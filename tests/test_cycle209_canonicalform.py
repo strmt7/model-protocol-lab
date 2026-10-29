@@ -73,6 +73,7 @@ class _WordBackend:
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -84,13 +85,16 @@ class _WordBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     @staticmethod
     def _is_nfd(text: str) -> bool:
+        """Is nfd."""
         return unicodedata.normalize("NFC", text) != text
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.calls += 1
         if self.mode == "explode":
             raise RuntimeError("boom")
@@ -127,6 +131,7 @@ class _NormalizingBackend(_WordBackend):
     fingerprint = "sha256:test-canonicalform-normalizing"
 
     def encode(self, text):
+        """Encode."""
         return super().encode(unicodedata.normalize("NFC", text))
 
 
@@ -146,6 +151,7 @@ class _AlternatingBackend(_NormalizingBackend):
         self.alt_calls = 0
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.alt_calls += 1
         if self.alt_calls % 2 == 1:
             text = self.decode(list(input_ids))
@@ -176,6 +182,7 @@ class _BalancedBackend(_WordBackend):
         self.nfd_seen = 0
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         text = self.decode(list(input_ids))
         is_nfd = self._is_nfd(text)
         if is_nfd:
@@ -216,6 +223,7 @@ class _PerFormatBackend(_WordBackend):
         self.seen: dict[tuple[str, str], int] = {}
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         text = self.decode(list(input_ids))
         fmt = "chatml" if "u:" in text else "llama"
         arm = "nfd" if self._is_nfd(text) else "nfc"
@@ -233,6 +241,7 @@ class _PerFormatBackend(_WordBackend):
 
 
 def _payload(backend=None, formats=(_CHATML,), seed=0, **stage_kwargs):
+    """Payload."""
     backend = backend if backend is not None else _WordBackend()
     stage_kwargs.setdefault("max_context", 4096)
     stage = experiments.canonicalform_stage(
@@ -246,7 +255,10 @@ def _payload(backend=None, formats=(_CHATML,), seed=0, **stage_kwargs):
 
 
 class GeneratorTests(unittest.TestCase):
+    """Generator tests."""
+
     def test_case_count_and_shape(self):
+        """Test case count and shape."""
         cases = cf.generate_cases(0)
         self.assertEqual(len(cases), cf.CASE_COUNT)
         self.assertEqual(cf.CASE_COUNT, 24)
@@ -257,6 +269,7 @@ class GeneratorTests(unittest.TestCase):
             self.assertNotEqual(case["sentence_indices"][0], case["sentence_indices"][1])
 
     def test_values_ascii_distinct_and_deterministic(self):
+        """Test values ascii distinct and deterministic."""
         first = cf.generate_cases(0)
         again = cf.generate_cases(0)
         self.assertEqual(first, again)
@@ -266,6 +279,7 @@ class GeneratorTests(unittest.TestCase):
         self.assertNotEqual(cf.generate_cases(0), cf.generate_cases(1))
 
     def test_authored_content_nfc_and_divergent(self):
+        """Test authored content nfc and divergent."""
         for case in cf.generate_cases(0):
             content = case["content"]
             self.assertEqual(unicodedata.normalize("NFC", content), content)
@@ -278,6 +292,7 @@ class GeneratorTests(unittest.TestCase):
             self.assertNotEqual(cf.form_content(case, "nfc"), cf.form_content(case, "nfd"))
 
     def test_topics_are_nfc_divergent_and_singleton_free(self):
+        """Test topics are nfc divergent and singleton free."""
         self.assertEqual(len(cf.TOPICS), 24)
         for topic in cf.TOPICS:
             self.assertEqual(unicodedata.normalize("NFC", topic), topic)
@@ -289,6 +304,7 @@ class GeneratorTests(unittest.TestCase):
                 self.assertFalse(cf._is_hangul_syllable(char))
 
     def test_pool_sentences_divergent_and_clean(self):
+        """Test pool sentences divergent and clean."""
         for sentence in cf.NEUTRAL_POOL:
             self.assertEqual(unicodedata.normalize("NFC", sentence), sentence)
             self.assertNotEqual(
@@ -303,6 +319,7 @@ class GeneratorTests(unittest.TestCase):
             self.assertNotIn("inspection code", sentence)
 
     def test_effective_alphabet_reported_by_mapping(self):
+        """Test effective alphabet reported by mapping."""
         # The alphabet is defined by the mapping predicate, not
         # by a block count: the frozen tables' decomposable
         # characters are exactly these twelve, and the known
@@ -319,6 +336,7 @@ class GeneratorTests(unittest.TestCase):
         self.assertEqual(decomposable, set("âçèéêëïñôöûü"))
 
     def test_validation_rejects_accented_value_singleton_and_hangul(self):
+        """Test validation rejects accented value singleton and hangul."""
         content = cf.generate_cases(0)[0]["content"]
         with self.assertRaises(ValueError):
             cf._validate_case_text(content, "café-1234")
@@ -330,6 +348,7 @@ class GeneratorTests(unittest.TestCase):
             cf._validate_case_text("The plain code is elm-1.", "elm-1")
 
     def test_validation_guard_messages_pin_which_guard_fired(self):
+        """Test validation guard messages pin which guard fired."""
         # Same outcome class (ValueError) for every guard, so
         # the pin must assert the message: a message-blind
         # test passes vacuously when guards are reordered
@@ -355,6 +374,7 @@ class GeneratorTests(unittest.TestCase):
             cf._validate_case_text(123, "elm-1")  # type: ignore[arg-type]
 
     def test_ground_and_protocol_digests(self):
+        """Test ground and protocol digests."""
         self.assertEqual(cf.ground_sha256(0), cf.ground_sha256(0))
         self.assertNotEqual(cf.ground_sha256(0), cf.ground_sha256(1))
         protocol = cf.protocol_object(0, "sha256:test")
@@ -373,6 +393,7 @@ class GeneratorTests(unittest.TestCase):
         )
 
     def test_unknown_arm_rejected(self):
+        """Test unknown arm rejected."""
         case = cf.generate_cases(0)[0]
         with self.assertRaises(ValueError):
             cf.form_content(case, "nfkc")
@@ -388,18 +409,25 @@ class ScorerPinTests(unittest.TestCase):
     """
 
     def _echo_evaluate(self, topic, value, form, expected):
+        """Echo evaluate."""
+
         class EchoBackend:
+            """Echo backend."""
+
             fingerprint = "sha256:test-cf-echo"
 
             @staticmethod
             def encode(text):
+                """Encode."""
                 return tuple(ord(c) for c in text)
 
             @staticmethod
             def decode(ids):
+                """Decode."""
                 return "".join(chr(int(i)) for i in ids)
 
             def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+                """Generate."""
                 text = self.decode(tuple(input_ids))
                 found = re.search(r"inspection code is (\S+?)\.", text)
                 answer = found.group(1) if found else "unknown"
@@ -428,6 +456,7 @@ class ScorerPinTests(unittest.TestCase):
         return report.observations[0]
 
     def test_accented_value_flips_zero_defect_echo(self):
+        """Test accented value flips zero defect echo."""
         nfc = self._echo_evaluate("café", "café-1234", "NFC", "café-1234")
         nfd = self._echo_evaluate("café", "café-1234", "NFD", "café-1234")
         self.assertTrue(nfc.exact_match)
@@ -435,6 +464,7 @@ class ScorerPinTests(unittest.TestCase):
         self.assertEqual(nfc.answer, "café-1234")
 
     def test_ascii_value_never_flips_zero_defect_echo(self):
+        """Test ascii value never flips zero defect echo."""
         nfc = self._echo_evaluate("café", "elm-1234", "NFC", "elm-1234")
         nfd = self._echo_evaluate("café", "elm-1234", "NFD", "elm-1234")
         self.assertTrue(nfc.exact_match)
@@ -442,7 +472,10 @@ class ScorerPinTests(unittest.TestCase):
 
 
 class ClassificationTests(unittest.TestCase):
+    """Classification tests."""
+
     def test_total_function_branches(self):
+        """Test total function branches."""
         self.assertEqual(cf.classify_canonical_form(5, 3, 3), "insufficient")
         self.assertEqual(cf.classify_canonical_form(6, 0, 0), "no_discordance_observed")
         self.assertEqual(cf.classify_canonical_form(6, 1, 0), "below_threshold")
@@ -453,6 +486,7 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual(cf.classify_canonical_form(24, 2, 1), "discordant_asymmetric")
 
     def test_falsification_direction(self):
+        """Test falsification direction."""
         # Falsified means the INVARIANCE claim fell, stated
         # explicitly so the boolean cannot be misread.
         self.assertFalse(cf.invariance_falsified("insufficient"))
@@ -463,6 +497,7 @@ class ClassificationTests(unittest.TestCase):
 
 
 def _selection(decision, winner=None, withheld=False):
+    """Selection."""
     return {
         "decision": decision,
         "detail": "" if not withheld else "selection_withheld_mismatched_sets",
@@ -473,7 +508,10 @@ def _selection(decision, winner=None, withheld=False):
 
 
 class WinnerHeadlineTests(unittest.TestCase):
+    """Winner headline tests."""
+
     def test_changed_stable_abstention_undefined(self):
+        """Test changed stable abstention undefined."""
         self.assertEqual(
             cf.winner_headline(
                 {"nfc": _selection("selected", "a"), "nfd": _selection("selected", "b")}
@@ -521,6 +559,7 @@ class WinnerHeadlineTests(unittest.TestCase):
         )
 
     def test_withheld_gives_undefined_and_none(self):
+        """Test withheld gives undefined and none."""
         result = cf.winner_headline(
             {"nfc": _selection("unavailable", withheld=True), "nfd": _selection("selected", "a")}
         )
@@ -529,7 +568,10 @@ class WinnerHeadlineTests(unittest.TestCase):
 
 
 class StageTests(unittest.TestCase):
+    """Stage tests."""
+
     def test_perfect_backend_no_discordance(self):
+        """Test perfect backend no discordance."""
         payload = _payload()
         self.assertTrue(payload["available"])
         entry = payload["candidates"]["chatml"]
@@ -544,6 +586,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(payload["n_candidates"], 1)
 
     def test_single_discordance_is_below_threshold_not_falsified(self):
+        """Test single discordance is below threshold not falsified."""
         # An NFD-arm failure is an NFC-ONLY pass: the NFC arm
         # passed where the NFD arm did not. The direction label
         # follows the passing arm, not the failing one.
@@ -554,6 +597,7 @@ class StageTests(unittest.TestCase):
         self.assertFalse(entry["invariance_falsified"])
 
     def test_discordant_asymmetric_falsifies(self):
+        """Test discordant asymmetric falsifies."""
         payload = _payload(_WordBackend(mode="nfd_fail", fail_count=3))
         entry = payload["candidates"]["chatml"]
         self.assertEqual(entry["headline"]["n_nfc_only"], 3)
@@ -561,6 +605,7 @@ class StageTests(unittest.TestCase):
         self.assertTrue(entry["invariance_falsified"])
 
     def test_discordant_balanced_falsifies(self):
+        """Test discordant balanced falsifies."""
         payload = _payload(_BalancedBackend())
         entry = payload["candidates"]["chatml"]
         self.assertEqual(entry["headline"]["n_nfc_only"], 2)
@@ -569,6 +614,7 @@ class StageTests(unittest.TestCase):
         self.assertTrue(entry["invariance_falsified"])
 
     def test_normalizing_backend_all_ids_identical(self):
+        """Test normalizing backend all ids identical."""
         payload = _payload(_NormalizingBackend())
         entry = payload["candidates"]["chatml"]
         self.assertEqual(entry["ids"]["n_ids_identical"], 24)
@@ -578,6 +624,7 @@ class StageTests(unittest.TestCase):
         self.assertFalse(entry["invariance_falsified"])
 
     def test_same_ids_flips_are_determinism_findings(self):
+        """Test same ids flips are determinism findings."""
         payload = _payload(_AlternatingBackend())
         entry = payload["candidates"]["chatml"]
         self.assertEqual(entry["ids"]["n_ids_identical"], 24)
@@ -588,6 +635,7 @@ class StageTests(unittest.TestCase):
         self.assertFalse(entry["invariance_falsified"])
 
     def test_context_exceeded_cells_are_insufficient(self):
+        """Test context exceeded cells are insufficient."""
         payload = _payload(max_context=8)
         entry = payload["candidates"]["chatml"]
         record = entry["records"][0]
@@ -597,6 +645,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(entry["headline"]["classification"], "insufficient")
 
     def test_cancel_unwinds_to_fail_closed_payload(self):
+        """Test cancel unwinds to fail closed payload."""
         event = threading.Event()
         event.set()
         backend = _WordBackend()
@@ -615,6 +664,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(analysis["detail"], "cancelled")
 
     def test_duplicate_format_names_rejected(self):
+        """Test duplicate format names rejected."""
         backend = _WordBackend()
         with self.assertRaises(ValueError):
             experiments.canonicalform_stage(
@@ -626,7 +676,11 @@ class StageTests(unittest.TestCase):
             )
 
     def test_non_string_fingerprint_rejected(self):
+        """Test non string fingerprint rejected."""
+
         class BadBackend(_WordBackend):
+            """Bad backend."""
+
             fingerprint = 123  # type: ignore[assignment]
 
         backend = BadBackend()
@@ -640,6 +694,7 @@ class StageTests(unittest.TestCase):
             )
 
     def test_winner_changed_across_arms(self):
+        """Test winner changed across arms."""
         backend = _PerFormatBackend({("chatml", "nfd"): 1, ("llama", "nfc"): 1})
         payload = _payload(backend, formats=(_CHATML, _LLAMA))
         self.assertEqual(payload["conditions"]["nfc"]["winner"], "chatml")
@@ -648,6 +703,7 @@ class StageTests(unittest.TestCase):
         self.assertTrue(payload["selection"]["winner"]["winner_changed"])
 
     def test_winner_abstention_asymmetric_is_not_a_change(self):
+        """Test winner abstention asymmetric is not a change."""
         backend = _PerFormatBackend({("llama", "nfc"): 1})
         payload = _payload(backend, formats=(_CHATML, _LLAMA))
         self.assertEqual(payload["conditions"]["nfc"]["winner"], "chatml")
@@ -656,9 +712,14 @@ class StageTests(unittest.TestCase):
         self.assertFalse(payload["selection"]["winner"]["winner_changed"])
 
     def test_error_reason_backend_yields_failed_cells_not_a_crash(self):
+        """Test error reason backend yields failed cells not a crash."""
+
         class _ErrorBackend(_WordBackend):
+            """Error backend."""
+
             @staticmethod
             def generate(input_ids, *, max_new_tokens, seed=None, cancel=None):
+                """Generate."""
                 return Generation(token_ids=(), reason="error")
 
         backend = _ErrorBackend()
@@ -680,18 +741,23 @@ class StageTests(unittest.TestCase):
 
 
 class DiffValidatorTests(unittest.TestCase):
+    """Diff validator tests."""
+
     def test_identical_payloads_are_unchanged(self):
+        """Test identical payloads are unchanged."""
         payload = _payload()
         diff = diffreports.diff_canonicalform(payload, copy.deepcopy(payload))
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
 
     def test_missing_arm_payload_is_neither(self):
+        """Test missing arm payload is neither."""
         diff = diffreports.diff_canonicalform(None, None)
         self.assertEqual(diff["available"], "neither")
         self.assertFalse(diff["changed"])
 
     def test_tampered_content_digest_is_invalid(self):
+        """Test tampered content digest is invalid."""
         payload = _payload()
         bad = copy.deepcopy(payload)
         record = bad["candidates"]["chatml"]["records"][0]
@@ -701,12 +767,14 @@ class DiffValidatorTests(unittest.TestCase):
         self.assertEqual(diff["available"], "old")
 
     def test_tampered_verdict_binding_is_invalid(self):
+        """Test tampered verdict binding is invalid."""
         payload = _payload()
         bad = copy.deepcopy(payload)
         bad["candidates"]["chatml"]["records"][0]["cells"]["nfc"]["verdict"] = False
         self.assertFalse(diffreports._valid_canonicalform(bad))
 
     def test_tampered_ids_consistency_is_invalid(self):
+        """Test tampered ids consistency is invalid."""
         payload = _payload()
         bad = copy.deepcopy(payload)
         record = bad["candidates"]["chatml"]["records"][0]
@@ -716,18 +784,21 @@ class DiffValidatorTests(unittest.TestCase):
         self.assertFalse(diffreports._valid_canonicalform(bad))
 
     def test_tampered_aggregate_is_invalid(self):
+        """Test tampered aggregate is invalid."""
         payload = _payload()
         bad = copy.deepcopy(payload)
         bad["candidates"]["chatml"]["headline"]["n_paired"] = 0
         self.assertFalse(diffreports._valid_canonicalform(bad))
 
     def test_tampered_protocol_is_invalid(self):
+        """Test tampered protocol is invalid."""
         payload = _payload()
         bad = copy.deepcopy(payload)
         bad["protocol"]["fingerprint"] = "sha256:0000"
         self.assertFalse(diffreports._valid_canonicalform(bad))
 
     def test_classification_change_is_changed(self):
+        """Test classification change is changed."""
         first = _payload()
         second = _payload(_WordBackend(mode="nfd_fail", fail_count=3))
         diff = diffreports.diff_canonicalform(first, second)
@@ -738,6 +809,7 @@ class DiffValidatorTests(unittest.TestCase):
         self.assertIn(("chatml", "invariance_falsified"), metrics)
 
     def test_protocol_drift_marks_incomparable(self):
+        """Test protocol drift marks incomparable."""
         first = _payload()
         second = _payload(seed=1)
         diff = diffreports.diff_canonicalform(first, second)
@@ -745,11 +817,14 @@ class DiffValidatorTests(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_diff_reports_wires_section(self):
+        """Test diff reports wires section."""
+
         # diff_reports needs the full report shape (decision,
         # search summaries, held-out summary); the section
         # wiring is proved by identical reports that differ in
         # nothing, then in canonical_form only.
         def _report(payload):
+            """Report."""
             return {
                 "decision": "select_best",
                 "selected_candidate": "alpha",
@@ -796,7 +871,10 @@ class DiffValidatorTests(unittest.TestCase):
 
 
 class ReportingTests(unittest.TestCase):
+    """Reporting tests."""
+
     def test_section_renders_headline_and_counts(self):
+        """Test section renders headline and counts."""
         payload = _payload()
         html = reporting_mod._canonical_form_section({"canonical_form": payload})
         self.assertIn("canonical-form", html)
@@ -805,6 +883,7 @@ class ReportingTests(unittest.TestCase):
         self.assertIn("winner_stable", html)
 
     def test_section_empty_when_unavailable(self):
+        """Test section empty when unavailable."""
         self.assertEqual(
             reporting_mod._canonical_form_section(
                 {"canonical_form": {"available": False, "detail": "canonical_form_unavailable"}}
@@ -814,6 +893,7 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(reporting_mod._canonical_form_section({}), "")
 
     def test_section_escapes_hostile_payload_text(self):
+        """Test section escapes hostile payload text."""
         # The section's contract is _escape_text's contract
         # (the cycle-100 pin): HTML metacharacters escaped, C0
         # controls and lone surrogates stripped. U+2028/U+2029
@@ -832,7 +912,10 @@ class ReportingTests(unittest.TestCase):
 
 
 class CliDispatchTests(unittest.TestCase):
+    """Cli dispatch tests."""
+
     def test_run_canonical_form_probe_attaches_and_fails_closed(self):
+        """Test run canonical form probe attaches and fails closed."""
         result = {}
         backend = _WordBackend()
         from model_protocol_lab.cli import _run_canonical_form_probe
@@ -922,6 +1005,7 @@ _MUTANTS = {
 
 
 def _scenario_classify_floor(mod):
+    """Scenario classify floor."""
     # One discordant pair each way is BELOW the floor, not
     # balanced: the floor mutant (>= 1) calls it balanced.
     assert mod.classify_canonical_form(6, 1, 1) == "below_threshold"
@@ -929,16 +1013,19 @@ def _scenario_classify_floor(mod):
 
 
 def _scenario_falsified(mod):
+    """Scenario falsified."""
     assert mod.invariance_falsified("discordant_asymmetric") is True
 
 
 def _scenario_arm_swap(mod):
+    """Scenario arm swap."""
     case = mod.generate_cases(0)[0]
     assert mod.form_content(case, "nfc") == unicodedata.normalize("NFC", case["content"])
     assert mod.form_content(case, "nfd") == unicodedata.normalize("NFD", case["content"])
 
 
 def _scenario_pair_block(mod):
+    """Scenario pair block."""
     records = [
         {
             "ids_identical": True,
@@ -951,6 +1038,7 @@ def _scenario_pair_block(mod):
 
 
 def _scenario_ascii_pin(mod):
+    """Scenario ascii pin."""
     try:
         mod._validate_case_text("The café code is elm-1.", "café-1234")
     except ValueError:
@@ -959,6 +1047,7 @@ def _scenario_ascii_pin(mod):
 
 
 def _scenario_winner_change(mod):
+    """Scenario winner change."""
     headline = mod.winner_headline(
         {
             "nfc": _selection("selected", "a"),
@@ -970,6 +1059,7 @@ def _scenario_winner_change(mod):
 
 
 def _scenario_content_digest(mod):
+    """Scenario content digest."""
     # canonical_generated_rows are lists: [fixture_id, topic,
     # value, sentence_indices, nfc_digest, nfd_digest].
     rows = mod.canonical_generated_rows(0)
@@ -1001,6 +1091,7 @@ class MutationGateTests(unittest.TestCase):
     """
 
     def test_gates_kill_every_mutant(self):
+        """Test gates kill every mutant."""
         import tempfile
         from pathlib import Path
 
@@ -1029,12 +1120,14 @@ class GapCoverageTests(unittest.TestCase):
     """
 
     def test_generate_cases_rejects_non_int_seed(self):
+        """Test generate cases rejects non int seed."""
         with self.assertRaises(ValueError):
             cf.generate_cases("0")
         with self.assertRaises(ValueError):
             cf.generate_cases(1.5)
 
     def test_value_collision_redraws(self):
+        """Test value collision redraws."""
         # Seed 636: index 7's first draw (drift-1299) collides
         # with index 2's value. Without the redraw loop the
         # set would contain a duplicate; with it, index 7
@@ -1045,6 +1138,7 @@ class GapCoverageTests(unittest.TestCase):
         self.assertEqual(cases[7]["value"], "quill-8528")
 
     def test_neither_case_in_pair_block(self):
+        """Test neither case in pair block."""
         # Both arms failing the same case is the "neither"
         # outcome: it must not count as discordance, and it
         # exercises the pair block's final elif falling
@@ -1056,6 +1150,7 @@ class GapCoverageTests(unittest.TestCase):
         self.assertEqual(entry["headline"]["classification"], "no_discordance_observed")
 
     def test_aggregate_tolerates_malformed_records(self):
+        """Test aggregate tolerates malformed records."""
         # _cell's non-dict-cells branch, the non-int delta
         # coercion, the same-ids incomplete-cell skip, and a
         # record whose ids_identical is neither True nor False
@@ -1083,9 +1178,11 @@ class GapCoverageTests(unittest.TestCase):
         self.assertEqual(aggregate["headline"]["n_paired"], 0)
 
     def test_shared_fixtures_empty(self):
+        """Test shared fixtures empty."""
         self.assertEqual(cf.shared_fixtures({}), frozenset())
 
     def test_arm_selection_withheld_on_empty_completed_set(self):
+        """Test arm selection withheld on empty completed set."""
         good = [
             {
                 "fixture": "canonicalform-00",
@@ -1107,6 +1204,7 @@ class GapCoverageTests(unittest.TestCase):
         self.assertEqual(selection["decision"], "unavailable")
 
     def test_arm_selection_withheld_on_mismatched_completed_sets(self):
+        """Test arm selection withheld on mismatched completed sets."""
         # Both candidates complete something, but different
         # sets: the restricted comparison is withheld rather
         # than computed over mismatched populations.
@@ -1143,6 +1241,7 @@ class GapCoverageTests(unittest.TestCase):
         self.assertEqual(selection["decision"], "unavailable")
 
     def test_winner_headline_missing_selection(self):
+        """Test winner headline missing selection."""
         result = cf.winner_headline({})
         self.assertEqual(result["headline"], "winner_undefined")
         self.assertEqual(result["detail"], "selection_missing")
@@ -1169,6 +1268,7 @@ class FullRunGapTests(unittest.TestCase):
 
     @staticmethod
     def _mirror_cell(verdict, tokens, digest):
+        """Mirror cell."""
         return {
             "verdict": verdict,
             "boundary_found": True,
@@ -1179,6 +1279,7 @@ class FullRunGapTests(unittest.TestCase):
 
     @staticmethod
     def _mirror_record(case, tokens=(10, 12)):
+        """Mirror record."""
         return {
             "fixture": case["fixture_id"],
             "topic": case["topic"],
@@ -1195,6 +1296,7 @@ class FullRunGapTests(unittest.TestCase):
 
     @staticmethod
     def _recompute_entry(records):
+        """Recompute entry."""
         entry = dict.fromkeys(diffreports._CANONICALFORM_AGGREGATE_KEYS)
         entry.update({"status": "available", "detail": "", "records": records})
         return entry
@@ -1202,6 +1304,7 @@ class FullRunGapTests(unittest.TestCase):
     # -- mirror helpers -------------------------------------------------
 
     def test_mirror_digest_ok_branches(self):
+        """Test mirror digest ok branches."""
         ok = diffreports._canonicalform_digest_ok
         self.assertTrue(ok(None))
         self.assertFalse(ok(123))
@@ -1210,6 +1313,7 @@ class FullRunGapTests(unittest.TestCase):
         self.assertTrue(ok("a" * 64))
 
     def test_mirror_generate_redraws(self):
+        """Test mirror generate redraws."""
         # Seed 636 collides (index 7's first draw repeats
         # index 2's value); seed 1 draws equal sentence
         # indices at index 3 and redraws the second.
@@ -1220,13 +1324,17 @@ class FullRunGapTests(unittest.TestCase):
         self.assertEqual(cases[3]["sentence_indices"][1], 9)
 
     def test_mirror_cell_get_non_dict(self):
+        """Test mirror cell get non dict."""
         get = diffreports._canonicalform_cell_get
         self.assertIsNone(get({"cells": "junk"}, "nfc"))
         self.assertIsNone(get({"cells": {"nfc": "junk"}}, "nfc"))
         self.assertIsNone(get({}, "nfc"))
 
     def test_mirror_pair_block_branches(self):
+        """Test mirror pair block branches."""
+
         def rec(identical, nfc, nfd):
+            """Rec."""
             return {
                 "ids_identical": identical,
                 "cells": {"nfc": nfc, "nfd": nfd},
@@ -1250,6 +1358,7 @@ class FullRunGapTests(unittest.TestCase):
         self.assertEqual(out["rate_nfd"], 0.5)
 
     def test_mirror_classify_all_outcomes(self):
+        """Test mirror classify all outcomes."""
         classify = diffreports._canonicalform_classify
         self.assertEqual(classify(5, 0, 0), "insufficient")
         self.assertEqual(classify(6, 0, 0), "no_discordance_observed")
@@ -1258,6 +1367,7 @@ class FullRunGapTests(unittest.TestCase):
         self.assertEqual(classify(6, 1, 0), "below_threshold")
 
     def test_mirror_aggregate_branches(self):
+        """Test mirror aggregate branches."""
         records = [
             {"ids_identical": False, "id_length_delta": 0, "cells": None},
             {
@@ -1301,7 +1411,10 @@ class FullRunGapTests(unittest.TestCase):
         self.assertEqual(out["headline"]["classification"], "insufficient")
 
     def test_mirror_selection_branches(self):
+        """Test mirror selection branches."""
+
         def rec(fixture, verdict):
+            """Rec."""
             return {
                 "fixture": fixture,
                 "cells": {"nfc": ({"verdict": verdict} if verdict is not None else None)},
@@ -1346,6 +1459,7 @@ class FullRunGapTests(unittest.TestCase):
         self.assertFalse(other["flip"])
 
     def test_mirror_winner_headline_branches(self):
+        """Test mirror winner headline branches."""
         headline = diffreports._canonicalform_winner_headline
         self.assertEqual(headline("junk")["detail"], "selection_missing")
         self.assertEqual(
@@ -1390,6 +1504,7 @@ class FullRunGapTests(unittest.TestCase):
         )
 
     def test_mirror_cell_ok_rejects_each_break(self):
+        """Test mirror cell ok rejects each break."""
         payload = _payload()
         record = payload["candidates"]["chatml"]["records"][0]
         cell = copy.deepcopy(record["cells"]["nfc"])
@@ -1422,12 +1537,16 @@ class FullRunGapTests(unittest.TestCase):
     # -- recompute battery ----------------------------------------------
 
     def test_recompute_rejects_each_break(self):
+        """Test recompute rejects each break."""
+
         def bad_payload(mutate):
+            """Bad payload."""
             payload = _payload()
             mutate(payload)
             return payload
 
         def check(mutate):
+            """Check."""
             self.assertIsNone(diffreports._canonicalform_recompute(bad_payload(mutate)))
 
         check(lambda p: p.update(protocol="junk"))
@@ -1472,6 +1591,7 @@ class FullRunGapTests(unittest.TestCase):
         check(lambda p: p["candidates"]["chatml"]["records"][0].update(ids_identical="yes"))
 
         def wrong_delta(p):
+            """Wrong delta."""
             record = p["candidates"]["chatml"]["records"][0]
             record["id_length_delta"] = record["nfc_tokens"] - record["nfd_tokens"] + 1
 
@@ -1484,6 +1604,7 @@ class FullRunGapTests(unittest.TestCase):
         check(lambda p: p["candidates"]["chatml"]["records"][0].update(cell_details={"nfc": ""}))
 
         def bad_none_detail(p):
+            """Bad none detail."""
             record = p["candidates"]["chatml"]["records"][0]
             record["cells"]["nfc"] = None
             record["cell_details"]["nfc"] = "bogus"
@@ -1491,18 +1612,21 @@ class FullRunGapTests(unittest.TestCase):
         check(bad_none_detail)
 
         def nonzero_detail(p):
+            """Nonzero detail."""
             record = p["candidates"]["chatml"]["records"][0]
             record["cell_details"]["nfc"] = "arm_context_exceeded"
 
         check(nonzero_detail)
 
         def token_mismatch(p):
+            """Token mismatch."""
             record = p["candidates"]["chatml"]["records"][0]
             record["cells"]["nfc"]["input_tokens"] += 1
 
         check(token_mismatch)
 
     def test_recompute_total_records_cap(self):
+        """Test recompute total records cap."""
         cases = diffreports._canonicalform_generate(0)
         records = [self._mirror_record(case) for case in cases]
         entry = self._recompute_entry(records)
@@ -1513,6 +1637,7 @@ class FullRunGapTests(unittest.TestCase):
         self.assertIsNone(diffreports._canonicalform_recompute(payload))
 
     def test_recompute_empty_raw_records(self):
+        """Test recompute empty raw records."""
         payload = {
             "protocol": diffreports._canonicalform_protocol(0, "sha256:test"),
             "candidates": {"ghost": {"status": "unavailable", "detail": "d", "records": []}},
@@ -1520,6 +1645,7 @@ class FullRunGapTests(unittest.TestCase):
         self.assertIsNone(diffreports._canonicalform_recompute(payload))
 
     def test_recompute_equal_digests_guard_proven_by_stub(self):
+        """Test recompute equal digests guard proven by stub."""
         # The equal-digests reject is unreachable through real
         # payloads: every generated case diverges, so any
         # record passing both digest checks already has
@@ -1533,6 +1659,7 @@ class FullRunGapTests(unittest.TestCase):
         stub_cases[0]["nfd_content"] = stub_cases[0]["nfc_content"]
 
         def build(cases):
+            """Build."""
             return {
                 "protocol": diffreports._canonicalform_protocol(0, "sha256:test"),
                 "candidates": {"c": self._recompute_entry([self._mirror_record(c) for c in cases])},
@@ -1545,6 +1672,7 @@ class FullRunGapTests(unittest.TestCase):
     # -- _valid mismatch branches ----------------------------------------
 
     def test_valid_mismatch_branches(self):
+        """Test valid mismatch branches."""
         payload = _payload()
         bad = copy.deepcopy(payload)
         bad["extra"] = 1
@@ -1569,6 +1697,7 @@ class FullRunGapTests(unittest.TestCase):
 
     @staticmethod
     def _mixed_payload():
+        """Mixed payload."""
         # A valid payload with one available and one
         # unavailable candidate, built through the real
         # analysis path (not hand-assembled).
@@ -1588,6 +1717,7 @@ class FullRunGapTests(unittest.TestCase):
         return experiments.canonicalform_analysis(stage, ("chatml", "llama"))
 
     def test_diff_new_availability_and_status_drift(self):
+        """Test diff new availability and status drift."""
         payload = _payload()
         self.assertEqual(diffreports.diff_canonicalform(None, payload)["available"], "new")
         mixed = self._mixed_payload()
@@ -1604,6 +1734,7 @@ class FullRunGapTests(unittest.TestCase):
     # -- stage screens and preconditions -----------------------------------
 
     def test_stage_format_preconditions(self):
+        """Test stage format preconditions."""
         backend = _WordBackend()
         with self.assertRaises(ValueError):
             experiments.canonicalform_stage(
@@ -1623,6 +1754,7 @@ class FullRunGapTests(unittest.TestCase):
             )
 
     def test_stage_record_budget_exceeded(self):
+        """Test stage record budget exceeded."""
         backend = _WordBackend()
         formats = tuple(
             Format(
@@ -1645,6 +1777,7 @@ class FullRunGapTests(unittest.TestCase):
         self.assertEqual(stage["detail"], "canonical_form_record_budget_exceeded")
 
     def test_stage_special_token_screen_wiring_proven_by_stub(self):
+        """Test stage special token screen wiring proven by stub."""
         # The audit screen's wiring, proven by stub (cycle-171):
         # the real audit cannot fire on this stage's input --
         # generated_text is frozen templates/topics/words/pool
@@ -1685,6 +1818,7 @@ class FullRunGapTests(unittest.TestCase):
         self.assertEqual(stage["detail"], "canonical_form_screen_failed")
 
     def test_stage_boundary_text_screen(self):
+        """Test stage boundary text screen."""
         backend = _WordBackend()
         stage = experiments.canonicalform_stage(
             backend,
@@ -1697,8 +1831,13 @@ class FullRunGapTests(unittest.TestCase):
         self.assertEqual(stage["detail"], "canonical_form_screen_failed")
 
     def test_stage_undecodable_boundary_screens_nothing(self):
+        """Test stage undecodable boundary screens nothing."""
+
         class _RaiseBoundaryBackend(_WordBackend):
+            """Raise boundary backend."""
+
             def decode(self, ids):
+                """Decode."""
                 if tuple(ids) == tuple(self.encode("endmark")):
                     raise ValueError("undecodable")
                 return super().decode(ids)
@@ -1714,12 +1853,17 @@ class FullRunGapTests(unittest.TestCase):
         self.assertTrue(stage["available"])
 
     def test_stage_mid_arm_cancel_unwinds(self):
+        """Test stage mid arm cancel unwinds."""
+
         class _CancelOnRenderBackend(_WordBackend):
+            """Cancel on render backend."""
+
             def __init__(self, event):
                 super().__init__()
                 self.event = event
 
             def encode(self, text):
+                """Encode."""
                 if "inspection code" in text:
                     self.event.set()
                 return super().encode(text)
@@ -1740,6 +1884,7 @@ class FullRunGapTests(unittest.TestCase):
     # -- reporting defensive branches ---------------------------------------
 
     def test_section_non_dict_candidates_is_empty(self):
+        """Test section non dict candidates is empty."""
         self.assertEqual(
             reporting_mod._canonical_form_section(
                 {"canonical_form": {"available": True, "candidates": "junk"}}
@@ -1748,6 +1893,7 @@ class FullRunGapTests(unittest.TestCase):
         )
 
     def test_stage_cell_none_none_fallthrough_proven_by_stub(self):
+        """Test stage cell none none fallthrough proven by stub."""
         # _canonical_form_cell never returns (None, None):
         # every path yields a detail, a cell, or a raise. The
         # arm loop's fall-through (neither assignment) is
@@ -1771,6 +1917,7 @@ class FullRunGapTests(unittest.TestCase):
         self.assertEqual(record["cell_details"]["nfc"], "")
 
     def test_section_fat_payload_branches(self):
+        """Test section fat payload branches."""
         probe = {
             "available": True,
             "detail": "",

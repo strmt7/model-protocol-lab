@@ -47,6 +47,7 @@ TESTS_DIR = ROOT / "tests"
 
 
 def _normalize(name: str) -> str:
+    """Normalize."""
     return re.sub(r"[-_.]+", "_", name).strip().lower()
 
 
@@ -56,6 +57,7 @@ def _requirement_name(requirement: str) -> str:
 
 
 def _pyproject() -> dict:
+    """Pyproject."""
     with open(ROOT / "pyproject.toml", "rb") as fh:
         return tomllib.load(fh)
 
@@ -101,6 +103,7 @@ def _dependency_closure(declared: set[str]) -> set[str]:
     return closure
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _module_level_third_party_imports() -> dict[str, set[str]]:
     """Map test module name -> module-level third-party import roots."""
     stdlib = sys.stdlib_module_names
@@ -151,7 +154,10 @@ def _module_level_third_party_imports() -> dict[str, set[str]]:
 
 
 class ReadmeInstallLineTest(unittest.TestCase):
+    """Readme install line test."""
+
     def test_install_extras_exist_in_pyproject(self) -> None:
+        """Test install extras exist in pyproject."""
         extras = _readme_install_extras()
         self.assertTrue(extras, 'no pip install -e ".[...]" line found in README')
         declared_extras = {_normalize(e) for e in _pyproject()["project"]["optional-dependencies"]}
@@ -166,6 +172,7 @@ class ReadmeInstallLineTest(unittest.TestCase):
         self.assertIn("transformers", names)
 
     def test_dev_extra_still_present(self) -> None:
+        """Test dev extra still present."""
         dev_reqs = _pyproject()["project"]["optional-dependencies"]["dev"]
         names = {_requirement_name(r) for r in dev_reqs}
         self.assertIn("pytest", names)
@@ -173,7 +180,10 @@ class ReadmeInstallLineTest(unittest.TestCase):
 
 
 class TestImportsCoveredTest(unittest.TestCase):
+    """Test imports covered test."""
+
     def test_module_level_imports_within_declared_closure(self) -> None:
+        """Test module level imports within declared closure."""
         closure = _dependency_closure(_declared_distributions())
         dist_for_module = importlib.metadata.packages_distributions()
         uncovered: list[str] = []

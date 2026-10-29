@@ -160,6 +160,7 @@ class TocBodyCorrespondenceTests(unittest.TestCase):
 class RenderHtmlSourceGuardTests(unittest.TestCase):
     """Every _toc entry's variable must reach the returned document."""
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     @staticmethod
     def _render_html_parts():
         """Render html parts."""

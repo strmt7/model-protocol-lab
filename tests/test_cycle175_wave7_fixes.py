@@ -41,6 +41,7 @@ from model_protocol_lab.core import Generation
 
 
 def _pure_output(input_ids: tuple[int, ...], seed: int, count: int) -> tuple[int, ...]:
+    """Pure output."""
     digest = hashlib.sha256(bytes(b % 256 for b in input_ids) + seed.to_bytes(8, "big")).digest()
     return tuple(b % 50 for b in digest[:count])
 
@@ -57,6 +58,7 @@ class _PureBackend:
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate."""
         self.calls.append((tuple(input_ids), max_new_tokens, seed))
         return Generation(_pure_output(tuple(input_ids), seed, max_new_tokens), "limit")
 
@@ -67,6 +69,7 @@ def _obs(
     output_ids: Any,
     status: str = "completed",
 ) -> dict[str, Any]:
+    """Obs."""
     return {
         "candidate": "cand-a",
         "fixture": fixture,
@@ -84,6 +87,7 @@ def _obs(
 
 
 def _entry(observations: list[dict[str, Any]]) -> dict[str, Any]:
+    """Entry."""
     return {
         "format": {"name": "cand-a"},
         "summary": {
@@ -97,6 +101,7 @@ def _entry(observations: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _artifact(observations: list[dict[str, Any]], *, seed: int = 7, cap: int = 4) -> dict[str, Any]:
+    """Artifact."""
     return {
         "schema_version": 1,
         "seed": seed,
@@ -114,15 +119,20 @@ def _artifact(observations: list[dict[str, Any]], *, seed: int = 7, cap: int = 4
 def _reproducing_obs(
     fixture: str, input_ids: tuple[int, ...], *, seed: int = 7, cap: int = 4
 ) -> dict[str, Any]:
+    """Reproducing obs."""
     request_seed = int.from_bytes(hashlib.sha256(f"{seed}\0{fixture}".encode()).digest()[:4], "big")
     return _obs(fixture, list(input_ids), list(_pure_output(input_ids, request_seed, cap)))
 
 
 class TestDetectorV2Boundaries(unittest.TestCase):
+    """Test detector v2 boundaries."""
+
     def test_detector_version_bumped(self) -> None:
+        """Test detector version bumped."""
         self.assertEqual(refusals.DETECTOR_ID, "frozen_refusal_openers_v2")
 
     def test_red_team_false_positive_corpus_is_silent(self) -> None:
+        """Test red team false positive corpus is silent."""
         # Wave-7 A F1 + B's additional members, verbatim.
         corpus = [
             "I will note the key points for the meeting.",
@@ -137,6 +147,7 @@ class TestDetectorV2Boundaries(unittest.TestCase):
                 self.assertIsNone(refusals.classify_refusal(answer))
 
     def test_boundary_corpus_still_fires(self) -> None:
+        """Test boundary corpus still fires."""
         for opener in refusals.REFUSAL_OPENERS:
             with self.subTest(opener=opener):
                 self.assertEqual(refusals.classify_refusal(opener), opener)
@@ -147,12 +158,14 @@ class TestDetectorV2Boundaries(unittest.TestCase):
                 self.assertNotEqual(refusals.classify_refusal(opener + "x"), opener)
 
     def test_longest_among_boundary_passing(self) -> None:
+        """Test longest among boundary passing."""
         # B's condition: a longest-only boundary check would lose
         # the "i cannot" attribution here.
         self.assertEqual(refusals.classify_refusal("I cannot providex the data"), "i cannot")
         self.assertEqual(refusals.classify_refusal("I cannot provide the data"), "i cannot provide")
 
     def test_unicode_letter_boundary(self) -> None:
+        """Test unicode letter boundary."""
         # B's condition: the boundary class is Unicode L*, not
         # [a-z] -- a Cyrillic continuation also blocks the match.
         self.assertIsNone(refusals.classify_refusal("I will not\u0430"))  # Cyrillic а
@@ -160,18 +173,24 @@ class TestDetectorV2Boundaries(unittest.TestCase):
 
 
 class TestDetectorV2Normalisation(unittest.TestCase):
+    """Test detector v2 normalisation."""
+
     def test_format_characters_are_word_breaks(self) -> None:
+        """Test format characters are word breaks."""
         self.assertEqual(refusals.classify_refusal("I\u200bcannot help."), "i cannot")
         self.assertEqual(refusals.classify_refusal("I'm\u200bsorry, no."), "i'm sorry")
 
     def test_combining_marks_and_dotted_capital_i(self) -> None:
+        """Test combining marks and dotted capital i."""
         self.assertEqual(refusals.classify_refusal("I\u0301 cannot help."), "i cannot")
         self.assertEqual(refusals.classify_refusal("\u0130'm sorry, no."), "i'm sorry")
 
     def test_glued_refusal_is_the_documented_cost(self) -> None:
+        """Test glued refusal is the documented cost."""
         self.assertIsNone(refusals.classify_refusal("I cannotprovide that."))
 
     def test_v1_behaviour_preserved_where_it_was_right(self) -> None:
+        """Test v1 behaviour preserved where it was right."""
         self.assertEqual(
             refusals.classify_refusal("I'm sorry to hear about your hamster."),
             "i'm sorry",
@@ -181,7 +200,10 @@ class TestDetectorV2Normalisation(unittest.TestCase):
 
 
 class TestDeterminismBlockingSet(unittest.TestCase):
+    """Test determinism blocking set."""
+
     def test_invalid_completed_cell_blocks_certificate(self) -> None:
+        """Test invalid completed cell blocks certificate."""
         # F3's fail-open shape: one reproducing cell + one claimed
         # completed cell with a non-integer token id.
         good = _reproducing_obs("f1", (1, 2, 3))
@@ -194,6 +216,7 @@ class TestDeterminismBlockingSet(unittest.TestCase):
         self.assertEqual(bad_cell["detail"], "recorded_ids_invalid")
 
     def test_empty_input_completed_cell_blocks_certificate(self) -> None:
+        """Test empty input completed cell blocks certificate."""
         good = _reproducing_obs("f1", (1, 2, 3))
         bad = _obs("f2", [], [4, 5, 6, 7])
         audit = determinism.audit_determinism(_artifact([good, bad]), _PureBackend())
@@ -201,6 +224,7 @@ class TestDeterminismBlockingSet(unittest.TestCase):
         self.assertIsNone(audit["certificate"])
 
     def test_unclaimed_cell_with_empty_ids_is_scope_not_a_gap(self) -> None:
+        """Test unclaimed cell with empty ids is scope not a gap."""
         # The status-first half of F3: an aborted observation
         # legitimately stores empty inputs; it must be labelled
         # observation_not_completed and must NOT block a certificate
@@ -215,6 +239,7 @@ class TestDeterminismBlockingSet(unittest.TestCase):
         self.assertEqual(aborted_cell["detail"], "observation_not_completed")
 
     def test_blocking_set_matches_design_doc_i5(self) -> None:
+        """Test blocking set matches design doc i5."""
         for code in (
             "recorded_ids_invalid",
             "recorded_length_inconsistent",
@@ -227,8 +252,11 @@ class TestDeterminismBlockingSet(unittest.TestCase):
 
 
 class TestPackReservedName(unittest.TestCase):
+    """Test pack reserved name."""
+
     @staticmethod
     def _report_dir(tmp: str, *, with_manifest: bool) -> Path:
+        """Report dir."""
         sample = Path(__file__).resolve().parent.parent / "examples" / "sample-report"
         directory = Path(tmp)
         for name in ("results.json", "report.html"):
@@ -238,6 +266,7 @@ class TestPackReservedName(unittest.TestCase):
         return directory
 
     def test_manifest_named_report_file_is_refused_at_collection(self) -> None:
+        """Test manifest named report file is refused at collection."""
         with tempfile.TemporaryDirectory() as tmp:
             directory = self._report_dir(tmp, with_manifest=True)
             with self.assertRaises(ValueError) as caught:
@@ -248,6 +277,7 @@ class TestPackReservedName(unittest.TestCase):
             self.assertEqual(str(caught.exception), "pack_entry_name_reserved")
 
     def test_clean_report_dir_still_packs(self) -> None:
+        """Test clean report dir still packs."""
         with tempfile.TemporaryDirectory() as tmp:
             directory = self._report_dir(tmp, with_manifest=False)
             _data, _manifest, digest = pack.pack_bundle(directory, [])

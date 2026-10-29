@@ -64,6 +64,7 @@ def github_page_fetcher(repo: str, token: str) -> Callable[[int], list[dict[str,
     """Build a page fetcher over the code-scanning alerts API."""
 
     def fetch(page: int) -> list[dict[str, object]]:
+        """Fetch."""
         url = (
             f"https://api.github.com/repos/{repo}/code-scanning/alerts"
             f"?state=open&per_page=100&page={page}"

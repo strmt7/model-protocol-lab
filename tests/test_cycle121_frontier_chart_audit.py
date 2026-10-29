@@ -78,6 +78,7 @@ def _example_frontier() -> dict:
 
 
 def _paths(svg: str) -> list[tuple[str, str, str]]:
+    """Paths."""
     return re.findall(
         r'<path d="([^"]+)"[^>]*stroke="([^"]+)"[^>]*stroke-width="([^"]+)"',
         svg,
@@ -109,7 +110,10 @@ def _load_mutant(source_path: Path, old: str, new: str, tag: str):
 
 
 class TestHandDerivedGeometry(unittest.TestCase):
+    """Test hand derived geometry."""
+
     def test_step_paths_colors_and_widths(self) -> None:
+        """Test step paths colors and widths."""
         svg = _frontier_chart_svg(_example_frontier())
         paths = _paths(svg)
         self.assertEqual(len(paths), 2)
@@ -123,6 +127,7 @@ class TestHandDerivedGeometry(unittest.TestCase):
         self.assertEqual(paths[1][0], "M 0 160 H 186 V 80 H 497 V 0 H 560")
 
     def test_step_markers_at_vertices(self) -> None:
+        """Test step markers at vertices."""
         svg = _frontier_chart_svg(_example_frontier())
         circles = re.findall(r'<circle cx="(\d+)" cy="(\d+)"', svg)
         # alpha vertices: (0,160) (186,80) (497,0); beta: (0,240) (124,160)
@@ -140,12 +145,14 @@ class TestHandDerivedGeometry(unittest.TestCase):
         )
 
     def test_tick_labels(self) -> None:
+        """Test tick labels."""
         svg = _frontier_chart_svg(_example_frontier())
         texts = re.findall(r"<text[^>]*>([^<]*)</text>", svg)
         for label in ("1", "3", "5", "7", "10", "0", "2", "token budget"):
             self.assertIn(label, texts, f"missing tick/label {label!r}")
 
     def test_legend_order_and_colors(self) -> None:
+        """Test legend order and colors."""
         svg = _frontier_chart_svg(_example_frontier())
         # Decision swatches key the ribbon and come first (fixed order:
         # selected, ambiguous, no candidate — only those present), then
@@ -167,6 +174,7 @@ class TestHandDerivedGeometry(unittest.TestCase):
         self.assertEqual(swatches["alpha"], "#38bdf8")
 
     def test_aria_label_states_exact_data(self) -> None:
+        """Test aria label states exact data."""
         svg = _frontier_chart_svg(_example_frontier())
         match = re.search(r'aria-label="([^"]+)"', svg)
         self.assertIsNotNone(match)
@@ -180,12 +188,16 @@ class TestHandDerivedGeometry(unittest.TestCase):
 
 
 class TestDeterminism(unittest.TestCase):
+    """Test determinism."""
+
     def test_byte_identical_in_process(self) -> None:
+        """Test byte identical in process."""
         first = _frontier_chart_svg(_example_frontier())
         for _ in range(3):
             self.assertEqual(_frontier_chart_svg(_example_frontier()), first)
 
     def test_insertion_order_independent(self) -> None:
+        """Test insertion order independent."""
         forward = _example_frontier()
         reversed_frontier = {
             "max_new_tokens": 10,
@@ -196,6 +208,7 @@ class TestDeterminism(unittest.TestCase):
         self.assertEqual(_frontier_chart_svg(forward), _frontier_chart_svg(reversed_frontier))
 
     def test_byte_identical_across_hash_seeds(self) -> None:
+        """Test byte identical across hash seeds."""
         _SCRATCH.mkdir(parents=True, exist_ok=True)
         payload = _SCRATCH / "frontier.json"
         payload.write_text(json.dumps(_example_frontier()), encoding="utf-8")
@@ -224,11 +237,15 @@ class TestDeterminism(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
+        """Tear down the test fixture."""
         shutil.rmtree(_SCRATCH, ignore_errors=True)
 
 
 class TestRobustness(unittest.TestCase):
+    """Test robustness."""
+
     def test_degenerate_inputs_render_nothing(self) -> None:
+        """Test degenerate inputs render nothing."""
         bad = [
             {},
             {"candidates": {}, "max_new_tokens": 10},
@@ -255,12 +272,14 @@ class TestRobustness(unittest.TestCase):
                 self.assertEqual(_frontier_chart_svg(frontier), "")
 
     def test_does_not_mutate_input(self) -> None:
+        """Test does not mutate input."""
         frontier = _example_frontier()
         snapshot = copy.deepcopy(frontier)
         _frontier_chart_svg(frontier)
         self.assertEqual(frontier, snapshot)
 
     def test_legend_escapes_hostile_names(self) -> None:
+        """Test legend escapes hostile names."""
         evil = '"><script>alert(1)</script>&"'
         frontier = {
             "max_new_tokens": 5,
@@ -279,6 +298,7 @@ class TestRobustness(unittest.TestCase):
         self.assertIn("&amp;", svg)
 
     def test_single_budget_and_single_fixture(self) -> None:
+        """Test single budget and single fixture."""
         frontier = {
             "max_new_tokens": 1,
             "native_winner": "solo",
@@ -299,7 +319,10 @@ class TestRobustness(unittest.TestCase):
 
 
 class TestSectionHook(unittest.TestCase):
+    """Test section hook."""
+
     def test_frontier_section_embeds_chart(self) -> None:
+        """Test frontier section embeds chart."""
         result = {"budget_frontier": _example_frontier()}
         html = reporting._frontier_section(result)
         self.assertIn("<h3>Frontier chart: all candidates</h3>", html)
@@ -312,19 +335,24 @@ class TestSectionHook(unittest.TestCase):
         )
 
     def test_section_without_frontier_unchanged(self) -> None:
+        """Test section without frontier unchanged."""
         self.assertEqual(reporting._frontier_section({}), "")
         self.assertEqual(reporting._frontier_section({"budget_frontier": None}), "")
 
 
 class TestMutationGate(unittest.TestCase):
+    """Test mutation gate."""
+
     SOURCE = _REPO_ROOT / "model_protocol_lab" / "reporting.py"
 
     def test_control_passes(self) -> None:
+        """Test control passes."""
         module = _load_mutant(self.SOURCE, "", "", "control")
         svg = module._frontier_chart_svg(_example_frontier())
         self.assertEqual(_paths(svg)[1][0], "M 0 160 H 186 V 80 H 497 V 0 H 560")
 
     def test_unsorted_legend_caught(self) -> None:
+        """Test unsorted legend caught."""
         # The sort lives in _sorted_str_keys (hostile-payload hardening):
         # mutating it to preserve insertion order must change the chart.
         module = _load_mutant(
@@ -346,6 +374,7 @@ class TestMutationGate(unittest.TestCase):
         )
 
     def test_shifted_x_mapping_caught(self) -> None:
+        """Test shifted x mapping caught."""
         module = _load_mutant(
             self.SOURCE,
             "return (budget - 1) * width // denom_x",
@@ -356,6 +385,7 @@ class TestMutationGate(unittest.TestCase):
         self.assertNotIn("M 0 160 H 186 V 80 H 497 V 0 H 560", svg)
 
     def test_rotated_palette_caught(self) -> None:
+        """Test rotated palette caught."""
         module = _load_mutant(
             self.SOURCE,
             '    "#38bdf8",\n    "#22c55e",',
@@ -367,6 +397,7 @@ class TestMutationGate(unittest.TestCase):
         self.assertNotEqual(paths[1][1], "#38bdf8")
 
     def test_unescaped_legend_name_caught(self) -> None:
+        """Test unescaped legend name caught."""
         module = _load_mutant(
             self.SOURCE,
             '+ escape(name)\n            + "</text>"',
@@ -388,6 +419,7 @@ class TestMutationGate(unittest.TestCase):
         self.assertIn("<script>", module._frontier_chart_svg(frontier))
 
     def test_flipped_y_mapping_caught(self) -> None:
+        """Test flipped y mapping caught."""
         module = _load_mutant(
             self.SOURCE,
             "return (y_total - count) * height // y_total",

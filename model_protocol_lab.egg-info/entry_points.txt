@@ -1,0 +1,3 @@
+[console_scripts]
+model-protocol-lab = model_protocol_lab.cli:main
+model-protocol-lab-mcp = model_protocol_lab.mcp_server:serve

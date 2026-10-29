@@ -51,6 +51,7 @@ CANDIDATES = ("alpha", "beta")
 
 
 def _format(name: str) -> Format:
+    """Format."""
     return Format(
         name=name,
         bos="",
@@ -78,13 +79,16 @@ class ScriptedHierarchyBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(ids):
+        """Decode."""
         return "".join(map(chr, ids))
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         prompt = self.decode(input_ids)
         candidate = next((n for n in CANDIDATES if f"[{n}]" in prompt), None)
         if candidate is None:
@@ -105,11 +109,13 @@ class ScriptedHierarchyBackend:
 
 
 def _pairs():
+    """Pairs."""
     specs = validate_conflict_specs(CONFLICT_SPECS)
     return {spec["system"]: (spec["expected_system"], spec["expected_user"]) for spec in specs}
 
 
 def _run_stage(policy, position="privilege_first"):
+    """Run stage."""
     specs = validate_conflict_specs(CONFLICT_SPECS)
     fixtures, expectations = build_conflict_fixtures(specs, position=position)
     return hierarchy_stage(
@@ -125,51 +131,64 @@ def _run_stage(policy, position="privilege_first"):
 
 
 class ConflictSpecValidationTests(unittest.TestCase):
+    """Conflict spec validation tests."""
+
     def test_valid_specs_pass(self):
+        """Test valid specs pass."""
         specs = validate_conflict_specs(CONFLICT_SPECS)
         self.assertEqual(len(specs), 8)
 
     def test_empty_rejected(self):
+        """Test empty rejected."""
         with self.assertRaises(ValueError):
             validate_conflict_specs(())
         with self.assertRaises(ValueError):
             validate_conflict_specs([])
 
     def test_missing_key_rejected(self):
+        """Test missing key rejected."""
         bad = dict(CONFLICT_SPECS[0])
         del bad["expected_user"]
         with self.assertRaises(ValueError):
             validate_conflict_specs((bad,))
 
     def test_blank_field_rejected(self):
+        """Test blank field rejected."""
         bad = dict(CONFLICT_SPECS[0])
         bad["system"] = "   "
         with self.assertRaises(ValueError):
             validate_conflict_specs((bad,))
 
     def test_duplicate_id_rejected(self):
+        """Test duplicate id rejected."""
         with self.assertRaises(ValueError):
             validate_conflict_specs((CONFLICT_SPECS[0], CONFLICT_SPECS[0]))
 
     def test_equal_answers_rejected(self):
+        """Test equal answers rejected."""
         bad = dict(CONFLICT_SPECS[0])
         bad["expected_user"] = bad["expected_system"]
         with self.assertRaises(ValueError):
             validate_conflict_specs((bad,))
 
     def test_non_dict_rejected(self):
+        """Test non dict rejected."""
         with self.assertRaises(ValueError):
             validate_conflict_specs((CONFLICT_SPECS[0], "junk"))
 
 
 class PrivilegeBlockTests(unittest.TestCase):
+    """Privilege block tests."""
+
     def test_block_format(self):
+        """Test block format."""
         block = privilege_block("do the thing")
         self.assertTrue(block.startswith(PRIVILEGE_OPEN + "\n"))
         self.assertTrue(block.endswith("\n" + PRIVILEGE_CLOSE))
         self.assertIn("do the thing", block)
 
     def test_blank_rejected(self):
+        """Test blank rejected."""
         with self.assertRaises(ValueError):
             privilege_block("  ")
         with self.assertRaises(ValueError):
@@ -177,7 +196,10 @@ class PrivilegeBlockTests(unittest.TestCase):
 
 
 class BuildConflictFixturesTests(unittest.TestCase):
+    """Build conflict fixtures tests."""
+
     def test_positions_order_content(self):
+        """Test positions order content."""
         specs = validate_conflict_specs(CONFLICT_SPECS)
         first, _exp_first = build_conflict_fixtures(specs, position="privilege_first")
         last, _exp_last = build_conflict_fixtures(specs, position="privilege_last")
@@ -192,6 +214,7 @@ class BuildConflictFixturesTests(unittest.TestCase):
         self.assertGreater(block_at, user_at)
 
     def test_expected_is_system_answer(self):
+        """Test expected is system answer."""
         specs = validate_conflict_specs(CONFLICT_SPECS)
         fixtures, expectations = build_conflict_fixtures(specs, position="privilege_first")
         for fixture, spec in zip(fixtures, specs, strict=True):
@@ -201,6 +224,7 @@ class BuildConflictFixturesTests(unittest.TestCase):
             self.assertEqual(fixture.messages[0].role, "user")
 
     def test_ids_unique_and_grouped(self):
+        """Test ids unique and grouped."""
         specs = validate_conflict_specs(CONFLICT_SPECS)
         fixtures, _ = build_conflict_fixtures(specs, position="privilege_first")
         ids = [f.id for f in fixtures]
@@ -208,13 +232,17 @@ class BuildConflictFixturesTests(unittest.TestCase):
         self.assertTrue(all(f.group == "hierarchy-privilege_first" for f in fixtures))
 
     def test_bad_position_rejected(self):
+        """Test bad position rejected."""
         specs = validate_conflict_specs(CONFLICT_SPECS)
         with self.assertRaises(ValueError):
             build_conflict_fixtures(specs, position="sideways")
 
 
 class FamilyLabelTests(unittest.TestCase):
+    """Family label tests."""
+
     def test_pinned_dedicated_families(self):
+        """Test pinned dedicated families."""
         for family in (
             "mistral_large",
             "gemma4",
@@ -234,10 +262,12 @@ class FamilyLabelTests(unittest.TestCase):
             self.assertEqual(system_treatment(family), "dedicated", family)
 
     def test_pinned_folded_families(self):
+        """Test pinned folded families."""
         for family in ("gemma", "gemma3", "deepseek"):
             self.assertEqual(system_treatment(family), "folded", family)
 
     def test_unknown_by_default(self):
+        """Test unknown by default."""
         for family in ("chatml", "llama3", "qwen38", "phi4", "muse_spark"):
             self.assertEqual(system_treatment(family), "unknown", family)
         self.assertEqual(system_treatment("not-a-family"), "unknown")
@@ -245,14 +275,17 @@ class FamilyLabelTests(unittest.TestCase):
         self.assertEqual(system_treatment(None), "unknown")
 
     def test_labels_cover_only_known_catalog_families(self):
+        """Test labels cover only known catalog families."""
         for family in FAMILY_SYSTEM_TREATMENT:
             self.assertIn(family, CATALOG)
 
     def test_labels_are_valid_treatments(self):
+        """Test labels are valid treatments."""
         for treatment in FAMILY_SYSTEM_TREATMENT.values():
             self.assertIn(treatment, ("dedicated", "folded"))
 
     def test_family_of(self):
+        """Test family of."""
         self.assertEqual(family_of("llama3"), "llama3")
         self.assertEqual(family_of("llama3/toggle-bos"), "llama3")
         self.assertEqual(family_of("a/b/c"), "a")
@@ -263,7 +296,10 @@ class FamilyLabelTests(unittest.TestCase):
 
 
 class HierarchyStageTests(unittest.TestCase):
+    """Hierarchy stage tests."""
+
     def test_adherence_counts(self):
+        """Test adherence counts."""
         stage = _run_stage({"alpha": "system", "beta": "user"})
         self.assertEqual(stage["position"], "privilege_first")
         self.assertEqual(stage["n_fixtures"], 8)
@@ -275,17 +311,20 @@ class HierarchyStageTests(unittest.TestCase):
         self.assertIs(beta["pass"], False)
 
     def test_neither_counts(self):
+        """Test neither counts."""
         stage = _run_stage({"alpha": "neither", "beta": "system"})
         alpha = stage["per_candidate"]["alpha"]
         self.assertEqual((alpha["system"], alpha["user"], alpha["neither"]), (0, 0, 8))
         self.assertIs(alpha["pass"], False)
 
     def test_fail_closed_on_generate_raise(self):
+        """Test fail closed on generate raise."""
         stage = _run_stage({"alpha": "raise", "beta": "system"})
         self.assertIsNone(stage["per_candidate"]["alpha"])
         self.assertIsNotNone(stage["per_candidate"]["beta"])
 
     def test_stage_validates_inputs(self):
+        """Test stage validates inputs."""
         specs = validate_conflict_specs(CONFLICT_SPECS)
         fixtures, expectations = build_conflict_fixtures(specs, position="privilege_first")
         formats = tuple(_format(c) for c in CANDIDATES)
@@ -319,6 +358,7 @@ class HierarchyStageTests(unittest.TestCase):
 
 
 def _adherence_stage(per_candidate, position="privilege_first", n_fixtures=8):
+    """Adherence stage."""
     return {
         "position": position,
         "n_fixtures": n_fixtures,
@@ -327,12 +367,16 @@ def _adherence_stage(per_candidate, position="privilege_first", n_fixtures=8):
 
 
 def _entry(system, user, neither, passed):
+    """Entry."""
     return {"n": 8, "system": system, "user": user, "neither": neither, "pass": passed}
 
 
 class HierarchyAdherenceTests(unittest.TestCase):
+    """Hierarchy adherence tests."""
+
     @staticmethod
     def _stages():
+        """Stages."""
         return {
             "privilege_first": _adherence_stage(
                 {
@@ -349,6 +393,7 @@ class HierarchyAdherenceTests(unittest.TestCase):
         }
 
     def test_selection_reapplied_per_condition(self):
+        """Test selection reapplied per condition."""
         result = hierarchy_adherence("alpha", "selected", CANDIDATES, self._stages())
         self.assertTrue(result["available"])
         first = result["per_condition"]["privilege_first"]
@@ -357,6 +402,7 @@ class HierarchyAdherenceTests(unittest.TestCase):
         self.assertEqual((last["decision"], last["winner"]), ("no_candidate", None))
 
     def test_flips_against_primary(self):
+        """Test flips against primary."""
         result = hierarchy_adherence("alpha", "selected", CANDIDATES, self._stages())
         flips = result["flips"]
         self.assertEqual(len(flips), 1)
@@ -365,6 +411,7 @@ class HierarchyAdherenceTests(unittest.TestCase):
         self.assertEqual(flips[0]["decision_to"], "no_candidate")
 
     def test_no_flip_when_matching(self):
+        """Test no flip when matching."""
         stages = {
             "privilege_first": _adherence_stage(
                 {"alpha": _entry(8, 0, 0, True), "beta": _entry(0, 8, 0, False)}
@@ -374,6 +421,7 @@ class HierarchyAdherenceTests(unittest.TestCase):
         self.assertEqual(result["flips"], [])
 
     def test_ambiguous_and_unavailable(self):
+        """Test ambiguous and unavailable."""
         stages = {
             "privilege_first": _adherence_stage(
                 {"alpha": _entry(8, 0, 0, True), "beta": _entry(8, 0, 0, True)}
@@ -398,6 +446,7 @@ class HierarchyAdherenceTests(unittest.TestCase):
         )
 
     def test_position_effect(self):
+        """Test position effect."""
         result = hierarchy_adherence("alpha", "selected", CANDIDATES, self._stages())
         effect = result["position_effect"]
         self.assertIsNotNone(effect)
@@ -406,6 +455,7 @@ class HierarchyAdherenceTests(unittest.TestCase):
         self.assertAlmostEqual(effect["mean_system_rate_delta"], 0.25)
 
     def test_position_effect_absent_with_one_position(self):
+        """Test position effect absent with one position."""
         stages = {
             "privilege_first": _adherence_stage(
                 {"alpha": _entry(8, 0, 0, True), "beta": _entry(0, 8, 0, False)}
@@ -415,6 +465,7 @@ class HierarchyAdherenceTests(unittest.TestCase):
         self.assertIsNone(result["position_effect"])
 
     def test_group_adherence_means(self):
+        """Test group adherence means."""
         stages = {
             "privilege_first": _adherence_stage(
                 {
@@ -435,6 +486,7 @@ class HierarchyAdherenceTests(unittest.TestCase):
         self.assertAlmostEqual(groups["unknown"]["mean_system_rate"], 0.0)
 
     def test_malformed_inputs_degrade(self):
+        """Test malformed inputs degrade."""
         good = self._stages()
         self.assertEqual(
             hierarchy_adherence("alpha", "selected", (), good)["detail"],
@@ -483,6 +535,7 @@ class HierarchyAdherenceTests(unittest.TestCase):
         )
 
     def test_rates_none_when_no_fixtures(self):
+        """Test rates none when no fixtures."""
         stages = {
             "privilege_first": {
                 "position": "privilege_first",
@@ -499,6 +552,7 @@ class HierarchyAdherenceTests(unittest.TestCase):
 
 
 def _hierarchy_payload(**overrides):
+    """Hierarchy payload."""
     payload = {
         "available": True,
         "primary_winner": "alpha",
@@ -566,12 +620,16 @@ def _hierarchy_payload(**overrides):
 
 
 class DiffHierarchyTests(unittest.TestCase):
+    """Diff hierarchy tests."""
+
     def test_identical_payloads_unchanged(self):
+        """Test identical payloads unchanged."""
         diff = diff_hierarchy(_hierarchy_payload(), _hierarchy_payload())
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
 
     def test_condition_triplet_changed(self):
+        """Test condition triplet changed."""
         new = _hierarchy_payload()
         new["per_condition"]["privilege_first"]["winner"] = "beta"
         diff = diff_hierarchy(_hierarchy_payload(), new)
@@ -581,6 +639,7 @@ class DiffHierarchyTests(unittest.TestCase):
         self.assertEqual(cond["new_winner"], "beta")
 
     def test_flips_changed(self):
+        """Test flips changed."""
         new = _hierarchy_payload()
         new["flips"] = []
         diff = diff_hierarchy(_hierarchy_payload(), new)
@@ -588,6 +647,7 @@ class DiffHierarchyTests(unittest.TestCase):
         self.assertTrue(diff["flips_changed"])
 
     def test_candidate_rate_drift(self):
+        """Test candidate rate drift."""
         new = _hierarchy_payload()
         new["per_condition"]["privilege_last"]["per_candidate"]["alpha"]["system_rate"] = 0.75
         diff = diff_hierarchy(_hierarchy_payload(), new)
@@ -598,6 +658,7 @@ class DiffHierarchyTests(unittest.TestCase):
         self.assertEqual(entry["position"], "privilege_last")
 
     def test_group_rates_changed(self):
+        """Test group rates changed."""
         new = _hierarchy_payload()
         new["group_adherence"]["dedicated"]["mean_system_rate"] = 0.9
         diff = diff_hierarchy(_hierarchy_payload(), new)
@@ -605,6 +666,7 @@ class DiffHierarchyTests(unittest.TestCase):
         self.assertTrue(diff["group_rates"]["changed"])
 
     def test_candidates_added_removed(self):
+        """Test candidates added removed."""
         new = _hierarchy_payload()
         new["per_condition"]["privilege_first"]["per_candidate"]["gamma"] = {
             "system_rate": 1.0,
@@ -617,6 +679,7 @@ class DiffHierarchyTests(unittest.TestCase):
         self.assertEqual(diff["candidates_added"], ["gamma"])
 
     def test_positions_added(self):
+        """Test positions added."""
         new = _hierarchy_payload()
         new["positions"] = ["privilege_first", "privilege_last", "privilege_middle"]
         new["per_condition"]["privilege_middle"] = {
@@ -630,6 +693,7 @@ class DiffHierarchyTests(unittest.TestCase):
         self.assertEqual(diff["positions_added"], ["privilege_middle"])
 
     def test_availability(self):
+        """Test availability."""
         self.assertEqual(
             diff_hierarchy(_hierarchy_payload(), {"available": False})["available"], "old"
         )
@@ -639,6 +703,7 @@ class DiffHierarchyTests(unittest.TestCase):
         self.assertEqual(diff_hierarchy(None, None)["available"], "neither")
 
     def test_hostile_payloads_invalid(self):
+        """Test hostile payloads invalid."""
         # Non-string map keys must fail validation (wave-2 C3 lesson).
         evil = _hierarchy_payload()
         evil["per_condition"]["privilege_first"]["per_candidate"][7] = {"system_rate": 1.0}
@@ -654,8 +719,11 @@ class DiffHierarchyTests(unittest.TestCase):
 
 
 class HierarchyDiffIntegrationTests(unittest.TestCase):
+    """Hierarchy diff integration tests."""
+
     @staticmethod
     def _reports(hierarchy_old, hierarchy_new):
+        """Reports."""
         base = {
             "decision": "select_best",
             "selected_candidate": "alpha",
@@ -667,6 +735,7 @@ class HierarchyDiffIntegrationTests(unittest.TestCase):
         return old, new
 
     def test_summary_flags_and_identical(self):
+        """Test summary flags and identical."""
         old, new = self._reports(_hierarchy_payload(), _hierarchy_payload())
         diff = diff_reports(old, new)
         self.assertFalse(diff["summary"]["hierarchy_changed"])
@@ -674,6 +743,7 @@ class HierarchyDiffIntegrationTests(unittest.TestCase):
         self.assertTrue(diff["summary"]["identical"])
 
     def test_changed_feeds_identical(self):
+        """Test changed feeds identical."""
         changed = _hierarchy_payload()
         changed["per_condition"]["privilege_first"]["winner"] = "beta"
         old, new = self._reports(_hierarchy_payload(), changed)
@@ -682,12 +752,14 @@ class HierarchyDiffIntegrationTests(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_asymmetric_feeds_identical(self):
+        """Test asymmetric feeds identical."""
         old, new = self._reports(_hierarchy_payload(), {"available": False})
         diff = diff_reports(old, new)
         self.assertTrue(diff["summary"]["hierarchy_asymmetric"])
         self.assertFalse(diff["summary"]["identical"])
 
     def test_stderr_summary_lines(self):
+        """Test stderr summary lines."""
         changed = _hierarchy_payload()
         changed["per_condition"]["privilege_first"]["winner"] = "beta"
         old, new = self._reports(_hierarchy_payload(), changed)
@@ -696,17 +768,22 @@ class HierarchyDiffIntegrationTests(unittest.TestCase):
         self.assertIn("selected/alpha -> selected/beta", summary)
 
     def test_identical_axes_names_hierarchy(self):
+        """Test identical axes names hierarchy."""
         old, new = self._reports(_hierarchy_payload(), _hierarchy_payload())
         summary = render_summary(diff_reports(old, new))
         self.assertIn("instruction-hierarchy adherence", summary)
 
 
 class HierarchySectionTests(unittest.TestCase):
+    """Hierarchy section tests."""
+
     @staticmethod
     def _result():
+        """Result."""
         return {"hierarchy": _hierarchy_payload()}
 
     def test_renders_tables(self):
+        """Test renders tables."""
         section_html = _hierarchy_section(self._result())
         self.assertIn("Instruction-hierarchy adherence", section_html)
         self.assertIn("privilege_first", section_html)
@@ -714,10 +791,12 @@ class HierarchySectionTests(unittest.TestCase):
         self.assertIn("dedicated", section_html)
 
     def test_empty_when_absent(self):
+        """Test empty when absent."""
         self.assertEqual(_hierarchy_section({}), "")
         self.assertEqual(_hierarchy_section({"hierarchy": {"available": False}}), "")
 
     def test_hostile_non_string_keys_do_not_crash(self):
+        """Test hostile non string keys do not crash."""
         result = self._result()
         hierarchy = result["hierarchy"]
         hierarchy["per_condition"][7] = {
@@ -730,6 +809,7 @@ class HierarchySectionTests(unittest.TestCase):
         self.assertIn("7", section_html)
 
     def test_escapes_hostile_candidate_names(self):
+        """Test escapes hostile candidate names."""
         import html as html_module
 
         result = self._result()
@@ -750,6 +830,7 @@ class HierarchyMutationGateTests(unittest.TestCase):
     """Tempdir-module mutation gates (the real tree is never rewritten)."""
 
     def _run_gate(self, module_name, name, old_text, new_text, scenario):
+        """Run gate."""
         mod = __import__(f"model_protocol_lab.{module_name}", fromlist=["x"])
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
@@ -769,6 +850,7 @@ class HierarchyMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _flip_scenario(mod):
+        """Flip scenario."""
         stages = {
             "privilege_first": {
                 "position": "privilege_first",
@@ -785,6 +867,7 @@ class HierarchyMutationGateTests(unittest.TestCase):
         assert len(result["flips"]) == 1, f"expected 1 flip, got {result['flips']}"
 
     def test_mutant_inverted_flip_detection_caught(self):
+        """Test mutant inverted flip detection caught."""
         self._run_gate(
             "experiments",
             "inverted_flip",
@@ -803,6 +886,7 @@ class HierarchyMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _diff_scenario(mod):
+        """Diff scenario."""
         old = _hierarchy_payload()
         new = _hierarchy_payload()
         new["flips"] = []
@@ -811,6 +895,7 @@ class HierarchyMutationGateTests(unittest.TestCase):
         assert diff["flips_changed"] is True
 
     def test_mutant_dropped_flips_disjunct_caught(self):
+        """Test mutant dropped flips disjunct caught."""
         self._run_gate(
             "diffreports",
             "dropped_flips_disjunct",
@@ -821,6 +906,7 @@ class HierarchyMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _group_scenario(mod):
+        """Group scenario."""
         old = _hierarchy_payload()
         new = _hierarchy_payload()
         new["group_adherence"]["dedicated"]["mean_system_rate"] = 0.9
@@ -829,6 +915,7 @@ class HierarchyMutationGateTests(unittest.TestCase):
         assert diff["group_rates"]["changed"] is True
 
     def test_mutant_dropped_group_disjunct_caught(self):
+        """Test mutant dropped group disjunct caught."""
         self._run_gate(
             "diffreports",
             "dropped_group_disjunct",
@@ -839,6 +926,7 @@ class HierarchyMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _swap_scenario(mod):
+        """Swap scenario."""
         specs = mod.validate_conflict_specs(mod.CONFLICT_SPECS)
         _, expectations = mod.build_conflict_fixtures(specs, position="privilege_first")
         fid = "hierarchy/privilege_first/color-word"
@@ -846,6 +934,7 @@ class HierarchyMutationGateTests(unittest.TestCase):
         assert expectations[fid]["expected_user"] == "emerald", expectations[fid]
 
     def test_mutant_swapped_expectations_caught(self):
+        """Test mutant swapped expectations caught."""
         self._run_gate(
             "hierarchy",
             "swapped_expectations",
@@ -861,6 +950,7 @@ class HierarchyMutationGateTests(unittest.TestCase):
         )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_adherence(primary_winner, primary_decision, candidates, stages):
     """Independent reimplementation of hierarchy_adherence (test oracle)."""
     per_condition = {}
@@ -922,6 +1012,7 @@ class HierarchyOracleTests(unittest.TestCase):
     """Brute-force differential: the pure analysis vs an independent oracle."""
 
     def test_oracle_agrees_on_random_stages(self):
+        """Test oracle agrees on random stages."""
         rng = random.Random(20261018)  # noqa: S311 -- deterministic test seed
         for _ in range(200):
             n_candidates = rng.randint(1, 4)
@@ -968,32 +1059,43 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
     """Pin the fail-closed and defensive branches (coverage gate)."""
 
     def test_validator_rejects_each_malformed_shape(self):
+        """Test validator rejects each malformed shape."""
+
         def _positions_not_list(payload):
+            """Positions not list."""
             payload.update(positions="privilege_first")
 
         def _per_condition_key_mismatch(payload):
+            """Per condition key mismatch."""
             payload["per_condition"].pop("privilege_last")
 
         def _condition_not_dict(payload):
+            """Condition not dict."""
             payload["per_condition"].update(privilege_first="x")
 
         def _winner_not_str(payload):
+            """Winner not str."""
             payload["per_condition"]["privilege_first"].update(winner=42)
 
         def _entry_not_dict(payload):
+            """Entry not dict."""
             payload["per_condition"]["privilege_first"]["per_candidate"].update(alpha="x")
 
         def _pass_not_bool(payload):
+            """Pass not bool."""
             entry = payload["per_condition"]["privilege_first"]["per_candidate"]["alpha"]
             entry["pass"] = "yes"
 
         def _groups_not_dict(payload):
+            """Groups not dict."""
             payload.update(group_adherence=[])
 
         def _group_not_dict(payload):
+            """Group not dict."""
             payload["group_adherence"].update(dedicated="x")
 
         def _group_label_not_str(payload):
+            """Group label not str."""
             payload["group_adherence"][7] = {
                 "n_candidates": 0,
                 "n_families": 0,
@@ -1001,12 +1103,15 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
             }
 
         def _mean_not_number(payload):
+            """Mean not number."""
             payload["group_adherence"]["dedicated"].update(mean_system_rate="high")
 
         def _n_candidates_not_int(payload):
+            """N candidates not int."""
             payload["group_adherence"]["dedicated"].update(n_candidates="1")
 
         def _n_families_not_int(payload):
+            """N families not int."""
             payload["group_adherence"]["dedicated"].update(n_families=1.5)
 
         cases = {
@@ -1031,6 +1136,7 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
                 self.assertEqual(diff["available"], "new", name)
 
     def test_validator_accepts_none_entry(self):
+        """Test validator accepts none entry."""
         # A None per-candidate entry is skipped, not invalid.
         payload = _hierarchy_payload()
         payload["per_condition"]["privilege_first"]["per_candidate"]["alpha"] = None
@@ -1038,7 +1144,10 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
         self.assertEqual(diff["available"], "both")
 
     def test_adherence_rejects_malformed_stages(self):
+        """Test adherence rejects malformed stages."""
+
         def _bad(**overrides):
+            """Bad."""
             stage = _adherence_stage({"alpha": _entry(8, 0, 0, True)})
             stage.update(overrides)
             return {"privilege_first": stage}
@@ -1056,6 +1165,7 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
                 self.assertEqual(result["detail"], "stage_privilege_first_invalid", name)
 
     def test_flip_key_skips_non_dict_entries(self):
+        """Test flip key skips non dict entries."""
         old = _hierarchy_payload()
         new = _hierarchy_payload()
         new["flips"] = [None, old["flips"][0]]
@@ -1064,7 +1174,10 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
         self.assertFalse(diff["flips_changed"])
 
     def test_adherence_rejects_bad_entry_shapes(self):
+        """Test adherence rejects bad entry shapes."""
+
         def _stage_with(entry):
+            """Stage with."""
             return {"privilege_first": _adherence_stage({"alpha": entry})}
 
         bad_entries = {
@@ -1091,6 +1204,7 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
                 self.assertEqual(result["detail"], "stage_privilege_first_invalid")
 
     def test_adherence_rejects_non_dict_per_candidate(self):
+        """Test adherence rejects non dict per candidate."""
         for per_candidate in ("x", {7: _entry(8, 0, 0, True)}):
             with self.subTest(per_candidate=per_candidate):
                 stage = _adherence_stage({"alpha": _entry(8, 0, 0, True)})
@@ -1102,6 +1216,7 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
                 self.assertEqual(result["detail"], "stage_privilege_first_invalid")
 
     def test_render_summary_positions_added_removed(self):
+        """Test render summary positions added removed."""
         base = {
             "decision": "select_best",
             "selected_candidate": "alpha",
@@ -1118,6 +1233,7 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
         self.assertIn("Hierarchy positions removed", summary)
 
     def test_render_summary_flips_changed_line(self):
+        """Test render summary flips changed line."""
         base = {
             "decision": "select_best",
             "selected_candidate": "alpha",
@@ -1135,6 +1251,7 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
         self.assertIn("flip pattern changed", summary)
 
     def test_section_tolerates_malformed_optionals(self):
+        """Test section tolerates malformed optionals."""
         result = {"hierarchy": _hierarchy_payload()}
         hierarchy = result["hierarchy"]
         hierarchy["flips"] = "not-a-list"
@@ -1145,6 +1262,7 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
         self.assertNotIn("correlation readout", html)
 
     def test_section_skips_non_dict_flip_entries(self):
+        """Test section skips non dict flip entries."""
         result = {"hierarchy": _hierarchy_payload()}
         flips = result["hierarchy"]["flips"]
         result["hierarchy"]["flips"] = [None, flips[0]]
@@ -1158,6 +1276,7 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
         self.assertFalse(diff["flips_changed"])
 
     def test_render_summary_neither_and_non_dict(self):
+        """Test render summary neither and non dict."""
         from model_protocol_lab.diffreports import _render_hierarchy_summary
 
         self.assertEqual(_render_hierarchy_summary(None), [])
@@ -1177,6 +1296,7 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
         self.assertNotIn("Hierarchy adherence drift", summary)
 
     def test_render_summary_drift_candidates_groups(self):
+        """Test render summary drift candidates groups."""
         base = {
             "decision": "select_best",
             "selected_candidate": "alpha",
@@ -1222,6 +1342,7 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
         self.assertIn("(none) -> 50.0%", summary)
 
     def test_render_summary_one_sided_hierarchy(self):
+        """Test render summary one sided hierarchy."""
         base = {
             "decision": "select_best",
             "selected_candidate": "alpha",
@@ -1234,6 +1355,7 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
         self.assertIn("did not record the hierarchy probe", summary)
 
     def test_section_group_note_absent_without_numeric_rates(self):
+        """Test section group note absent without numeric rates."""
         result = {"hierarchy": _hierarchy_payload()}
         groups = result["hierarchy"]["group_adherence"]
         groups["dedicated"]["mean_system_rate"] = None
@@ -1243,6 +1365,7 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
         self.assertNotIn("correlation readout", html)
 
     def test_section_skips_non_dict_group(self):
+        """Test section skips non dict group."""
         result = {"hierarchy": _hierarchy_payload()}
         result["hierarchy"]["group_adherence"]["dedicated"] = "x"
         html = _hierarchy_section(result)
@@ -1251,12 +1374,16 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
 
 
 class HierarchyCliProbeTests(unittest.TestCase):
+    """Hierarchy cli probe tests."""
+
     @staticmethod
     def _result():
+        """Result."""
         return {"decision": "selected", "selected_candidate": "alpha"}
 
     @staticmethod
     def _call(result, backend):
+        """Call."""
         from model_protocol_lab.cli import _run_hierarchy_probe
 
         _run_hierarchy_probe(
@@ -1270,6 +1397,7 @@ class HierarchyCliProbeTests(unittest.TestCase):
         )
 
     def test_probe_helper_happy_path(self):
+        """Test probe helper happy path."""
         result = self._result()
         self._call(
             result,
@@ -1280,6 +1408,7 @@ class HierarchyCliProbeTests(unittest.TestCase):
         self.assertEqual(hierarchy["positions"], ["privilege_first", "privilege_last"])
 
     def test_probe_helper_fail_closed(self):
+        """Test probe helper fail closed."""
         result = self._result()
         with mock.patch(
             "model_protocol_lab.hierarchy.validate_conflict_specs",
@@ -1302,6 +1431,7 @@ class HierarchyGroupLabelSanitizationTests(unittest.TestCase):
     """
 
     def test_group_label_terminal_escapes_stripped(self):
+        """Test group label terminal escapes stripped."""
         base = {
             "decision": "select_best",
             "selected_candidate": "alpha",

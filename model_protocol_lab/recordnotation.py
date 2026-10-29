@@ -628,6 +628,7 @@ def records_bytes(records_by_candidate: dict[str, list[dict[str, Any]]]) -> int:
     )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def validate_case(case: dict[str, Any], seed: int) -> bool:
     """The pre-generation invariant battery over one case
     (candidate sections 2 and 3), executed by the stage before

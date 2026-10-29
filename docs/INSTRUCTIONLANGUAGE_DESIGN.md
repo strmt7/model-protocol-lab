@@ -1,0 +1,788 @@
+# Instruction-language probe — design round (ADJUDICATED: NO-BUILD)
+
+## Round summary (coordinator #40, design round only — nothing built)
+
+- Tree at main `f31e72e1ace4` (cycle 212 closed green, 8,439 tests,
+  precise coverage 95.3455%). This round was READ-ONLY except for
+  this doc and the briefs; no suite was run, no push was made, no
+  tag was cut or discussed.
+- Specialists (blind to each other): researcher
+  (`~/workspace/agents_out/instructionlanguage/research.md`),
+  red-team A (`redteam_a.md`), red-team B (`redteam_b.md`),
+  verifier/claims auditor (`verifier.md`). All four briefs landed.
+  The verifier resolved every externally checkable claim against
+  primary sources, re-ran every surviving PoC, and recomputed all
+  decision math exactly; the coordinator re-executed the
+  load-bearing claims itself (§4). **Fabrication sweep: clean** —
+  a first for this program. Every symbol cited by any brief exists
+  at or within a few lines of the cited location; the failures
+  found were one Monte Carlo cell off by ~2.4σ, several
+  unreproducible secondary figures, and sloppy line ranges, all
+  handled in §5.
+- Convergence and divergence, in one paragraph: all three blind
+  briefs return NO-BUILD for the candidate as specified in the
+  circulated sketch (EN vs DE vs FR instructions over a numform
+  fork, 9 frozen strings, answers numeric), and the verifier
+  sustains that unanimously, fatal by fatal, by execution. The
+  researcher additionally specifies a narrowed instrument (add as
+  sole headline task, copy as competence gate, compare excluded,
+  six frozen strings, a new locale-grammar decomposition, a
+  panel-derived (8,5) rule) and recommends BUILD-as-amended; the
+  verifier verifies every load-bearing number in it and rules it
+  a **resubmission, not an amendment**, under the program's own
+  test. The coordinator concurs: the verdict is **NO-BUILD** —
+  for the sketch, and as a build order for the narrowed
+  instrument in this round. §3 records the narrowed instrument as
+  the resubmission candidate in full, with the questions a fresh
+  review must settle head-on. The sketch is dead; what survives
+  is a claim about six named strings, and whether that residue is
+  worth the build surface is a judgment the fresh review must
+  make with both red teams' recommendation against prioritising
+  it in front of it.
+
+## 1. Why NO-BUILD: the fatal defects of the candidate as specified
+
+Each defect below is individually blocking and was established by
+execution (attribution: A = red-team A, B = red-team B, V =
+verifier, C = coordinator).
+
+### F1 — The translation confound: one rendering per language cannot identify a language effect
+
+The sketch freezes exactly one hand-authored string per language
+per task. Language and rendering are therefore perfectly
+collinear: a discordance between the EN and DE arms is, with equal
+support, an effect of the German language, of this translator's
+lexical choice, of register, of this sentence's length, or of an
+awkwardness in this sentence. No analysis can separate them,
+because the rendering never varies within a language. There is
+no equivalence theorem for translations comparable to
+canonical-form's UAX #15 basis: NFC and NFD are *the same string*
+under a standard that proves it; a translation is "the same
+instruction" only by stipulation. Negation escaped the analogous
+trap because its arm meaning was *derived* (the pair-closed
+complement rule, NEGATION_DESIGN §2.3); a translation's meaning
+is only ever stipulated — the payload round's F2 in linguistic
+dress. Executed (A; C independently, §4): equally valid renderings
+of the same compare instruction spread 7 chars within German and
+7 within French on the coordinator's own strings (A: up to 12
+within French), the same order as the EN→DE delta itself (C:
++3 to +10). "The DE arm" is a sample of size 1 from a rendering
+distribution whose variance the design cannot estimate.
+
+### F2 — The compare task has no coherent arm design (the sketch's premise is false for one of its three tasks)
+
+The sketch says "answers stay numeric". Compare's expected answer
+is the English word `first`/`second` (`numform.py:597-603`,
+`expected_answer` returns `expected_label`), not a number.
+Both horns of the label dilemma break (A, B, executed):
+
+- *Labels stay English:* the DE/FR instruction must demand an
+  English answer word — a code-mixed hybrid no localiser ships;
+  the arm measures instruction-switching, and a locally correct
+  answer (`erste`) scores False.
+- *Labels translate:* the scorer's target moves per arm, the
+  frozen gender/ordinal choice is arbitrary and load-bearing
+  (DE `erste` vs `erster`; FR `premier`/`deuxième`/`première` —
+  ≥10 mutually byte-distinct defensible DE forms, B), and the FR
+  forms violate the canonical-form scorer pin: `deuxième` and
+  `première` are non-ASCII and NFC/NFD-divergent (C, executed,
+  §4). Negation's pin — reply contract byte-identical in every
+  arm, so the answer vocabulary never varies — cannot be
+  satisfied by a language probe at all on this task.
+
+### F3 — The byte-exact scorer × locale number conventions manufacture failures and misattribute them
+
+Executed through the tree's real `core.evaluate` (`core.py:797`)
+with a semantically perfect localising backend (A poc5; C re-ran
+it, §4): the perfect localiser scores `exact_match=False` on
+every non-EN arm (`erste`, `premier`, `1.234.568`). Worse, the
+shipped decomposition cannot even describe the failure:
+`numform.parse_value("1.234.568")` is `None` (C, executed), so a
+numerically correct German-grouped sum decomposes as `value_fail`
+— an arithmetic failure — not `value_pass_form_fail`. The forms
+axis and the language axis are not orthogonal: numform's comma
+form `1,234` reads as the decimal 1.234 under German convention
+(a factor of 1000, B's well-formed version of the point), and
+numform's space form is byte-identical to French U+202F grouping
+(`render_form(1234567, "space") == "1\u202f234\u202f567"`, C,
+executed). Any design retaining comma/space forms across
+languages measures notation parsing; a plain-only design avoids
+the collision only by retreating to bare digits (see F6's
+utility residue).
+
+### F4 — No decision rule exists in the sketch, and the borrowed rule is a noise amplifier
+
+The sketch names no decision rule at all — underspecification at
+the decision layer (the payload F1 pattern, one level up). The
+obvious borrowed rule (placement/canonical-form/numform (6,2))
+is executed to death three ways: exact enumeration (B; V; C,
+§4) gives a directional "advantage" fire rate of 0.8598 on a
+random labeller at n=16 — an expectation of 61.9 fires across 72
+decisions (3 pairs × 24 candidates) — and A's weakest-reading
+rule fires 0.8115 (exact; A's Monte Carlo printed 0.8196) on a
+competent no-effect candidate. A rule that fires 86% on noise
+and ~97% on a real 0.90-vs-0.60 gap discriminates almost
+nothing. Multiplicity is triple the sibling panels' before tasks
+are even separated, and numform forbids pooling rates across
+tasks.
+
+### F5 — The arm-equivalence premise is unvalidatable in this tree, and the scope exemption fails
+
+The strings would be LLM-authored. A pinning test proves
+frozenness, not correctness, idiomaticity, or equivalence.
+Back-translation by the same model class is circular (A, B, V
+concur): it measures self-consistency, not fidelity; the tree
+contains no DE/FR reference artefact of any kind. The premise
+"these strings say the same thing" is the one premise no agent
+in the pipeline can check — a design that cannot state how its
+central premise could be falsified fails the repo's scientific
+standard. Scope: surface-noise excludes "semantic paraphrase of
+instructions" (`surfacenoise.py:1251`, `:1403`, `not_measured`
+lists, V-verified). Negation earned re-entry on *derivable*
+ground truth for the variation itself. Translation meets that
+test only via the payload-residue route — the claim's subject
+becomes the strings — not via a derivable arm equivalence (A11,
+sustained by V). A translation is a paraphrase in another
+language; it inherits the exclusion unless the claim is
+re-scoped.
+
+### F6 — Bundling, fertility, and the utility residue
+
+Switching the instruction's language moves vocabulary, word
+order, length, character set, register (a forced Sie/du,
+vous/tu choice — the researcher's own draft strings drifted
+register mid-round and only deliberate checking caught it, V §5),
+typographic convention (FR space-before-colon), and tokenisation
+together (payload F3 at maximum strength: an entire linguistic
+system as the treatment). Canonical-form's ID-divergence gating
+is vacuous here — all pairs diverge by construction — so
+divergence can only be *reported* (negation's disposition, which
+all briefs adopt). Token fertility itself is **UNEXECUTED** in
+this round: the tree has no frozen local tokenizer (only
+`backend.encode` at run time), A's attempted real-BPE execution
+failed on a vocab-3 test fixture, B marked its counts
+UNEXECUTED, and no DE/FR fertility figure may be printed from
+any doc in this line (§5). What survives F1–F6 is a descriptive
+discordance between named frozen strings — and both red teams
+argue, on the Monday-morning test, that the residue does not
+clear the bar for the full sibling-probe build surface: an
+operator can already run the existing lab on self-authored
+German fixtures; the probe's marginal product is the frozen
+panel plus derived rule plus validator mirror (V downgrades A9
+to a standing utility caveat on exactly that ground — every
+generated probe in this program offers the same marginal
+product). That judgment is recorded, not settled, here; §3
+item 6(d) puts it to the fresh review.
+
+### Non-fatals, adjudicated
+
+- **Winner framing.** The sketch's framing ("does the template
+  verdict reached in English survive localization") presupposes
+  per-language winner re-selection, which the numform settlement
+  forbids over synthetic sets (`experiments.py:11049-11051`) and
+  which has no three-arm total extension (A10, sustained). The
+  narrowed instrument drops the winner readout entirely; the
+  framing sentence is retired with the sketch (§5).
+- **Naming.** `--instruction-language` is free as a string (zero
+  hits, all briefs' greps concur), but "language" already names
+  language *identification* in the tree (the `classify-language`
+  spec, `fieldorder.py:258`, `structured.py:155`, answer enum
+  literally english/german/french), and the name asserts the
+  treatment is *language* while the surviving claim's subject is
+  *strings*. The mismatch is unresolved by any brief and is a
+  §3 question, not a detail (A12, B §3, V §6).
+- **Split contamination.** REFUTED as a fatal, conditionally:
+  stage-local generated cases never enter the user's Split
+  (canonical-form/negation invariant). The narrowed instrument
+  states the invariant as binding; a resubmission must too.
+- **Role frame.** The catalog's templates frame every arm in
+  English role tokens, so even a perfect DE user turn is "German
+  content inside an English protocol frame" (B §10). The claim's
+  scope is user-turn instruction only, and must say so.
+- **ID-divergence disposition — settled.** Reported, not gated,
+  not conditioned on (unanimous; §3). Same-ids cases are a
+  rendering anomaly; same-ids flips are determinism findings,
+  never language fragility.
+
+## 2. Why the narrowed instrument is a resubmission, not an amendment
+
+The negation round's BUILD verdict rested on a stated test:
+every defect was corrected by amendment to the *same*
+instrument — same population, same arms, same scorer, same
+joint-rule shape — whose population and arms were already
+frozen and executable. The payload and answer-syntax rounds
+rest on the complementary test: where amendments change the
+endpoint set, the population, or the headline scorer, the
+result is a resubmission and must be reviewed as a new design.
+
+Measured against that test, the researcher's narrowed instrument
+changes: the **population** (numform's three tasks → add as sole
+headline task, copy demoted to a competence gate/descriptive
+arm, compare excluded outright); the **decision statistic**
+(none in the sketch → an EN-conditioned joint rule with a copy
+gate, counting only a new parsed decomposition class); and it
+adds **new scorer-side machinery** (frozen locale grammars —
+DE dot-grouping, FR space-grouping — inside a six-class
+decomposition the sketch did not have), even though the per-cell
+verdict stays byte-exact and the arms (en/de/fr renderings)
+survive. The verifier's §6 ruling — resubmission in
+configuration — is adopted in full.
+
+The verdict is therefore NO-BUILD for this round. This is
+explicitly **not** a finding that the narrowed instrument is
+unsound: it arrives complete (frozen strings with a recomputed
+digest, a derived rule whose operating characteristics the
+verifier recomputed *exactly*, a frozen decomposition, counts,
+vocabulary, naming audit), and its numbers all check out (§4).
+What it has never faced is a blind red team of its own: both red
+teams attacked the sketch, not this instrument — the same gap
+that made the answer-syntax amended instrument a resubmission.
+And three conditions the red teams set for any resubmission are
+unmet (§3, item 6). The program does not build an instrument on
+verification alone, however complete the verification is.
+
+## 3. Resubmission specification (NOT a build order)
+
+A resubmission is reviewable as a NEW design only if it
+satisfies all of the following in full. Partial compliance is
+still NO-BUILD. The researcher's narrowed instrument
+(`~/workspace/agents_out/instructionlanguage/research.md`
+§§1–13) is the resubmission candidate and is incorporated by
+reference, subject to items 1–5 below; the fresh review's job
+is to attack the frozen machinery itself (the six strings, the
+locale grammars, the copy gate, the (8,5) rule), not to
+re-litigate the sketch, which is dead.
+
+1. **Corrections applied before review.** (i) The (8,4) grid
+   cell is 4.96% exact (panel expectation ≈2.38), not the
+   brief's Monte Carlo 4.7% / 2.26 (V §4.1; C §4). The chosen
+   (8,5) rule is unaffected. (ii) The copy gate's status is
+   resolved to the brief's §6.1 version — a *blocking*
+   condition on `instruction_language_drop_observed` — and is
+   not described as "the negation gate-weak pattern" without
+   noting that shipped negation's gate-weak is a non-blocking
+   printed flag (V §4.1). (iii) The locale grammars (DE
+   `^[0-9]{1,3}(\.[0-9]{3})*$`; FR space-grouping incl. U+0020)
+   are presented as NEW frozen grammars authored by the design,
+   not as shipped tree code, with the integer-operand fiat
+   disclosed: `803.564` counts as grouped 803564, never as a
+   decimal; a decimal-comma answer is class 4/5 under the
+   frozen grammars. (iv) Researcher poc2's 991-case rows are
+   not evidence for anything (broken substitution loop, V §4.1).
+2. **Frozen items that carry verbatim in substance:** the six
+   strings of research §2.1 (EN = numform templates verbatim;
+   DE/FR formal register, NFC, digest
+   `f9d7b56d9f08a7234700ad3526dc463d3dbeb62a38d8098b1be168eaea17835a`);
+   the population (add headline, 16 cases; copy gate/
+   descriptive, 16 cases; compare excluded; plain form only;
+   generated, stage-local, never the Split); the six-class
+   decomposition with precedence as specified (only
+   `wrong_numeric_value` counts toward J); the (8,5) rule per
+   candidate per non-EN language with the copy gate, the
+   reverse-discordance count `n_reverse` printed beside every
+   decision, and this panel's own operating-characteristics
+   table (as corrected — never negation's paragraph); the
+   fail-closed vocabulary of research §8; counts (96
+   generations/candidate; 2,304 at 24 candidates; 768
+   multi-cell ground records; 1,152 headline generations);
+   digest-only records; the validator mirror recomputing the
+   generator, strings, grammars, decomposition, and aggregates.
+   Deviation from any frozen item voids the design and requires
+   fresh review.
+3. **Claim (the only falsification-class sentence, research §4
+   in substance):** "On this candidate, on the frozen add panel,
+   at least 5 of the cases it passed under the frozen English
+   instruction produced a mechanically parseable wrong numeric
+   sum under the frozen German [resp. French] instruction,
+   while its copy gate held — a drop pattern relative to the
+   English rendering of this instruction, on these LLM-authored
+   frozen strings." The claim's subject is the strings. Its
+   scope is the user-turn instruction only (English role frame
+   disclosed). It is not "using the model in German": German
+   number words, German grouping, and German prose answers are
+   contract violations under this instrument, recorded
+   descriptively in the decomposition classes — a user who
+   wants that construct needs a different probe with
+   per-language expected values and its own scorer design.
+4. **Token-ID divergence:** reported, not gated, not
+   conditioned on. Per case, per arm pair: render-id digest
+   and length, `ids_identical`, `id_length_delta` list,
+   `max_abs_id_delta`; same-ids excluded from the headline
+   population as a rendering anomaly; same-ids flips are
+   determinism findings. Length/fertility is a printed rival
+   beside every decision (char/byte deltas labelled as such).
+   No token-fertility number for DE/FR may be printed (§5).
+5. **Monday-morning utility (narrowed instrument):** a team
+   serving a local checkpoint to German- or French-speaking
+   users, whose templates were selected and validated in
+   English, uses this probe per candidate to decide whether
+   their existing English instruction wording can be localised
+   as-is or must be re-validated per language — before a silent
+   instruction-language drop ships. Where the verdict is
+   `insufficient` or `below_threshold`, the honest deliverable
+   is "this panel cannot distinguish them; choose on other
+   grounds", and the design must say so in those words'
+   substance.
+6. **What the fresh review must settle head-on** (silence on
+   any of these is NO-BUILD):
+   a. **Renderings per language.** At least two independently
+      authored renderings per language per task, with
+      within-language discordance printed beside cross-language
+      discordance (A's condition (ii), B §12) — the only
+      in-design answer to F1 — OR a fresh-review finding that
+      the strictly string-scoped claim of item 3 stands without
+      them. The finding must be argued, not assumed: if
+      within-language discordance is comparable to
+      cross-language discordance on the coordinator's own
+      executed spreads (F1, §4), a single-rendering design's
+      numbers cannot be read as language numbers even
+      descriptively without that caveat printed beside them.
+   b. **The flag name.** `--instruction-language` names the
+      abstraction; item 3's claim names six strings. The fresh
+      review must either rename the flag to name the renderings
+      (the payload/answer-syntax naming discipline) or argue,
+      against A12/B §3, why the language name does not overclaim
+      a string-scoped instrument. Either way the build cycle's
+      USAGE naming audit remains required, and the
+      `classify-language` distinction must be stated in the
+      USAGE section's opening (research §11 cautions carry).
+   c. **Translation validation.** A stated, checkable method
+      stronger than same-model-family back-translation (A
+      condition (vii)), or an explicit fresh-review finding
+      that unattested fidelity plus the string-scoped claim is
+      acceptable, with the §2.2 ceiling (LLM-authored,
+      mechanically invariant-checked, blind-back-translation-
+      checked at build — never "human-validated", never
+      "natural/idiomatic" as established fact) printed wherever
+      the claim appears. Red-team A records that it cannot
+      currently name such a method in-tree; a resubmission that
+      cannot either must win the explicit finding, not skip the
+      question.
+   d. **Utility vs the slate.** Both red teams recommend
+      against building this residue ahead of the rest of the
+      slate (its honest headline is the thinnest of any wave-10
+      candidate). The fresh review decides the value judgment
+      with the build cost (new module, stage, validator mirror,
+      report section, CLI surface) and the panel-wise false-fire
+      expectation (≈0.53 false labels per 48-decision panel,
+      P(≥1) ≈ 41% at the derived rule's no-effect rate) in
+      front of it.
+   e. **Scope justification.** The surfacenoise §6 question is
+      answered via the payload-residue route (claim subject =
+      strings), NOT via a negation-style derivability
+      exemption, and the resubmission says so in those terms
+      (A11, V §4.2).
+7. **Sources** are limited to §6 of this doc, with their
+   fencing. No "first" is claimed anywhere; the contribution,
+   if the resubmission is ever built, is the combination stated
+   in research §10 (instruction sentence as sole varying
+   component, language-neutral operands, byte-identical expected
+   answer, chat-template crossing, panel-derived falsification
+   rule), scoped to fetched sources.
+
+## 4. Adjudication evidence (coordinator's own execution)
+
+All snippets read-only; no suite was run. Coordinator script in
+`/tmp/instlang/coord_poc.py` during the round, plus direct re-runs
+of the briefs' surviving PoC scripts.
+
+- **Within-language spread (F1).** Coordinator's own renderings
+  of the compare instruction (instruction sentence only): EN 79
+  chars; four DE renderings 82–89 chars (within-DE spread 7;
+  EN→DE deltas +3, +4, +5, +10); three FR renderings 89–96
+  (within-FR spread 7; EN→FR deltas +10, +11, +17).
+  Within-language variation is the same order as the
+  cross-language delta. (A's convention counts the same effect
+  at up to 12 chars within FR; B counts templates including
+  placeholders — V reconciled the two conventions; no brief
+  mixes conventions mid-table.)
+- **Locale forms (F3).** `numform.parse_value("1.234.568")`,
+  `parse_value("1.234")`, and `parse_value("803.564")` are all
+  `None`. `render_form(1234567, "space")` is byte-identical to
+  the French U+202F grouping `"1\u202f234\u202f567"`, and that
+  string parses back to 1234567. `render_form(1234567, "comma")`
+  is `"1,234,567"`.
+- **Perfect localiser through the real scorer (F3).**
+  Re-ran red-team A's poc5 against shipped `core.evaluate`:
+  EN compare `first` and EN add `1234568` score
+  `exact_match=True`; DE compare `erste`, FR compare `premier`,
+  and DE add `1.234.568` all score `exact_match=False` with
+  status completed; the DE add answer decomposes as `value_fail`
+  (parse `None`), not `value_pass_form_fail`.
+- **FR label pin (F2).** `deuxième` and `première`:
+  `isascii()` False, NFC ≠ NFD. DE `erste`/`zweite`: ASCII,
+  NFC-stable. The FR failure alone suffices to exclude compare
+  under the scorer pin.
+- **Borrowed floors (F4).** Exact enumeration of the (6,2)
+  directional rule under the random-labeller null at n=16:
+  a_advantage 0.4299, b_advantage 0.4299, directional fire
+  0.8598, expected fires 61.9 per 72 decisions — digit-for-digit
+  B's table and V's enumeration.
+- **Researcher's derived rule (§3).** Exact DP (no Monte
+  Carlo): the (8,5) rule with copy gate at the no-effect
+  competent model (p_en=.9, r=.1, copy=.95) fires 0.0111; panel
+  expectation over 48 decisions ≈0.53, P(≥1) ≈ 41%. The (8,4)
+  neighbour fires 0.0496 exactly (expectation ≈2.38) — the
+  corrected cell of §3 item 1(i). The random-labeller null does
+  not transfer to this panel (a random digit guesser is
+  `insufficient` 100% of the time), as the researcher states.
+- **Frozen strings (§3).** Re-ran researcher poc5: all six
+  strings NFC, digit-free, placeholder/line parity holds;
+  deltas copy DE +1/+2, copy FR +4/+6, add DE +23/+23,
+  add FR +18/+21 (chars/bytes); the six-string digest
+  recomputes identically:
+  `f9d7b56d9f08a7234700ad3526dc463d3dbeb62a38d8098b1be168eaea17835a`.
+- **Verifier reproductions accepted:** the fabrication sweep
+  (§4.0 of the verifier brief: every cited symbol located,
+  catalog counted at 29 `Format` entries by AST and by
+  `len(CATALOG)`); the exact-DP table for the researcher's rule
+  grid; B's PoC 5 winner-flip magnitude (~19–21%, exact figure
+  unreproduced — §5); A's poc1–poc3 char tables. The coordinator
+  did not re-run those in full; they are credited to the
+  verifier, not claimed as coordinator executions.
+
+## 5. Removals applied (verifier removals list — none of these enter any build doc)
+
+- Any claim of the form "German/French instructions degrade /
+  improve / do not affect ⟨task⟩", "models are worse in German",
+  or "the template verdict survives localization" — in
+  headlines, CLI help, README, or section titles. The only
+  permitted claim subject is the named frozen strings (§3,
+  item 3).
+- Etxaniz et al. beyond §6's fencing: no per-task numbers,
+  model names, or effect sizes; no use as evidence about
+  instruction-only variation (its treatment is whole-input
+  translation to English).
+- Petrov's "up to 15×" as a DE/FR or per-language figure, and
+  any specific DE/FR fertility or token-count number whatsoever
+  — no tokenizer was executed in this round. Char/byte deltas
+  may be printed only labelled as char/byte deltas.
+- Ahia et al. per-language cost multipliers from secondary
+  sources (not in the primary abstract). MMMLU figures of any
+  kind (not primary-resolved this round; "15 languages" would
+  be wrong — 14 non-English translations).
+- The borrowed (6,2) rule in any form, and negation's (8,5)
+  operating-characteristics paragraph transplanted to this
+  panel — this panel's rule has its own table (§4, as
+  corrected). The negation-round (6,2)-fires-58% figure may be
+  cited only as a NEGATION_DESIGN §7.3 result about negation's
+  joint statistic.
+- Red-team B's unreproduced PoC 1 ranges (FR strings 104–121
+  chars, DE to 124, FR copy 121 chars / 124 bytes — strings
+  unquoted, no scripts left) and B's PoC 5 winner-flip figure
+  20.8% as an exact number (magnitude ~19–21% only; tie rule
+  unstated; verifier replication 19.3%).
+- Red-team A's "value changed by 10^6" for the comma-form
+  reading (use B's well-formed 1,234 → 1.234, factor 1000), and
+  A's "(DIN 5008 / CLDR de)" attribution for dot grouping
+  (CLDR de only; DIN 5008 prefers space grouping).
+- B §7's "no register-neutral imperative/question exists in
+  German/French" as a linguistic fact (infinitival instruction
+  style is a counterexample — DE "Nur mit der Summe antworten:",
+  FR "Répondre uniquement par la somme :"). The bundling
+  conclusion survives; the absolute claim does not.
+- Researcher poc2's 991-case rows as evidence, and the
+  researcher's poc1 draft register-mixed strings (superseded
+  by the poc5 freeze, digest in §4).
+- Any assertion that a DE/FR string in this round is "natural /
+  idiomatic / register-appropriate" as an established fact —
+  including the researcher's FR-space remark and B's ordinal
+  grammar gloss. Every such judgment this round, the verifier's
+  included, rests on LLM judgement; only agreement, convention,
+  NFC status, and byte facts were checkable. Permitted wording:
+  "LLM-authored, mechanically invariant-checked,
+  blind-back-translation-checked at build", with the ceiling
+  stated.
+- A winner/selection readout, a DE–FR primary contrast, pooled
+  rates across tasks/languages/candidates, and any
+  canonical-form ID-divergence *gating* for this probe.
+
+## 6. Sources the resubmission may safely cite
+
+All resolved against primary sources this round by the
+researcher and independently by the verifier (abstract level
+unless stated; fencing must travel with each):
+
+- Etxaniz et al., arXiv:2308.01223 — self-translate consistently
+  outperforms direct inference over 5 tasks; models do not
+  leverage their full multilingual potential when prompted in
+  non-English languages. Fencing: treatment is translation of
+  the *entire input* to English (external MT for translate-test,
+  the model's own few-shot translation for self-translate); the
+  instruction sentence is not isolated, no operand set is held
+  fixed, no chat template is crossed.
+- Shi et al., arXiv:2210.03057 (MGSM) — 250 GSM8K problems
+  *manually* translated into ten languages; chain-of-thought
+  reasoning evaluation. Fencing: the translated unit is the
+  whole word problem (numbers embedded in prose); manual
+  translation is the fidelity gold standard this instrument is
+  explicitly below.
+- Petrov et al., arXiv:2305.15425 — tokenization lengths for
+  the same text can differ up to 15× across languages (extreme
+  pair; 17 tokenizers). Warrant that tokenization disparity is
+  real; NOT a DE/FR figure.
+- Ahia et al., arXiv:2305.13707 — abstract scope only: OpenAI
+  API cost/utility disparity across 22 languages. No
+  per-language multipliers.
+- Rust et al., arXiv:2012.15613 — a designated monolingual
+  tokenizer plays an equally important role as pretraining data
+  size in controlled comparisons; tokenizer adequacy is a real,
+  separable factor (the warrant for printing fertility as a
+  named rival). Fencing: encoder-era models, downstream tasks.
+- BIPM/CGPM Resolution 7 substance — in SI writing the comma or
+  dot is only the decimal marker; digit groups are separated by
+  spaces, never by dots or commas. The convention basis for
+  numform's U+202F space form and for the locale-grammar
+  discussion.
+
+No "first" is claimed anywhere in this doc. The contribution of
+any future resubmission is the combination stated in §3,
+item 7, never priority.
+
+## 7. What a build cycle must NOT do on the basis of this doc
+
+- Do not build the circulated sketch, any compare arm under
+  either label choice, any form-crossing (comma/space/scientific
+  under DE/FR), or any borrowed decision rule.
+- Do not build the narrowed instrument on this doc's authority:
+  it enters only through a fresh design review (blind red-team
+  pair + verifier) of a resubmission satisfying §3 in full,
+  and only on a BUILD verdict from that review.
+- Do not ship the flag under `--instruction-language` on this
+  doc's authority; the name is a §3 item 6(b) question for the
+  fresh review, and the build cycle's USAGE naming audit is
+  required regardless of its answer.
+- Do not print any DE/FR token-fertility figure, any
+  "natural/idiomatic translation" assertion, or any
+  language-level headline from any number produced in this
+  round.
+- Do not present blind back-translation as human validation.
+
+## 8. Fresh blind review of §3 (2026-10-28) — adjudicated: NO-BUILD
+
+Review of the §3 resubmission as written, coordinator #57.
+Three blind specialists (researcher; red teams A and B, mutually
+blind); every load-bearing claim below was re-derived by the
+coordinator's own execution (exact rational DP, the real
+`core.evaluate`, an independent implementation of research §5's
+decomposition, and tree reads). Briefs and verification notes:
+`~/workspace/agents_out/instructionlanguage2/` (researcher.md,
+redteam_a.md, redteam_b.md, ADJUDICATION.md). §3 is judged as
+written; BUILD-as-amended was considered and does not apply,
+because the sustained fatals require amending frozen items
+(the rule's derivation and the records), which §2's own test
+makes a resubmission, not an amendment.
+
+**Verdict: NO-BUILD.** Two independently sufficient fatals,
+one settlement failure, and a priority objection that survives
+independently (below).
+
+### 8.1 Fatal 1 — digest-only records × decomposition recomputation (both red teams, independently; coordinator-verified)
+
+§3 item 2 freezes BOTH "digest-only records" (research §8) AND
+"the diff validator mirror recomputing … decomposition"
+(research §9). Class 5 `wrong_numeric_value` is a *parse of the
+answer text* ("the answer parses, under one of several
+grammars, to some integer ≠ expected"); it is not decidable
+from a SHA-256 digest — the wrong-value preimage universe is
+~1.1×10²⁰ (`MAX_PARSE_DIGITS = 20`, numform.py:154). Negation
+escapes this only because its classes are digest *equalities*
+over an enumerable label universe (negation.py:343-370
+`decompose_cell`). The shipped sibling that faced the identical
+problem solved it the opposite way: records carry `answer_text`
+verbatim with the comment that "the diff validator binds this
+text to the cell digest and re-parses it (cycle 190, F3)"
+(experiments.py:11014-11017), and the validator does re-parse
+and reject on mismatch (diffreports.py:6980-6987). Carrying a
+stored parse instead is the posture cycle 190 removed; carrying
+text violates the frozen item. As written, §3 item 2 is
+jointly unsatisfiable, and any build deviating from a frozen
+item voids the design by §3 item 2's own rule.
+
+### 8.2 Fatal 2 — the (8,5) rule's null fixes an underived conditional; under the paired null the frozen panel numbers are wrong (red team B primary; red team A corroborating; coordinator DP reproduces every figure digit-for-digit)
+
+The derivation sets the class-5 rate on EN-pass cases to
+r = .1 at *every* EN pass rate p_en, i.e. it assumes away the
+same-case difficulty correlation that the shipped sibling's J
+encodes structurally (negation's J counts flipped passes on
+the *same* cases; §3's J has no same-case joint control and no
+EN-arm class-5 base rate is ever measured or stated). The
+frozen numbers are exactly right *at the stated model*
+(coordinator DP: (8,5) competent fire 0.0111; (8,4) 0.0496 and
+panel expectation 2.38, so §3 item 1(i)'s correction stands;
+panel (8,5) expectation 0.5309, P(≥1) 0.4137 under
+independence) — and they are hyper-sensitive to the assumed
+conditional: at p_en = .9, r = .15 fires 0.0541 (panel 2.60)
+and r = .20 fires 0.1458 (panel 7.00). Under a null paired on
+the panel's own difficulty strata (.95/.75/.35) the fire is
+0.0383, the panel expectation 1.84, and P(≥1 false label)
+84.7% — not the 0.53 / 41% that §3.6(d) freezes as the
+review's inputs. The label also fires at net-negative
+discordance: at E = 8, J = 5 it fires for n_reverse = 0, 3, 5
+and 8, and 44.7% of symmetric-null fires carry n_reverse ≥ 3;
+§3 freezes only that n_reverse be *printed*. A cure requires a
+new statistic or a re-derived rule and table — a resubmission.
+
+### 8.3 §3 item 6 settlements, as this review is required to make them
+
+- **6(a) one rendering — NOT settled in the candidate's
+  favour.** The claim *sentence* is string-scoped and stands.
+  But §3.6(a)'s own caveat condition is triggered: within-
+  language rendering spread on the headline add task is the
+  same order as the frozen cross-language delta (coordinator's
+  independent renderings: DE add lengths 104–128, spread 24,
+  vs frozen deltas +3..+27; FR spread 9 vs +11..+20; red team
+  A's clause-complete alternatives: DE spread 22, FR 13), and
+  for a length-mediated candidate — length being a bundled
+  rival the design itself prints — the label flips with the
+  rendering choice (A, executed construction). The frozen
+  honest-limits text carries no within-language caveat, and
+  §3 item 5's utility ("re-validated per language" for the
+  operator's own strings) spends the result as a language
+  finding the claim sentence disclaims.
+- **6(b) flag name — settled only against the candidate as
+  written.** `--instruction-language` names the abstraction.
+  The program's own precedent is verbatim on point:
+  `--directive` was rejected because it "names any
+  instruction and overclaims the scope" and renamed
+  `--response-directive` (docs/DIRECTIVE_DESIGN.md:439-442,
+  coordinator-verified). The researcher concedes and proposes
+  naming the strings (e.g. `--en-de-fr-instruction-strings`);
+  a rename touches neither endpoints, population, nor scorer,
+  but the candidate as written fails its own settlement.
+  (Collision note: `classify-language` exists in three shipped
+  copies — fieldorder.py:258, structured.py:155,
+  diffreports.py:13647 — with answer enum english/german/
+  french in the identification sense.)
+- **6(c) translation validation — explicit finding AGAINST
+  the candidate's utility, not for it.** No validation
+  stronger than same-family back-translation exists in-tree;
+  the claim sentence asserts no fidelity and needs none, but
+  item 5's utility sentence consumes a rendering
+  generalisation that research §2.2's ceiling disclaims.
+- **6(d) utility vs slate — see §8.5.** The frozen panel
+  inputs are corrected by §8.2.
+- **6(e) scope via payload-residue route — SETTLED.** Design
+  §§1–3 (F5/A11) plus the researcher's §6 state the route in
+  the required terms: instruction strings are payload-
+  independent (the residue class payload-serialisation could
+  not absorb). Red team B's objection rested on a grep of
+  research.md alone and is not sustained. (Process note:
+  research.md nowhere mentions the shipped surfacenoise
+  probe's explicit "semantic paraphrase of instructions"
+  exclusion, surfacenoise.py:1251, 1403 — the route should
+  have been argued against it in the candidate text.)
+
+### 8.4 Sustained non-fatal defects (record for any restatement)
+
+- Total localisation collapse is invisible to the label:
+  E = 14 with all 14 L-answers in class 6 reads
+  `below_threshold` (B, executed); the sibling has the same
+  label behaviour, but §6.1's "observed null" gloss is the
+  hazard.
+- EN-conditioning concentrates blindness where difficulty
+  lives: full_chain is 11.7% of E (coordinator DP); a
+  full_chain-only effect fires 18.5% with E[J] = 3.30 < 5.
+  L-side `arm_context_exceeded` attrition is not counted by
+  `n_audit_excluded` (located gap).
+- The "(8,5) is the smallest (E_min, K)" sentence is a grid
+  artefact: fire and power are E_min-invariant at the
+  derivation model, and unexplored (6,5)/(7,5) dominate (8,5)
+  on §6.2's own insufficiency criterion (0.019/0.058 vs 0.142
+  at p = .6) while matching its mid power. The rule performs
+  as advertised at the competent point; the derivation claim
+  does not survive.
+- Decomposition rows (coordinator-verified): the DE class-3
+  grammar accepts non-canonical strings no renderer produces
+  (`0.991`, `00.991` for expected 991 → class 3), so a decimal
+  misreading is credited as a correct localised sum; class 6
+  pools correct DIN-5008 space groupings on DE (`803 564`
+  U+0020) and NBSP groupings (U+00A0) with gibberish; the FR
+  grammar accepts mixed separators (`803 564\u202f789`).
+  The decimal-comma class-4 rows are the disclosed §3 item
+  1(iii) fiat operating as specified. None of these leaks
+  into J (no localised right-value form lands in class 5;
+  cross-dressed groupings land in class 6, conservatively),
+  and the F3 phenomenon the decomposition cures is real
+  through the shipped `core.evaluate` (perfect-localiser
+  answers score `exact_match=False`).
+- Copy gate: §6.1's label gloss ("an observed null")
+  contradicts its own gate-weak qualifier ("undiagnosed, not
+  absent") in the (E ≥ 8, J ≥ 5, gate weak) cell — the
+  decision function is total, its printed semantics are not;
+  C_L is undefined at 0 completed copy cells; the frozen copy
+  strings contain neither load-bearing add clause; and the
+  gate threshold 0.5 sits exactly on the seed-0 copy
+  population's length cliff (exactly 8 values ≤ 6 digits,
+  8 > 6 — coordinator-verified), where a purely length-limited
+  copier passes the gate at exactly C_L = 0.5.
+- Candidate-text imprecisions (coordinator-verified): the
+  digest's key scheme (`"{task}-{lang}"`, flat dict) is stated
+  in neither doc — the digest f9d7b56d…a17835a itself
+  reproduces exactly, as do all string invariants (NFC,
+  digit-free, placeholder/line parity, char/byte deltas);
+  research §6.2's Monte Carlo rows carry slop (exact mid/weak
+  no-effect fires 0.0019/0.0003 vs printed 0.0014/0.0001);
+  research §3's "(3,3) up to (12,12)" is false for seed 0
+  (nf-add-03 is (2,2)); §6.1 vs §7 wording on the copy
+  population is inconsistent; the claim's "wrong numeric sum"
+  wording covers operand echoes only by stretching "sum"
+  (echoes land in class 5 — coordinator- and A-verified).
+
+### 8.5 Priority objection — survives independently
+
+Both red teams in the original round recommended against
+prioritising this candidate. That objection stands on this
+round's executed numbers regardless of the technical verdict:
+the build surface is ≈2,700–4,200 lines (B's estimate from
+sibling sizes: module ~605 + stage/analysis ~365 + report
+~266 + CLI ~65 + validator mirror 738–1,070 + tests
+711–1,819), including a validator mirror the closest sibling
+never needed, for a string-scoped sufficient-pattern label
+whose family-wise false-label probability at the panel is 41%
+on the design's own null and ≈85% under the paired null —
+against a slate with eight parked candidates, none of them a
+build order. A technically perfect restatement would still
+enter at the back of the queue.
+
+### 8.6 Fabrication sweep
+
+CLEAN for all three specialists. Every load-bearing number
+the coordinator re-executed matched: the frozen-string digest
+and string invariants; the rule's fire/panel/P(≥1) at the
+stated model; B's exchangeable and stratified nulls; A's
+r-sensitivity (0.0111/0.0541/0.1458), copy-split (8/8),
+(2,2) pair, and class rows; the researcher's decomposition
+reproduction and honest concessions (fidelity unattestable
+in-tree; modest power; implicit digest key shape; register
+bundled permanently). The two imprecisions in §8.4's last
+bullet are in the *candidate documents*, caught by red team A
+and verified by the coordinator — not specialist fabrications.
+One omission noted: the researcher's utility case for the
+validator mirror does not mention the §8.1 records problem.
+
+### 8.7 What a restated candidate must settle in its own text
+
+1. Records that make §9's recomputation real: answer text
+   carried per the cycle-190 pattern, or a decomposition
+   decidable from stored fields, with the validator's
+   recomputation specified — not both frozen claims at once.
+2. A decision statistic with a same-case joint control, or a
+   rule and operating table derived under a paired/stratified
+   null with a stated EN-arm class-5 base rate; and a label
+   that cannot fire at net-negative discordance, or an
+   explicit defence of one-sided counting.
+3. The within-language rendering caveat in the frozen
+   honest-limits text, or ≥2 renderings per language.
+4. A utility sentence scoped to decisions the six frozen
+   strings actually license.
+5. The flag renamed per the DIRECTIVE precedent (name the
+   strings/renderings, not the abstraction).
+6. Gate semantics made consistent (label vs qualifier), C_L
+   total at 0 completed, and the 0.5 threshold justified
+   against the copy population's length structure.
+
+Parked, not queued ahead of anything. The settlements on
+record stand untouched: the treatment is "these specific
+translations", permanently; token-ID divergence is reported,
+not gated; compare stays excluded.

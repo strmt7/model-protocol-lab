@@ -76,6 +76,7 @@ class TableBackend:
         self._texts = dict(texts)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(self._texts[token] for token in token_ids)
 
 
@@ -83,10 +84,12 @@ class SglangEmulationTests(unittest.TestCase):
     """The ``emulate_sglang_stop`` port itself, against vLLM/HF behavior."""
 
     def setUp(self) -> None:
+        """Set up the test fixture."""
         # 1->"a", 2->"b", 3->"STOP", 4->"c": stop "STOP" completes at step 3.
         self.backend = TableBackend({1: "a", 2: "b", 3: "STOP", 4: "c"})
 
     def test_fires_at_first_step_containing_stop(self) -> None:
+        """Test fires at first step containing stop."""
         outcome = emulate_sglang_stop(self.backend, (1, 2, 3, 4), "STOP")
         self.assertTrue(outcome.available)
         self.assertTrue(outcome.fired)
@@ -94,17 +97,20 @@ class SglangEmulationTests(unittest.TestCase):
         self.assertEqual(outcome.truncated_ids, (1, 2, 3))
 
     def test_strips_at_leftmost_occurrence_by_default(self) -> None:
+        """Test strips at leftmost occurrence by default."""
         # Default no_stop_trim=False: trim_matched_stop cuts at the
         # leftmost stop occurrence -- like vLLM's default, unlike HF.
         outcome = emulate_sglang_stop(self.backend, (1, 2, 3, 4), "STOP")
         self.assertEqual(outcome.returned_text, "ab")
 
     def test_no_stop_trim_keep_variant(self) -> None:
+        """Test no stop trim keep variant."""
         outcome = emulate_sglang_stop(self.backend, (1, 2, 3, 4), "STOP", no_stop_trim=True)
         self.assertTrue(outcome.fired)
         self.assertEqual(outcome.returned_text, "abSTOP")
 
     def test_no_min_tokens_parameter(self) -> None:
+        """Test no min tokens parameter."""
         # The API-level absence is the divergence: SGLang has no
         # min_tokens equivalent, so the emulation cannot take one.
         params = inspect.signature(emulate_sglang_stop).parameters
@@ -112,6 +118,7 @@ class SglangEmulationTests(unittest.TestCase):
         self.assertNotIn("min_new_tokens", params)
 
     def test_sglang_column_ungated_where_vllm_gates(self) -> None:
+        """Test sglang column ungated where vllm gates."""
         # min_tokens=1 gates vLLM's holdback (the stop completes at step 1
         # and the step-2 window no longer covers it) but SGLang fires.
         backend = TableBackend({1: "STOP", 2: "x"})
@@ -134,6 +141,7 @@ class SglangEmulationTests(unittest.TestCase):
         self.assertEqual(sglang["returned_text"], "")
 
     def test_sglang_firing_step_matches_vllm_and_hf_on_clean_stop(self) -> None:
+        """Test sglang firing step matches vllm and hf on clean stop."""
         result = diff_backends(
             prompt_ids=(),
             output_ids=(1, 2, 3, 4),
@@ -150,6 +158,7 @@ class SglangEmulationTests(unittest.TestCase):
         self.assertEqual(steps[SGLANG_STOP], 3)
 
     def test_invalid_inputs_degrade(self) -> None:
+        """Test invalid inputs degrade."""
         outcome = emulate_sglang_stop(self.backend, (1, 2), "")
         self.assertFalse(outcome.available)
         outcome = emulate_sglang_stop(self.backend, (1, "x"), "STOP")  # type: ignore[arg-type]
@@ -164,12 +173,14 @@ class MultiStopSelectionTests(unittest.TestCase):
     """
 
     def setUp(self) -> None:
+        """Set up the test fixture."""
         # One token decodes to several chars, so two stops can complete
         # within ONE check step -- the research-log caveat case.
         # 1->" The user", 2->" is a": at step 2 both "a" and "is" match.
         self.backend = TableBackend({1: " The user", 2: " is a"})
 
     def _run(self, stop_texts: tuple[str, ...], **kwargs: Any) -> dict[str, Any]:
+        """Run."""
         base: dict[str, Any] = {
             "prompt_ids": (),
             "output_ids": (1, 2),
@@ -181,9 +192,11 @@ class MultiStopSelectionTests(unittest.TestCase):
 
     @staticmethod
     def _classes(result: dict[str, Any]) -> list[str]:
+        """Classes."""
         return [finding["class"] for finding in result["divergences"]]
 
     def test_first_listed_vs_earliest_completing_diverges(self) -> None:
+        """Test first listed vs earliest completing diverges."""
         # stops ("a", "is"): SGLang picks "a" (first-listed); vLLM picks
         # "is" (completes earliest: end index 12 < 14) -- the hard
         # divergence, mirroring the vLLM #49391 repro.
@@ -203,12 +216,14 @@ class MultiStopSelectionTests(unittest.TestCase):
         self.assertEqual(finding["stop_text"], "a")
 
     def test_agree_when_first_listed_is_earliest(self) -> None:
+        """Test agree when first listed is earliest."""
         # stops ("is", "a"): both rules pick "is" -- no selection
         # divergence (KEPT_VS_STRIPPED still fires; filter by class).
         result = self._run(("is", "a"))
         self.assertNotIn("MULTI_STOP_SELECTION", self._classes(result))
 
     def test_earlier_step_still_wins_with_one_token_per_step(self) -> None:
+        """Test earlier step still wins with one token per step."""
         # The research-log caveat: with 1 token/step the
         # earlier-completing stop fires at its own step regardless of list
         # order, so both engines agree. 1->"x", 2->"is", 3->" a": "is"
@@ -225,15 +240,18 @@ class MultiStopSelectionTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "diverge")  # KEPT_VS_STRIPPED still fires
 
     def test_no_selection_divergence_when_nothing_fires(self) -> None:
+        """Test no selection divergence when nothing fires."""
         result = self._run(("ZZZ", "QQQ"))
         self.assertNotIn("MULTI_STOP_SELECTION", self._classes(result))
         self.assertEqual(result["verdict"], "agree")
 
     def test_single_stop_text_never_diverges_on_selection(self) -> None:
+        """Test single stop text never diverges on selection."""
         result = self._run(("is",))
         self.assertNotIn("MULTI_STOP_SELECTION", self._classes(result))
 
     def test_vllm_tie_broken_by_list_order(self) -> None:
+        """Test vllm tie broken by list order."""
         # stops ("ab", "b") on text "ab": both complete with end index 2
         # in the same step; vLLM breaks the tie by list order (PR #49391
         # pins this) and SGLang is first-listed too -- agree.
@@ -248,6 +266,7 @@ class NoMinTokensGateTests(unittest.TestCase):
     """``NO_MIN_TOKENS_GATE``: the SGLang column on ``MIN_TOKENS_GATED``."""
 
     def test_sglang_fires_where_vllm_gate_blocks(self) -> None:
+        """Test sglang fires where vllm gate blocks."""
         backend = TableBackend({1: "STOP", 2: "x"})
         result = diff_backends(
             prompt_ids=(),
@@ -267,6 +286,7 @@ class NoMinTokensGateTests(unittest.TestCase):
         self.assertEqual(DIVERGENCE_SEVERITY["NO_MIN_TOKENS_GATE"], "medium")
 
     def test_no_gate_classes_without_min_tokens(self) -> None:
+        """Test no gate classes without min tokens."""
         backend = TableBackend({1: "STOP", 2: "x"})
         result = diff_backends(
             prompt_ids=(),
@@ -286,6 +306,7 @@ class StrOverEosPrecedenceTests(unittest.TestCase):
     """
 
     def test_same_step_tie_fires_with_precedence_rationale(self) -> None:
+        """Test same step tie fires with precedence rationale."""
         # Token 1 decodes to "STOP" and IS the EOS id: both fire at step 1.
         backend = TableBackend({1: "STOP"})
         result = diff_backends(
@@ -308,6 +329,7 @@ class StrOverEosPrecedenceTests(unittest.TestCase):
         self.assertEqual(DIVERGENCE_SEVERITY["STR_OVER_EOS_PRECEDENCE"], "high")
 
     def test_no_tie_no_precedence_class(self) -> None:
+        """Test no tie no precedence class."""
         # EOS at step 1, stop completes at step 2: firing order decides,
         # so only EOS_PRECEDENCE fires.
         backend = TableBackend({1: "E", 2: "STOP"})
@@ -347,6 +369,7 @@ class NoTgiCellRationaleTests(unittest.TestCase):
     """
 
     def test_no_tgi_semantic_exists(self) -> None:
+        """Test no tgi semantic exists."""
         backend = TableBackend({1: "a", 2: "b", 3: "STOP", 4: "c"})
         result = diff_backends(
             prompt_ids=(),
@@ -361,6 +384,7 @@ class NoTgiCellRationaleTests(unittest.TestCase):
         )
 
     def test_tgi_kept_rule_covered_by_hf_cell(self) -> None:
+        """Test tgi kept rule covered by hf cell."""
         backend = TableBackend({1: "a", 2: "b", 3: "STOP", 4: "c"})
         result = diff_backends(
             prompt_ids=(),
@@ -373,6 +397,7 @@ class NoTgiCellRationaleTests(unittest.TestCase):
         self.assertEqual(hf["disposition"], "kept")
 
     def test_tgi_first_listed_rule_covered_by_sglang_selection(self) -> None:
+        """Test tgi first listed rule covered by sglang selection."""
         # TGI's first-listed multi-stop rule is behaviorally identical to
         # the SGLang side of MULTI_STOP_SELECTION: first-listed wins.
         backend = TableBackend({1: " The user", 2: " is a"})
@@ -391,6 +416,7 @@ class NoTgiCellRationaleTests(unittest.TestCase):
         self.assertIn("sglang_stop selects stop 'a' at step 2", finding["detail"])
 
     def test_tgi_no_min_tokens_covered_by_sglang_ungated_path(self) -> None:
+        """Test tgi no min tokens covered by sglang ungated path."""
         # TGI has no min_tokens equivalent, like SGLang: the sglang cell
         # fires identically with and without the gate.
         backend = TableBackend({1: "STOP", 2: "x"})
@@ -411,6 +437,7 @@ class NoTgiCellRationaleTests(unittest.TestCase):
         self.assertEqual(plain_cell["returned_text"], gated_cell["returned_text"])
 
     def test_tgi_eos_beats_stop_is_the_documented_contrast(self) -> None:
+        """Test tgi eos beats stop is the documented contrast."""
         backend = TableBackend({1: "STOP"})
         result = diff_backends(
             prompt_ids=(),
@@ -437,9 +464,11 @@ class SglangReportTests(unittest.TestCase):
     """
 
     def setUp(self) -> None:
+        """Set up the test fixture."""
         self.backend = TableBackend({1: " The user", 2: " is a", 3: "STOP", 4: "x"})
 
     def _section(self, **kwargs: Any) -> dict[str, Any]:
+        """Section."""
         base: dict[str, Any] = {
             "observations": [
                 # MULTI_STOP_SELECTION: ("a","is") both complete at step 2.
@@ -459,6 +488,7 @@ class SglangReportTests(unittest.TestCase):
         return section
 
     def test_new_classes_in_matrix_with_severities(self) -> None:
+        """Test new classes in matrix with severities."""
         section = self._section()
         matrix = section["matrix"]
         for kind in ("MULTI_STOP_SELECTION", "NO_MIN_TOKENS_GATE", "STR_OVER_EOS_PRECEDENCE"):
@@ -476,6 +506,7 @@ class SglangReportTests(unittest.TestCase):
         self.assertEqual(severities["STR_OVER_EOS_PRECEDENCE"], "high")
 
     def test_report_renders_new_classes_with_badges(self) -> None:
+        """Test report renders new classes with badges."""
         section = self._section()
         html = render_html(
             {"decision": "compatible_on_fixture_set", "backend_divergences": section}
@@ -496,6 +527,7 @@ class SglangReportTests(unittest.TestCase):
         self.assertEqual(html, html2)
 
     def test_hostile_strings_escaped(self) -> None:
+        """Test hostile strings escaped."""
         hostile_stop = "<script>alert(1)</script>"
         hostile_fixture = "<img src=x onerror=alert(1)>"
         section = self._section(
@@ -517,6 +549,7 @@ class SglangReportTests(unittest.TestCase):
         self.assertIn("[withheld from this HTML view]", html)
 
     def test_stop_regex_has_no_cell(self) -> None:
+        """Test stop regex has no cell."""
         # SGLang stop_regex is outside stop-string scope: USAGE.md note
         # only, never a cell or a divergence class.
         result = diff_backends(
@@ -532,7 +565,10 @@ class SglangReportTests(unittest.TestCase):
 
 
 class SglangDeterminismTests(unittest.TestCase):
+    """Sglang determinism tests."""
+
     def test_diff_backends_deterministic_with_sglang_column(self) -> None:
+        """Test diff backends deterministic with sglang column."""
         backend = TableBackend({1: " The user", 2: " is a", 3: "STOP", 4: "x"})
         kwargs: dict[str, Any] = {
             "prompt_ids": (),

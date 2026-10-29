@@ -135,6 +135,7 @@ def _request_seed(exp_seed: int, fixture_id: str) -> int:
 
 
 def _boundary_ids() -> tuple[int, ...]:
+    """Boundary ids."""
     return tuple(ord(c) for c in BOUNDARY_TEXT)
 
 
@@ -174,10 +175,12 @@ class SeedSpyBackend:
     # -- Backend protocol -------------------------------------------------
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(ord(c) for c in text)
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(chr(i) for i in token_ids)
 
     def generate(
@@ -188,6 +191,7 @@ class SeedSpyBackend:
         seed: int,
         cancel: Any,
     ) -> Any:
+        """Generate."""
         prompt = self.decode(input_ids)
         candidate = next((n for n in self._candidates if f"[{n}]" in prompt), None)
         fixture_id = self.seed_to_fid.get(seed)
@@ -250,6 +254,7 @@ def make_scenario(
     fixtures: dict[str, Any] = {}
 
     def _fixture(fid: str, text: str, expected: str) -> Any:
+        """Fixture."""
         fx = core_mod.Fixture(
             id=fid,
             messages=(core_mod.Message(role="user", content=text),),
@@ -285,6 +290,7 @@ def make_scenario(
 
 
 def run_experiment_on(exp_mod: Any, sc: SimpleNamespace) -> dict[str, Any]:
+    """Run experiment on."""
     return exp_mod.run_experiment(
         sc.backend,
         sc.formats,
@@ -296,6 +302,7 @@ def run_experiment_on(exp_mod: Any, sc: SimpleNamespace) -> dict[str, Any]:
 
 
 def _call_sequence(sc: SimpleNamespace) -> list[tuple[str | None, str | None]]:
+    """Call sequence."""
     return [(c["candidate"], c["fixture"]) for c in sc.backend.calls]
 
 
@@ -549,41 +556,51 @@ class HeldoutSeparationAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_ambiguous_selection_abstains_without_touching_held_out():
+        """Test ambiguous selection abstains without touching held out."""
         audit_ambiguous_abstains(real_exp, real_core)
 
     @staticmethod
     def test_unique_winner_flow_measures_held_out_once_fresh():
+        """Test unique winner flow measures held out once fresh."""
         audit_unique_winner_flow(real_exp, real_core)
 
     @staticmethod
     def test_compatible_flow_when_held_out_passes():
+        """Test compatible flow when held out passes."""
         audit_compatible_flow(real_exp, real_core)
 
     @staticmethod
     def test_no_candidate_flow_never_measures_held_out():
+        """Test no candidate flow never measures held out."""
         audit_no_candidate_flow(real_exp, real_core)
 
     @staticmethod
     def test_request_seeds_disjoint_and_runs_deterministic():
+        """Test request seeds disjoint and runs deterministic."""
         audit_seed_separation(real_exp, real_core)
 
     def test_split_rejects_empty_search(self):
+        """Test split rejects empty search."""
         with self.assertRaises(ValueError):
             real_core.Split(search=(), held_out=(_fx("H1"),))
 
     def test_split_rejects_empty_held_out(self):
+        """Test split rejects empty held out."""
         with self.assertRaises(ValueError):
             real_core.Split(search=(_fx("S1"),), held_out=())
 
     def test_split_rejects_duplicate_id_across_splits(self):
+        """Test split rejects duplicate id across splits."""
         with self.assertRaises(ValueError):
             real_core.Split(search=(_fx("DUP"),), held_out=(_fx("DUP", text="other?"),))
 
     def test_split_rejects_nfc_variant_duplicate_id(self):
+        """Test split rejects nfc variant duplicate id."""
         with self.assertRaises(ValueError):
             real_core.Split(search=(_fx("caf\u00e9"),), held_out=(_fx("cafe\u0301"),))
 
     def test_split_rejects_shared_group_across_splits(self):
+        """Test split rejects shared group across splits."""
         with self.assertRaises(ValueError):
             real_core.Split(
                 search=(_fx("S1", group="shared-group"),),
@@ -591,6 +608,7 @@ class HeldoutSeparationAuditTests(unittest.TestCase):
             )
 
     def test_split_rejects_identical_messages_across_splits(self):
+        """Test split rejects identical messages across splits."""
         with self.assertRaises(ValueError):
             real_core.Split(
                 search=(_fx("S1", text="same prompt?"),),
@@ -598,6 +616,7 @@ class HeldoutSeparationAuditTests(unittest.TestCase):
             )
 
     def test_run_experiment_rejects_unvalidated_split(self):
+        """Test run experiment rejects unvalidated split."""
         sc = make_scenario(
             real_core,
             exp_seed=7,
@@ -615,6 +634,7 @@ class HeldoutSeparationAuditTests(unittest.TestCase):
             )
 
     def test_run_experiment_rejects_empty_or_duplicate_candidates(self):
+        """Test run experiment rejects empty or duplicate candidates."""
         sc = make_scenario(
             real_core,
             exp_seed=7,
@@ -635,6 +655,7 @@ class HeldoutSeparationAuditTests(unittest.TestCase):
             )
 
     def test_evaluate_rejects_non_tuple_cases(self):
+        """Test evaluate rejects non tuple cases."""
         sc = make_scenario(
             real_core,
             exp_seed=7,
@@ -652,6 +673,7 @@ class HeldoutSeparationAuditTests(unittest.TestCase):
             )
 
     def test_split_and_fixtures_are_immutable(self):
+        """Test split and fixtures are immutable."""
         sc = make_scenario(
             real_core,
             exp_seed=7,
@@ -685,6 +707,7 @@ class HeldoutSeparationAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_result_documents_are_fresh_objects_per_run():
+        """Test result documents are fresh objects per run."""
         behavior = {("cand-B", "S1"): "fail_answer"}
         sc1 = make_scenario(
             real_core,
@@ -706,7 +729,9 @@ class HeldoutSeparationAuditTests(unittest.TestCase):
         assert r1["held_out"] is not r2["held_out"]
         assert json.dumps(r1, sort_keys=True) == json.dumps(r2, sort_keys=True)
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_fuzz_separation_matches_independent_oracle(self):
+        """Test fuzz separation matches independent oracle."""
         for trial in range(24):
             with self.subTest(trial=trial):
                 rng = random.Random(0xC63 + trial)  # noqa: S311 -- seeded fuzz PRNG, not cryptographic
@@ -803,6 +828,7 @@ class HeldoutSeparationAuditTests(unittest.TestCase):
 
 
 def _fx(fid: str, text: str = "q?", expected: str = "a", group: str | None = None) -> Any:
+    """Fx."""
     return real_core.Fixture(
         id=fid,
         messages=(real_core.Message(role="user", content=text),),
@@ -829,6 +855,7 @@ def _oracle_decision(
     search_ids: list[str],
     held_ids: list[str],
 ) -> tuple[str, str | None]:
+    """Oracle decision."""
     winners = [
         c for c in candidates if all(behavior.get((c, f), "pass") == "pass" for f in search_ids)
     ]

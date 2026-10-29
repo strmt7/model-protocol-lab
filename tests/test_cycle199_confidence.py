@@ -33,6 +33,7 @@ _FORMATS = (
 
 
 def _fx(fid, expected, group, content=None):
+    """Fx."""
     return Fixture(
         id=fid,
         messages=(Message(role="user", content=content or f"question {fid}?"),),
@@ -42,6 +43,7 @@ def _fx(fid, expected, group, content=None):
 
 
 def _cases():
+    """Cases."""
     return (
         _fx("s0", "42", "numbers"),
         _fx("s1", "Paris", "geo"),
@@ -66,13 +68,16 @@ class _ScriptedBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(text.encode("utf-8"))
 
     @staticmethod
     def decode(ids):
+        """Decode."""
         return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         self.calls += 1
         prompt = self.decode(input_ids)
         answer = "?"
@@ -97,6 +102,7 @@ class _ScriptedBackend:
 
 
 def _native_result(backend, cases, *, max_new_tokens=64):
+    """Native result."""
     return experiments.run_experiment(
         backend,
         _FORMATS,
@@ -108,6 +114,7 @@ def _native_result(backend, cases, *, max_new_tokens=64):
 
 
 def _stage_payload(backend=None, cases=None, *, seed=3, result=None):
+    """Stage payload."""
     backend = _ScriptedBackend() if backend is None else backend
     cases = _cases() if cases is None else cases
     result = _native_result(backend, cases) if result is None else result
@@ -165,12 +172,16 @@ _BATTERY = [
 
 
 class TestParserBattery(unittest.TestCase):
+    """Test parser battery."""
+
     def test_battery_exact(self):
+        """Test battery exact."""
         for text, want in _BATTERY:
             with self.subTest(text=text):
                 self.assertEqual(confidence.parse_verbalized_confidence(text), want)
 
     def test_kill_m1a_sign(self):
+        """Test kill m1a sign."""
         # A grammar mutant admitting a sign must fail here.
         self.assertEqual(
             confidence.parse_verbalized_confidence("Paris\nConfidence: +85"),
@@ -178,42 +189,49 @@ class TestParserBattery(unittest.TestCase):
         )
 
     def test_kill_m1b_leading_zero(self):
+        """Test kill m1b leading zero."""
         self.assertEqual(
             confidence.parse_verbalized_confidence("Paris\nConfidence: 085"),
             ("malformed_line", None, "Paris\nConfidence: 085"),
         )
 
     def test_kill_m1c_non_ascii_digits(self):
+        """Test kill m1c non ascii digits."""
         self.assertEqual(
             confidence.parse_verbalized_confidence("Paris\nConfidence: ８５"),
             ("malformed_line", None, "Paris\nConfidence: ８５"),
         )
 
     def test_kill_m2_confidence_not_final(self):
+        """Test kill m2 confidence not final."""
         self.assertEqual(
             confidence.parse_verbalized_confidence("Paris\nConfidence: 85\nSome prose")[0],
             "confidence_not_final",
         )
 
     def test_kill_m3_multiple_lines(self):
+        """Test kill m3 multiple lines."""
         self.assertEqual(
             confidence.parse_verbalized_confidence("Paris\nConfidence: 85\nConfidence: 90")[0],
             "multiple_lines",
         )
 
     def test_kill_m4_line_separator(self):
+        """Test kill m4 line separator."""
         self.assertEqual(
             confidence.parse_verbalized_confidence("Paris Confidence: 85")[0],
             "missing_line",
         )
 
     def test_kill_m5_underscore_int(self):
+        """Test kill m5 underscore int."""
         self.assertEqual(
             confidence.parse_verbalized_confidence("Paris\nConfidence: 8_5")[0],
             "malformed_line",
         )
 
     def test_kill_m6_precedence(self):
+        """Test kill m6 precedence."""
         # Final-line-first: a prefix-shaped final line is malformed
         # even when an earlier line matched the grammar.
         self.assertEqual(
@@ -222,12 +240,14 @@ class TestParserBattery(unittest.TestCase):
         )
 
     def test_parser_is_total_and_pure_str(self):
+        """Test parser is total and pure str."""
         # A lone surrogate must not raise (the parser never encodes).
         code, value, span = confidence.parse_verbalized_confidence("x\ud800\nConfidence: 85")
         self.assertEqual((code, value), ("ok", 85))
         self.assertEqual(span, "x\ud800")
 
     def test_suffix_has_no_grammar_line(self):
+        """Test suffix has no grammar line."""
         self.assertFalse(
             any(confidence.is_grammar_line(line) for line in confidence.SUFFIX.split("\n"))
         )
@@ -255,12 +275,14 @@ class TestParserMutationGate(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import model_protocol_lab.confidence as _cf
 
         cls.source = Path(_cf.__file__).read_text(encoding="utf-8")
 
     def _mutant_parse(self, original: str, mutant: str):
+        """Mutant parse."""
         self.assertEqual(
             self.source.count(original), 1, f"mutant anchor not unique: {original[:60]}"
         )
@@ -268,23 +290,28 @@ class TestParserMutationGate(unittest.TestCase):
         return namespace["parse_verbalized_confidence"]
 
     def test_control_unmutated_passes_battery(self):
+        """Test control unmutated passes battery."""
         parse = _load_confidence_variant(self.source)["parse_verbalized_confidence"]
         for text, want in _BATTERY:
             self.assertEqual(parse(text), want)
 
     def test_m1a_sign_mutant_killed(self):
+        """Test m1a sign mutant killed."""
         parse = self._mutant_parse("(0|[1-9][0-9]?|100)", r"(\+?[0-9]+)")
         self.assertEqual(parse("Paris\nConfidence: +85"), ("ok", 85, "Paris"))
 
     def test_m1b_leading_zero_mutant_killed(self):
+        """Test m1b leading zero mutant killed."""
         parse = self._mutant_parse("(0|[1-9][0-9]?|100)", "([0-9]+)")
         self.assertEqual(parse("Paris\nConfidence: 085"), ("ok", 85, "Paris"))
 
     def test_m1c_unicode_digit_mutant_killed(self):
+        """Test m1c unicode digit mutant killed."""
         parse = self._mutant_parse("(0|[1-9][0-9]?|100)", r"(\d+)")
         self.assertEqual(parse("Paris\nConfidence: ８５"), ("ok", 85, "Paris"))
 
     def test_m2_any_line_mutant_killed(self):
+        """Test m2 any line mutant killed."""
         parse = self._mutant_parse(
             '    final = lines[-1] if lines else ""',
             "    final = next((line for line in lines if _GRAMMAR_RE.match(line)),"
@@ -293,6 +320,7 @@ class TestParserMutationGate(unittest.TestCase):
         self.assertNotEqual(parse("Paris\nConfidence: 85\nSome prose")[0], "confidence_not_final")
 
     def test_m3_multiple_threshold_mutant_killed(self):
+        """Test m3 multiple threshold mutant killed."""
         parse = self._mutant_parse(
             '        if grammar_lines >= 2:\n            return ("multiple_lines", None, answer)',
             '        if grammar_lines >= 3:\n            return ("multiple_lines", None, answer)',
@@ -302,6 +330,7 @@ class TestParserMutationGate(unittest.TestCase):
         )
 
     def test_m4_splitlines_mutant_killed(self):
+        """Test m4 splitlines mutant killed."""
         parse = self._mutant_parse(
             '    lines = answer.split("\\n")\n'
             '    if answer.endswith("\\n"):\n'
@@ -312,12 +341,14 @@ class TestParserMutationGate(unittest.TestCase):
         self.assertNotEqual(parse("Paris Confidence: 85")[0], "missing_line")
 
     def test_m5_loose_regex_mutant_killed(self):
+        """Test m5 loose regex mutant killed."""
         parse = self._mutant_parse(
             'r"^Confidence: (0|[1-9][0-9]?|100)$"', 'r"^Confidence: (\\S+)$"'
         )
         self.assertEqual(parse("Paris\nConfidence: 8_5"), ("ok", 85, "Paris"))
 
     def test_m6_count_first_mutant_killed(self):
+        """Test m6 count first mutant killed."""
         original = (
             '    if final.startswith("Confidence:") or final.lower().startswith("confidence:"):\n'
             '        return ("malformed_line", None, answer)\n'
@@ -335,7 +366,10 @@ class TestParserMutationGate(unittest.TestCase):
 
 
 class TestScreensAndSurgery(unittest.TestCase):
+    """Test screens and surgery."""
+
     def test_screens(self):
+        """Test screens."""
         self.assertEqual(confidence.screen_fixture(_fx("a", "  ", "g")), "expected_blank")
         self.assertEqual(
             confidence.screen_fixture(_fx("a", "Paris\nConfidence: 50", "g")),
@@ -355,6 +389,7 @@ class TestScreensAndSurgery(unittest.TestCase):
         self.assertEqual(confidence.screen_fixture(_fx("a", "Paris", "g")), "")
 
     def test_treated_fixture_only_last_user_changes(self):
+        """Test treated fixture only last user changes."""
         case = Fixture(
             id="m",
             messages=(
@@ -375,6 +410,7 @@ class TestScreensAndSurgery(unittest.TestCase):
         )
 
     def test_case_material_distinct_and_deterministic(self):
+        """Test case material distinct and deterministic."""
         pairs = confidence.case_material(11)
         self.assertEqual(len(pairs), confidence.CASE_COUNT)
         self.assertEqual(len({k for k, _ in pairs}), confidence.CASE_COUNT)
@@ -383,6 +419,7 @@ class TestScreensAndSurgery(unittest.TestCase):
         self.assertNotEqual(confidence.case_material(12), pairs)
 
     def test_case_protocol_matches_arms(self):
+        """Test case protocol matches arms."""
         protocol = confidence.case_protocol(5)
         knowable = confidence.build_cases(5, control=False)
         control = confidence.build_cases(5, control=True)
@@ -408,7 +445,10 @@ class TestScreensAndSurgery(unittest.TestCase):
 
 
 class TestStage(unittest.TestCase):
+    """Test stage."""
+
     def test_faithful_payload_validates(self):
+        """Test faithful payload validates."""
         payload = _stage_payload()
         self.assertTrue(payload["available"])
         self.assertTrue(diffreports._valid_confidence(payload))
@@ -423,12 +463,14 @@ class TestStage(unittest.TestCase):
         self.assertIs(knowability["falsified"], False)
 
     def test_theatre_backend_is_falsified(self):
+        """Test theatre backend is falsified."""
         payload = _stage_payload(_ScriptedBackend(control_confidence=95))
         knowability = payload["candidates"]["alpha"]["generated"]["knowability"]
         self.assertIs(knowability["falsified"], True)
         self.assertTrue(diffreports._valid_confidence(payload))
 
     def test_screened_fixtures_carry_no_cells(self):
+        """Test screened fixtures carry no cells."""
         cases = _cases() + (
             _fx("s4", "Confidence: 50\nParis", "geo"),
             _fx("s5", "   ", "geo"),
@@ -446,8 +488,13 @@ class TestStage(unittest.TestCase):
         self.assertEqual(payload["candidates"]["alpha"]["operator"]["n_population"], 4)
 
     def test_candidate_degrades_alone(self):
+        """Test candidate degrades alone."""
+
         class _BetaFails(_ScriptedBackend):
+            """Beta fails."""
+
             def generate(self, input_ids, **kwargs):
+                """Generate."""
                 prompt = self.decode(input_ids)
                 if prompt.startswith("U>"):
                     raise RuntimeError("boom")
@@ -461,6 +508,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(diffreports._valid_confidence(payload))
 
     def test_budget_gate(self):
+        """Test budget gate."""
         formats = tuple(
             Format(name=f"f{i}", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>")
             for i in range(25)
@@ -473,6 +521,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(payload["detail"], "confidence_cell_budget_exceeded")
 
     def test_cancelled(self):
+        """Test cancelled."""
         cancel = Event()
         cancel.set()
         payload = experiments.confidence_stage(
@@ -488,6 +537,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(payload["detail"], "cancelled")
 
     def test_suffix_screen_fails_closed(self):
+        """Test suffix screen fails closed."""
         formats = (
             Format(
                 name="evil",
@@ -511,18 +561,24 @@ class TestValidatorTamper(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls.payload = _stage_payload()
 
     def _tampered(self, mutate):
+        """Tampered."""
         payload = copy.deepcopy(self.payload)
         mutate(payload)
         return payload
 
     def test_control_valid(self):
+        """Test control valid."""
         self.assertTrue(diffreports._valid_confidence(self.payload))
 
     def test_scalar_edit_caught_by_carried_line(self):
+        """Test scalar edit caught by carried line."""
+
         def mutate(p):
+            """Mutate."""
             for record in p["records"]:
                 cell = record["elicited"]
                 if type(cell) is dict and cell["code"] == "ok":
@@ -534,6 +590,7 @@ class TestValidatorTamper(unittest.TestCase):
         self.assertFalse(diffreports._valid_confidence(self._tampered(mutate)))
 
     def test_breaks(self):
+        """Test breaks."""
         breaks = {
             "verdict_flip": lambda p: p["records"][0]["elicited"].__setitem__(
                 "verdict", not p["records"][0]["elicited"]["verdict"]
@@ -586,7 +643,10 @@ class TestValidatorTamper(unittest.TestCase):
 
 
 class TestDiffSection(unittest.TestCase):
+    """Test diff section."""
+
     def test_self_diff_unchanged(self):
+        """Test self diff unchanged."""
         payload = _stage_payload()
         diff = diffreports.diff_confidence(payload, payload)
         self.assertEqual(diff["available"], "both")
@@ -594,6 +654,7 @@ class TestDiffSection(unittest.TestCase):
         self.assertTrue(diff["comparable"])
 
     def test_theatre_diff_changes_falsified(self):
+        """Test theatre diff changes falsified."""
         faithful = _stage_payload()
         theatre = _stage_payload(_ScriptedBackend(control_confidence=95))
         diff = diffreports.diff_confidence(faithful, theatre)
@@ -603,6 +664,7 @@ class TestDiffSection(unittest.TestCase):
         self.assertIn(("alpha", "control_mean_confidence"), metrics)
 
     def test_asymmetric_availability(self):
+        """Test asymmetric availability."""
         payload = _stage_payload()
         diff = diffreports.diff_confidence(payload, {"available": False})
         self.assertEqual(diff["available"], "old")
@@ -611,6 +673,7 @@ class TestDiffSection(unittest.TestCase):
         self.assertEqual(diff["available"], "neither")
 
     def test_full_diff_reports_integration(self):
+        """Test full diff reports integration."""
         payload = _stage_payload()
         old = {
             "decision": "compatible_on_fixture_set",
@@ -630,7 +693,10 @@ class TestDiffSection(unittest.TestCase):
 
 
 class TestReportingSection(unittest.TestCase):
+    """Test reporting section."""
+
     def test_section_renders(self):
+        """Test section renders."""
         payload = _stage_payload()
         html = reporting._confidence_section({"confidence": payload})
         self.assertIn('id="confidence"', html)
@@ -640,10 +706,12 @@ class TestReportingSection(unittest.TestCase):
         self.assertIn("outside its", html)
 
     def test_section_empty_when_unavailable(self):
+        """Test section empty when unavailable."""
         self.assertEqual(reporting._confidence_section({}), "")
         self.assertEqual(reporting._confidence_section({"confidence": {"available": False}}), "")
 
     def test_section_strips_hostile_candidate_name(self):
+        """Test section strips hostile candidate name."""
         formats = (
             Format(
                 name="a\x00b\ud800c",
@@ -672,8 +740,11 @@ class TestReportingSection(unittest.TestCase):
 
 
 class TestCliWrapper(unittest.TestCase):
+    """Test cli wrapper."""
+
     @staticmethod
     def _result(decision="compatible_on_fixture_set"):
+        """Result."""
         return {
             "decision": decision,
             "selected_candidate": "alpha",
@@ -681,6 +752,7 @@ class TestCliWrapper(unittest.TestCase):
         }
 
     def test_gate_on_failed_native(self):
+        """Test gate on failed native."""
         result = self._result(decision="failed")
         cli._run_confidence_probe(
             _ScriptedBackend(),
@@ -699,10 +771,12 @@ class TestCliWrapper(unittest.TestCase):
         )
 
     def test_stage_exception_degrades(self):
+        """Test stage exception degrades."""
         result = self._result()
         original = experiments.confidence_stage
 
         def _boom(*args, **kwargs):
+            """Boom."""
             raise RuntimeError("boom")
 
         experiments.confidence_stage = _boom
@@ -726,6 +800,7 @@ class TestCliWrapper(unittest.TestCase):
         )
 
     def test_wrapper_installs_payload(self):
+        """Test wrapper installs payload."""
         backend = _ScriptedBackend()
         cases = _cases()
         result = _native_result(backend, cases)
@@ -749,6 +824,7 @@ class TestTinyCheckpointEndToEnd(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         import tempfile
 
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
@@ -762,9 +838,11 @@ class TestTinyCheckpointEndToEnd(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        """Tear down the test fixture."""
         cls._tmp.cleanup()
 
     def test_tiny_checkpoint_confidence_run(self):
+        """Test tiny checkpoint confidence run."""
         from model_protocol_lab.backends import LocalHFBackend
 
         # The tiny checkpoint's declared window is 64 tokens, so

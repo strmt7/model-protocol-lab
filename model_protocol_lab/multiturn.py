@@ -347,6 +347,7 @@ def _pair_counts(records: list[dict[str, Any]], arm_a: str, arm_b: str) -> dict[
     return counts
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-candidate readouts recomputed from the records
     alone: per-depth paired blocks (delivery and scripted

@@ -48,6 +48,7 @@ BOUNDARY = (124,)  # ord("|")
 
 
 def _fixture(fid, expected="WORD"):
+    """Fixture."""
     return Fixture(
         id=fid,
         messages=(Message(role="user", content="Say the word."),),
@@ -57,6 +58,7 @@ def _fixture(fid, expected="WORD"):
 
 
 def _format(name="chatml"):
+    """Format."""
     return Format(
         name=name,
         bos="<s>",
@@ -73,14 +75,17 @@ class ParityBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids):
+        """Decode."""
         return "".join(map(chr, token_ids))
 
     @staticmethod
     def generate(input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         answer = "WORD" if len(input_ids) % 2 == 0 else "NOPE"
         out = tuple(map(ord, (answer + "|").ljust(max_new_tokens, ".")[:max_new_tokens]))
         return Generation(token_ids=out, reason="limit")
@@ -93,19 +98,24 @@ class ConstantBackend(ParityBackend):
 
     @staticmethod
     def generate(input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         out = tuple(map(ord, ("WORD" + "|").ljust(max_new_tokens, ".")[:max_new_tokens]))
         return Generation(token_ids=out, reason="limit")
 
 
 class FailingBackend(ParityBackend):
+    """Failing backend."""
+
     fingerprint = "scripted-ws-failing-v1"
 
     @staticmethod
     def generate(input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         raise RuntimeError("boom")
 
 
 def _search_entries(names=("chatml",), n_fixtures=2, verdict=True):
+    """Search entries."""
     entries = []
     for name in names:
         observations = []
@@ -124,6 +134,7 @@ def _search_entries(names=("chatml",), n_fixtures=2, verdict=True):
 
 
 def _ws_payload(mutations=None, robust=True):
+    """Ws payload."""
     mutations = list(mutations or MUTATIONS)
     per_candidate = {}
     for name in ("alpha", "beta"):
@@ -162,93 +173,125 @@ def _ws_payload(mutations=None, robust=True):
 
 
 class ApplyMutationTests(unittest.TestCase):
+    """Apply mutation tests."""
+
     def test_trailing_space(self):
+        """Test trailing space."""
         self.assertEqual(apply_mutation("abc", "trailing_space"), "abc ")
 
     def test_double_trailing_space(self):
+        """Test double trailing space."""
         self.assertEqual(apply_mutation("abc", "double_trailing_space"), "abc  ")
 
     def test_trailing_newline(self):
+        """Test trailing newline."""
         self.assertEqual(apply_mutation("abc", "trailing_newline"), "abc\n")
 
     def test_trailing_tab(self):
+        """Test trailing tab."""
         self.assertEqual(apply_mutation("abc", "trailing_tab"), "abc\t")
 
     def test_leading_space(self):
+        """Test leading space."""
         self.assertEqual(apply_mutation("abc", "leading_space"), " abc")
 
     def test_leading_newline(self):
+        """Test leading newline."""
         self.assertEqual(apply_mutation("abc", "leading_newline"), "\nabc")
 
     def test_strip_trailing_space_present(self):
+        """Test strip trailing space present."""
         self.assertEqual(apply_mutation("abc ", "strip_trailing_space"), "abc")
 
     def test_strip_trailing_space_absent_is_identity(self):
+        """Test strip trailing space absent is identity."""
         self.assertEqual(apply_mutation("abc", "strip_trailing_space"), "abc")
 
     def test_collapse_double_space(self):
+        """Test collapse double space."""
         self.assertEqual(apply_mutation("a  b   c", "collapse_double_space"), "a b  c")
 
     def test_unknown_mutation_raises(self):
+        """Test unknown mutation raises."""
         with self.assertRaises(ValueError):
             apply_mutation("abc", "trailing_bikeshed")
 
     def test_non_string_text_raises(self):
+        """Test non string text raises."""
         with self.assertRaises(ValueError):
             apply_mutation(42, "trailing_space")
 
     def test_mutations_tuple_matches_descriptions(self):
+        """Test mutations tuple matches descriptions."""
         from model_protocol_lab.wscanonical import MUTATION_DESCRIPTIONS
 
         self.assertEqual(set(MUTATIONS), set(MUTATION_DESCRIPTIONS))
 
 
 class ValidateMutationsTests(unittest.TestCase):
+    """Validate mutations tests."""
+
     def test_accepts_tuple(self):
+        """Test accepts tuple."""
         self.assertEqual(validate_mutations(("trailing_space",)), ("trailing_space",))
 
     def test_accepts_list(self):
+        """Test accepts list."""
         self.assertEqual(validate_mutations(["leading_space"]), ("leading_space",))
 
     def test_unknown_rejected(self):
+        """Test unknown rejected."""
         with self.assertRaises(ValueError):
             validate_mutations(("trailing_space", "nope"))
 
     def test_duplicate_rejected(self):
+        """Test duplicate rejected."""
         with self.assertRaises(ValueError):
             validate_mutations(("trailing_space", "trailing_space"))
 
     def test_empty_rejected(self):
+        """Test empty rejected."""
         with self.assertRaises(ValueError):
             validate_mutations(())
 
     def test_non_sequence_rejected(self):
+        """Test non sequence rejected."""
         with self.assertRaises(ValueError):
             validate_mutations("trailing_space")
 
 
 class CompareIdSequencesTests(unittest.TestCase):
+    """Compare id sequences tests."""
+
     def test_equal(self):
+        """Test equal."""
         self.assertTrue(compare_id_sequences((1, 2, 3), (1, 2, 3)))
 
     def test_unequal(self):
+        """Test unequal."""
         self.assertFalse(compare_id_sequences((1, 2), (1, 2, 3)))
 
     def test_empty_equal(self):
+        """Test empty equal."""
         self.assertTrue(compare_id_sequences((), ()))
 
     def test_malformed_base_raises(self):
+        """Test malformed base raises."""
         with self.assertRaises(ValueError):
             compare_id_sequences([1, 2], (1, 2))
 
     def test_negative_id_raises(self):
+        """Test negative id raises."""
         with self.assertRaises(ValueError):
             compare_id_sequences((1, -1), (1, 2))
 
 
 class AggregateMutationRecordsTests(unittest.TestCase):
+    """Aggregate mutation records tests."""
+
     @staticmethod
     def _record(mutation, divergent=0, flips=0, n=4):
+        """Record."""
         return {
             "mutation": mutation,
             "n_fixtures": n,
@@ -259,6 +302,7 @@ class AggregateMutationRecordsTests(unittest.TestCase):
         }
 
     def test_rates_and_robust(self):
+        """Test rates and robust."""
         agg = aggregate_mutation_records(
             [self._record("trailing_space"), self._record("leading_space", divergent=2)]
         )
@@ -267,6 +311,7 @@ class AggregateMutationRecordsTests(unittest.TestCase):
         self.assertFalse(agg["whitespace_robust"])
 
     def test_whitespace_robust_when_clean(self):
+        """Test whitespace robust when clean."""
         agg = aggregate_mutation_records(
             [self._record("trailing_space"), self._record("leading_space")]
         )
@@ -274,6 +319,7 @@ class AggregateMutationRecordsTests(unittest.TestCase):
         self.assertEqual(agg["max_verdict_flip_rate"], 0.0)
 
     def test_flip_makes_fragile(self):
+        """Test flip makes fragile."""
         agg = aggregate_mutation_records([self._record("trailing_space", flips=1)])
         self.assertEqual(agg["n_fragile_mutations"], 1)
         self.assertTrue(agg["per_mutation"]["trailing_space"]["fragile"])
@@ -281,27 +327,32 @@ class AggregateMutationRecordsTests(unittest.TestCase):
         self.assertFalse(agg["whitespace_robust"])
 
     def test_empty_records_not_robust(self):
+        """Test empty records not robust."""
         agg = aggregate_mutation_records([])
         self.assertFalse(agg["whitespace_robust"])
         self.assertEqual(agg["n_fragile_mutations"], 0)
 
     def test_unknown_mutation_rejected(self):
+        """Test unknown mutation rejected."""
         with self.assertRaises(ValueError):
             aggregate_mutation_records([self._record("nope")])
 
     def test_duplicate_rejected(self):
+        """Test duplicate rejected."""
         with self.assertRaises(ValueError):
             aggregate_mutation_records(
                 [self._record("trailing_space"), self._record("trailing_space")]
             )
 
     def test_evaluable_exceeds_fixtures_rejected(self):
+        """Test evaluable exceeds fixtures rejected."""
         record = self._record("trailing_space")
         record["n_evaluable"] = 5
         with self.assertRaises(ValueError):
             aggregate_mutation_records([record])
 
     def test_negative_count_rejected(self):
+        """Test negative count rejected."""
         record = self._record("trailing_space")
         record["n_verdict_flips"] = -1
         with self.assertRaises(ValueError):
@@ -309,45 +360,61 @@ class AggregateMutationRecordsTests(unittest.TestCase):
 
 
 class WsScanBackendTests(unittest.TestCase):
+    """Ws scan backend tests."""
+
     def test_encode_applies_mutation(self):
+        """Test encode applies mutation."""
         wrapped = WsScanBackend(ParityBackend(), "trailing_space")
         self.assertEqual(wrapped.encode("abc"), tuple(map(ord, "abc ")))
 
     def test_fingerprint_suffix(self):
+        """Test fingerprint suffix."""
         wrapped = WsScanBackend(ParityBackend(), "leading_newline")
         self.assertEqual(wrapped.fingerprint, "scripted-ws-parity-v1+wsscan:leading_newline")
 
     def test_mutation_property(self):
+        """Test mutation property."""
         self.assertEqual(WsScanBackend(ParityBackend(), "trailing_tab").mutation, "trailing_tab")
 
     def test_none_inner_rejected(self):
+        """Test none inner rejected."""
         with self.assertRaises(ValueError):
             WsScanBackend(None, "trailing_space")
 
     def test_unknown_mutation_rejected(self):
+        """Test unknown mutation rejected."""
         with self.assertRaises(ValueError):
             WsScanBackend(ParityBackend(), "nope")
 
     def test_non_string_fingerprint_rejected(self):
+        """Test non string fingerprint rejected."""
+
         class Bad:
+            """Bad."""
+
             fingerprint = 42
 
         with self.assertRaises(ValueError):
             WsScanBackend(Bad(), "trailing_space")
 
     def test_decode_forwards(self):
+        """Test decode forwards."""
         wrapped = WsScanBackend(ParityBackend(), "trailing_space")
         self.assertEqual(wrapped.decode((65, 66)), "AB")
 
     def test_generate_forwards(self):
+        """Test generate forwards."""
         wrapped = WsScanBackend(ParityBackend(), "trailing_space")
         gen = wrapped.generate((1, 2), max_new_tokens=4, seed=1, cancel=Event())
         self.assertEqual(gen.token_ids, tuple(map(ord, "WORD")))
 
 
 class BruteForceOracleTests(unittest.TestCase):
+    """Brute force oracle tests."""
+
     @staticmethod
     def _independent_apply(text, mutation):
+        """Independent apply."""
         if mutation == "trailing_space":
             return text + " "
         if mutation == "double_trailing_space":
@@ -376,6 +443,7 @@ class BruteForceOracleTests(unittest.TestCase):
         raise AssertionError("unknown mutation")
 
     def test_apply_mutation_matches_independent(self):
+        """Test apply mutation matches independent."""
         rng = random.Random(20261019)  # noqa: S311 -- deterministic test seed
         alphabet = "ab \n\t"
         for _ in range(200):
@@ -388,6 +456,7 @@ class BruteForceOracleTests(unittest.TestCase):
             )
 
     def test_aggregate_matches_independent(self):
+        """Test aggregate matches independent."""
         rng = random.Random(20261019)  # noqa: S311 -- deterministic test seed
         for _ in range(200):
             mutations = rng.sample(MUTATIONS, rng.randint(1, 4))
@@ -429,14 +498,18 @@ class BruteForceOracleTests(unittest.TestCase):
 
 
 class WscanonicalHypothesisTests(unittest.TestCase):
+    """Wscanonical hypothesis tests."""
+
     @given(st.text(), st.sampled_from(MUTATIONS))
     @settings(max_examples=200)
     def test_mutation_is_deterministic(self, text, mutation):
+        """Test mutation is deterministic."""
         self.assertEqual(apply_mutation(text, mutation), apply_mutation(text, mutation))
 
     @given(st.text())
     @settings(max_examples=200)
     def test_strip_is_left_inverse_of_trailing(self, text):
+        """Test strip is left inverse of trailing."""
         # strip_trailing_space undoes trailing_space exactly when the
         # original text did not already end with a space.
         if not text.endswith(" "):
@@ -448,6 +521,7 @@ class WscanonicalHypothesisTests(unittest.TestCase):
     @given(st.lists(st.integers(min_value=0, max_value=50000), max_size=20))
     @settings(max_examples=200)
     def test_compare_reflexive(self, ids):
+        """Test compare reflexive."""
         self.assertTrue(compare_id_sequences(tuple(ids), tuple(ids)))
 
     @given(
@@ -469,6 +543,7 @@ class WscanonicalHypothesisTests(unittest.TestCase):
     )
     @settings(max_examples=200)
     def test_rates_bounded(self, records):
+        """Test rates bounded."""
         # Clamp to the valid region; the property is about rate bounds.
         clean = []
         for record in records:
@@ -489,31 +564,41 @@ class WscanonicalHypothesisTests(unittest.TestCase):
 
 
 class NativeSearchInputIdsTests(unittest.TestCase):
+    """Native search input ids tests."""
+
     def test_extracts_ids(self):
+        """Test extracts ids."""
         result = native_search_input_ids(_search_entries(), ("chatml",))
         self.assertEqual(result["chatml"], {"f0": [10, 20, 30], "f1": [10, 20, 31]})
 
     def test_malformed_observation_degrades_to_none(self):
+        """Test malformed observation degrades to none."""
         entries = _search_entries()
         entries[0]["observations"][0] = {"fixture": "f0", "input_ids": "junk"}
         result = native_search_input_ids(entries, ("chatml",))
         self.assertIsNone(result["chatml"])
 
     def test_missing_candidate_is_none(self):
+        """Test missing candidate is none."""
         result = native_search_input_ids(_search_entries(), ("ghost",))
         self.assertIsNone(result["ghost"])
 
     def test_non_list_entries_degrade(self):
+        """Test non list entries degrade."""
         result = native_search_input_ids("junk", ("chatml",))
         self.assertIsNone(result["chatml"])
 
 
 class WsStageTests(unittest.TestCase):
+    """Ws stage tests."""
+
     @staticmethod
     def _cases(n=2):
+        """Cases."""
         return tuple(_fixture(f"f{i}") for i in range(n))
 
     def test_cells_record_verdicts_and_ids(self):
+        """Test cells record verdicts and ids."""
         stage = ws_stage(ParityBackend(), (_format(),), self._cases(), boundary=BOUNDARY)
         self.assertEqual(stage["mutations"], list(MUTATIONS))
         cell = stage["per_mutation"]["trailing_space"]["per_candidate"]["chatml"]
@@ -523,25 +608,30 @@ class WsStageTests(unittest.TestCase):
         self.assertEqual(set(cell["input_ids"]), {"f0", "f1"})
 
     def test_parity_backend_diverges_on_one_char_mutations(self):
+        """Test parity backend diverges on one char mutations."""
         stage = ws_stage(ParityBackend(), (_format(),), self._cases(), boundary=BOUNDARY)
         base_ids = ParityBackend.encode(_format().render(self._cases()[0].messages))
         variant = stage["per_mutation"]["trailing_space"]["per_candidate"]["chatml"]
         self.assertNotEqual(tuple(variant["input_ids"]["f0"]), base_ids)
 
     def test_failing_backend_cell_is_none(self):
+        """Test failing backend cell is none."""
         stage = ws_stage(FailingBackend(), (_format(),), self._cases(), boundary=BOUNDARY)
         cell = stage["per_mutation"]["trailing_space"]["per_candidate"]["chatml"]
         self.assertIsNone(cell)
 
     def test_none_backend_raises(self):
+        """Test none backend raises."""
         with self.assertRaises(ValueError):
             ws_stage(None, (_format(),), self._cases(), boundary=BOUNDARY)
 
     def test_empty_formats_raises(self):
+        """Test empty formats raises."""
         with self.assertRaises(ValueError):
             ws_stage(ParityBackend(), (), self._cases(), boundary=BOUNDARY)
 
     def test_unknown_mutation_raises(self):
+        """Test unknown mutation raises."""
         with self.assertRaises(ValueError):
             ws_stage(
                 ParityBackend(),
@@ -552,10 +642,12 @@ class WsStageTests(unittest.TestCase):
             )
 
     def test_bad_boundary_raises(self):
+        """Test bad boundary raises."""
         with self.assertRaises(ValueError):
             ws_stage(ParityBackend(), (_format(),), self._cases(), boundary=())
 
     def test_mutation_subset_accepted(self):
+        """Test mutation subset accepted."""
         stage = ws_stage(
             ParityBackend(),
             (_format(),),
@@ -567,8 +659,11 @@ class WsStageTests(unittest.TestCase):
 
 
 class WsCanonicalizationTests(unittest.TestCase):
+    """Ws canonicalization tests."""
+
     @staticmethod
     def _run(backend, names=("chatml",), n_fixtures=2):
+        """Run."""
         from model_protocol_lab.core import evaluate
 
         formats = tuple(_format(name) for name in names)
@@ -603,6 +698,7 @@ class WsCanonicalizationTests(unittest.TestCase):
         )
 
     def test_parity_backend_is_fragile(self):
+        """Test parity backend is fragile."""
         payload = self._run(ParityBackend())
         self.assertTrue(payload["available"])
         cand = payload["per_candidate"]["chatml"]
@@ -613,6 +709,7 @@ class WsCanonicalizationTests(unittest.TestCase):
         self.assertGreater(trailing["n_verdict_flips"], 0)
 
     def test_constant_backend_diverges_but_never_flips(self):
+        """Test constant backend diverges but never flips."""
         payload = self._run(ConstantBackend())
         self.assertTrue(payload["available"])
         cand = payload["per_candidate"]["chatml"]
@@ -627,11 +724,16 @@ class WsCanonicalizationTests(unittest.TestCase):
         self.assertFalse(trailing["fragile"])
 
     def test_same_ids_verdict_flip_recorded_separately(self):
+        """Test same ids verdict flip recorded separately."""
+
         class FlipFlopBackend(ParityBackend):
+            """Flip flop backend."""
+
             fingerprint = "scripted-ws-flipflop-v1"
             calls = 0
 
             def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+                """Generate."""
                 type(self).calls += 1
                 # Alternates answers across calls: same ids, flipped verdict.
                 answer = "WORD" if type(self).calls % 2 == 0 else "NOPE"
@@ -648,6 +750,7 @@ class WsCanonicalizationTests(unittest.TestCase):
         self.assertGreaterEqual(strip["n_same_ids_verdict_flips"], 0)
 
     def test_missing_native_input_ids_excludes_candidate(self):
+        """Test missing native input ids excludes candidate."""
         entries = _search_entries(names=("chatml", "gemma"))
         entries[0]["observations"][0]["input_ids"] = "junk"
         names = ("chatml", "gemma")
@@ -665,6 +768,7 @@ class WsCanonicalizationTests(unittest.TestCase):
         self.assertIn("gemma", payload["per_candidate"])
 
     def test_all_candidates_excluded_is_unavailable(self):
+        """Test all candidates excluded is unavailable."""
         entries = _search_entries()
         entries[0]["observations"][0]["input_ids"] = "junk"
         names = ("chatml",)
@@ -680,6 +784,7 @@ class WsCanonicalizationTests(unittest.TestCase):
         self.assertEqual(payload["detail"], "no_evaluable_candidates")
 
     def test_none_variant_cell_degrades(self):
+        """Test none variant cell degrades."""
         names = ("chatml",)
         entries = _search_entries()
         cases = tuple(_fixture(f"f{i}") for i in range(2))
@@ -695,10 +800,12 @@ class WsCanonicalizationTests(unittest.TestCase):
         self.assertEqual(cand["detail"], "variant_cell_unavailable")
 
     def test_malformed_ws_result_unavailable(self):
+        """Test malformed ws result unavailable."""
         payload = ws_canonicalization({}, {}, {"bogus": True}, ("chatml",))
         self.assertFalse(payload["available"])
 
     def test_no_evaluable_candidates_unavailable(self):
+        """Test no evaluable candidates unavailable."""
         payload = ws_canonicalization(
             {}, {}, {"mutations": ["trailing_space"], "per_mutation": {}}, ()
         )
@@ -707,22 +814,28 @@ class WsCanonicalizationTests(unittest.TestCase):
 
 
 class DiffWsCanonicalTests(unittest.TestCase):
+    """Diff ws canonical tests."""
+
     def test_neither_available(self):
+        """Test neither available."""
         diff = diff_ws_canonical(None, None)
         self.assertEqual(diff["available"], "neither")
         self.assertFalse(diff["changed"])
 
     def test_old_only_asymmetric(self):
+        """Test old only asymmetric."""
         diff = diff_ws_canonical(_ws_payload(), None)
         self.assertEqual(diff["available"], "old")
         self.assertFalse(diff["changed"])
 
     def test_identical_payloads_unchanged(self):
+        """Test identical payloads unchanged."""
         diff = diff_ws_canonical(_ws_payload(), _ws_payload())
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
 
     def test_rate_drift_detected(self):
+        """Test rate drift detected."""
         old = _ws_payload()
         new = _ws_payload()
         new["per_candidate"]["alpha"]["per_mutation"]["trailing_space"]["verdict_flip_rate"] = 1.0
@@ -736,6 +849,7 @@ class DiffWsCanonicalTests(unittest.TestCase):
         )
 
     def test_robust_flip_detected(self):
+        """Test robust flip detected."""
         old = _ws_payload()
         new = _ws_payload()
         new["per_candidate"]["alpha"]["whitespace_robust"] = False
@@ -744,6 +858,7 @@ class DiffWsCanonicalTests(unittest.TestCase):
         self.assertEqual(len(diff["robust_flips"]), 1)
 
     def test_fragile_set_changes_detected(self):
+        """Test fragile set changes detected."""
         old = _ws_payload()
         new = _ws_payload(robust=False)
         diff = diff_ws_canonical(old, new)
@@ -752,6 +867,7 @@ class DiffWsCanonicalTests(unittest.TestCase):
         self.assertEqual(diff["fragile_removed"], [])
 
     def test_candidates_added_removed(self):
+        """Test candidates added removed."""
         old = _ws_payload()
         new = _ws_payload()
         del new["per_candidate"]["beta"]
@@ -760,6 +876,7 @@ class DiffWsCanonicalTests(unittest.TestCase):
         self.assertEqual(diff["candidates_removed"], ["beta"])
 
     def test_mutations_added_detected(self):
+        """Test mutations added detected."""
         old = _ws_payload(mutations=["trailing_space"])
         new = _ws_payload(mutations=["trailing_space", "leading_space"])
         diff = diff_ws_canonical(old, new)
@@ -767,18 +884,21 @@ class DiffWsCanonicalTests(unittest.TestCase):
         self.assertEqual(diff["mutations_added"], ["leading_space"])
 
     def test_malformed_side_degrades_to_asymmetric(self):
+        """Test malformed side degrades to asymmetric."""
         bad = {"available": True, "mutations": "junk", "per_candidate": {}}
         diff = diff_ws_canonical(_ws_payload(), bad)
         self.assertEqual(diff["available"], "old")
         self.assertFalse(diff["changed"])
 
     def test_non_string_candidate_key_rejected(self):
+        """Test non string candidate key rejected."""
         bad = _ws_payload()
         bad["per_candidate"][7] = bad["per_candidate"].pop("alpha")
         diff = diff_ws_canonical(bad, _ws_payload())
         self.assertEqual(diff["available"], "new")
 
     def test_non_numeric_rate_rejected(self):
+        """Test non numeric rate rejected."""
         bad = _ws_payload()
         bad["per_candidate"]["alpha"]["per_mutation"]["trailing_space"]["verdict_flip_rate"] = (
             "high"
@@ -791,6 +911,7 @@ class WsChangedSingleCausePinTests(unittest.TestCase):
     """Each ``changed`` disjunct alone must flip the verdict (C4/C5 lesson)."""
 
     def _only(self, mutate):
+        """Only."""
         old = _ws_payload()
         new = copy.deepcopy(old)
         mutate(new)
@@ -799,6 +920,7 @@ class WsChangedSingleCausePinTests(unittest.TestCase):
         return diff
 
     def test_rate_drift_only(self):
+        """Test rate drift only."""
         self._only(
             lambda new: new["per_candidate"]["alpha"]["per_mutation"]["trailing_space"].update(
                 {"ids_divergence_rate": 0.75}
@@ -806,15 +928,20 @@ class WsChangedSingleCausePinTests(unittest.TestCase):
         )
 
     def test_robust_flip_only(self):
+        """Test robust flip only."""
         self._only(lambda new: new["per_candidate"]["alpha"].update({"whitespace_robust": False}))
 
     def test_fragile_added_only(self):
+        """Test fragile added only."""
+
         def mutate(new):
+            """Mutate."""
             new["fragile_candidates"] = ["alpha"]
 
         self._only(mutate)
 
     def test_fragile_removed_only(self):
+        """Test fragile removed only."""
         old = _ws_payload(robust=False)
         new = _ws_payload(robust=False)
         new["fragile_candidates"] = []
@@ -822,18 +949,25 @@ class WsChangedSingleCausePinTests(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_candidates_added_only(self):
+        """Test candidates added only."""
+
         def mutate(new):
+            """Mutate."""
             new["per_candidate"]["gamma"] = copy.deepcopy(new["per_candidate"]["alpha"])
 
         self._only(mutate)
 
     def test_candidates_removed_only(self):
+        """Test candidates removed only."""
+
         def mutate(new):
+            """Mutate."""
             del new["per_candidate"]["beta"]
 
         self._only(mutate)
 
     def test_mutations_added_only(self):
+        """Test mutations added only."""
         old = _ws_payload(mutations=["trailing_space"])
         new = _ws_payload(mutations=["trailing_space", "leading_space"])
         diff = diff_ws_canonical(old, new)
@@ -841,6 +975,7 @@ class WsChangedSingleCausePinTests(unittest.TestCase):
         self.assertEqual(diff["mutations_added"], ["leading_space"])
 
     def test_mutations_removed_only(self):
+        """Test mutations removed only."""
         old = _ws_payload(mutations=["trailing_space", "leading_space"])
         new = _ws_payload(mutations=["trailing_space"])
         diff = diff_ws_canonical(old, new)
@@ -852,6 +987,7 @@ class WsCanonicalMutationGateTests(unittest.TestCase):
     """Tempdir-module mutation gates (the real tree is never rewritten)."""
 
     def _run_gate(self, module_name, name, old_text, new_text, scenario):
+        """Run gate."""
         mod = __import__(f"model_protocol_lab.{module_name}", fromlist=["x"])
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
@@ -871,9 +1007,11 @@ class WsCanonicalMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _trailing_space_scenario(mod):
+        """Trailing space scenario."""
         assert mod.apply_mutation("abc", "trailing_space") == "abc "
 
     def test_mutant_flipped_trailing_space_caught(self):
+        """Test mutant flipped trailing space caught."""
         self._run_gate(
             "wscanonical",
             "flipped_trailing_space",
@@ -884,6 +1022,7 @@ class WsCanonicalMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _fail_closed_scenario(mod):
+        """Fail closed scenario."""
         try:
             mod.apply_mutation("abc", "nope")
         except ValueError:
@@ -891,6 +1030,7 @@ class WsCanonicalMutationGateTests(unittest.TestCase):
         raise AssertionError("unknown mutation did not raise")
 
     def test_mutant_dropped_fail_closed_caught(self):
+        """Test mutant dropped fail closed caught."""
         self._run_gate(
             "wscanonical",
             "dropped_fail_closed",
@@ -909,12 +1049,14 @@ class WsCanonicalMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _rate_drift_scenario(mod):
+        """Rate drift scenario."""
         old = _ws_payload()
         new = _ws_payload()
         new["per_candidate"]["alpha"]["per_mutation"]["trailing_space"]["verdict_flip_rate"] = 1.0
         assert mod.diff_ws_canonical(old, new)["changed"] is True
 
     def test_mutant_dropped_rate_drift_caught(self):
+        """Test mutant dropped rate drift caught."""
         self._run_gate(
             "diffreports",
             "dropped_ws_rate_drift",
@@ -938,12 +1080,14 @@ class WsCanonicalMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _robust_flip_scenario(mod):
+        """Robust flip scenario."""
         old = _ws_payload()
         new = _ws_payload()
         new["per_candidate"]["beta"]["whitespace_robust"] = False
         assert mod.diff_ws_canonical(old, new)["changed"] is True
 
     def test_mutant_dropped_robust_flip_caught(self):
+        """Test mutant dropped robust flip caught."""
         self._run_gate(
             "diffreports",
             "dropped_ws_robust_flip",
@@ -967,17 +1111,22 @@ class WsCanonicalMutationGateTests(unittest.TestCase):
 
 
 class WsCanonicalSectionTests(unittest.TestCase):
+    """Ws canonical section tests."""
+
     def test_renders_table_and_anchor(self):
+        """Test renders table and anchor."""
         html = _wscanonical_section({"ws_canonical": _ws_payload()})
         self.assertIn('id="whitespace-canonicalization"', html)
         self.assertIn("alpha", html)
         self.assertIn("trailing space", html)
 
     def test_empty_when_unavailable(self):
+        """Test empty when unavailable."""
         self.assertEqual(_wscanonical_section({}), "")
         self.assertEqual(_wscanonical_section({"ws_canonical": {"available": False}}), "")
 
     def test_escapes_hostile_candidate_names(self):
+        """Test escapes hostile candidate names."""
         payload = _ws_payload()
         payload["per_candidate"]["<script>alert(1)</script>"] = payload["per_candidate"].pop(
             "alpha"
@@ -987,10 +1136,12 @@ class WsCanonicalSectionTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;", html)
 
     def test_fragile_line_rendered(self):
+        """Test fragile line rendered."""
         html = _wscanonical_section({"ws_canonical": _ws_payload(robust=False)})
         self.assertIn("Whitespace-fragile candidates", html)
 
     def test_mutation_vocabulary_pinned(self):
+        """Test mutation vocabulary pinned."""
         from model_protocol_lab import reporting
 
         self.assertEqual(tuple(reporting._WSCAN_MUTATIONS), MUTATIONS)
@@ -998,7 +1149,10 @@ class WsCanonicalSectionTests(unittest.TestCase):
 
 
 class WsCanonicalSanitizationTests(unittest.TestCase):
+    """Ws canonical sanitization tests."""
+
     def test_diff_never_raises_on_hostile_payload(self):
+        """Test diff never raises on hostile payload."""
         hostile = {
             "available": True,
             "mutations": ["trailing_space", 7, None],
@@ -1020,6 +1174,7 @@ class WsCanonicalSanitizationTests(unittest.TestCase):
         self.assertIn(diff["available"], ("old", "new", "neither", "both"))
 
     def test_stderr_renderer_strips_escapes(self):
+        """Test stderr renderer strips escapes."""
         old = _ws_payload()
         new = _ws_payload()
         # A hostile candidate name must not reach the renderer raw: the
@@ -1053,6 +1208,7 @@ class WsCanonicalSanitizationTests(unittest.TestCase):
             self.assertNotIn("\x1b", line)
 
     def test_stderr_renderer_escapes_drift_entries(self):
+        """Test stderr renderer escapes drift entries."""
         old = _ws_payload()
         new = _ws_payload()
         cell = new["per_candidate"]["alpha"]["per_mutation"]["trailing_space"]
@@ -1064,6 +1220,7 @@ class WsCanonicalSanitizationTests(unittest.TestCase):
             self.assertNotIn("\x1b", line)
 
     def test_unavailable_renderers_return_empty(self):
+        """Test unavailable renderers return empty."""
         self.assertEqual(diffreports._render_ws_canonical_summary(None), [])
         self.assertEqual(diffreports._render_ws_canonical_summary({"available": "neither"}), [])
         self.assertEqual(
@@ -1076,7 +1233,10 @@ class WsCanonicalSanitizationTests(unittest.TestCase):
 
 
 class CliProbeTests(unittest.TestCase):
+    """Cli probe tests."""
+
     def test_run_help_mentions_ws_scan(self):
+        """Test run help mentions ws scan."""
         import subprocess
         import sys
 
@@ -1093,6 +1253,7 @@ class CliProbeTests(unittest.TestCase):
         self.assertIn("--ws-scan", proc.stdout)
 
     def test_probe_stores_payload(self):
+        """Test probe stores payload."""
         from model_protocol_lab import cli
 
         cases = tuple(_fixture(f"f{i}") for i in range(2))
@@ -1133,6 +1294,7 @@ class CliProbeTests(unittest.TestCase):
         self.assertEqual(payload["mutations"], list(MUTATIONS))
 
     def test_probe_never_raises_on_broken_backend(self):
+        """Test probe never raises on broken backend."""
         from model_protocol_lab import cli
 
         result = {}
@@ -1152,7 +1314,10 @@ class CliProbeTests(unittest.TestCase):
 
 
 class SampleReportTests(unittest.TestCase):
+    """Sample report tests."""
+
     def test_sample_build_is_byte_identical(self):
+        """Test sample build is byte identical."""
         script = Path(__file__).resolve().parent.parent / "examples" / "make_sample_report.py"
         spec = importlib.util.spec_from_file_location("make_sample_report_c156", script)
         assert spec is not None and spec.loader is not None
@@ -1168,13 +1333,17 @@ class SampleReportTests(unittest.TestCase):
         )
 
     def test_committed_sample_has_ws_section(self):
+        """Test committed sample has ws section."""
         sample = Path(__file__).resolve().parent.parent / "examples" / "sample-report"
         html = (sample / "report.html").read_text(encoding="utf-8")
         self.assertIn('id="whitespace-canonicalization"', html)
 
 
 class TocAnchorTests(unittest.TestCase):
+    """Toc anchor tests."""
+
     def test_all_toc_ids_have_section_anchors(self):
+        """Test all toc ids have section anchors."""
         # Mirrors the cycle-153 invariant: _toc never points at a missing id.
         from model_protocol_lab import reporting
 
@@ -1201,11 +1370,13 @@ class WsCoverageGapTests(unittest.TestCase):
     # --- wscanonical.py: malformed variant ids, bad records ---
 
     def test_compare_rejects_malformed_variant(self):
+        """Test compare rejects malformed variant."""
         with self.assertRaises(ValueError):
             compare_id_sequences((1, 2), [1, 2])
 
     @staticmethod
     def _valid_record():
+        """Valid record."""
         return {
             "mutation": "trailing_space",
             "n_fixtures": 4,
@@ -1216,20 +1387,24 @@ class WsCoverageGapTests(unittest.TestCase):
         }
 
     def test_aggregate_rejects_non_list(self):
+        """Test aggregate rejects non list."""
         with self.assertRaises(ValueError):
             aggregate_mutation_records("nope")  # type: ignore[arg-type]
 
     def test_aggregate_rejects_non_dict_record(self):
+        """Test aggregate rejects non dict record."""
         with self.assertRaises(ValueError):
             aggregate_mutation_records(["nope"])  # type: ignore[list-item]
 
     def test_aggregate_rejects_divergent_over_fixtures(self):
+        """Test aggregate rejects divergent over fixtures."""
         record = self._valid_record()
         record["n_ids_divergent"] = 5
         with self.assertRaises(ValueError):
             aggregate_mutation_records([record])
 
     def test_aggregate_rejects_flips_over_evaluable(self):
+        """Test aggregate rejects flips over evaluable."""
         record = self._valid_record()
         record["n_verdict_flips"] = 4
         with self.assertRaises(ValueError):
@@ -1238,6 +1413,7 @@ class WsCoverageGapTests(unittest.TestCase):
     # --- experiments.native_search_input_ids: malformed entries ---
 
     def test_native_input_ids_malformed_entries(self):
+        """Test native input ids malformed entries."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import native_search_input_ids
 
@@ -1289,6 +1465,7 @@ class WsCoverageGapTests(unittest.TestCase):
     # --- experiments.ws_stage: contract violations + evaluate raising ---
 
     def test_ws_stage_rejects_bad_cases(self):
+        """Test ws stage rejects bad cases."""
         with self.assertRaises(ValueError):
             ws_stage(ParityBackend(), (_format(),), (), boundary=BOUNDARY)
         with self.assertRaises(ValueError):
@@ -1300,6 +1477,7 @@ class WsCoverageGapTests(unittest.TestCase):
             )
 
     def test_ws_stage_rejects_bad_max_new_tokens(self):
+        """Test ws stage rejects bad max new tokens."""
         with self.assertRaises(ValueError):
             ws_stage(
                 ParityBackend(),
@@ -1310,6 +1488,7 @@ class WsCoverageGapTests(unittest.TestCase):
             )
 
     def test_ws_stage_rejects_bad_seed(self):
+        """Test ws stage rejects bad seed."""
         with self.assertRaises(ValueError):
             ws_stage(
                 ParityBackend(),
@@ -1320,9 +1499,14 @@ class WsCoverageGapTests(unittest.TestCase):
             )
 
     def test_ws_stage_evaluate_raise_degrades_cell(self):
+        """Test ws stage evaluate raise degrades cell."""
+
         class EncodeBoomBackend(ParityBackend):
+            """Encode boom backend."""
+
             @staticmethod
             def encode(text):
+                """Encode."""
                 raise RuntimeError("encode boom")
 
         stage = ws_stage(
@@ -1338,9 +1522,11 @@ class WsCoverageGapTests(unittest.TestCase):
 
     @staticmethod
     def _good_stage():
+        """Good stage."""
         return {"mutations": ["trailing_space"], "per_mutation": {}}
 
     def test_canonicalization_rejects_malformed_native(self):
+        """Test canonicalization rejects malformed native."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import ws_canonicalization
 
@@ -1350,6 +1536,7 @@ class WsCoverageGapTests(unittest.TestCase):
         self.assertEqual(out["detail"], "native_data_malformed")
 
     def test_canonicalization_rejects_malformed_stage(self):
+        """Test canonicalization rejects malformed stage."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import ws_canonicalization
 
@@ -1363,6 +1550,7 @@ class WsCoverageGapTests(unittest.TestCase):
         self.assertEqual(out["detail"], "ws_result_malformed")
 
     def test_canonicalization_malformed_variant_cell(self):
+        """Test canonicalization malformed variant cell."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import ws_canonicalization
 
@@ -1390,6 +1578,7 @@ class WsCoverageGapTests(unittest.TestCase):
         self.assertEqual(cell["detail"], "variant_cell_malformed")
 
     def test_canonicalization_skips_bad_fixture_rows(self):
+        """Test canonicalization skips bad fixture rows."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import ws_canonicalization
 
@@ -1428,6 +1617,7 @@ class WsCoverageGapTests(unittest.TestCase):
     # --- reporting._wscanonical_section: defensive branches ---
 
     def test_section_malformed_payload_renders_nothing(self):
+        """Test section malformed payload renders nothing."""
         self.assertEqual(_wscanonical_section({"ws_canonical": {"available": True}}), "")
         self.assertEqual(
             _wscanonical_section({"ws_canonical": {"available": True, "per_candidate": "x"}}),
@@ -1435,6 +1625,7 @@ class WsCoverageGapTests(unittest.TestCase):
         )
 
     def test_section_handles_malformed_cells(self):
+        """Test section handles malformed cells."""
         payload = {
             "available": True,
             "mutations": ["trailing_space", "leading_space"],
@@ -1472,6 +1663,7 @@ class WsCoverageGapTests(unittest.TestCase):
     # --- diffreports._valid_ws_canonical: hostile payloads ---
 
     def test_valid_ws_canonical_rejects_hostile(self):
+        """Test valid ws canonical rejects hostile."""
         from model_protocol_lab.diffreports import _valid_ws_canonical
 
         good = _ws_payload()
@@ -1525,6 +1717,7 @@ class WsCoverageGapTests(unittest.TestCase):
     # --- diffreports._render_ws_canonical_summary: all branches ---
 
     def test_ws_summary_all_branches(self):
+        """Test ws summary all branches."""
         from model_protocol_lab.diffreports import _render_ws_canonical_summary
 
         self.assertEqual(_render_ws_canonical_summary(None), [])
@@ -1576,6 +1769,7 @@ class WsCoverageGapTests(unittest.TestCase):
     # --- cli._run_ws_probe: the never-raises except block ---
 
     def test_probe_never_raises_when_stage_raises(self):
+        """Test probe never raises when stage raises."""
         from model_protocol_lab.cli import _run_ws_probe
 
         result = {}

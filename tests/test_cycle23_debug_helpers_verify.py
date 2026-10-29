@@ -178,7 +178,10 @@ def _valid_messages(rng: random.Random) -> tuple[Message, ...]:
 
 
 class RenderSegmentsTests(unittest.TestCase):
+    """Render segments tests."""
+
     def test_known_catalog_case(self) -> None:
+        """Test known catalog case."""
         fmt = CATALOG["chatml"]
         messages = (Message(role="user", content="hello"),)
         segments = _render_segments(fmt, messages)
@@ -188,6 +191,7 @@ class RenderSegmentsTests(unittest.TestCase):
         self.assertEqual([name for name, _ in segments][-1], "open_suffix")
 
     def test_fuzz_oracle_and_tiling(self) -> None:
+        """Test fuzz oracle and tiling."""
         rng = random.Random(0xC23A11)  # noqa: S311 -- deterministic test seed
         for trial in range(400):
             with self.subTest(trial=trial):
@@ -212,6 +216,7 @@ class RenderSegmentsTests(unittest.TestCase):
                     self.assertEqual(rendered[start:end], text, f"span text mismatch: {name}")
 
     def test_fuzz_all_27_families(self) -> None:
+        """Test fuzz all 27 families."""
         rng = random.Random(0xFA4117)  # noqa: S311 -- deterministic test seed
         for family in _FAMILIES:
             with self.subTest(family=family):
@@ -222,6 +227,7 @@ class RenderSegmentsTests(unittest.TestCase):
                 self.assertEqual("".join(text for _, text in segments), fmt.render(messages))
 
     def test_segment_names_follow_documented_order(self) -> None:
+        """Test segment names follow documented order."""
         fmt = replace(CATALOG["chatml"], name="x", repeat_bos=True)
         messages = (
             Message(role="user", content="u1"),
@@ -250,6 +256,7 @@ class RenderSegmentsTests(unittest.TestCase):
         )
 
     def test_empty_content_message(self) -> None:
+        """Test empty content message."""
         fmt = CATALOG["llama3"]
         messages = (Message(role="user", content=""),)
         segments = _render_segments(fmt, messages)
@@ -259,6 +266,7 @@ class RenderSegmentsTests(unittest.TestCase):
         self.assertEqual(spans[-1][1], len(fmt.render(messages)))
 
     def test_invalid_messages_raise(self) -> None:
+        """Test invalid messages raise."""
         fmt = CATALOG["chatml"]
         with self.assertRaises(ValueError):
             _render_segments(fmt, ())
@@ -275,7 +283,10 @@ class RenderSegmentsTests(unittest.TestCase):
 
 
 class OverhangTests(unittest.TestCase):
+    """Overhang tests."""
+
     def test_fuzz_against_brute_force(self) -> None:
+        """Test fuzz against brute force."""
         rng = random.Random(0x0E2A96)  # noqa: S311 -- deterministic test seed
         for trial in range(2000):
             with self.subTest(trial=trial):
@@ -284,6 +295,7 @@ class OverhangTests(unittest.TestCase):
                 self.assertEqual(_overhang(seen, boundary), _oracle_overhang(seen, boundary))
 
     def test_fuzz_large_ids(self) -> None:
+        """Test fuzz large ids."""
         rng = random.Random(0xB16B00B5)  # noqa: S311 -- deterministic test seed
         for trial in range(300):
             with self.subTest(trial=trial):
@@ -292,6 +304,7 @@ class OverhangTests(unittest.TestCase):
                 self.assertEqual(_overhang(seen, boundary), _oracle_overhang(seen, boundary))
 
     def test_known_cases(self) -> None:
+        """Test known cases."""
         cases = [
             ((1, 2, 3), (2, 3, 4), 2),
             ((1, 2, 3), (1, 2, 3), 3),  # full match is still an overhang
@@ -308,6 +321,7 @@ class OverhangTests(unittest.TestCase):
                 self.assertEqual(_overhang(tuple(seen), tuple(boundary)), expected)
 
     def test_result_is_longest_matching_prefix(self) -> None:
+        """Test result is longest matching prefix."""
         # Property: the returned k is the LARGEST k with seen ending in boundary[:k].
         rng = random.Random(0xDECAF)  # noqa: S311 -- deterministic test seed
         for trial in range(500):
@@ -325,7 +339,10 @@ class OverhangTests(unittest.TestCase):
 
 
 class ParseIdListTests(unittest.TestCase):
+    """Parse id list tests."""
+
     def test_valid(self) -> None:
+        """Test valid."""
         self.assertEqual(_parse_id_list("0", what="x", max_len=16), (0,))
         self.assertEqual(_parse_id_list("1,2,3", what="x", max_len=16), (1, 2, 3))
         self.assertEqual(_parse_id_list("  7 ,  8\t", what="x", max_len=16), (7, 8))
@@ -333,6 +350,7 @@ class ParseIdListTests(unittest.TestCase):
         self.assertEqual(_parse_id_list(",".join(["1"] * 16), what="x", max_len=16), (1,) * 16)
 
     def test_rejects(self) -> None:
+        """Test rejects."""
         bad = [
             "",
             "   ",
@@ -360,6 +378,7 @@ class ParseIdListTests(unittest.TestCase):
                 _parse_id_list(value, what="stream", max_len=16)
 
     def test_error_names_what_and_max_len(self) -> None:
+        """Test error names what and max len."""
         with self.assertRaises(ValueError) as ctx:
             _parse_id_list("nope", what="boundary", max_len=16)
         self.assertIn("boundary", str(ctx.exception))
@@ -369,6 +388,7 @@ class ParseIdListTests(unittest.TestCase):
         self.assertIn("zz", str(ctx.exception))
 
     def test_fuzz_round_trip(self) -> None:
+        """Test fuzz round trip."""
         rng = random.Random(0x1D1157)  # noqa: S311 -- deterministic test seed
         for trial in range(500):
             with self.subTest(trial=trial):
@@ -380,6 +400,7 @@ class ParseIdListTests(unittest.TestCase):
                 self.assertEqual(_parse_id_list(padded, what="x", max_len=16), ids)
 
     def test_fuzz_rejects_corrupted(self) -> None:
+        """Test fuzz rejects corrupted."""
         rng = random.Random(0xBAD1D)  # noqa: S311 -- deterministic test seed
         alphabet = list("0123456789,") + [" ", "a", "-", "+", ".", ";", "\t"]
         for trial in range(800):
@@ -402,7 +423,10 @@ class ParseIdListTests(unittest.TestCase):
 
 
 class ParseSayLineTests(unittest.TestCase):
+    """Parse say line tests."""
+
     def test_role_prefixes(self) -> None:
+        """Test role prefixes."""
         cases = [
             ("user: hello", ("user", "hello")),
             ("User: hello", ("user", "hello")),
@@ -424,6 +448,7 @@ class ParseSayLineTests(unittest.TestCase):
                 self.assertEqual(_parse_say_line(line), expected)
 
     def test_unrecognized_prefix_kept_as_content(self) -> None:
+        """Test unrecognized prefix kept as content."""
         # Docstring contract: unrecognized "word:" prefixes are kept as
         # content, never mangled; the ORIGINAL line is returned verbatim.
         cases = [
@@ -448,6 +473,7 @@ class ParseSayLineTests(unittest.TestCase):
                 self.assertEqual(content, line)
 
     def test_fuzz_prefix_grammar(self) -> None:
+        """Test fuzz prefix grammar."""
         rng = random.Random(0x5A4)  # noqa: S311 -- deterministic test seed
         role_words = ["user", "assistant", "User", "ASSISTANT", "note", "data", "u1", ""]
         for trial in range(600):
@@ -467,7 +493,10 @@ class ParseSayLineTests(unittest.TestCase):
 
 
 class SanitizeDisplayTests(unittest.TestCase):
+    """Sanitize display tests."""
+
     def test_control_chars_stripped(self) -> None:
+        """Test control chars stripped."""
         stripped = "".join(
             chr(c)
             for c in list(range(0x00, 0x09))
@@ -480,13 +509,16 @@ class SanitizeDisplayTests(unittest.TestCase):
         self.assertIn("\x9b", stripped)  # C1 CSI introducer is covered
 
     def test_tab_lf_cr_kept(self) -> None:
+        """Test tab lf cr kept."""
         self.assertEqual(_sanitize_display("a\tb\nc\rd"), "a\tb\nc\rd")
 
     def test_printable_and_unicode_kept(self) -> None:
+        """Test printable and unicode kept."""
         text = "héllo ✓ \U0001f600 <|im_start|> \u00a0"
         self.assertEqual(_sanitize_display(text), text)
 
     def test_fuzz_against_char_oracle(self) -> None:
+        """Test fuzz against char oracle."""
         rng = random.Random(0x5A7172)  # noqa: S311 -- deterministic test seed
         alphabet = [chr(c) for c in range(0x20, 0x7F)] + [
             "\t",
@@ -519,6 +551,7 @@ class BoundaryStepComputationTests(unittest.TestCase):
     """
 
     def test_fuzz_step_walk(self) -> None:
+        """Test fuzz step walk."""
         rng = random.Random(0x57E9)  # noqa: S311 -- deterministic test seed
         for trial in range(400):
             with self.subTest(trial=trial):
@@ -532,10 +565,12 @@ class BoundaryStepComputationTests(unittest.TestCase):
                     )
 
     def test_first_boundary_requires_nonempty(self) -> None:
+        """Test first boundary requires nonempty."""
         with self.assertRaises(ValueError):
             first_boundary((1, 2), ())
 
     def test_overhang_zero_after_full_match(self) -> None:
+        """Test overhang zero after full match."""
         # After a full match, a following non-matching token resets overhang
         # to the brute-force value (no stale state).
         seen, boundary = (10, 20, 30), (10, 20, 30)
@@ -556,7 +591,10 @@ class SensitivityTests(unittest.TestCase):
     """
 
     def test_overhang_drops_zero_case(self) -> None:
+        """Test overhang drops zero case."""
+
         def mutated(seen: tuple[int, ...], boundary: tuple[int, ...]) -> int | None:
+            """Mutated."""
             for k in range(min(len(seen), len(boundary)), 0, -1):  # BUG: skips k=0
                 if seen[len(seen) - k :] == boundary[:k]:
                     return k
@@ -567,7 +605,10 @@ class SensitivityTests(unittest.TestCase):
         self.assertNotEqual(mutated(seen, boundary), _oracle_overhang(seen, boundary))
 
     def test_overhang_off_by_one_slice(self) -> None:
+        """Test overhang off by one slice."""
+
         def mutated(seen: tuple[int, ...], boundary: tuple[int, ...]) -> int:
+            """Mutated."""
             for k in range(min(len(seen), len(boundary)), -1, -1):
                 if seen[len(seen) - k :] == boundary[: k + 1]:  # BUG: k+1
                     return k
@@ -578,7 +619,10 @@ class SensitivityTests(unittest.TestCase):
         self.assertNotEqual(mutated(seen, boundary), _oracle_overhang(seen, boundary))
 
     def test_render_segments_dropped_open_suffix(self) -> None:
+        """Test render segments dropped open suffix."""
+
         def mutated(fmt: Format, messages: tuple[Message, ...]) -> tuple[tuple[str, str], ...]:
+            """Mutated."""
             pieces = list(_oracle_segments(fmt, messages))
             return tuple(pieces[:-1])  # BUG: open_suffix dropped
 
@@ -590,7 +634,10 @@ class SensitivityTests(unittest.TestCase):
         self.assertNotEqual(mutated(fmt, messages), tuple(_oracle_segments(fmt, messages)))
 
     def test_render_segments_swapped_order(self) -> None:
+        """Test render segments swapped order."""
+
         def mutated(fmt: Format, messages: tuple[Message, ...]) -> tuple[tuple[str, str], ...]:
+            """Mutated."""
             pieces = list(_oracle_segments(fmt, messages))
             pieces[1], pieces[2] = pieces[2], pieces[1]  # BUG: content before prefix
             return tuple(pieces)
@@ -600,7 +647,10 @@ class SensitivityTests(unittest.TestCase):
         self.assertNotEqual(mutated(fmt, messages), tuple(_oracle_segments(fmt, messages)))
 
     def test_parse_id_list_allows_over_cap(self) -> None:
+        """Test parse id list allows over cap."""
+
         def mutated(value: str, *, what: str, max_len: int) -> tuple[int, ...]:
+            """Mutated."""
             parts = [part.strip() for part in value.split(",")]  # BUG: no 2^31 cap
             return tuple(int(part) for part in parts)
 
@@ -612,7 +662,10 @@ class SensitivityTests(unittest.TestCase):
         self.assertEqual(mutated(value, what="boundary", max_len=16), (2**31,))
 
     def test_parse_id_list_allows_extra_part(self) -> None:
+        """Test parse id list allows extra part."""
+
         def mutated(value: str, *, what: str, max_len: int) -> tuple[int, ...]:
+            """Mutated."""
             return _parse_id_list(value, what=what, max_len=max_len + 1)  # BUG: off-by-one cap
 
         value = ",".join(["1"] * 6)
@@ -622,7 +675,10 @@ class SensitivityTests(unittest.TestCase):
         self.assertEqual(mutated(value, what="x", max_len=5), (1,) * 6)
 
     def test_parse_say_line_returns_stripped_on_no_match(self) -> None:
+        """Test parse say line returns stripped on no match."""
+
         def mutated(line: str) -> tuple[None, str]:
+            """Mutated."""
             return None, line.strip()  # BUG: mangles verbatim content
 
         line = "  note: padded stays verbatim  "
@@ -630,7 +686,10 @@ class SensitivityTests(unittest.TestCase):
         self.assertNotEqual(mutated(line), (None, line))
 
     def test_parse_say_line_rejects_unrecognized_prefix(self) -> None:
+        """Test parse say line rejects unrecognized prefix."""
+
         def mutated(line: str) -> tuple[str | None, str]:
+            """Mutated."""
             if ":" in line:
                 raise ValueError("unknown role")  # BUG: rejects prose
             return None, line
@@ -640,14 +699,20 @@ class SensitivityTests(unittest.TestCase):
         self.assertEqual(_parse_say_line("note: do not mangle"), (None, "note: do not mangle"))
 
     def test_sanitize_strips_tab_too(self) -> None:
+        """Test sanitize strips tab too."""
+
         def mutated(value: str) -> str:
+            """Mutated."""
             return "".join(ch for ch in _sanitize_display(value) if ch != "\t")  # BUG
 
         self.assertEqual(_sanitize_display("a\tb"), "a\tb")
         self.assertNotEqual(mutated("a\tb"), _oracle_sanitize("a\tb"))
 
     def test_sanitize_keeps_esc(self) -> None:
+        """Test sanitize keeps esc."""
+
         def mutated(value: str) -> str:
+            """Mutated."""
             return value  # BUG: no sanitization at all
 
         self.assertEqual(_sanitize_display("\x1b[31m"), "[31m")  # ESC gone, text kept

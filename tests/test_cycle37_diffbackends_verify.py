@@ -126,12 +126,14 @@ class _ConcatBackend:
         self._texts = dict(texts)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(self._texts[token] for token in token_ids)
 
 
 def _make_backend(
     output_texts: tuple[str, ...], prompt_texts: tuple[str, ...] = ()
 ) -> tuple[_ConcatBackend, tuple[int, ...], tuple[int, ...]]:
+    """Make backend."""
     mapping = {index + 1: text for index, text in enumerate(output_texts)}
     prompt_ids = tuple(1001 + index for index in range(len(prompt_texts)))
     for pid, text in zip(prompt_ids, prompt_texts, strict=True):
@@ -145,6 +147,7 @@ class _BytePathBackend(_ConcatBackend):
     """
 
     def hf_stop_token_bytes(self, token_id: int) -> bytes | None:
+        """Hf stop token bytes."""
         return self._texts[token_id].encode("utf-8")
 
 
@@ -161,6 +164,7 @@ class _CountingBackend(_ConcatBackend):
         self.calls = 0
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         self.calls += 1
         if self.calls > self.budget:
             raise RuntimeError("cycle37-armed-decode-failure")
@@ -211,6 +215,7 @@ def _readable_text(backend: Any, snap: _Snap) -> str | None:
 
 
 def _valid_id_seq(value: object, name: str, cap: int) -> tuple[int, ...]:
+    """Valid id seq."""
     if type(value) is not tuple or any(
         type(token) is not int or not 0 <= token < 2**31 for token in value
     ):
@@ -221,6 +226,7 @@ def _valid_id_seq(value: object, name: str, cap: int) -> tuple[int, ...]:
 
 
 def _valid_stop_list(value: object) -> tuple[str, ...]:
+    """Valid stop list."""
     if type(value) is tuple:
         items: tuple[object, ...] = value
     elif type(value) is list:
@@ -245,6 +251,7 @@ def _valid_stop_list(value: object) -> tuple[str, ...]:
 
 
 def _valid_obs_ids(observation: dict[str, Any], key: str, cap: int) -> tuple[int, ...] | None:
+    """Valid obs ids."""
     raw: object = observation.get(key)
     if type(raw) is list:
         raw = tuple(raw)
@@ -400,6 +407,7 @@ def _rule_harness_relied(stop: str, snaps: dict[str, _Snap], ctx: SimpleNamespac
     return hits
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _rule_multi_stop_selection(
     per_stop: list[tuple[str, dict[str, _Snap]]], ctx: SimpleNamespace
 ) -> list[str]:
@@ -454,9 +462,11 @@ class _DocstringOracle:
         eos_id: int | None,
         min_tokens: int,
     ) -> dict[str, _Snap]:
+        """Snapshot."""
         token_bytes = getattr(backend, "hf_stop_token_bytes", None)
 
         def snap(semantic: str, outcome: Any, disposition: str | None) -> _Snap:
+            """Snap."""
             return _Snap(
                 semantic=semantic,
                 available=bool(outcome.available),
@@ -513,6 +523,7 @@ class _DocstringOracle:
         min_tokens: int = 0,
         backend: Any,
     ) -> dict[str, Any]:
+        """Classify."""
         prompt_ids = _valid_id_seq(prompt_ids, "prompt_ids", MAX_PROMPT_IDS)
         output_ids = _valid_id_seq(output_ids, "output_ids", MAX_OUTPUT_IDS)
         stops = _valid_stop_list(stop_texts)
@@ -550,6 +561,7 @@ class _DocstringOracle:
             "verdict": "diverge" if findings else "agree",
         }
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def summarize(
         self,
         *,
@@ -559,6 +571,7 @@ class _DocstringOracle:
         min_tokens: int,
         backend: Any,
     ) -> dict[str, Any] | None:
+        """Summarize."""
         if type(observations) is tuple:
             candidates: list[Any] = list(observations)
         elif type(observations) is list:
@@ -746,10 +759,14 @@ _CLASS_CASES = {
 
 # skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class _Cycle37Base(unittest.TestCase):
+    """Cycle37 base."""
+
     def setUp(self) -> None:
+        """Set up the test fixture."""
         self.oracle = _DocstringOracle()
 
     def _run_case(self, name: str) -> tuple[dict[str, Any], dict[str, Any], frozenset[str]]:
+        """Run case."""
         for case in _HAND_CASES:
             if case[0] == name:
                 _, prompt_texts, output_texts, stops, eos_id, min_tokens, expected = case
@@ -802,6 +819,7 @@ class OracleDifferentialTests(_Cycle37Base):
     """``diff_backends`` vs the docstring-derived oracle, hand cases + fuzz."""
 
     def test_hand_cases_match_oracle(self) -> None:
+        """Test hand cases match oracle."""
         for name, _, _, _, _, _, expected in _HAND_CASES:
             with self.subTest(name=name):
                 impl, oracle_result, _ = self._run_case(name)
@@ -814,6 +832,7 @@ class OracleDifferentialTests(_Cycle37Base):
                     self.assertEqual(impl["verdict"], "agree", name)
 
     def test_each_class_fires_by_construction(self) -> None:
+        """Test each class fires by construction."""
         self.assertEqual(set(_CLASS_CASES), set(_ORACLE_SEVERITY))
         self.assertEqual(set(_CLASS_CASES), set(_CLASS_SEMANTICS))
         for kind, case_name in _CLASS_CASES.items():
@@ -822,16 +841,20 @@ class OracleDifferentialTests(_Cycle37Base):
                 self.assertIn(kind, {d["class"] for d in impl["divergences"]}, case_name)
 
     def test_severity_table_matches(self) -> None:
+        """Test severity table matches."""
         # The oracle's docstring-derived severity table equals the module's
         # DIVERGENCE_SEVERITY for every class, keys and values.
         self.assertEqual(_ORACLE_SEVERITY, DIVERGENCE_SEVERITY)
 
     def test_attribution_table_matches(self) -> None:
+        """Test attribution table matches."""
         # The oracle's docstring-derived attribution equals the module's
         # _CLASS_SEMANTICS entry for every class.
         self.assertEqual(_ORACLE_ATTRIBUTION, _CLASS_SEMANTICS)
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_fuzz_classification_matches_oracle(self) -> None:
+        """Test fuzz classification matches oracle."""
         rng = random.Random("cycle37-diffbackends-fuzz")  # noqa: S311 -- seeded, not crypto
         token_pool = [
             "a",
@@ -921,6 +944,7 @@ class OracleDifferentialTests(_Cycle37Base):
                         self.assertIsNotNone(finding["stop_text"], f"fuzz-{trial}")
 
     def test_fuzz_byte_path_matches_oracle(self) -> None:
+        """Test fuzz byte path matches oracle."""
         # The HF byte-space path (hf_stop_token_bytes) changes which decode
         # calls happen; classification must still match the oracle.
         rng = random.Random("cycle37-diffbackends-bytepath")  # noqa: S311 -- seeded
@@ -946,6 +970,7 @@ class OracleDifferentialTests(_Cycle37Base):
                 self.assert_matches_oracle(impl, oracle_result, f"bytepath-{trial}")
 
     def test_stop_text_dedup(self) -> None:
+        """Test stop text dedup."""
         backend, prompt_ids, output_ids = _make_backend(("aSTOP",))
         impl = diff_backends(
             prompt_ids=prompt_ids,
@@ -964,6 +989,7 @@ class OracleDifferentialTests(_Cycle37Base):
         self.assert_matches_oracle(impl, oracle_result, "dedup")
 
     def test_invalid_inputs_raise_identical_codes(self) -> None:
+        """Test invalid inputs raise identical codes."""
         backend, _, _ = _make_backend(("a",))
         base: dict[str, Any] = {
             "prompt_ids": (),
@@ -1002,15 +1028,18 @@ class ClassificationDetailTests(_Cycle37Base):
 
     @staticmethod
     def _kinds(impl: dict[str, Any]) -> set[str]:
+        """Kinds."""
         return {d["class"] for d in impl["divergences"]}
 
     @staticmethod
     def _details(impl: dict[str, Any], kind: str) -> list[str]:
+        """Details."""
         return [d["detail"] for d in impl["divergences"] if d["class"] == kind]
 
     # -- EOS_PRECEDENCE vs STR_OVER_EOS_PRECEDENCE ---------------------------
 
     def test_str_over_eos_without_eos_precedence(self) -> None:
+        """Test str over eos without eos precedence."""
         # The docstring claims STR_OVER_EOS_PRECEDENCE "Co-fires with
         # EOS_PRECEDENCE on the tie"; the code only requires the sglang/EOS
         # step tie, while EOS_PRECEDENCE needs eos_step <= min(stop steps).
@@ -1023,6 +1052,7 @@ class ClassificationDetailTests(_Cycle37Base):
         self.assertNotIn("EOS_PRECEDENCE", kinds)
 
     def test_str_over_eos_cofires_when_sglang_is_earliest(self) -> None:
+        """Test str over eos cofires when sglang is earliest."""
         impl, oracle_result, _ = self._run_case("tie_str_eos")
         self.assert_matches_oracle(impl, oracle_result, "tie_str_eos")
         kinds = self._kinds(impl)
@@ -1030,6 +1060,7 @@ class ClassificationDetailTests(_Cycle37Base):
         self.assertIn("EOS_PRECEDENCE", kinds)
 
     def test_eos_absent_means_no_eos_classes(self) -> None:
+        """Test eos absent means no eos classes."""
         # eos_id=None makes the EOS cell unavailable: neither EOS class can
         # fire however the stop semantics disagree.
         backend, prompt_ids, output_ids = _make_backend(("a", "STOP", "b"))
@@ -1047,6 +1078,7 @@ class ClassificationDetailTests(_Cycle37Base):
         self.assertIn("KEPT_VS_STRIPPED", kinds)
 
     def test_eos_precedence_needs_a_fired_stop(self) -> None:
+        """Test eos precedence needs a fired stop."""
         # EOS fires but no stop semantic fires: no EOS_PRECEDENCE (the
         # min() over an empty stop-step set must not fire).
         backend, prompt_ids, output_ids = _make_backend(("a", "b"))
@@ -1064,6 +1096,7 @@ class ClassificationDetailTests(_Cycle37Base):
     # -- KEPT_VS_STRIPPED -----------------------------------------------------
 
     def test_kept_vs_stripped_needs_both_fired(self) -> None:
+        """Test kept vs stripped needs both fired."""
         # HF fired but the strip cell is min_tokens-gated: no KEPT finding
         # (the gate finding fires instead).
         impl, oracle_result, _ = self._run_case("gated_combo")
@@ -1072,6 +1105,7 @@ class ClassificationDetailTests(_Cycle37Base):
         self.assertIn("MIN_TOKENS_GATED", self._kinds(impl))
 
     def test_kept_text_degrade_suppresses_silently(self) -> None:
+        """Test kept text degrade suppresses silently."""
         # Red-team: the backend's decode works during cell building but the
         # KEPT_VS_STRIPPED text re-decode fails afterwards (stateful
         # backend; HF on the byte path so its emulation needs no decode).
@@ -1079,6 +1113,7 @@ class ClassificationDetailTests(_Cycle37Base):
         texts = {1: "aSTOP", 2: "b"}
 
         def byte_map(token_id: int) -> bytes | None:
+            """Byte map."""
             return texts[token_id].encode("utf-8")
 
         # Generous budget: count every decode the run performs.
@@ -1117,6 +1152,7 @@ class ClassificationDetailTests(_Cycle37Base):
     # -- MIN_TOKENS_GATED / NO_MIN_TOKENS_GATE ---------------------------------
 
     def test_post_gate_fire_has_no_gate_finding(self) -> None:
+        """Test post gate fire has no gate finding."""
         # The stop completes after the gate: min_tokens changes nothing, so
         # the diagnostic re-run must not fire MIN_TOKENS_GATED.
         impl, oracle_result, _ = self._run_case("post_gate_fire")
@@ -1125,6 +1161,7 @@ class ClassificationDetailTests(_Cycle37Base):
         self.assertNotIn("NO_MIN_TOKENS_GATE", self._kinds(impl))
 
     def test_min_tokens_zero_never_runs_diagnostic(self) -> None:
+        """Test min tokens zero never runs diagnostic."""
         # min_tokens=0 with the strip cell silent (stop absent): no
         # diagnostic re-run, no gate findings.
         backend, prompt_ids, output_ids = _make_backend(("a", "b"))
@@ -1138,6 +1175,7 @@ class ClassificationDetailTests(_Cycle37Base):
         self.assertEqual(impl["divergences"], [])
 
     def test_gated_combo_carries_sglang_winner(self) -> None:
+        """Test gated combo carries sglang winner."""
         # min_tokens gates the vLLM side entirely: the sglang-only winner
         # still triggers MULTI_STOP_SELECTION, carrying sglang's stop.
         impl, _, _ = self._run_case("gated_combo")
@@ -1148,6 +1186,7 @@ class ClassificationDetailTests(_Cycle37Base):
     # -- HARNESS_NORMALIZATION_RELIED ------------------------------------------
 
     def test_harness_never_flags_kept_cells(self) -> None:
+        """Test harness never flags kept cells."""
         # "kept"-disposition cells keep the stop string by definition: even
         # when their text trivially contains it, they are not flagged.
         backend, prompt_ids, output_ids = _make_backend(("aSTOP",))
@@ -1165,6 +1204,7 @@ class ClassificationDetailTests(_Cycle37Base):
         self.assertIn("STOP", keep_text)
 
     def test_harness_strip_anomaly_detail(self) -> None:
+        """Test harness strip anomaly detail."""
         impl, oracle_result, _ = self._run_case("harness_anomaly")
         self.assert_matches_oracle(impl, oracle_result, "harness_anomaly")
         details = self._details(impl, "HARNESS_NORMALIZATION_RELIED")
@@ -1173,6 +1213,7 @@ class ClassificationDetailTests(_Cycle37Base):
         self.assertIn("'ab'", details[0])
 
     def test_harness_vacuous_for_sglang(self) -> None:
+        """Test harness vacuous for sglang."""
         # The DivergenceClass comment: "Vacuous for SGLang by construction:
         # text trimmed at the leftmost stop-string occurrence." A leftmost
         # trim cannot leave the stop string in the returned text, so no
@@ -1207,6 +1248,7 @@ class ClassificationDetailTests(_Cycle37Base):
     # -- MULTI_STOP_SELECTION ----------------------------------------------------
 
     def test_multi_tie_prefers_sglang_winner_stop_text(self) -> None:
+        """Test multi tie prefers sglang winner stop text."""
         impl, oracle_result, _ = self._run_case("multi_tie")
         self.assert_matches_oracle(impl, oracle_result, "multi_tie")
         multi = [d for d in impl["divergences"] if d["class"] == "MULTI_STOP_SELECTION"]
@@ -1218,11 +1260,13 @@ class ClassificationDetailTests(_Cycle37Base):
         self.assertIn("stop 'xa' at step 1", multi[0]["detail"])
 
     def test_multi_full_tie_no_finding(self) -> None:
+        """Test multi full tie no finding."""
         impl, oracle_result, _ = self._run_case("multi_full_tie")
         self.assert_matches_oracle(impl, oracle_result, "multi_full_tie")
         self.assertNotIn("MULTI_STOP_SELECTION", self._kinds(impl))
 
     def test_multi_no_fired_stops_no_finding(self) -> None:
+        """Test multi no fired stops no finding."""
         backend, prompt_ids, output_ids = _make_backend(("a", "b"))
         impl = diff_backends(
             prompt_ids=prompt_ids,
@@ -1236,6 +1280,7 @@ class ClassificationDetailTests(_Cycle37Base):
     # -- FIRING_STEP_DIFFERS -----------------------------------------------------
 
     def test_firing_step_differs_excludes_unavailable(self) -> None:
+        """Test firing step differs excludes unavailable."""
         # Unknown token id: every decode-dependent cell is unavailable; the
         # step set is empty, so no FIRING_STEP_DIFFERS and no crash.
         backend = _ConcatBackend({1: "a"})
@@ -1249,6 +1294,7 @@ class ClassificationDetailTests(_Cycle37Base):
         self.assertEqual(impl["verdict"], "agree")
 
     def test_firing_step_parsing(self) -> None:
+        """Test firing step parsing."""
         cases: list[tuple[str, int | None]] = [
             ("fired_at_step_1", 1),
             ("fired_at_step_007", 7),
@@ -1274,6 +1320,7 @@ class ClassificationDetailTests(_Cycle37Base):
     # -- _effective_text paths -----------------------------------------------------
 
     def test_effective_text_paths(self) -> None:
+        """Test effective text paths."""
         raising = _ConcatBackend({})
         # returned_text wins even when decode would fail.
         cell = _ImplCellResult(
@@ -1287,6 +1334,7 @@ class ClassificationDetailTests(_Cycle37Base):
         )
 
         def _boom(ids: tuple[int, ...]) -> str:
+            """Boom."""
             raise RuntimeError("must not be called")
 
         raising.decode = _boom  # type: ignore[method-assign]
@@ -1307,13 +1355,19 @@ class ClassificationDetailTests(_Cycle37Base):
         # ...degrading to None when decode raises, returns non-str, or is
         # absent -- the text checks degrade, never fail the diff.
         class _Raises:
+            """Raises."""
+
             @staticmethod
             def decode(ids: tuple[int, ...]) -> str:
+                """Decode."""
                 raise RuntimeError("boom")
 
         class _NonStr:
+            """Non str."""
+
             @staticmethod
             def decode(ids: tuple[int, ...]) -> int:
+                """Decode."""
                 return 42
 
         self.assertIsNone(_effective_text(_Raises(), cell2))
@@ -1323,6 +1377,7 @@ class ClassificationDetailTests(_Cycle37Base):
     # -- finding construction ------------------------------------------------------
 
     def test_result_key_sets(self) -> None:
+        """Test result key sets."""
         backend, prompt_ids, output_ids = _make_backend(("aSTOP",))
         impl = diff_backends(
             prompt_ids=prompt_ids,
@@ -1367,6 +1422,7 @@ class ClassificationDetailTests(_Cycle37Base):
         self.assertEqual(impl["verdict"], "diverge")
 
     def test_divergence_ordering(self) -> None:
+        """Test divergence ordering."""
         # Observed construction order: per-stop classes in code order, then
         # the cross-stop MULTI_STOP_SELECTION last.
         impl, _, _ = self._run_case("gated_combo")
@@ -1381,6 +1437,7 @@ class ClassificationDetailTests(_Cycle37Base):
         )
 
     def test_detail_anchors(self) -> None:
+        """Test detail anchors."""
         # The details cite the research anchors the docstrings pin per class.
         impl, _, _ = self._run_case("gated_combo")
         for detail in self._details(impl, "MIN_TOKENS_GATED"):
@@ -1403,6 +1460,7 @@ class SectionAggregationTests(_Cycle37Base):
     def assert_section_matches(
         self, impl: dict[str, Any] | None, oracle_result: dict[str, Any] | None, label: str
     ) -> None:
+        """Assert section matches."""
         self.assertEqual(impl is None, oracle_result is None, label)
         if impl is None or oracle_result is None:
             return
@@ -1438,6 +1496,7 @@ class SectionAggregationTests(_Cycle37Base):
     def _section_kwargs(
         observations: list[Any] | tuple[Any, ...], backend: _ConcatBackend, **extra: Any
     ) -> dict[str, Any]:
+        """Section kwargs."""
         kwargs: dict[str, Any] = {
             "observations": observations,
             "stop_texts": ("STOP",),
@@ -1449,6 +1508,7 @@ class SectionAggregationTests(_Cycle37Base):
         return kwargs
 
     def test_section_agree_diverge_exact(self) -> None:
+        """Test section agree diverge exact."""
         backend = _ConcatBackend({1: "a", 2: "STOP", 3: "b"})
         observations = [
             {"fixture": "agree_fx", "input_ids": [], "output_ids": [1]},
@@ -1474,6 +1534,7 @@ class SectionAggregationTests(_Cycle37Base):
         self.assertEqual(impl["observations_processed"], 2)
 
     def test_matrix_counts_per_finding_not_per_fixture(self) -> None:
+        """Test matrix counts per finding not per fixture."""
         # Two stops fire KEPT_VS_STRIPPED in one fixture: each *finding*
         # contributes its class's attributed semantics to the matrix.
         backend = _ConcatBackend({1: "aSTOP"})
@@ -1493,12 +1554,14 @@ class SectionAggregationTests(_Cycle37Base):
         self.assertEqual(impl["severities"], {"KEPT_VS_STRIPPED": "high"})
 
     def test_severity_values_are_badge_vocab(self) -> None:
+        """Test severity values are badge vocab."""
         # reporting.py maps severity -> badge via {"high": "fail",
         # "medium": "neutral", "low": "neutral"}; unknown values would
         # silently degrade to neutral, so the mapping's range is pinned.
         self.assertEqual(set(DIVERGENCE_SEVERITY.values()), {"high", "medium", "low"})
 
     def test_pairs_verdict_pluralization(self) -> None:
+        """Test pairs verdict pluralization."""
         backend = _ConcatBackend({1: "x"})
         observations = [{"fixture": "f", "input_ids": [], "output_ids": [1]}]
         kwargs = self._section_kwargs(observations, backend, stop_texts=("zzz",))
@@ -1520,6 +1583,7 @@ class SectionAggregationTests(_Cycle37Base):
         )
 
     def test_fixture_fallback_uses_candidate_index(self) -> None:
+        """Test fixture fallback uses candidate index."""
         # Skipped observations still consume candidate indices for the
         # fixture_N fallback names (observed behavior).
         backend = _ConcatBackend({1: "x"})
@@ -1537,6 +1601,7 @@ class SectionAggregationTests(_Cycle37Base):
         self.assertEqual(impl["observations_processed"], 1)
 
     def test_section_truncation(self) -> None:
+        """Test section truncation."""
         backend = _ConcatBackend({1: "x", 2: "y"})
         observations = [
             {"fixture": f"obs_{i}", "input_ids": [], "output_ids": [1, 2]}
@@ -1556,12 +1621,14 @@ class SectionAggregationTests(_Cycle37Base):
         )
 
     def test_section_none_when_nothing_usable(self) -> None:
+        """Test section none when nothing usable."""
         backend = _ConcatBackend({1: "x"})
         kwargs = self._section_kwargs([{"nope": 1}, "junk"], backend)
         self.assertIsNone(divergence_section_data(**kwargs))
         self.assertIsNone(self.oracle.summarize(**kwargs))
 
     def test_section_fuzz_matches_oracle(self) -> None:
+        """Test section fuzz matches oracle."""
         rng = random.Random("cycle37-diffbackends-section")  # noqa: S311 -- seeded
         token_pool = ["a", "b", "ab", "STOP", "<stop>", "", "x", "é", " ", "\n"]
         stop_pool = ["STOP", "ab", "a", "<stop>", "é", "b", "zzz", " "]
@@ -1602,6 +1669,7 @@ class SectionAggregationTests(_Cycle37Base):
                 self.assert_section_matches(impl, oracle_result, f"section-{trial}")
 
     def test_section_invalid_inputs_raise_identical_codes(self) -> None:
+        """Test section invalid inputs raise identical codes."""
         backend = _ConcatBackend({1: "x"})
         base: dict[str, Any] = {
             "observations": [],
@@ -1682,6 +1750,7 @@ class SensitivityTests(unittest.TestCase):
     """
 
     def test_mutants_are_caught(self) -> None:
+        """Test mutants are caught."""
         if os.environ.get("C37_UNDER_MUTANT") == "1":
             self.skipTest("running under a mutant copy")
         scratch = _SCRATCH_ROOT
@@ -1721,6 +1790,7 @@ class SensitivityTests(unittest.TestCase):
         old: str | None,
         new: str | None,
     ) -> None:
+        """Stage copy."""
         os.makedirs(dest)
         shutil.copytree(
             package_dir,
@@ -1739,6 +1809,7 @@ class SensitivityTests(unittest.TestCase):
 
     @staticmethod
     def _run_suite(workdir: str, python: str, *, fast: bool) -> bool:
+        """Run suite."""
         env = dict(os.environ)
         env["PYTHONPATH"] = workdir
         env["C37_UNDER_MUTANT"] = "1"

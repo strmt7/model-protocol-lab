@@ -101,6 +101,7 @@ from model_protocol_lab.diffbackends import MAX_DIVERGENCE_OBSERVATIONS
 
 
 def _obs(fixture, exact=True, boundary=True, status="completed", **extra):
+    """Obs."""
     obs = {
         "fixture": fixture,
         "status": status,
@@ -112,6 +113,7 @@ def _obs(fixture, exact=True, boundary=True, status="completed", **extra):
 
 
 def _run(name, observations, fingerprint="f" * 64, boundary_ids=(1, 2), **summary_kw):
+    """Run."""
     summary = {"rate": None, "status": "completed", "attempted": 0, "planned": 0}
     summary.update(summary_kw)
     return {
@@ -124,6 +126,7 @@ def _run(name, observations, fingerprint="f" * 64, boundary_ids=(1, 2), **summar
 
 
 def _minimal_result():
+    """Minimal result."""
     return {"decision": "ambiguous", "seed": 3, "search": []}
 
 
@@ -205,6 +208,7 @@ _NEEDS_ESCAPE = [s for s in _HOSTILE_STRINGS if any(c in s for c in '<>&"')]
 
 
 def _check_determinism(rep):
+    """Check determinism."""
     result = _full_result()
     before = copy.deepcopy(result)
     first = rep.render_html(result)
@@ -219,6 +223,7 @@ def _check_determinism(rep):
 
 
 def _check_self_contained(rep):
+    """Check self contained."""
     html = rep.render_html(_full_result())
     assert "http://" not in html and "https://" not in html
     assert "url(" not in html and "@import" not in html
@@ -235,6 +240,7 @@ def _check_self_contained(rep):
 
 
 def _check_decision_banner(rep):
+    """Check decision banner."""
     expected = {
         "compatible_on_fixture_set": ("pass", "The sole search winner also passed"),
         "ambiguous": ("neutral", "The lab abstains"),
@@ -256,6 +262,7 @@ def _check_decision_banner(rep):
 
 
 def _check_toc(rep):
+    """Check toc."""
     full = _full_result()
     html = rep.render_html(full)
     sections = re.findall(r'<section id="([^"]+)"', html)
@@ -270,6 +277,7 @@ def _check_toc(rep):
 
 
 def _check_report_structure(rep):
+    """Check report structure."""
     html = rep.render_html(_full_result())
     assert html.startswith("<!doctype html>")
     assert html.rstrip().endswith("</html>")
@@ -286,6 +294,7 @@ def _check_report_structure(rep):
 
 
 def _check_config_section(rep):
+    """Check config section."""
     result = _full_result()
     html = rep._config_section(result)
     assert "<dt>Selection rule</dt><dd>conservative single-candidate</dd>" in html
@@ -309,6 +318,7 @@ def _check_config_section(rep):
 
 
 def _check_search_rows(rep):
+    """Check search rows."""
     result = _full_result()
     html = rep.render_html(result)
     # chatml: 100% pass.
@@ -339,6 +349,7 @@ def _check_search_rows(rep):
 
 
 def _check_held_out(rep):
+    """Check held out."""
     result = _full_result()
     html = rep._held_out_section(result)
     cards = [
@@ -360,6 +371,7 @@ def _check_held_out(rep):
 
 
 def _check_outcome_grid(rep):
+    """Check outcome grid."""
     result = _full_result()
     html = rep._outcome_grid_section(result)
     # chatml f1 pass, f2 pass; llama3 f1 fail, f2 incomplete.
@@ -381,6 +393,7 @@ def _check_outcome_grid(rep):
 
 
 def _check_decisive(rep):
+    """Check decisive."""
     search = [
         _run("a", [_obs("f1"), _obs("f2", exact=False)]),
         _run("b", [_obs("f1", exact=False), _obs("f2", exact=False)]),
@@ -396,6 +409,7 @@ def _check_decisive(rep):
 
 
 def _check_margin_line(rep):
+    """Check margin line."""
     search = [
         _run("a", [_obs("f1"), _obs("f2")]),
         _run("b", [_obs("f1", exact=False), _obs("f2", exact=False)]),
@@ -428,6 +442,7 @@ def _check_margin_line(rep):
 
 
 def _check_token_overhead(rep):
+    """Check token overhead."""
     search = [
         _run("a", [_obs("f1", input_ids=[1] * 10, output_ids=[2] * 3)]),
         _run("b", [_obs("f1", input_ids=[1] * 5, output_ids=[2] * 3)]),
@@ -454,6 +469,7 @@ def _check_token_overhead(rep):
 
 
 def _check_sweep(rep):
+    """Check sweep."""
     sweep = {
         "native_winner": "chatml",
         "native_decision": "compatible_on_fixture_set",
@@ -486,6 +502,7 @@ def _check_sweep(rep):
 
 
 def _check_conformance(rep):
+    """Check conformance."""
     conf = {
         "status": "ok",
         "diffs": [
@@ -535,6 +552,7 @@ def _check_conformance(rep):
 
 
 def _check_stop_matrix(rep):
+    """Check stop matrix."""
     matrix = {
         "semantics": [
             {"id": "native", "label": "Native", "description": "lab semantics"},
@@ -577,6 +595,7 @@ def _check_stop_matrix(rep):
 
 
 def _divergence_section_data(**kw):
+    """Divergence section data."""
     section = {
         "verdict": "diverge",
         "pairs_verdict": "3 of 12 pairs diverge",
@@ -606,6 +625,7 @@ def _divergence_section_data(**kw):
 
 
 def _check_divergence(rep):
+    """Check divergence."""
     res = {
         "decision": "compatible_on_fixture_set",
         "backend_divergences": _divergence_section_data(),
@@ -665,6 +685,7 @@ def _check_divergence(rep):
 
 
 def _check_logprob(rep):
+    """Check logprob."""
     diag = {
         "available": True,
         "thresholds": {"derailed_mean_logprob_at_least": -0.5, "unknown_mean_logprob_below": -3.0},
@@ -717,6 +738,7 @@ def _check_logprob(rep):
 
 
 def _check_frontier(rep):
+    """Check frontier."""
     frontier = {
         "max_new_tokens": 4,
         "budget_robust": False,
@@ -754,6 +776,7 @@ def _check_frontier(rep):
 
 
 def _check_spark_helpers(rep):
+    """Check spark helpers."""
     assert rep._sparkline([0, 5, 10], 10) == "\u2581\u2585\u2588"
     assert rep._sparkline([1, 2, 3], 3) == "\u2583\u2586\u2588"
     assert rep._sparkline([], 10) == "?"
@@ -769,6 +792,7 @@ def _check_spark_helpers(rep):
 
 
 def _check_taxonomy(rep):
+    """Check taxonomy."""
     taxonomy = {
         "per_candidate": {
             "a": {"exact_mismatch": 2, "boundary_miss": 1},
@@ -799,6 +823,7 @@ def _check_taxonomy(rep):
 
 
 def _check_failure_diagnosis(rep):
+    """Check failure diagnosis."""
     result = {
         "decision": "failed",
         "search": [
@@ -841,6 +866,7 @@ def _check_failure_diagnosis(rep):
 
 
 def _check_misc_helpers(rep):
+    """Check misc helpers."""
     assert rep._short_fingerprint("x" * 19) == "x" * 19
     assert rep._short_fingerprint("x" * 20) == "x" * 19 + "\u2026"
     assert rep._short_fingerprint("abc") == "abc"
@@ -862,6 +888,7 @@ def _check_misc_helpers(rep):
 
 
 def _check_json_shape(rep):
+    """Check json shape."""
     result = _minimal_result()
     with tempfile.TemporaryDirectory() as tmp:
         json_path, _html_path = rep.save_report(copy.deepcopy(result), Path(tmp) / "r")
@@ -910,6 +937,7 @@ def _check_json_shape(rep):
 
 
 def _check_save_report_io(rep):
+    """Check save report io."""
     result = _minimal_result()
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -943,6 +971,7 @@ def _check_save_report_io(rep):
 
 
 def _check_hostile_escaping(rep):
+    """Check hostile escaping."""
     evil_name = _HOSTILE_STRINGS[0]
     result = {
         "decision": _HOSTILE_STRINGS[1],
@@ -984,6 +1013,7 @@ def _check_hostile_escaping(rep):
 
 
 def _check_empty_and_missing(rep):
+    """Check empty and missing."""
     html = rep.render_html({})
     assert '<div class="decision-value"></div>' in html
     assert "No candidates were evaluated in this run." in html
@@ -1050,13 +1080,17 @@ class TestReportInternals(unittest.TestCase):
     """Run every shared check against the real implementation."""
 
     def test_all_checks(self):
+        """Test all checks."""
         for name, check in _CHECKS.items():
             with self.subTest(check=name):
                 check(reporting)
 
 
 class TestDecisionVocabulary(unittest.TestCase):
+    """Test decision vocabulary."""
+
     def test_all_six_decisions_have_banner_class(self):
+        """Test all six decisions have banner class."""
         expected = {
             "compatible_on_fixture_set": "pass",
             "ambiguous": "neutral",
@@ -1077,6 +1111,7 @@ class TestSummaryComputations(unittest.TestCase):
     """Summary numbers rendered into the report match independent recomputation."""
 
     def test_search_row_percent_matches_summary(self):
+        """Test search row percent matches summary."""
         rng = random.Random("cycle33-summary")  # noqa: S311 -- deterministic test seed
         for trial in range(25):
             with self.subTest(trial=trial):
@@ -1105,6 +1140,7 @@ class TestSummaryComputations(unittest.TestCase):
                     self.assertIn('<span class="badge fail">', rows)
 
     def test_held_out_pass_rate_card(self):
+        """Test held out pass rate card."""
         html = reporting._held_out_section(
             {
                 "held_out": {
@@ -1122,6 +1158,7 @@ class TestSummaryComputations(unittest.TestCase):
         self.assertIn('<div class="k">Exact + boundary passes</div><div class="v">3/4</div>', html)
 
     def test_margin_value_matches_failing_count(self):
+        """Test margin value matches failing count."""
         rng = random.Random("cycle33-margin")  # noqa: S311 -- deterministic test seed
         for trial in range(25):
             with self.subTest(trial=trial):
@@ -1142,6 +1179,7 @@ class TestSummaryComputations(unittest.TestCase):
                 self.assertIn(f"Selection margin: {failing_b} fixture", line)
 
     def test_token_overhead_means_match_recomputation(self):
+        """Test token overhead means match recomputation."""
         counts = [4, 8, 12]
         result = {
             "decision": "x",
@@ -1168,13 +1206,18 @@ class TestSummaryComputations(unittest.TestCase):
 
 
 def _fuzz_string(rng, hostile_pool):
+    """Fuzz string."""
     choices = ["alpha", "beta", "f1", "chatml", ""] + hostile_pool
     return rng.choice(choices)
 
 
 class TestFuzzReportInternals(unittest.TestCase):
+    """Test fuzz report internals."""
+
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     @staticmethod
     def _random_result(rng, hostile_pool):
+        """Random result."""
         decisions = [
             "compatible_on_fixture_set",
             "ambiguous",
@@ -1188,6 +1231,7 @@ class TestFuzzReportInternals(unittest.TestCase):
         used = []
 
         def hs():
+            """Hs."""
             s = _fuzz_string(rng, hostile_pool)
             if s in _NEEDS_ESCAPE:
                 used.append(s)
@@ -1282,6 +1326,7 @@ class TestFuzzReportInternals(unittest.TestCase):
         return result, used
 
     def test_fuzz_determinism_and_escaping(self):
+        """Test fuzz determinism and escaping."""
         for trial in range(150):
             with self.subTest(trial=trial):
                 rng = random.Random(f"cycle33-fuzz-{trial}")  # noqa: S311 -- deterministic seed
@@ -1296,6 +1341,7 @@ class TestFuzzReportInternals(unittest.TestCase):
                     self.assertNotIn(payload, first)
 
     def test_fuzz_json_shape(self):
+        """Test fuzz json shape."""
         for trial in range(60):
             with self.subTest(trial=trial):
                 rng = random.Random(f"cycle33-fuzzjson-{trial}")  # noqa: S311 -- deterministic seed
@@ -1496,6 +1542,7 @@ class TestMutantSensitivity(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         # PID-scoped (module constant): two pytest processes staging mutants
         # concurrently must not share a directory (a fixed name raced: one
         # process's rmtree deleted the other's in-use packages ->
@@ -1525,17 +1572,20 @@ class TestMutantSensitivity(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        """Tear down the test fixture."""
         if str(cls.root) in sys.path:
             sys.path.remove(str(cls.root))
         shutil.rmtree(cls.root, ignore_errors=True)
 
     def test_control_copy_passes_all_checks(self):
+        """Test control copy passes all checks."""
         mod = importlib.import_module("control.reporting")
         for name, check in _CHECKS.items():
             with self.subTest(check=name):
                 check(mod)
 
     def test_mutants_are_caught(self):
+        """Test mutants are caught."""
         for pkg, _, check_names in _MUTANTS:
             mod = importlib.import_module(f"{pkg}.reporting")
             for check_name in check_names:
@@ -1547,6 +1597,7 @@ class TestCrossProcessDeterminism(unittest.TestCase):
     """PYTHONHASHSEED must not affect the rendered report bytes."""
 
     def test_render_stable_across_hash_seeds(self):
+        """Test render stable across hash seeds."""
         script = (
             "import copy, hashlib, json, sys; sys.path.insert(0, '.');"
             "from model_protocol_lab import reporting;"

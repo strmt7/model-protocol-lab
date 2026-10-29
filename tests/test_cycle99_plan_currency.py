@@ -15,11 +15,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 class DevelopmentPlanCurrencyTests(unittest.TestCase):
+    """Development plan currency tests."""
+
     def test_status_note_present(self):
+        """Test status note present."""
         text = (REPO_ROOT / "DEVELOPMENT_PLAN.md").read_text(encoding="utf-8")
         self.assertIn("Status note (2026-10-16, v0.1.0)", text)
 
     def test_status_note_records_implementation(self):
+        """Test status note records implementation."""
         text = (REPO_ROOT / "DEVELOPMENT_PLAN.md").read_text(encoding="utf-8")
         # The note must state the proposal phase is over.
         self.assertIn("substantially implemented", text)

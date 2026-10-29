@@ -32,10 +32,12 @@ class TextBackend:
 
     @staticmethod
     def decode(token_ids):
+        """Decode."""
         return "".join(TEXTS[token] for token in token_ids)
 
 
 def _fixture(fid, expected):
+    """Fixture."""
     return Fixture(
         id=fid,
         messages=(Message(role="user", content=f"question-{fid}"),),
@@ -48,6 +50,7 @@ FIXTURES = (_fixture("f1", "yes"), _fixture("f2", "no"))
 
 
 def _obs(fixture, output_ids, exact_match=True, boundary_found=True):
+    """Obs."""
     return {
         "fixture": fixture,
         "status": "completed",
@@ -59,6 +62,7 @@ def _obs(fixture, output_ids, exact_match=True, boundary_found=True):
 
 
 def _entry(name, outputs, exact_match=True, boundary_found=True):
+    """Entry."""
     return {
         "format": {
             "name": name,
@@ -83,6 +87,7 @@ def _flip_result():
 
 
 def _analyze(result=None):
+    """Analyze."""
     return experiments.selection_robustness(
         TextBackend(),
         _flip_result() if result is None else result,
@@ -93,7 +98,10 @@ def _analyze(result=None):
 
 
 class SelectionRobustnessFlipTest(unittest.TestCase):
+    """Selection robustness flip test."""
+
     def test_eos_appended_flips_ambiguous_to_alpha(self):
+        """Test eos appended flips ambiguous to alpha."""
         out = _analyze()
         self.assertTrue(out["available"])
         self.assertEqual(out["per_semantic"]["native"], {"decision": "ambiguous", "winner": None})
@@ -111,6 +119,7 @@ class SelectionRobustnessFlipTest(unittest.TestCase):
         )
 
     def test_decision_only_flip_detected(self):
+        """Test decision only flip detected."""
         # Both candidates carry the empty-decoding EOS: native is
         # ambiguous, eos_appended is no_candidate. The winner is None on
         # both sides -- only the decision drifts, and it must still flip.
@@ -135,6 +144,7 @@ class SelectionRobustnessFlipTest(unittest.TestCase):
         self.assertIsNone(flip["winner_to"])
 
     def test_flip_record_shape(self):
+        """Test flip record shape."""
         out = _analyze()
         self.assertEqual(len(out["flips"]), 1)
         flip = out["flips"][0]
@@ -150,6 +160,7 @@ class SelectionRobustnessFlipTest(unittest.TestCase):
         )
 
     def test_per_candidate_matrix(self):
+        """Test per candidate matrix."""
         out = _analyze()
         self.assertEqual(
             out["per_candidate"]["alpha"],
@@ -168,7 +179,10 @@ class SelectionRobustnessFlipTest(unittest.TestCase):
 
 
 class SelectionRobustnessRobustTest(unittest.TestCase):
+    """Selection robustness robust test."""
+
     def test_no_flip_when_all_agree(self):
+        """Test no flip when all agree."""
         result = {
             "search": [
                 _entry("alpha", [("f1", (1, 7)), ("f2", (2, 7))]),
@@ -192,6 +206,7 @@ class SelectionRobustnessRobustTest(unittest.TestCase):
         self.assertEqual(out["flips"], [])
 
     def test_misaligned_observations_exclude_candidate(self):
+        """Test misaligned observations exclude candidate."""
         bad = _entry("broken", [("f1", (1, 7))])  # one row, two fixtures
         result = {"search": [_entry("alpha", [("f1", (1, 7)), ("f2", (2, 7))]), bad]}
         out = _analyze(result)
@@ -203,6 +218,7 @@ class SelectionRobustnessRobustTest(unittest.TestCase):
         self.assertEqual(out["per_semantic"]["native"], {"decision": "selected", "winner": "alpha"})
 
     def test_unknown_eos_id_marks_semantic_unavailable(self):
+        """Test unknown eos id marks semantic unavailable."""
         # Without an EOS id the eos_appended emulation cannot run: the
         # honest verdict is "unavailable", never a phantom no_candidate
         # flip.
@@ -219,6 +235,7 @@ class SelectionRobustnessRobustTest(unittest.TestCase):
         self.assertEqual(out["flips"], [])
 
     def test_malformed_result_unavailable(self):
+        """Test malformed result unavailable."""
         for bad_result in (None, {}, {"search": []}, {"search": "nope"}):
             out = experiments.selection_robustness(
                 TextBackend(), bad_result, FIXTURES, boundary=BOUNDARY, eos_id=EOS_ID
@@ -226,12 +243,14 @@ class SelectionRobustnessRobustTest(unittest.TestCase):
             self.assertFalse(out["available"], bad_result)
 
     def test_invalid_cases_unavailable(self):
+        """Test invalid cases unavailable."""
         out = experiments.selection_robustness(
             TextBackend(), _flip_result(), (), boundary=BOUNDARY, eos_id=EOS_ID
         )
         self.assertFalse(out["available"])
 
     def test_winner_flip_selected_to_selected(self):
+        """Test winner flip selected to selected."""
         # beta passes natively alone? No -- construct a direct flip:
         # alpha wins natively, beta wins under eos_appended.
         result = {
@@ -246,7 +265,10 @@ class SelectionRobustnessRobustTest(unittest.TestCase):
 
 
 class SelectionRobustnessHtmlTest(unittest.TestCase):
+    """Selection robustness html test."""
+
     def test_section_renders_flip(self):
+        """Test section renders flip."""
         html = _selection_robustness_section({"selection_robustness": _analyze()})
         self.assertIn("Selection robustness under stop semantics", html)
         self.assertIn("EOS-appended", html)
@@ -256,6 +278,7 @@ class SelectionRobustnessHtmlTest(unittest.TestCase):
         self.assertIn("Winner flips under other stop semantics", html)
 
     def test_section_renders_robust(self):
+        """Test section renders robust."""
         result = {
             "search": [
                 _entry("alpha", [("f1", (1, 7)), ("f2", (2, 7))]),
@@ -271,6 +294,7 @@ class SelectionRobustnessHtmlTest(unittest.TestCase):
         self.assertIn("robust", html)
 
     def test_section_absent_when_missing(self):
+        """Test section absent when missing."""
         self.assertEqual(_selection_robustness_section({}), "")
         self.assertEqual(
             _selection_robustness_section({"selection_robustness": {"available": False}}),
@@ -283,7 +307,10 @@ class SelectionRobustnessHtmlTest(unittest.TestCase):
 
 
 class DiffSelectionRobustnessTest(unittest.TestCase):
+    """Diff selection robustness test."""
+
     def test_identical_analyses_unchanged(self):
+        """Test identical analyses unchanged."""
         out = _analyze()
         diff = diffreports.diff_selection_robustness(out, _analyze())
         self.assertEqual(diff["available"], "both")
@@ -292,6 +319,7 @@ class DiffSelectionRobustnessTest(unittest.TestCase):
         self.assertFalse(diff["flips_changed"])
 
     def test_changed_verdict_detected(self):
+        """Test changed verdict detected."""
         old = _analyze()
         new = _analyze()
         new["per_semantic"]["eos_appended"] = {"decision": "ambiguous", "winner": None}
@@ -304,6 +332,7 @@ class DiffSelectionRobustnessTest(unittest.TestCase):
         self.assertIsNone(drift["new_winner"])
 
     def test_flips_changed_detected(self):
+        """Test flips changed detected."""
         old = _analyze()
         new = _analyze()
         new["flips"] = []
@@ -313,6 +342,7 @@ class DiffSelectionRobustnessTest(unittest.TestCase):
         self.assertEqual(diff["verdict_drift"], [])
 
     def test_asymmetric_availability(self):
+        """Test asymmetric availability."""
         diff = diffreports.diff_selection_robustness(_analyze(), {"available": False})
         self.assertEqual(diff["available"], "old")
         self.assertFalse(diff["changed"])
@@ -320,6 +350,7 @@ class DiffSelectionRobustnessTest(unittest.TestCase):
         self.assertEqual(diff["available"], "neither")
 
     def test_mixed_key_types_fail_closed(self):
+        """Test mixed key types fail closed."""
         # Hostile results.json with non-string semantic keys must not
         # crash the comparator; the malformed side degrades to asymmetric.
         good = _analyze()
@@ -330,6 +361,7 @@ class DiffSelectionRobustnessTest(unittest.TestCase):
         self.assertFalse(diff["changed"])
 
     def test_summary_feeds_identical(self):
+        """Test summary feeds identical."""
         old_report = {"decision": "ambiguous", "selection_robustness": _analyze()}
         new_report = {"decision": "ambiguous", "selection_robustness": _analyze()}
         diff = diffreports.diff_reports(old_report, new_report)
@@ -347,6 +379,7 @@ class ConsistencyAnchorTest(unittest.TestCase):
     """
 
     def test_native_matches_run_decision(self):
+        """Test native matches run decision."""
         for behavior, decision, winner in (
             (
                 {"anchor-A": "pass", "anchor-B": "fail_answer"},
@@ -424,13 +457,16 @@ class _AnchorBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids):
+        """Decode."""
         return "".join(map(chr, token_ids))
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         prompt = self.decode(input_ids)
         candidate = next((n for n in ("anchor-A", "anchor-B") if f"[{n}]" in prompt), None)
         fixture = next((fid for fid in self._expected if f"question-{fid}" in prompt), None)

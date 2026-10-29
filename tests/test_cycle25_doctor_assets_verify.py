@@ -219,6 +219,7 @@ def _o_model_result(
     }
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_examine_model(
     model_path: str | Path,
     *,
@@ -395,6 +396,7 @@ def oracle_template_conformance_status(model_path: str | Path) -> tuple[str, str
     return ("loadable", "")
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_parse_safetensors_header(path: str | Path) -> tuple[bool, str]:
     """Independent struct-based safetensors header parse: (ok, reason).
 
@@ -494,6 +496,7 @@ def oracle_longest_prompt_tokens(tokenizer: object, dataset_path: str | Path) ->
         return None
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_suggestion(
     *,
     verdict_ok: bool,
@@ -560,6 +563,7 @@ def oracle_suggestion(
 
 
 def _write_json(path: Path, obj: object) -> None:
+    """Write json."""
     path.write_text(json.dumps(obj), encoding="utf-8")
 
 
@@ -598,7 +602,10 @@ def _write_wordlevel_tokenizer(root: Path, n_words: int = 24) -> None:
 
 
 def _write_dataset(path: Path, search_texts: list[str], heldout_texts: list[str]) -> None:
+    """Write dataset."""
+
     def item(prefix: str, group: str, index: int, text: str) -> dict:
+        """Item."""
         return {
             "id": f"{prefix}{index}",
             # Groups must not cross the search/held_out split (datasets rule).
@@ -731,6 +738,7 @@ def _expected_suggestion(
     boundary_ids: tuple[int, ...] | None,
     tokenizer: object | None,
 ) -> dict[str, str] | None:
+    """Expected suggestion."""
     return oracle_suggestion(
         verdict_ok=o_report["verdict"] == "ok",
         dataset_path=ds,
@@ -764,6 +772,7 @@ def _make_mutant_package(tmpdir: str, mutations: list[tuple[str, str, str]]) -> 
 
 
 def _import_mutant_doctor(pkgdir: Path):
+    """Import mutant doctor."""
     sys.path.insert(0, str(pkgdir))
     try:
         return importlib.import_module(f"{_MUTANT_PKG}.doctor")
@@ -772,6 +781,7 @@ def _import_mutant_doctor(pkgdir: Path):
 
 
 def _cleanup_mutant_modules() -> None:
+    """Cleanup mutant modules."""
     for name in [n for n in sys.modules if n == _MUTANT_PKG or n.startswith(_MUTANT_PKG + ".")]:
         del sys.modules[name]
 
@@ -780,24 +790,28 @@ class SafetensorsHeaderOracleTests(unittest.TestCase):
     """Sanity checks for the oracle's own struct-based header parser."""
 
     def test_valid_header_parses(self):
+        """Test valid header parses."""
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "m.safetensors"
             _write_safetensors_file(path, "valid")
             self.assertEqual(oracle_parse_safetensors_header(path), (True, "ok"))
 
     def test_truncated_header_detected(self):
+        """Test truncated header detected."""
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "m.safetensors"
             _write_safetensors_file(path, "truncated")
             self.assertEqual(oracle_parse_safetensors_header(path), (False, "truncated_header"))
 
     def test_bad_magic_detected(self):
+        """Test bad magic detected."""
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "m.safetensors"
             _write_safetensors_file(path, "bad-magic")
             self.assertEqual(oracle_parse_safetensors_header(path), (False, "bad_header_json"))
 
     def test_short_file_detected(self):
+        """Test short file detected."""
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "m.safetensors"
             path.write_bytes(b"\x01\x02")
@@ -810,6 +824,7 @@ class ModelDifferentialTests(unittest.TestCase):
     """examine_model verdicts vs the independent oracle, field-by-field."""
 
     def test_valid_single_file_checkpoint(self):
+        """Test valid single file checkpoint."""
         with TemporaryDirectory() as tmp:
             root = _write_checkpoint(Path(tmp), config={"model_type": "gpt2"})
             expected = oracle_examine_model(root, boundary_ids=(0, 1), boundary_map={"a": (0,)})
@@ -856,6 +871,7 @@ class ModelDifferentialTests(unittest.TestCase):
             )
 
     def test_sharded_layout_with_index_ok(self):
+        """Test sharded layout with index ok."""
         with TemporaryDirectory() as tmp:
             index_map = {
                 "layer.w": "shard-a.safetensors",
@@ -881,6 +897,7 @@ class ModelDifferentialTests(unittest.TestCase):
             )
 
     def test_index_referencing_missing_shard_fails(self):
+        """Test index referencing missing shard fails."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "ckpt"
             root.mkdir()
@@ -907,6 +924,7 @@ class ModelDifferentialTests(unittest.TestCase):
             self.assertEqual(actual["model"]["assets"], [])
 
     def test_index_weight_map_variants(self):
+        """Test index weight map variants."""
         cases = [
             ("list-weight-map", {"weight_map": ["x"]}, "invalid_weight_index"),
             ("missing-weight-map", {"other": 1}, "invalid_weight_index"),
@@ -939,6 +957,7 @@ class ModelDifferentialTests(unittest.TestCase):
                 _assert_report_matches(self, expected, actual, label=f"index-{label}")
 
     def test_layout_presence_variants(self):
+        """Test layout presence variants."""
         for label, setup in (
             ("both-present", True),
             ("neither-present", False),
@@ -966,6 +985,7 @@ class ModelDifferentialTests(unittest.TestCase):
                 _assert_report_matches(self, expected, actual, label=f"layout-{label}")
 
     def test_adapter_config_rejected(self):
+        """Test adapter config rejected."""
         with TemporaryDirectory() as tmp:
             root = _write_checkpoint(Path(tmp), config={"model_type": "gpt2"})
             (root / "adapter_config.json").write_text("{}", encoding="utf-8")
@@ -1003,6 +1023,7 @@ class ModelDifferentialTests(unittest.TestCase):
         # manifest listing the generation_config.json file itself (it is
         # hashed into the manifest; its *contents* change nothing).
         def normalized(report: dict) -> dict:
+            """Normalized."""
             checks = {
                 key: {**check, "detail": ""} if key in ("directory", "asset_layout") else check
                 for key, check in report["model"]["checks"].items()
@@ -1022,7 +1043,10 @@ class ModelDifferentialTests(unittest.TestCase):
         )
 
     def test_config_variants(self):
+        """Test config variants."""
+
         def write_config(root: Path, kind: str) -> None:
+            """Write config."""
             target = root / "config.json"
             if kind == "non-dict":
                 target.write_text("[1, 2]", encoding="utf-8")
@@ -1061,7 +1085,10 @@ class ModelDifferentialTests(unittest.TestCase):
                 _assert_report_matches(self, expected, actual, label=f"config-{label}")
 
     def test_tokenizer_file_variants(self):
+        """Test tokenizer file variants."""
+
         def write_tokenizer(root: Path, kind: str) -> None:
+            """Write tokenizer."""
             target = root / "tokenizer.json"
             if kind == "invalid-json":
                 target.write_text("not json", encoding="utf-8")
@@ -1097,6 +1124,7 @@ class ModelDifferentialTests(unittest.TestCase):
                 _assert_report_matches(self, expected, actual, label=f"tokenizer-{label}")
 
     def test_context_window_variants(self):
+        """Test context window variants."""
         cases = [
             ("gpt2-window", {"model_type": "gpt2", "n_positions": 512}, 512),
             ("gpt2-no-window", {"model_type": "gpt2"}, None),
@@ -1118,6 +1146,7 @@ class ModelDifferentialTests(unittest.TestCase):
                 self.assertEqual(actual["model"]["context_window"], expected_window)
 
     def test_missing_directory(self):
+        """Test missing directory."""
         with TemporaryDirectory() as tmp:
             missing = Path(tmp) / "nope"
             expected = oracle_examine_model(missing)
@@ -1141,6 +1170,7 @@ class WeightHeadersCheckTests(unittest.TestCase):
 
     @staticmethod
     def _checkpoint(tmp: str, filename: str, payload: bytes) -> Path:
+        """Checkpoint."""
         root = Path(tmp) / "ckpt"
         root.mkdir(parents=True, exist_ok=True)
         _write_json(root / "config.json", {"model_type": "gpt2"})
@@ -1155,10 +1185,12 @@ class WeightHeadersCheckTests(unittest.TestCase):
 
     @staticmethod
     def _valid_payload(header: dict) -> bytes:
+        """Valid payload."""
         header_bytes = json.dumps(header).encode("utf-8")
         return struct.pack("<Q", len(header_bytes)) + header_bytes
 
     def test_valid_header_passes(self):
+        """Test valid header passes."""
         with TemporaryDirectory() as tmp:
             root = self._checkpoint(
                 tmp, "model.safetensors", self._valid_payload({"__metadata__": {}})
@@ -1172,6 +1204,7 @@ class WeightHeadersCheckTests(unittest.TestCase):
             )
 
     def test_short_file_fails(self):
+        """Test short file fails."""
         with TemporaryDirectory() as tmp:
             root = self._checkpoint(tmp, "model.safetensors", b"\x01\x02")
             expected = oracle_examine_model(root)
@@ -1184,6 +1217,7 @@ class WeightHeadersCheckTests(unittest.TestCase):
             )
 
     def test_oversized_declared_header_fails(self):
+        """Test oversized declared header fails."""
         with TemporaryDirectory() as tmp:
             payload = struct.pack("<Q", 2**40) + b"{}"
             root = self._checkpoint(tmp, "model.safetensors", payload)
@@ -1193,6 +1227,7 @@ class WeightHeadersCheckTests(unittest.TestCase):
             self.assertEqual(actual["verdict"], "failed")
 
     def test_non_dict_json_header_fails(self):
+        """Test non dict json header fails."""
         with TemporaryDirectory() as tmp:
             root = self._checkpoint(tmp, "model.safetensors", self._valid_payload([1, 2]))
             expected = oracle_examine_model(root)
@@ -1201,6 +1236,7 @@ class WeightHeadersCheckTests(unittest.TestCase):
             self.assertEqual(actual["verdict"], "failed")
 
     def test_truncated_header_body_fails(self):
+        """Test truncated header body fails."""
         with TemporaryDirectory() as tmp:
             header_bytes = json.dumps({"a": 1}).encode("utf-8")
             payload = struct.pack("<Q", len(header_bytes) + 100) + header_bytes
@@ -1211,6 +1247,7 @@ class WeightHeadersCheckTests(unittest.TestCase):
             self.assertEqual(actual["verdict"], "failed")
 
     def test_tensor_data_never_read(self):
+        """Test tensor data never read."""
         # The header declares a huge tensor but no data follows: still
         # valid, because only the header is ever read (weights never load).
         with TemporaryDirectory() as tmp:
@@ -1222,6 +1259,7 @@ class WeightHeadersCheckTests(unittest.TestCase):
             self.assertEqual(actual["model"]["checks"]["weight_headers"]["status"], "ok")
 
     def test_sharded_layout_checks_every_shard(self):
+        """Test sharded layout checks every shard."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "ckpt"
             root.mkdir(parents=True, exist_ok=True)
@@ -1244,6 +1282,7 @@ class WeightHeadersCheckTests(unittest.TestCase):
             )
 
     def test_detail_vocabulary_is_fixed(self):
+        """Test detail vocabulary is fixed."""
         # No raw file bytes may reach the check detail, even for binary garbage.
         with TemporaryDirectory() as tmp:
             root = self._checkpoint(tmp, "model.safetensors", b"\xff\xfe\x00not-json-at-all")
@@ -1272,6 +1311,7 @@ class TemplateConformanceDifferentialTests(unittest.TestCase):
 
     @staticmethod
     def _conformance_dir(tmp: str, tokenizer_config: object) -> Path:
+        """Conformance dir."""
         root = Path(tmp) / "ckpt"
         root.mkdir()
         _write_wordlevel_tokenizer(root)
@@ -1283,6 +1323,7 @@ class TemplateConformanceDifferentialTests(unittest.TestCase):
         return root
 
     def test_tokenizer_config_variants(self):
+        """Test tokenizer config variants."""
         cases: list[tuple[str, object, tuple[str, str]]] = [
             ("missing", "absent", ("no_template_declared", "tokenizer_config_unreadable")),
             (
@@ -1341,6 +1382,7 @@ class SuggestionDifferentialTests(unittest.TestCase):
     def _differential_suggestion(
         self, root: Path, ds: Path, boundary_ids: tuple[int, ...] | None, *, label: str
     ) -> dict:
+        """Differential suggestion."""
         report = doctor_mod.doctor(root, dataset_path=ds, boundary_ids=boundary_ids)
         o_report, tokenizer = _suggestion_inputs(root, boundary_ids)
         _assert_report_matches(self, o_report, report, label=label)
@@ -1350,6 +1392,7 @@ class SuggestionDifferentialTests(unittest.TestCase):
         return report
 
     def test_suggestion_fits_window(self):
+        """Test suggestion fits window."""
         with TemporaryDirectory() as tmp:
             root, ds, longest, window = _build_suggestion_fixture(tmp, window_mode="fits")
             report = self._differential_suggestion(root, ds, (0, 1), label="fits")
@@ -1361,6 +1404,7 @@ class SuggestionDifferentialTests(unittest.TestCase):
             self.assertNotIn("WARNING", report["suggestion"]["note"])
 
     def test_suggestion_warns_when_prompt_fills_window(self):
+        """Test suggestion warns when prompt fills window."""
         with TemporaryDirectory() as tmp:
             root, ds, longest, window = _build_suggestion_fixture(tmp, window_mode="over")
             report = self._differential_suggestion(root, ds, (0, 1), label="over")
@@ -1373,6 +1417,7 @@ class SuggestionDifferentialTests(unittest.TestCase):
             self.assertIn(str(longest), report["suggestion"]["note"])
 
     def test_suggestion_none_without_declared_window(self):
+        """Test suggestion none without declared window."""
         with TemporaryDirectory() as tmp:
             root = _write_checkpoint(Path(tmp), config={"model_type": "gpt2"})
             ds = Path(tmp) / "ds.json"
@@ -1385,6 +1430,7 @@ class SuggestionDifferentialTests(unittest.TestCase):
             self.assertIsNone(report["suggestion"])
 
     def test_suggestion_none_on_failed_verdict(self):
+        """Test suggestion none on failed verdict."""
         with TemporaryDirectory() as tmp:
             root = _write_checkpoint(Path(tmp), config={"model_type": "bert"})
             ds = Path(tmp) / "ds.json"
@@ -1397,6 +1443,7 @@ class SuggestionDifferentialTests(unittest.TestCase):
             self.assertIsNone(report["suggestion"])
 
     def test_suggestion_none_without_dataset(self):
+        """Test suggestion none without dataset."""
         with TemporaryDirectory() as tmp:
             root = _write_checkpoint(Path(tmp), config={"model_type": "gpt2", "n_positions": 512})
             report = doctor_mod.doctor(root, boundary_ids=(0, 1))
@@ -1427,6 +1474,7 @@ class SuggestionDifferentialTests(unittest.TestCase):
             self.assertNotIn("WARNING", actual["note"])
 
     def test_next_command_none_on_bad_boundary_ids(self):
+        """Test next command none on bad boundary ids."""
         with TemporaryDirectory() as tmp:
             root = _write_checkpoint(Path(tmp), config={"model_type": "gpt2", "n_positions": 512})
             ds = Path(tmp) / "ds.json"
@@ -1453,6 +1501,7 @@ class MutationTests(unittest.TestCase):
     """Sensitivity controls: mutated copies must be caught by the differential tests."""
 
     def _mutant(self, tmp: str, mutations: list[tuple[str, str, str]]):
+        """Mutant."""
         pkgdir = _make_mutant_package(tmp, mutations)
         mutant = _import_mutant_doctor(pkgdir)
         self.addCleanup(_cleanup_mutant_modules)

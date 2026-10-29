@@ -57,6 +57,7 @@ BOUNDARY = (124,)  # ord("|")
 
 
 def _format(name="chatml"):
+    """Format."""
     return Format(
         name=name,
         bos="<s>",
@@ -67,6 +68,7 @@ def _format(name="chatml"):
 
 
 def _fixture(fid, expected="WORD"):
+    """Fixture."""
     return Fixture(
         id=fid,
         messages=(Message(role="user", content="Say the word."),),
@@ -76,6 +78,7 @@ def _fixture(fid, expected="WORD"):
 
 
 def _number_schema(**field_kwargs):
+    """Number schema."""
     field = {"type": "number"}
     field.update(field_kwargs)
     return {
@@ -92,8 +95,11 @@ def _number_schema(**field_kwargs):
 
 
 class SameIdsFragilityExclusionTests(unittest.TestCase):
+    """Same ids fragility exclusion tests."""
+
     @staticmethod
     def _record(mutation, *, n=9, divergent=0, flips=0, same=0):
+        """Record."""
         return {
             "mutation": mutation,
             "n_fixtures": n,
@@ -104,6 +110,7 @@ class SameIdsFragilityExclusionTests(unittest.TestCase):
         }
 
     def test_same_ids_only_flips_not_fragile(self):
+        """Test same ids only flips not fragile."""
         # B's exact reproduction: flips on identical ids must not be
         # fragility.
         agg = aggregate_mutation_records([self._record("trailing_space", flips=3, same=3)])
@@ -116,6 +123,7 @@ class SameIdsFragilityExclusionTests(unittest.TestCase):
         self.assertTrue(agg["whitespace_robust"])
 
     def test_mixed_flips_fragile_only_on_divergent_ids(self):
+        """Test mixed flips fragile only on divergent ids."""
         agg = aggregate_mutation_records([self._record("trailing_space", flips=3, same=2)])
         cell = agg["per_mutation"]["trailing_space"]
         self.assertTrue(cell["fragile"])
@@ -124,6 +132,7 @@ class SameIdsFragilityExclusionTests(unittest.TestCase):
         self.assertFalse(agg["whitespace_robust"])
 
     def test_divergent_ids_without_flips_not_fragile(self):
+        """Test divergent ids without flips not fragile."""
         agg = aggregate_mutation_records([self._record("trailing_space", divergent=4)])
         cell = agg["per_mutation"]["trailing_space"]
         self.assertFalse(cell["fragile"])
@@ -132,6 +141,7 @@ class SameIdsFragilityExclusionTests(unittest.TestCase):
         self.assertFalse(agg["whitespace_robust"])
 
     def test_same_ids_exceeding_total_rejected(self):
+        """Test same ids exceeding total rejected."""
         # n_same_ids_verdict_flips is a subset of n_verdict_flips; a
         # record violating that is malformed (fail-closed, like the
         # other cross-field checks).
@@ -148,13 +158,16 @@ class FlipFlopBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids):
+        """Decode."""
         return "".join(map(chr, token_ids))
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         type(self).calls += 1
         answer = "WORD" if type(self).calls % 2 == 0 else "NOPE"
         out = tuple(map(ord, (answer + "|").ljust(max_new_tokens, ".")[:max_new_tokens]))
@@ -162,8 +175,11 @@ class FlipFlopBackend:
 
 
 class WsCanonicalizationSameIdsEndToEndTests(unittest.TestCase):
+    """Ws canonicalization same ids end to end tests."""
+
     @staticmethod
     def _run():
+        """Run."""
         from model_protocol_lab.core import evaluate
 
         names = ("chatml",)
@@ -204,6 +220,7 @@ class WsCanonicalizationSameIdsEndToEndTests(unittest.TestCase):
         )
 
     def test_end_to_end_same_ids_flips_excluded_from_fragility(self):
+        """Test end to end same ids flips excluded from fragility."""
         payload = self._run()
         self.assertTrue(payload["available"])
         cand = payload["per_candidate"]["chatml"]
@@ -233,34 +250,43 @@ class WsCanonicalizationSameIdsEndToEndTests(unittest.TestCase):
 
 
 class NonFiniteNumberTests(unittest.TestCase):
+    """Non finite number tests."""
+
     def test_nan_not_adherent_minimum_only(self):
+        """Test nan not adherent minimum only."""
         result = classify_response('{"v": NaN}', _number_schema(minimum=0))
         self.assertEqual(result["parse"], "parse_ok")
         self.assertEqual(result["outcome"], "schema_failed")
 
     def test_infinity_not_adherent_unbounded(self):
+        """Test infinity not adherent unbounded."""
         result = classify_response('{"v": Infinity}', _number_schema())
         self.assertEqual(result["outcome"], "schema_failed")
 
     def test_negative_infinity_not_adherent(self):
+        """Test negative infinity not adherent."""
         result = classify_response('{"v": -Infinity}', _number_schema(maximum=10))
         self.assertEqual(result["outcome"], "schema_failed")
 
     def test_nan_not_adherent_with_enum(self):
+        """Test nan not adherent with enum."""
         schema = _number_schema()
         schema["properties"]["v"]["enum"] = [1.5, 2.5]
         result = classify_response('{"v": NaN}', schema)
         self.assertEqual(result["outcome"], "schema_failed")
 
     def test_finite_float_still_adherent(self):
+        """Test finite float still adherent."""
         result = classify_response('{"v": 1.5}', _number_schema(minimum=0))
         self.assertEqual(result["outcome"], "adherent")
 
     def test_finite_int_still_adherent(self):
+        """Test finite int still adherent."""
         result = classify_response('{"v": 3}', _number_schema(minimum=0, maximum=5))
         self.assertEqual(result["outcome"], "adherent")
 
     def test_spec_with_nan_answer_rejected(self):
+        """Test spec with nan answer rejected."""
         spec = {
             "id": "nan-answer",
             "question": "Pick a number.",
@@ -273,6 +299,7 @@ class NonFiniteNumberTests(unittest.TestCase):
             validate_structured_specs((spec,))
 
     def test_spec_with_infinity_answer_rejected(self):
+        """Test spec with infinity answer rejected."""
         spec = {
             "id": "inf-answer",
             "question": "Pick a number.",
@@ -285,15 +312,18 @@ class NonFiniteNumberTests(unittest.TestCase):
             validate_structured_specs((spec,))
 
     def test_canonical_json_rejects_non_finite(self):
+        """Test canonical json rejects non finite."""
         for bad in (float("nan"), float("inf"), float("-inf")):
             with self.assertRaises(ValueError):
                 _canonical_json({"v": bad})
 
     def test_enum_nan_member_rejected(self):
+        """Test enum nan member rejected."""
         with self.assertRaises(ValueError):
             validate_field_def({"type": "number", "enum": [1.0, float("nan")]}, where="p")
 
     def test_enum_infinity_member_rejected(self):
+        """Test enum infinity member rejected."""
         with self.assertRaises(ValueError):
             validate_field_def({"type": "number", "enum": [float("inf")]}, where="p")
 
@@ -304,8 +334,11 @@ class NonFiniteNumberTests(unittest.TestCase):
 
 
 class StructuredStageSchemaValidationTests(unittest.TestCase):
+    """Structured stage schema validation tests."""
+
     @staticmethod
     def _schemas():
+        """Schemas."""
         return {
             "s/x": {
                 "type": "object",
@@ -316,6 +349,7 @@ class StructuredStageSchemaValidationTests(unittest.TestCase):
         }
 
     def test_malformed_schema_dict_raises(self):
+        """Test malformed schema dict raises."""
         fmt = _format()
         fixture = _fixture("s/x", expected='{"a": "x"}')
         bad = dict(self._schemas())
@@ -330,6 +364,7 @@ class StructuredStageSchemaValidationTests(unittest.TestCase):
             )
 
     def test_malformed_field_def_raises(self):
+        """Test malformed field def raises."""
         fmt = _format()
         fixture = _fixture("s/x", expected='{"a": "x"}')
         bad = dict(self._schemas())
@@ -349,6 +384,7 @@ class StructuredStageSchemaValidationTests(unittest.TestCase):
             )
 
     def test_valid_schemas_do_not_raise(self):
+        """Test valid schemas do not raise."""
         fmt = _format()
         fixture = _fixture("s/x", expected='{"a": "x"}')
         # Must not raise; the cell degrades or classifies, never explodes.
@@ -367,15 +403,20 @@ class StructuredStageSchemaValidationTests(unittest.TestCase):
 
 
 class LayoutOptionsDuplicateTests(unittest.TestCase):
+    """Layout options duplicate tests."""
+
     def test_duplicate_options_raise(self):
+        """Test duplicate options raise."""
         with self.assertRaises(ValueError):
             layout_options(("a", "a", "b"), "a", condition="correct_first", seed=0)
 
     def test_all_identical_options_raise(self):
+        """Test all identical options raise."""
         with self.assertRaises(ValueError):
             layout_options(("a", "a"), "a", condition="correct_last", seed=0)
 
     def test_distinct_options_still_work(self):
+        """Test distinct options still work."""
         layout = layout_options(("a", "b", "c"), "b", condition="correct_first", seed=0)
         self.assertEqual(len(layout), 3)
         self.assertEqual(layout[0], "b")
@@ -388,19 +429,25 @@ class LayoutOptionsDuplicateTests(unittest.TestCase):
 
 
 class FieldDefBoundsTests(unittest.TestCase):
+    """Field def bounds tests."""
+
     def test_minimum_on_string_rejected(self):
+        """Test minimum on string rejected."""
         with self.assertRaises(ValueError):
             validate_field_def({"type": "string", "minimum": 3}, where="p")
 
     def test_maximum_on_boolean_rejected(self):
+        """Test maximum on boolean rejected."""
         with self.assertRaises(ValueError):
             validate_field_def({"type": "boolean", "maximum": 1}, where="p")
 
     def test_bounds_on_null_rejected(self):
+        """Test bounds on null rejected."""
         with self.assertRaises(ValueError):
             validate_field_def({"type": "null", "minimum": 0, "maximum": 1}, where="p")
 
     def test_bounds_on_number_accepted(self):
+        """Test bounds on number accepted."""
         normalized = validate_field_def(
             {"type": "number", "minimum": 0.5, "maximum": 2.5}, where="p"
         )
@@ -408,10 +455,12 @@ class FieldDefBoundsTests(unittest.TestCase):
         self.assertEqual(normalized["maximum"], 2.5)
 
     def test_bounds_on_integer_accepted(self):
+        """Test bounds on integer accepted."""
         normalized = validate_field_def({"type": "integer", "minimum": 1, "maximum": 5}, where="p")
         self.assertEqual(normalized["minimum"], 1)
 
     def test_bounds_not_carried_on_string(self):
+        """Test bounds not carried on string."""
         # The docstring promises the normalized dict carries only
         # applicable keys; a rejected bound cannot leak through.
         with self.assertRaises(ValueError):
@@ -424,6 +473,7 @@ class FieldDefBoundsTests(unittest.TestCase):
 
 
 def _structured_cell(parse_rate, schema_rate, adherent_rate):
+    """Structured cell."""
     return {
         "available": True,
         "n_fixtures": 9,
@@ -440,19 +490,26 @@ def _structured_cell(parse_rate, schema_rate, adherent_rate):
 
 
 class ValidStructuredCrossFieldTests(unittest.TestCase):
+    """Valid structured cross field tests."""
+
     def test_contradictory_adherent_rate_rejected(self):
+        """Test contradictory adherent rate rejected."""
         self.assertFalse(_valid_structured(_structured_cell(0.0, 1.0, 1.0)))
 
     def test_contradictory_schema_rate_rejected(self):
+        """Test contradictory schema rate rejected."""
         self.assertFalse(_valid_structured(_structured_cell(0.5, 0.9, 0.1)))
 
     def test_consistent_cell_accepted(self):
+        """Test consistent cell accepted."""
         self.assertTrue(_valid_structured(_structured_cell(1.0, 0.5, 0.5)))
 
     def test_none_rates_accepted(self):
+        """Test none rates accepted."""
         self.assertTrue(_valid_structured(_structured_cell(None, None, None)))
 
     def test_mixed_none_and_consistent_accepted(self):
+        """Test mixed none and consistent accepted."""
         self.assertTrue(_valid_structured(_structured_cell(0.8, None, 0.2)))
 
 
@@ -465,6 +522,7 @@ class FixupMutationGateTests(unittest.TestCase):
     """Each gate reverts one fix; the regression scenario must catch it."""
 
     def _run_gate(self, module_name, name, old_text, new_text, scenario):
+        """Run gate."""
         mod = __import__(f"model_protocol_lab.{module_name}", fromlist=["x"])
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
@@ -486,6 +544,7 @@ class FixupMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _b1_scenario(mod):
+        """B1 scenario."""
         record = {
             "mutation": "trailing_space",
             "n_fixtures": 9,
@@ -500,6 +559,7 @@ class FixupMutationGateTests(unittest.TestCase):
         assert agg["whitespace_robust"] is True
 
     def test_mutant_b1_same_ids_counted_as_fragile_caught(self):
+        """Test mutant b1 same ids counted as fragile caught."""
         self._run_gate(
             "wscanonical",
             "b1_fragile_counts_same_ids",
@@ -509,6 +569,7 @@ class FixupMutationGateTests(unittest.TestCase):
         )
 
     def test_mutant_b1_dropped_subset_validation_caught(self):
+        """Test mutant b1 dropped subset validation caught."""
         self._run_gate(
             "wscanonical",
             "b1_dropped_subset_check",
@@ -520,6 +581,7 @@ class FixupMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _b1_subset_scenario(mod):
+        """B1 subset scenario."""
         record = {
             "mutation": "trailing_space",
             "n_fixtures": 9,
@@ -538,10 +600,12 @@ class FixupMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _f1_scenario(mod):
+        """F1 scenario."""
         result = mod.classify_response('{"v": NaN}', _number_schema(minimum=0))
         assert result["outcome"] == "schema_failed", result
 
     def test_mutant_f1_nan_accepted_as_number_caught(self):
+        """Test mutant f1 nan accepted as number caught."""
         self._run_gate(
             "structured",
             "f1_nan_adherent",
@@ -556,6 +620,7 @@ class FixupMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _f2_scenario(mod):
+        """F2 scenario."""
         fmt = _format()
         fixture = _fixture("s/x", expected='{"a": "x"}')
         try:
@@ -571,6 +636,7 @@ class FixupMutationGateTests(unittest.TestCase):
         raise AssertionError("malformed schema dict was absorbed by the stage")
 
     def test_mutant_f2_stage_skips_schema_validation_caught(self):
+        """Test mutant f2 stage skips schema validation caught."""
         self._run_gate(
             "experiments",
             "f2_skipped_schema_validation",
@@ -583,6 +649,7 @@ class FixupMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _f3_scenario(mod):
+        """F3 scenario."""
         try:
             mod.layout_options(("a", "a", "b"), "a", condition="correct_first", seed=0)
         except ValueError:
@@ -590,6 +657,7 @@ class FixupMutationGateTests(unittest.TestCase):
         raise AssertionError("duplicate options were silently shortened")
 
     def test_mutant_f3_duplicates_accepted_caught(self):
+        """Test mutant f3 duplicates accepted caught."""
         self._run_gate(
             "position",
             "f3_duplicates_accepted",
@@ -603,6 +671,7 @@ class FixupMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _f4_scenario(mod):
+        """F4 scenario."""
         try:
             mod.validate_field_def({"type": "string", "minimum": 3}, where="p")
         except ValueError:
@@ -610,6 +679,7 @@ class FixupMutationGateTests(unittest.TestCase):
         raise AssertionError("bound on a string field was accepted")
 
     def test_mutant_f4_bounds_on_string_accepted_caught(self):
+        """Test mutant f4 bounds on string accepted caught."""
         self._run_gate(
             "structured",
             "f4_bounds_on_string",
@@ -624,10 +694,12 @@ class FixupMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _f5_scenario(mod):
+        """F5 scenario."""
         payload = _structured_cell(0.0, 1.0, 1.0)
         assert mod._valid_structured(payload) is False
 
     def test_mutant_f5_contradictory_cell_accepted_caught(self):
+        """Test mutant f5 contradictory cell accepted caught."""
         self._run_gate(
             "diffreports",
             "f5_contradictory_cell",

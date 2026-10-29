@@ -68,6 +68,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _fx(fid, expected, group):
+    """Fx."""
     return Fixture(
         id=fid,
         messages=(Message(role="user", content=f"q {fid}"),),
@@ -77,6 +78,7 @@ def _fx(fid, expected, group):
 
 
 def _donor_ids(entry):
+    """Donor ids."""
     return [c["source_fixture"] for c in entry["choices"][1:]]
 
 
@@ -86,7 +88,10 @@ def _donor_ids(entry):
 
 
 class TestConstruction(unittest.TestCase):
+    """Test construction."""
+
     def test_basic_donor_order_and_shape(self):
+        """Test basic donor order and shape."""
         cases = [
             _fx("a1", "apple", "fruit"),
             _fx("a2", "pear", "fruit"),
@@ -108,6 +113,7 @@ class TestConstruction(unittest.TestCase):
         self.assertEqual(target["n_distinct_choices"], 4)
 
     def test_group_wide_screen_rejects_donor_matching_any_group_member(self):
+        """Test group wide screen rejects donor matching any group member."""
         # "cat" is equivalent (folded containment) to "wild cat",
         # an expected of the target's own group, so it is
         # ineligible even though the target's own answer is "dog".
@@ -125,6 +131,7 @@ class TestConstruction(unittest.TestCase):
         self.assertEqual(_donor_ids(target), ["d2", "d3", "d4"])
 
     def test_containment_rejected_both_directions(self):
+        """Test containment rejected both directions."""
         cases = [
             _fx("t1", "New York City", "geo"),
             _fx("d1", "York", "other"),
@@ -139,6 +146,7 @@ class TestConstruction(unittest.TestCase):
         self.assertEqual(_donor_ids(target), ["d3", "d4", "d5"])
 
     def test_rung4_equivalent_donor_rejected(self):
+        """Test rung4 equivalent donor rejected."""
         cases = [
             _fx("t1", "Paris!", "geo"),
             _fx("d1", "paris", "other"),
@@ -153,6 +161,7 @@ class TestConstruction(unittest.TestCase):
         self.assertTrue(target["constructible"])
 
     def test_byte_duplicate_and_class_duplicate_donors_collapse(self):
+        """Test byte duplicate and class duplicate donors collapse."""
         cases = [
             _fx("t1", "sun", "sky"),
             _fx("d1", "moon", "night"),
@@ -167,6 +176,7 @@ class TestConstruction(unittest.TestCase):
         self.assertEqual(_donor_ids(target), ["d1", "d4", "d5"])
 
     def test_shortfall_recorded_not_repaired(self):
+        """Test shortfall recorded not repaired."""
         cases = [
             _fx("t1", "one", "g"),
             _fx("d1", "two", "h"),
@@ -181,6 +191,7 @@ class TestConstruction(unittest.TestCase):
         self.assertEqual(target["n_distinct_choices"], 3)
 
     def test_blank_expected_excluded(self):
+        """Test blank expected excluded."""
         cases = [
             _fx("t1", "  ", "g"),
             _fx("t2", "?", "g"),
@@ -200,6 +211,7 @@ class TestConstruction(unittest.TestCase):
         self.assertTrue(by_id["t2"]["constructible"])
 
     def test_excluded_expected_never_serves_as_donor(self):
+        """Test excluded expected never serves as donor."""
         cases = [
             _fx("t1", "alpha", "g"),
             _fx("e1", "  ", "h"),
@@ -214,6 +226,7 @@ class TestConstruction(unittest.TestCase):
         self.assertEqual(_donor_ids(target), ["d1", "d2", "d3"])
 
     def test_donor_map_digest_binds_the_block(self):
+        """Test donor map digest binds the block."""
         cases = [
             _fx("t1", "alpha", "g"),
             _fx("d1", "beta", "h"),
@@ -231,6 +244,7 @@ class TestConstruction(unittest.TestCase):
         self.assertNotEqual(donor_map_sha256(altered), digest_a)
 
     def test_protocol_fingerprint_binds_backend(self):
+        """Test protocol fingerprint binds backend."""
         block = build_choice_sets([_fx("t1", "alpha", "g")])
         obj = protocol_object(["t1"], block, "backend-a")
         self.assertEqual(obj["donor_map_sha256"], donor_map_sha256(block))
@@ -244,12 +258,14 @@ class TestConstruction(unittest.TestCase):
         )
 
     def test_numeric_flag_on_block(self):
+        """Test numeric flag on block."""
         block = build_choice_sets([_fx("t1", "42", "g"), _fx("t2", "abc", "g")])
         by_id = {e["fixture"]: e for e in block}
         self.assertTrue(by_id["t1"]["numeric"])
         self.assertFalse(by_id["t2"]["numeric"])
 
     def test_numeric_answer_matches_scorerlens_decimal(self):
+        """Test numeric answer matches scorerlens decimal."""
         corpus = [
             "42",
             "0.5",
@@ -288,6 +304,7 @@ class TestConstruction(unittest.TestCase):
 
 
 def _cell(total, *, mean=None, tokens=2, byte_length=None, status="ok", reason=None):
+    """Cell."""
     if mean is None and total is not None:
         mean = total / tokens
     return {
@@ -303,6 +320,7 @@ def _cell(total, *, mean=None, tokens=2, byte_length=None, status="ok", reason=N
 def _record(
     fixture="f1", *, cells, obs_status="completed", exact=True, boundary=True, prompt_reason=None
 ):
+    """Record."""
     return {
         "fixture": fixture,
         "obs_status": obs_status,
@@ -318,13 +336,17 @@ _ENTRY_SHORT = {"fixture": "f1", "constructible": False}
 
 
 class TestVerdicts(unittest.TestCase):
+    """Test verdicts."""
+
     def test_rank_verdict_three_states(self):
+        """Test rank verdict three states."""
         self.assertEqual(rank_verdict([3.0, 1.0, 2.0, 0.0]), "correct")
         self.assertEqual(rank_verdict([1.0, 3.0, 2.0, 0.0]), "incorrect")
         self.assertEqual(rank_verdict([3.0, 3.0, 2.0, 0.0]), "tied")
         self.assertEqual(rank_verdict([3.0, 3.0, 3.0, 3.0]), "tied")
 
     def test_ranking_values_per_ranking(self):
+        """Test ranking values per ranking."""
         cells = [
             _cell(-8.0, byte_length=4),
             _cell(-9.0, byte_length=3),
@@ -339,6 +361,7 @@ class TestVerdicts(unittest.TestCase):
             ranking_values(cells, "bogus")
 
     def test_generation_verdict_states(self):
+        """Test generation verdict states."""
         self.assertEqual(generation_verdict("completed", True, True), "pass")
         self.assertEqual(generation_verdict("completed", False, True), "fail")
         self.assertEqual(generation_verdict("completed", True, False), "fail")
@@ -347,6 +370,7 @@ class TestVerdicts(unittest.TestCase):
         self.assertEqual(generation_verdict(None, None, None), "missing")
 
     def test_record_evaluable_rules(self):
+        """Test record evaluable rules."""
         good = _record(cells=[_cell(-1.0) for _ in range(4)])
         self.assertTrue(record_evaluable(good, _ENTRY_OK))
         self.assertFalse(record_evaluable(good, _ENTRY_SHORT))
@@ -393,6 +417,7 @@ def _agg_fixtures():
 
 
 def _win_cells():
+    """Win cells."""
     # True choice (index 0) wins every ranking outright.
     return [
         _cell(-1.0, tokens=2, byte_length=4),
@@ -403,6 +428,7 @@ def _win_cells():
 
 
 def _lose_cells():
+    """Lose cells."""
     return [
         _cell(-5.0, tokens=2, byte_length=4),
         _cell(-1.0, tokens=2, byte_length=4),
@@ -412,14 +438,19 @@ def _lose_cells():
 
 
 class TestAggregation(unittest.TestCase):
+    """Test aggregation."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.fixtures = _agg_fixtures()
 
     def _entry(self, fixture):
+        """Entry."""
         # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         return next(e for e in self.fixtures if e["fixture"] == fixture)
 
     def test_denominators_and_discordance(self):
+        """Test denominators and discordance."""
         records = [
             _record("f1", cells=_win_cells()),
             _record("f2", cells=_win_cells(), exact=False),
@@ -439,6 +470,7 @@ class TestAggregation(unittest.TestCase):
         self.assertEqual(disc["gen_fail_boundary_not_found"], 0)
 
     def test_boundary_not_found_split(self):
+        """Test boundary not found split."""
         records = [_record("f1", cells=_lose_cells(), exact=False, boundary=False)]
         agg = choiceaudit.aggregate_candidate(records, self.fixtures)
         disc = agg["discordance"]
@@ -447,6 +479,7 @@ class TestAggregation(unittest.TestCase):
         self.assertEqual(disc["n_discordant"], 0)
 
     def test_tied_paired_cell_counted_beside_the_table(self):
+        """Test tied paired cell counted beside the table."""
         tied = [
             _cell(-1.0, tokens=2, byte_length=4),
             _cell(-1.0, tokens=2, byte_length=4),
@@ -460,6 +493,7 @@ class TestAggregation(unittest.TestCase):
         self.assertEqual(agg["accuracy"]["total"]["tied"], 1)
 
     def test_gen_missing_not_paired(self):
+        """Test gen missing not paired."""
         records = [
             _record("f1", cells=_win_cells(), obs_status="failed", exact=None, boundary=None)
         ]
@@ -470,6 +504,7 @@ class TestAggregation(unittest.TestCase):
         self.assertEqual(agg["n_evaluable"], 1)
 
     def test_prompt_reason_counted_once_cells_not_counted(self):
+        """Test prompt reason counted once cells not counted."""
         records = [_record("f1", cells=[], prompt_reason="prompt_roundtrip_mismatch")]
         agg = choiceaudit.aggregate_candidate(records, self.fixtures)
         self.assertEqual(agg["n_prompt_failures"], 1)
@@ -478,6 +513,7 @@ class TestAggregation(unittest.TestCase):
         self.assertEqual(agg["n_choice_unavailable"], agg["n_constructible"])
 
     def test_cell_reasons_counted_per_cell(self):
+        """Test cell reasons counted per cell."""
         records = [
             _record(
                 "f1",
@@ -494,6 +530,7 @@ class TestAggregation(unittest.TestCase):
         self.assertEqual(agg["n_evaluable"], 0)
 
     def test_ok_empty_counted_under_its_own_status(self):
+        """Test ok empty counted under its own status."""
         records = [
             _record(
                 "f1",
@@ -505,6 +542,7 @@ class TestAggregation(unittest.TestCase):
         self.assertEqual(agg["n_evaluable"], 0)
 
     def test_non_constructible_records_skip_populations(self):
+        """Test non constructible records skip populations."""
         short_fixtures = build_choice_sets([_fx("s1", "one", "g"), _fx("s2", "two", "h")])
         records = [_record("s1", cells=[]), _record("s2", cells=[])]
         agg = choiceaudit.aggregate_candidate(records, short_fixtures)
@@ -514,6 +552,7 @@ class TestAggregation(unittest.TestCase):
         self.assertEqual(agg["accuracy"]["total"]["detail"], "no_evaluable_fixtures")
 
     def test_length_matched_stratum(self):
+        """Test length matched stratum."""
         spread = _win_cells()
         spread[3] = _cell(-5.0, tokens=9, byte_length=18)
         records = [_record("f1", cells=spread), _record("f2", cells=_win_cells())]
@@ -522,12 +561,14 @@ class TestAggregation(unittest.TestCase):
         self.assertEqual(agg["strata"]["length_matched"]["correct"], 1)
 
     def test_numeric_stratum(self):
+        """Test numeric stratum."""
         records = [_record("f1", cells=_win_cells()), _record("f2", cells=_win_cells())]
         agg = choiceaudit.aggregate_candidate(records, self.fixtures)
         self.assertEqual(agg["strata"]["numeric"]["n"], 1)  # f1's "42"
         self.assertEqual(agg["strata"]["non_numeric"]["n"], 1)  # f2's "red"
 
     def test_ranking_agreement_counts(self):
+        """Test ranking agreement counts."""
         # Total: donor 1 wins (-3). Byte: the true choice wins
         # (-4/8 = -0.5). Mean: donor 2 wins (-9/9 = -1). So byte
         # disagrees with total and mean agrees (both incorrect).
@@ -545,12 +586,14 @@ class TestAggregation(unittest.TestCase):
 
     @staticmethod
     def _method_aggs(verdicts_by_name):
+        """Method aggs."""
         return {
             name: {"_verdicts": {fid: {"total": v} for fid, v in per.items()}}
             for name, per in verdicts_by_name.items()
         }
 
     def test_method_comparison_states_and_priority(self):
+        """Test method comparison states and priority."""
         big = {f"f{i}": "correct" for i in range(8)}
         # Withheld beats everything below the floor.
         out = method_comparison(
@@ -600,6 +643,7 @@ class TestAggregation(unittest.TestCase):
         self.assertEqual(out["common_accuracy"]["b"], {"correct": 8, "n": 8, "accuracy": 1.0})
 
     def test_method_comparison_primary_mapping(self):
+        """Test method comparison primary mapping."""
         big = {f"f{i}": "correct" for i in range(8)}
         out = method_comparison(
             self._method_aggs({"a": big, "b": big}),
@@ -611,6 +655,7 @@ class TestAggregation(unittest.TestCase):
         self.assertEqual(out["primary_winner"], "a")
 
     def test_discordance_falsification_tristate(self):
+        """Test discordance falsification tristate."""
         empty = {"a": {"discordance": {"n_paired": 0, "n_discordant": 0}}}
         self.assertEqual(
             discordance_summary(empty),
@@ -651,17 +696,21 @@ class _CharBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(text.encode("utf-8"))
 
     @staticmethod
     def decode(ids):
+        """Decode."""
         return bytes(int(i) for i in ids).decode("utf-8", errors="replace")
 
     @staticmethod
     def token_bytes(token_id):
+        """Token bytes."""
         return bytes([int(token_id)])
 
     def forward_logits(self, input_ids):
+        """Forward logits."""
         seq = [int(i) for i in input_ids]
         gen = torch.Generator().manual_seed(self._seed + len(seq))
         rows = []
@@ -691,6 +740,7 @@ class _KeyedBackend(_CharBackend):
 
     @staticmethod
     def forward_logits(input_ids):
+        """Forward logits."""
         seq = [int(i) for i in input_ids]
         key = seq[0] if seq else 0
         rows = []
@@ -715,20 +765,26 @@ class _NoLogitsBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(text.encode("utf-8"))
 
     @staticmethod
     def decode(ids):
+        """Decode."""
         return bytes(int(i) for i in ids).decode("utf-8", errors="replace")
 
     @staticmethod
     def token_bytes(token_id):
+        """Token bytes."""
         return bytes([int(token_id)])
 
 
 class _NonFiniteBackend(_CharBackend):
+    """Non finite backend."""
+
     @staticmethod
     def forward_logits(input_ids):
+        """Forward logits."""
         seq = [int(i) for i in input_ids]
         rows = []
         for pos in range(len(seq)):
@@ -740,12 +796,18 @@ class _NonFiniteBackend(_CharBackend):
 
 
 class _MangleDecodeBackend(_CharBackend):
+    """Mangle decode backend."""
+
     def decode(self, ids):
+        """Decode."""
         return super().decode(ids) + "!"
 
 
 class _EncodeFailBackend(_CharBackend):
+    """Encode fail backend."""
+
     def encode(self, text):
+        """Encode."""
         if text == "red":
             raise ValueError("cannot encode")
         return super().encode(text)
@@ -758,6 +820,7 @@ _FORMATS = (
 
 
 def _stage_cases():
+    """Stage cases."""
     data = [
         ("f0", "42", "numbers"),
         ("f1", "17", "numbers"),
@@ -780,6 +843,7 @@ def _stage_cases():
 
 
 def _search_entries(cases, *, exact_ids=("f0", "f2")):
+    """Search entries."""
     entries = []
     for fmt in _FORMATS:
         # Distinct recorded prompts per candidate (the keyed
@@ -807,6 +871,7 @@ def _search_entries(cases, *, exact_ids=("f0", "f2")):
 
 
 def _run_stage(backend=None, *, cases=None, entries=None, cancel=None):
+    """Run stage."""
     backend = backend or _CharBackend()
     cases = tuple(cases) if cases is not None else _stage_cases()
     entries = entries if entries is not None else _search_entries(cases)
@@ -816,7 +881,10 @@ def _run_stage(backend=None, *, cases=None, entries=None, cancel=None):
 
 
 class TestStage(unittest.TestCase):
+    """Test stage."""
+
     def test_happy_path_payload_is_valid(self):
+        """Test happy path payload is valid."""
         _, payload = _run_stage()
         self.assertTrue(payload["available"])
         self.assertEqual(payload["detail"], "")
@@ -829,6 +897,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(self_diff["comparable"])
 
     def test_stage_fingerprint_is_the_protocol_string(self):
+        """Test stage fingerprint is the protocol string."""
         # Regression pin (cycle 200): the payload must carry the
         # backend's fingerprint string itself, never a repr of the
         # attribute object. With a method-style fingerprint the stage
@@ -839,11 +908,13 @@ class TestStage(unittest.TestCase):
         self.assertEqual(payload["protocol"]["backend_fingerprint"], "fake-char:echo")
 
     def test_logits_not_supported(self):
+        """Test logits not supported."""
         _, payload = _run_stage(_NoLogitsBackend())
         self.assertFalse(payload["available"])
         self.assertEqual(payload["detail"], "logits_not_supported")
 
     def test_budget_cap_checked_first(self):
+        """Test budget cap checked first."""
         # 25 candidates x 100 fixtures = 2,500 records > the 2,400
         # cap; the cap fires before any search entry is consulted
         # (entries are empty here).
@@ -858,6 +929,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["candidates"], {})
 
     def test_cancel_returns_cancelled_without_partials(self):
+        """Test cancel returns cancelled without partials."""
         event = threading.Event()
         event.set()
         _, payload = _run_stage(cancel=event)
@@ -865,6 +937,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(payload["detail"], "cancelled")
 
     def test_candidate_without_observations_is_unavailable(self):
+        """Test candidate without observations is unavailable."""
         cases = _stage_cases()
         entries = _search_entries(cases)
         entries[1] = {"format": {"name": "plain"}, "summary": {}}
@@ -876,6 +949,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["candidates"]["chatml"]["status"], "available")
 
     def test_prompt_failure_accounted_once_cells_empty(self):
+        """Test prompt failure accounted once cells empty."""
         _, payload = _run_stage(_MangleDecodeBackend())
         candidate = payload["candidates"]["chatml"]
         self.assertGreater(candidate["n_prompt_failures"], 0)
@@ -883,12 +957,14 @@ class TestStage(unittest.TestCase):
         self.assertTrue(diffreports._valid_choiceaudit(payload))
 
     def test_encode_failure_lands_on_the_cell(self):
+        """Test encode failure lands on the cell."""
         _, payload = _run_stage(_EncodeFailBackend())
         reasons = payload["candidates"]["chatml"]["unavailable_reasons"]
         self.assertGreaterEqual(reasons.get("encode_failed", 0), 1)
         self.assertTrue(diffreports._valid_choiceaudit(payload))
 
     def test_non_finite_totals_demoted(self):
+        """Test non finite totals demoted."""
         _, payload = _run_stage(_NonFiniteBackend())
         candidate = payload["candidates"]["chatml"]
         self.assertEqual(candidate["n_evaluable"], 0)
@@ -896,6 +972,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(diffreports._valid_choiceaudit(payload))
 
     def test_malformed_observation_ids_prompt_missing(self):
+        """Test malformed observation ids prompt missing."""
         cases = _stage_cases()
         entries = _search_entries(cases)
         for obs in entries[0]["observations"]:
@@ -915,6 +992,7 @@ class TestStage(unittest.TestCase):
 
 
 def _valid_payload():
+    """Valid payload."""
     _, payload = _run_stage()
     assert payload["available"] and diffreports._valid_choiceaudit(payload)
     return payload
@@ -929,6 +1007,7 @@ def _wide_loser_tamper(payload):
     import struct
 
     def _f32(value):
+        """F32."""
         return struct.unpack("f", struct.pack("f", value))[0]
 
     payload = copy.deepcopy(payload)
@@ -953,10 +1032,14 @@ def _wide_loser_tamper(payload):
 
 
 class TestValidatorBattery(unittest.TestCase):
+    """Test validator battery."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.payload = _valid_payload()
 
     def _tampered(self, mutate):
+        """Tampered."""
         import copy
 
         payload = copy.deepcopy(self.payload)
@@ -964,19 +1047,28 @@ class TestValidatorBattery(unittest.TestCase):
         return payload
 
     def test_aggregate_tamper_rejected(self):
+        """Test aggregate tamper rejected."""
+
         def mutate(p):
+            """Mutate."""
             p["candidates"]["chatml"]["accuracy"]["total"]["correct"] += 1
 
         self.assertFalse(diffreports._valid_choiceaudit(self._tampered(mutate)))
 
     def test_protocol_fingerprint_tamper_rejected(self):
+        """Test protocol fingerprint tamper rejected."""
+
         def mutate(p):
+            """Mutate."""
             p["protocol"]["fingerprint"] = "0" * 64
 
         self.assertFalse(diffreports._valid_choiceaudit(self._tampered(mutate)))
 
     def test_donor_digest_tamper_rejected(self):
+        """Test donor digest tamper rejected."""
+
         def mutate(p):
+            """Mutate."""
             # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             entry = next(e for e in p["fixtures"] if e["constructible"])
             entry["choices"][1]["digest"] = "0" * 64
@@ -984,7 +1076,10 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(diffreports._valid_choiceaudit(self._tampered(mutate)))
 
     def test_donor_group_equals_target_group_rejected(self):
+        """Test donor group equals target group rejected."""
+
         def mutate(p):
+            """Mutate."""
             # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             entry = next(e for e in p["fixtures"] if e["constructible"])
             entry["choices"][1]["group"] = entry["group"]
@@ -992,7 +1087,10 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(diffreports._valid_choiceaudit(self._tampered(mutate)))
 
     def test_duplicate_choice_digests_rejected(self):
+        """Test duplicate choice digests rejected."""
+
         def mutate(p):
+            """Mutate."""
             # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             entry = next(e for e in p["fixtures"] if e["constructible"])
             digest = entry["choices"][0]["digest"]
@@ -1002,13 +1100,19 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(diffreports._valid_choiceaudit(self._tampered(mutate)))
 
     def test_n_common_tamper_rejected(self):
+        """Test n common tamper rejected."""
+
         def mutate(p):
+            """Mutate."""
             p["method_comparison"]["n_common"] += 1
 
         self.assertFalse(diffreports._valid_choiceaudit(self._tampered(mutate)))
 
     def test_agreement_flip_rejected(self):
+        """Test agreement flip rejected."""
+
         def mutate(p):
+            """Mutate."""
             p["method_comparison"]["agreement"] = (
                 "agree" if p["method_comparison"]["agreement"] != "agree" else "disagree"
             )
@@ -1016,37 +1120,51 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(diffreports._valid_choiceaudit(self._tampered(mutate)))
 
     def test_falsified_flip_rejected(self):
+        """Test falsified flip rejected."""
+
         def mutate(p):
+            """Mutate."""
             p["discordance"]["falsified"] = p["discordance"]["falsified"] is False
 
         self.assertFalse(diffreports._valid_choiceaudit(self._tampered(mutate)))
 
     def test_unmapped_primary_decision_rejected(self):
+        """Test unmapped primary decision rejected."""
+
         # The stored primary values are the mapped ones; a stored
         # "held_out_failed" recomputes to "selected" and mismatches.
         def mutate(p):
+            """Mutate."""
             p["method_comparison"]["primary_decision"] = "held_out_failed"
 
         self.assertFalse(diffreports._valid_choiceaudit(self._tampered(mutate)))
 
     def test_extra_payload_key_rejected(self):
+        """Test extra payload key rejected."""
+
         def mutate(p):
+            """Mutate."""
             p["extra"] = 1
 
         self.assertFalse(diffreports._valid_choiceaudit(self._tampered(mutate)))
 
     def test_record_order_swap_rejected(self):
+        """Test record order swap rejected."""
+
         def mutate(p):
+            """Mutate."""
             records = p["candidates"]["chatml"]["records"]
             records[0], records[1] = records[1], records[0]
 
         self.assertFalse(diffreports._valid_choiceaudit(self._tampered(mutate)))
 
     def test_raw_float_cell_rejected(self):
+        """Test raw float cell rejected."""
         forged = _wide_loser_tamper(self.payload)
         self.assertFalse(diffreports._valid_choiceaudit(forged))
 
     def test_diff_foreign_backend_flags_drift(self):
+        """Test diff foreign backend flags drift."""
         _, other = _run_stage(_CharBackend(mode="flat"))
         self.assertTrue(diffreports._valid_choiceaudit(other))
         diff = diffreports.diff_choiceaudit(self.payload, other)
@@ -1055,6 +1173,7 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_diff_unavailable_side(self):
+        """Test diff unavailable side."""
         diff = diffreports.diff_choiceaudit(
             self.payload, {"available": False, "detail": "cancelled"}
         )
@@ -1068,6 +1187,7 @@ class TestValidatorBattery(unittest.TestCase):
 
 
 def _run_gate(mutant_name, replacements, scenario):
+    """Run gate."""
     source = (REPO_ROOT / "model_protocol_lab" / "diffreports.py").read_text(encoding="utf-8")
     for original, mutant in replacements:
         assert source.count(original) == 1, f"gate anchor not unique: {original[:60]}"
@@ -1088,11 +1208,15 @@ def _run_gate(mutant_name, replacements, scenario):
 
 
 class TestMutationGates(unittest.TestCase):
+    """Test mutation gates."""
+
     def test_f32_representability_gate(self):
+        """Test f32 representability gate."""
         honest = _valid_payload()
         forged = _wide_loser_tamper(honest)
 
         def scenario(module):
+            """Scenario."""
             self.assertTrue(module._valid_choiceaudit(honest))
             self.assertFalse(module._valid_choiceaudit(forged))
 
@@ -1105,6 +1229,7 @@ class TestMutationGates(unittest.TestCase):
             )
 
     def test_tie_verdict_gate(self):
+        """Test tie verdict gate."""
         # Flat logits score strictly by length; fixture t0's true
         # answer "ab" and its donor "cd" share the minimum length,
         # so the total ranking ties them at the maximum exactly.
@@ -1124,6 +1249,7 @@ class TestMutationGates(unittest.TestCase):
         self.assertTrue(tied)
 
         def scenario(module):
+            """Scenario."""
             self.assertTrue(module._valid_choiceaudit(payload))
 
         scenario(diffreports)
@@ -1141,7 +1267,10 @@ class TestMutationGates(unittest.TestCase):
 
 
 class TestReportingAndCli(unittest.TestCase):
+    """Test reporting and cli."""
+
     def test_section_renders_iff_available(self):
+        """Test section renders iff available."""
         _, payload = _run_stage()
         html = reporting.render_html({"choice_audit": payload})
         self.assertIn("Choice-scoring audit (second opinion)", html)
@@ -1150,6 +1279,7 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertNotIn("Choice-scoring audit (second opinion)", html_absent)
 
     def test_help_states_cost_and_labelling(self):
+        """Test help states cost and labelling."""
         import argparse
 
         parser = cli.build_parser()
@@ -1163,6 +1293,7 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertIn("second opinion", action.help)
 
     def test_wrapper_gates_on_incomplete_search(self):
+        """Test wrapper gates on incomplete search."""
         backend = _CharBackend()
         cases = _stage_cases()
         # Failed decision: the audit must not run at all.
@@ -1182,7 +1313,11 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertEqual(result["choice_audit"]["detail"], "native_search_incomplete")
 
     def test_wrapper_never_raises(self):
+        """Test wrapper never raises."""
+
         class _ExplodingBackend:
+            """Exploding backend."""
+
             @property
             def fingerprint(self):
                 raise RuntimeError("boom")
@@ -1201,6 +1336,7 @@ class TestReportingAndCli(unittest.TestCase):
         )
 
     def test_flag_default_and_set(self):
+        """Test flag default and set."""
         parser = cli.build_parser()
         args = parser.parse_args(
             [
@@ -1245,10 +1381,12 @@ class TestReportingAndCli(unittest.TestCase):
 
 
 def _excluded_cases():
+    """Excluded cases."""
     return _stage_cases() + (_fx("f8", "  ", "misc"),)
 
 
 def _special_payload(kind):
+    """Special payload."""
     if kind == "excluded":
         _, payload = _run_stage(cases=_excluded_cases())
     elif kind == "unavailable_candidate":
@@ -1292,6 +1430,7 @@ class TestValidatorGuardBattery(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls.payload = _valid_payload()
         cls.excluded = _special_payload("excluded")
         cls.unavail = _special_payload("unavailable_candidate")
@@ -1299,6 +1438,7 @@ class TestValidatorGuardBattery(unittest.TestCase):
 
     @staticmethod
     def _tampered(payload, mutate):
+        """Tampered."""
         import copy
 
         payload = copy.deepcopy(payload)
@@ -1306,17 +1446,20 @@ class TestValidatorGuardBattery(unittest.TestCase):
         return payload
 
     def _assert_invalid(self, payload, mutate, base=None):
+        """Assert invalid."""
         self.assertFalse(
             diffreports._valid_choiceaudit(self._tampered(base or self.payload, mutate))
         )
 
     def test_excluded_payload_is_valid(self):
+        """Test excluded payload is valid."""
         self.assertTrue(diffreports._valid_choiceaudit(self.excluded))
         # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         entry = next(e for e in self.excluded["fixtures"] if e["fixture"] == "f8")
         self.assertEqual(entry["excluded"], "blank_expected")
 
     def test_block_guards(self):
+        """Test block guards."""
         cases = [
             ("entry_extra_key", lambda p: p["fixtures"][0].__setitem__("x", 1)),
             ("entry_group_type", lambda p: p["fixtures"][0].__setitem__("group", 7)),
@@ -1396,7 +1539,10 @@ class TestValidatorGuardBattery(unittest.TestCase):
                 self._assert_invalid(self.payload, mutate)
 
     def test_excluded_entry_constructible_guard(self):
+        """Test excluded entry constructible guard."""
+
         def mutate(p):
+            """Mutate."""
             # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             entry = next(e for e in p["fixtures"] if e["fixture"] == "f8")
             entry["constructible"] = True
@@ -1404,12 +1550,16 @@ class TestValidatorGuardBattery(unittest.TestCase):
         self._assert_invalid(self.excluded, mutate, base=self.excluded)
 
     def test_unavailable_candidate_shape_guard(self):
+        """Test unavailable candidate shape guard."""
+
         def mutate(p):
+            """Mutate."""
             p["candidates"]["plain"]["x"] = 1
 
         self._assert_invalid(self.unavail, mutate, base=self.unavail)
 
     def test_record_guards(self):
+        """Test record guards."""
         record = lambda p: p["candidates"]["chatml"]["records"][0]  # noqa: E731
         cases = [
             ("record_extra_key", lambda p: record(p).__setitem__("x", 1)),
@@ -1431,6 +1581,7 @@ class TestValidatorGuardBattery(unittest.TestCase):
                 self._assert_invalid(self.payload, mutate)
 
     def test_cell_guards(self):
+        """Test cell guards."""
         cell = lambda p: p["candidates"]["chatml"]["records"][0]["cells"][0]  # noqa: E731
         cases = [
             ("cell_extra_key", lambda p: cell(p).__setitem__("x", 1)),
@@ -1445,7 +1596,10 @@ class TestValidatorGuardBattery(unittest.TestCase):
                 self._assert_invalid(self.payload, mutate)
 
     def test_ok_empty_malformed_cell_guard(self):
+        """Test ok empty malformed cell guard."""
+
         def mutate(p):
+            """Mutate."""
             p["candidates"]["chatml"]["records"][0]["cells"][0] = {
                 "status": "ok_empty",
                 "reason": None,
@@ -1458,7 +1612,10 @@ class TestValidatorGuardBattery(unittest.TestCase):
         self._assert_invalid(self.payload, mutate)
 
     def test_unavailable_cell_guards(self):
+        """Test unavailable cell guards."""
+
         def first_unavailable(p):
+            """First unavailable."""
             for record in p["candidates"]["chatml"]["records"]:
                 for cell in record["cells"]:
                     if cell["status"] == "unavailable":
@@ -1479,7 +1636,10 @@ class TestValidatorGuardBattery(unittest.TestCase):
                 )
 
     def test_records_bytes_cap_guard(self):
+        """Test records bytes cap guard."""
+
         def mutate(p):
+            """Mutate."""
             record = p["candidates"]["chatml"]["records"][0]
             record["prompt_reason"] = "x" * 13_000_000
             record["cells"] = []
@@ -1487,6 +1647,7 @@ class TestValidatorGuardBattery(unittest.TestCase):
         self._assert_invalid(self.payload, mutate)
 
     def test_total_records_cap_guard(self):
+        """Test total records cap guard."""
         import copy
 
         payload = copy.deepcopy(self.payload)
@@ -1495,6 +1656,7 @@ class TestValidatorGuardBattery(unittest.TestCase):
         self.assertFalse(diffreports._valid_choiceaudit(payload))
 
     def test_valid_wrapper_guards(self):
+        """Test valid wrapper guards."""
         import copy
 
         payload = copy.deepcopy(self.payload)
@@ -1510,13 +1672,17 @@ class TestValidatorGuardBattery(unittest.TestCase):
         self.assertFalse(diffreports._valid_choiceaudit("not a payload"))
 
     def test_mirror_evaluable_nonconstructible_direct(self):
+        """Test mirror evaluable nonconstructible direct."""
         record = {"cells": [_cell(-1.0) for _ in range(4)]}
         self.assertFalse(diffreports._ca_record_evaluable(record, {"constructible": False}))
         self.assertTrue(diffreports._ca_record_evaluable(record, {"constructible": True}))
 
 
 class TestStageGuards(unittest.TestCase):
+    """Test stage guards."""
+
     def test_formats_and_cases_must_be_nonempty_tuples(self):
+        """Test formats and cases must be nonempty tuples."""
         backend = _CharBackend()
         cases = _stage_cases()
         entries = _search_entries(cases)
@@ -1528,6 +1694,7 @@ class TestStageGuards(unittest.TestCase):
             choiceaudit_stage(backend, (), cases, entries)
 
     def test_junk_search_entries_are_skipped(self):
+        """Test junk search entries are skipped."""
         cases = _stage_cases()
         entries = ["junk", {"format": {}}, {"no_format": 1}] + _search_entries(cases)
         stage, payload = _run_stage(cases=cases, entries=entries)
@@ -1535,6 +1702,7 @@ class TestStageGuards(unittest.TestCase):
         self.assertTrue(payload["available"])
 
     def test_observation_not_dict_makes_candidate_unavailable(self):
+        """Test observation not dict makes candidate unavailable."""
         cases = _stage_cases()
         entries = _search_entries(cases)
         entries[0]["observations"][0] = "junk"
@@ -1542,6 +1710,7 @@ class TestStageGuards(unittest.TestCase):
         self.assertEqual(stage["candidates"]["chatml"]["status"], "unavailable")
 
     def test_missing_case_observation_makes_candidate_unavailable(self):
+        """Test missing case observation makes candidate unavailable."""
         cases = _stage_cases()
         entries = _search_entries(cases)
         entries[0]["observations"] = entries[0]["observations"][:-1]
@@ -1549,6 +1718,7 @@ class TestStageGuards(unittest.TestCase):
         self.assertEqual(stage["candidates"]["chatml"]["status"], "unavailable")
 
     def test_aggregate_ineligible_summary_makes_candidate_unavailable(self):
+        """Test aggregate ineligible summary makes candidate unavailable."""
         cases = _stage_cases()
         entries = _search_entries(cases)
         entries[0]["summary"] = {"aggregate_eligible": False}
@@ -1556,6 +1726,7 @@ class TestStageGuards(unittest.TestCase):
         self.assertEqual(stage["candidates"]["chatml"]["status"], "unavailable")
 
     def test_records_bytes_cap_in_stage(self):
+        """Test records bytes cap in stage."""
         formats = tuple(
             Format(name=f"fmt{i}", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>")
             for i in range(24)
@@ -1584,6 +1755,7 @@ class TestStageGuards(unittest.TestCase):
         self.assertEqual(stage["detail"], DETAIL_BUDGET_EXCEEDED)
 
     def test_failed_observations_payload_valid_and_counted(self):
+        """Test failed observations payload valid and counted."""
         payload = _special_payload("failed_obs")
         self.assertTrue(diffreports._valid_choiceaudit(payload))
         candidate = payload["candidates"]["chatml"]
@@ -1591,12 +1763,14 @@ class TestStageGuards(unittest.TestCase):
         self.assertIsNone(payload["discordance"]["falsified"])
 
     def test_boundary_miss_payload_valid_and_split(self):
+        """Test boundary miss payload valid and split."""
         payload = _special_payload("boundary_miss")
         self.assertTrue(diffreports._valid_choiceaudit(payload))
         candidate = payload["candidates"]["chatml"]
         self.assertGreater(candidate["discordance"]["gen_fail_boundary_not_found"], 0)
 
     def test_agree_method_payload_valid(self):
+        """Test agree method payload valid."""
         # The keyed backend gives chatml a deterministic unique
         # top (2 correct vs 0 on the common population).
         stage, abstain_payload = _run_stage(_KeyedBackend())
@@ -1611,6 +1785,7 @@ class TestStageGuards(unittest.TestCase):
         self.assertTrue(diffreports._valid_choiceaudit(payload))
 
     def test_all_candidates_unavailable_payload_is_not_valid(self):
+        """Test all candidates unavailable payload is not valid."""
         # The validator's stance (placement precedent): a payload
         # with no available candidate carries no recomputable
         # aggregates and is not a valid diff payload.
@@ -1622,11 +1797,15 @@ class TestStageGuards(unittest.TestCase):
 
 
 class TestDiffDrift(unittest.TestCase):
+    """Test diff drift."""
+
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls.payload = _valid_payload()
 
     def test_candidate_status_drift(self):
+        """Test candidate status drift."""
         other = _special_payload("unavailable_candidate")
         self.assertTrue(diffreports._valid_choiceaudit(other))
         diff = diffreports.diff_choiceaudit(self.payload, other)
@@ -1637,6 +1816,7 @@ class TestDiffDrift(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_candidate_metric_drift(self):
+        """Test candidate metric drift."""
         # Keyed vs echo: plain's total correct count differs
         # deterministically (0 vs 2).
         _, keyed = _run_stage(_KeyedBackend())
@@ -1647,6 +1827,7 @@ class TestDiffDrift(unittest.TestCase):
         self.assertIn(("plain", "accuracy_total_correct"), metrics)
 
     def test_method_drift(self):
+        """Test method drift."""
         stage, _ = _run_stage(_KeyedBackend())
         top = "chatml"
         agree_payload = choiceaudit_analysis(
@@ -1658,6 +1839,7 @@ class TestDiffDrift(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_discordance_drift(self):
+        """Test discordance drift."""
         other = _special_payload("failed_obs")
         diff = diffreports.diff_choiceaudit(self.payload, other)
         self.assertEqual(diff["available"], "both")
@@ -1665,28 +1847,35 @@ class TestDiffDrift(unittest.TestCase):
 
 
 class TestReportingStates(unittest.TestCase):
+    """Test reporting states."""
+
     def test_malformed_method_block_renders_empty(self):
+        """Test malformed method block renders empty."""
         html = reporting.render_html(
             {"choice_audit": {"available": True, "candidates": {}, "method_comparison": None}}
         )
         self.assertNotIn("Choice-scoring audit", html)
 
     def test_unavailable_payload_renders_empty(self):
+        """Test unavailable payload renders empty."""
         html = reporting.render_html({"choice_audit": {"available": False, "detail": "cancelled"}})
         self.assertNotIn("Choice-scoring audit", html)
 
     def test_no_evaluable_candidate_renders_na(self):
+        """Test no evaluable candidate renders na."""
         payload = _special_payload("mangle")
         html = reporting.render_html({"choice_audit": payload})
         self.assertIn("n/a", html)
         self.assertIn("Evaluable 0 of", html)
 
     def test_unavailable_candidate_row(self):
+        """Test unavailable candidate row."""
         payload = _special_payload("unavailable_candidate")
         html = reporting.render_html({"choice_audit": payload})
         self.assertIn("unavailable", html)
 
     def test_non_dict_candidate_entry_skipped(self):
+        """Test non dict candidate entry skipped."""
         payload = _valid_payload()
         payload["candidates"]["ghost"] = "nope"
         html = reporting.render_html({"choice_audit": payload})
@@ -1694,6 +1883,7 @@ class TestReportingStates(unittest.TestCase):
         self.assertNotIn("ghost", html)
 
     def test_method_lines_for_each_agreement_state(self):
+        """Test method lines for each agreement state."""
         stage, base = _run_stage(_KeyedBackend())
         top = base["method_comparison"]["choice_top_candidate"]
         self.assertEqual(top, "chatml")
@@ -1735,6 +1925,7 @@ class TestReportingStates(unittest.TestCase):
         self.assertIn("withheld", reporting.render_html({"choice_audit": withheld}))
 
     def test_falsified_false_line(self):
+        """Test falsified false line."""
         payload = _special_payload("gen_all_fail")
         self.assertEqual(payload["discordance"]["falsified"], False)
         html = reporting.render_html({"choice_audit": payload})
@@ -1747,6 +1938,7 @@ class TestValidatorGuardBattery2(unittest.TestCase):
     """
 
     def test_canonical_ok_empty_cell_counted_and_rejected(self):
+        """Test canonical ok empty cell counted and rejected."""
         # A canonically-shaped ok_empty cell passes the structural
         # cell guard, so the mirror aggregate itself must count it
         # (under its own status) and reject the payload whose
@@ -1765,6 +1957,7 @@ class TestValidatorGuardBattery2(unittest.TestCase):
         self.assertFalse(diffreports._valid_choiceaudit(payload))
 
     def test_choice_tied_payload_valid(self):
+        """Test choice tied payload valid."""
         stage, _ = _run_stage(_CharBackend(mode="flat"))
         payload = choiceaudit_analysis(
             stage, "compatible_on_fixture_set", "chatml", tuple(f.name for f in _FORMATS)
@@ -1773,6 +1966,7 @@ class TestValidatorGuardBattery2(unittest.TestCase):
         self.assertTrue(diffreports._valid_choiceaudit(payload))
 
     def test_disagree_payload_valid(self):
+        """Test disagree payload valid."""
         stage, _ = _run_stage(_KeyedBackend())
         payload = choiceaudit_analysis(
             stage, "compatible_on_fixture_set", "plain", tuple(f.name for f in _FORMATS)
@@ -1781,6 +1975,7 @@ class TestValidatorGuardBattery2(unittest.TestCase):
         self.assertTrue(diffreports._valid_choiceaudit(payload))
 
     def test_fixture_set_digest_fails_closed_on_surrogate_id(self):
+        """Test fixture set digest fails closed on surrogate id."""
         # The mirror must never raise on a hostile id: an
         # unencodable fixture id yields None, so the expected
         # protocol mismatches any recorded payload (fail closed).
@@ -1789,6 +1984,7 @@ class TestValidatorGuardBattery2(unittest.TestCase):
         self.assertIsNone(expected["fixture_set_sha256"])
 
     def test_recompute_rejects_surrogate_fixture_id_without_raising(self):
+        """Test recompute rejects surrogate fixture id without raising."""
         # Rename one fixture id consistently (every occurrence in
         # the payload), so all cross-references stay coherent; the
         # payload must then be rejected by the digest recompute --
@@ -1800,6 +1996,7 @@ class TestValidatorGuardBattery2(unittest.TestCase):
         renamed = target + "\ud800"
 
         def _rename(node):
+            """Rename."""
             if isinstance(node, dict):
                 return {
                     (_rename(k) if isinstance(k, str) else k): _rename(v) for k, v in node.items()
@@ -1814,6 +2011,7 @@ class TestValidatorGuardBattery2(unittest.TestCase):
         self.assertFalse(diffreports._valid_choiceaudit(payload))
 
     def test_diff_new_side_only(self):
+        """Test diff new side only."""
         diff = diffreports.diff_choiceaudit(
             {"available": False, "detail": "cancelled"}, _valid_payload()
         )
@@ -1824,7 +2022,10 @@ class TestValidatorGuardBattery2(unittest.TestCase):
 
 
 class TestReportingFalsifiedTrue(unittest.TestCase):
+    """Test reporting falsified true."""
+
     def test_falsified_true_line(self):
+        """Test falsified true line."""
         # Per-format generation facts aligned with the keyed
         # backend's choice verdicts (chatml correct exactly on
         # f0/f1; plain correct nowhere): zero discordance over a

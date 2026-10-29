@@ -72,10 +72,12 @@ from model_protocol_lab.core import Fixture, Format, Message
 
 
 def _write_json(path: Path, obj: object) -> None:
+    """Write json."""
     path.write_text(json.dumps(obj), encoding="utf-8")
 
 
 def _write_valid_safetensors(path: Path) -> None:
+    """Write valid safetensors."""
     header = json.dumps(
         {"__metadata__": {}, "w": {"dtype": "F32", "shape": [2], "data_offsets": [0, 8]}}
     ).encode("utf-8")
@@ -117,7 +119,10 @@ def _write_checkpoint(
 
 
 def _write_dataset(path: Path, search_texts: list[str], heldout_texts: list[str]) -> None:
+    """Write dataset."""
+
     def item(prefix: str, group: str, index: int, text: str) -> dict:
+        """Item."""
         return {
             "id": f"{prefix}{index}",
             "group": group,
@@ -136,12 +141,16 @@ def _write_dataset(path: Path, search_texts: list[str], heldout_texts: list[str]
 
 # skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class _TmpTestCase(unittest.TestCase):
+    """Tmp test case."""
+
     def setUp(self) -> None:
+        """Set up the test fixture."""
         self._tmp = TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.tmpdir = Path(self._tmp.name)
 
     def ckpt(self, name: str = "ckpt", **kwargs) -> Path:
+        """Ckpt."""
         return _write_checkpoint(self.tmpdir / name, **kwargs)
 
 
@@ -151,11 +160,15 @@ class _TmpTestCase(unittest.TestCase):
 
 
 class ModelResultAssemblyTests(_TmpTestCase):
+    """Model result assembly tests."""
+
     def test_check_returns_status_detail_shape(self) -> None:
+        """Test check returns status detail shape."""
         self.assertEqual(doctor_mod._check("ok", "x"), {"status": "ok", "detail": "x"})
         self.assertEqual(doctor_mod._check("failed"), {"status": "failed", "detail": ""})
 
     def test_bad_directory_report_carries_full_key_set(self) -> None:
+        """Test bad directory report carries full key set."""
         report = doctor_mod.examine_model(self.tmpdir / "does-not-exist")
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(set(report), {"verdict", "model"})
@@ -173,6 +186,7 @@ class ModelResultAssemblyTests(_TmpTestCase):
         self.assertIsNone(model["context_window"])
 
     def test_hostile_model_path_types_degrade_to_directory_failed(self) -> None:
+        """Test hostile model path types degrade to directory failed."""
         for bad in ("", 123, None, b"bytes-path"):
             with self.subTest(bad=repr(bad)):
                 report = doctor_mod.examine_model(bad)  # type: ignore[arg-type]
@@ -184,6 +198,7 @@ class ModelResultAssemblyTests(_TmpTestCase):
                 self.assertEqual(report["model"]["assets"], [])
 
     def test_path_to_file_is_not_a_directory(self) -> None:
+        """Test path to file is not a directory."""
         target = self.tmpdir / "afile"
         target.write_text("x")
         report = doctor_mod.examine_model(target)
@@ -193,6 +208,7 @@ class ModelResultAssemblyTests(_TmpTestCase):
         )
 
     def test_config_failure_returns_assets_but_empty_token_maps(self) -> None:
+        """Test config failure returns assets but empty token maps."""
         root = self.ckpt(raw_files={"config.json": b"not json{"})
         report = doctor_mod.examine_model(root)
         self.assertEqual(report["verdict"], "failed")
@@ -211,25 +227,33 @@ class ModelResultAssemblyTests(_TmpTestCase):
 
 
 class ContextWindowTests(_TmpTestCase):
+    """Context window tests."""
+
     def _window(self, config: dict) -> object:
+        """Window."""
         root = self.ckpt(config=config)
         return doctor_mod.examine_model(root)["model"]["context_window"]
 
     def test_gpt2_uses_n_positions(self) -> None:
+        """Test gpt2 uses n positions."""
         self.assertEqual(self._window({"model_type": "gpt2", "n_positions": 1024}), 1024)
 
     def test_llama_uses_max_position_embeddings(self) -> None:
+        """Test llama uses max position embeddings."""
         self.assertEqual(
             self._window({"model_type": "llama", "max_position_embeddings": 8192}), 8192
         )
 
     def test_gpt2_ignores_max_position_embeddings(self) -> None:
+        """Test gpt2 ignores max position embeddings."""
         self.assertIsNone(self._window({"model_type": "gpt2", "max_position_embeddings": 4096}))
 
     def test_llama_ignores_n_positions(self) -> None:
+        """Test llama ignores n positions."""
         self.assertIsNone(self._window({"model_type": "llama", "n_positions": 4096}))
 
     def test_malformed_values_leave_window_unknown(self) -> None:
+        """Test malformed values leave window unknown."""
         for config in (
             {"model_type": "gpt2", "n_positions": 0},
             {"model_type": "gpt2", "n_positions": -5},
@@ -249,12 +273,16 @@ class ContextWindowTests(_TmpTestCase):
 
 
 class ConfigCheckTests(_TmpTestCase):
+    """Config check tests."""
+
     def _config_check(self, config: object, raw: bytes | None = None) -> dict:
+        """Config check."""
         raw_files = {"config.json": raw} if raw is not None else None
         root = self.ckpt(config=config, raw_files=raw_files)
         return doctor_mod.examine_model(root)["model"]["checks"]["config"]
 
     def test_missing_config_json_fails_asset_layout_first(self) -> None:
+        """Test missing config json fails asset layout first."""
         # asset_layout runs before the config check, so a missing config.json
         # surfaces as an asset-layout failure, not a config failure: this pins
         # the check ordering, not the layout rules themselves.
@@ -267,6 +295,7 @@ class ConfigCheckTests(_TmpTestCase):
         self.assertNotIn("config", checks)
 
     def test_config_symlink_fails_asset_layout_first(self) -> None:
+        """Test config symlink fails asset layout first."""
         root = self.ckpt()
         real = root / "config.json.real"
         (root / "config.json").rename(real)
@@ -278,10 +307,12 @@ class ConfigCheckTests(_TmpTestCase):
         self.assertNotIn("config", checks)
 
     def test_non_dict_config_json(self) -> None:
+        """Test non dict config json."""
         check = self._config_check(None, raw=b"[1, 2, 3]")
         self.assertEqual(check, {"status": "failed", "detail": "invalid_asset_json"})
 
     def test_adversarial_config_bytes_never_echoed(self) -> None:
+        """Test adversarial config bytes never echoed."""
         hostile = b'{"model_type": "gpt2", "zzz": "' + b"A" * 500 + b'"} trailing {{{'
         check = self._config_check(None, raw=hostile)
         self.assertEqual(check["status"], "failed")
@@ -289,12 +320,14 @@ class ConfigCheckTests(_TmpTestCase):
         self.assertNotIn("A" * 10, check["detail"])
 
     def test_unsupported_model_type_uses_repr(self) -> None:
+        """Test unsupported model type uses repr."""
         check = self._config_check({"model_type": "bert"})
         self.assertEqual(check, {"status": "failed", "detail": "unsupported model_type: 'bert'"})
         check = self._config_check({"model_type": None})
         self.assertEqual(check, {"status": "failed", "detail": "unsupported model_type: None"})
 
     def test_rejected_keys_only_when_truthy(self) -> None:
+        """Test rejected keys only when truthy."""
         check = self._config_check(
             {"model_type": "gpt2", "auto_map": {"x": 1}, "quantization_config": {"y": 2}}
         )
@@ -312,6 +345,7 @@ class ConfigCheckTests(_TmpTestCase):
         self.assertEqual(check["detail"], "rejected config keys: auto_map, add_cross_attention")
 
     def test_falsy_rejected_keys_are_ignored(self) -> None:
+        """Test falsy rejected keys are ignored."""
         for config in (
             {"model_type": "gpt2", "is_encoder_decoder": False},
             {"model_type": "gpt2", "quantization_config": 0},
@@ -323,6 +357,7 @@ class ConfigCheckTests(_TmpTestCase):
                 self.assertEqual(check["status"], "ok")
 
     def test_ok_config_detail(self) -> None:
+        """Test ok config detail."""
         check = self._config_check({"model_type": "llama"})
         self.assertEqual(check, {"status": "ok", "detail": "model_type=llama"})
 
@@ -333,6 +368,8 @@ class ConfigCheckTests(_TmpTestCase):
 
 
 class TokenizerFileCheckTests(_TmpTestCase):
+    """Tokenizer file check tests."""
+
     def _patch_tokenizer_doc(self, patch: dict) -> dict:
         """Rewrite tokenizer.json's document with hostile content, keep it loadable."""
         root = self.ckpt()
@@ -342,12 +379,14 @@ class TokenizerFileCheckTests(_TmpTestCase):
         return doctor_mod.examine_model(root)["model"]["checks"]["tokenizer_file"]
 
     def test_missing_model_section(self) -> None:
+        """Test missing model section."""
         check = self._patch_tokenizer_doc({"model": None})
         self.assertEqual(check, {"status": "failed", "detail": "tokenizer model section missing"})
         check = self._patch_tokenizer_doc({"model": "WordLevel"})
         self.assertEqual(check, {"status": "failed", "detail": "tokenizer model section missing"})
 
     def test_stochastic_dropout_rejected(self) -> None:
+        """Test stochastic dropout rejected."""
         for dropout in (0.5, 1, 0.1, True):
             with self.subTest(dropout=dropout):
                 root = self.ckpt()
@@ -360,6 +399,7 @@ class TokenizerFileCheckTests(_TmpTestCase):
                 )
 
     def test_zero_dropout_variants_accepted(self) -> None:
+        """Test zero dropout variants accepted."""
         for dropout in (0, 0.0, False, None):
             with self.subTest(dropout=repr(dropout)):
                 check = self._patch_tokenizer_doc({"model": {"dropout": dropout}})
@@ -368,11 +408,13 @@ class TokenizerFileCheckTests(_TmpTestCase):
                 self.assertEqual(check, {"status": "ok", "detail": "standalone tokenizer.json"})
 
     def test_ok_detail(self) -> None:
+        """Test ok detail."""
         root = self.ckpt()
         check = doctor_mod.examine_model(root)["model"]["checks"]["tokenizer_file"]
         self.assertEqual(check, {"status": "ok", "detail": "standalone tokenizer.json"})
 
     def test_oversized_tokenizer_json(self) -> None:
+        """Test oversized tokenizer json."""
         # NOTE: examine_model reads tokenizer.json via _read_json (128 MB cap,
         # code "oversized_asset_json"), not via _tokenizer_file (whose own
         # 128 MB pre-load cap reports "oversized_tokenizer_file" and is only
@@ -388,6 +430,7 @@ class TokenizerFileCheckTests(_TmpTestCase):
         self.assertEqual(check, {"status": "failed", "detail": "oversized_asset_json"})
 
     def test_tokenizer_json_as_directory(self) -> None:
+        """Test tokenizer json as directory."""
         root = self.ckpt()
         (root / "tokenizer.json").unlink()
         (root / "tokenizer.json").mkdir()
@@ -401,7 +444,10 @@ class TokenizerFileCheckTests(_TmpTestCase):
 
 
 class TokenizerDeepCheckTests(_TmpTestCase):
+    """Tokenizer deep check tests."""
+
     def test_deep_ok_reports_vocab_and_added_count(self) -> None:
+        """Test deep ok reports vocab and added count."""
         root = self.ckpt()
         report = doctor_mod.examine_model(root)
         check = report["model"]["checks"]["tokenizer_deep"]
@@ -412,6 +458,7 @@ class TokenizerDeepCheckTests(_TmpTestCase):
         self.assertEqual(report["model"]["special_tokens"], {})
 
     def test_added_tokens_hostile_entries_filtered(self) -> None:
+        """Test added tokens hostile entries filtered."""
         root = self.ckpt()
         doc = json.loads((root / "tokenizer.json").read_text(encoding="utf-8"))
         doc["added_tokens"] = [
@@ -433,6 +480,7 @@ class TokenizerDeepCheckTests(_TmpTestCase):
         self.assertNotIn("bool-id", added)
 
     def test_deep_failed_is_fail_closed_and_sanitized(self) -> None:
+        """Test deep failed is fail closed and sanitized."""
         root = self.ckpt()
         (root / "tokenizer.json").write_text(
             json.dumps({"model": {"type": "NopeXYZ"}, "added_tokens": [{"content": "x", "id": 1}]}),
@@ -450,6 +498,7 @@ class TokenizerDeepCheckTests(_TmpTestCase):
         self.assertEqual(report["model"]["special_tokens"], {})
 
     def test_deep_skipped_without_transformers(self) -> None:
+        """Test deep skipped without transformers."""
         root = self.ckpt()
         with mock.patch.object(
             doctor_mod, "_build_primary_tokenizer", side_effect=ImportError("nope")
@@ -477,7 +526,10 @@ class TokenizerDeepCheckTests(_TmpTestCase):
 
 
 class AssetManifestTests(_TmpTestCase):
+    """Asset manifest tests."""
+
     def test_manifest_records_name_bytes_sha256(self) -> None:
+        """Test manifest records name bytes sha256."""
         root = self.ckpt()
         report = doctor_mod.examine_model(root)
         assets = report["model"]["assets"]
@@ -495,22 +547,29 @@ class AssetManifestTests(_TmpTestCase):
 
 
 class BoundaryChecksTests(_TmpTestCase):
+    """Boundary checks tests."""
+
     def setUp(self) -> None:
+        """Set up the test fixture."""
         super().setUp()
         self.root = self.ckpt()  # vocab: w0..w23 -> 0..23, [UNK]=24, [BOS]=25, [EOS]=26
 
     def _check(self, name: str, **kwargs) -> dict:
+        """Check."""
         return doctor_mod.examine_model(self.root, **kwargs)["model"]["checks"][name]
 
     def test_valid_boundary_ids(self) -> None:
+        """Test valid boundary ids."""
         check = self._check("boundary_ids", boundary_ids=(0, 26))
         self.assertEqual(check, {"status": "ok", "detail": "2 ids within vocabulary"})
 
     def test_list_input_accepted(self) -> None:
+        """Test list input accepted."""
         check = self._check("boundary_ids", boundary_ids=[1, 2])
         self.assertEqual(check["status"], "ok")
 
     def test_hostile_boundary_ids_fail(self) -> None:
+        """Test hostile boundary ids fail."""
         cases = {
             "empty": (),
             "out_of_range": (27,),
@@ -529,11 +588,13 @@ class BoundaryChecksTests(_TmpTestCase):
                 )
 
     def test_no_boundary_ids_no_check_key(self) -> None:
+        """Test no boundary ids no check key."""
         report = doctor_mod.examine_model(self.root)
         self.assertNotIn("boundary_ids", report["model"]["checks"])
         self.assertNotIn("boundary_map", report["model"]["checks"])
 
     def test_boundary_map_per_name_labels(self) -> None:
+        """Test boundary map per name labels."""
         report = doctor_mod.examine_model(
             self.root, boundary_map={"chatml": (0, 1), "llama3": (26,)}
         )
@@ -547,6 +608,7 @@ class BoundaryChecksTests(_TmpTestCase):
         self.assertEqual(report["verdict"], "ok")
 
     def test_boundary_map_hostile_entries_fail_per_name(self) -> None:
+        """Test boundary map hostile entries fail per name."""
         report = doctor_mod.examine_model(
             self.root,
             boundary_map={
@@ -569,6 +631,7 @@ class BoundaryChecksTests(_TmpTestCase):
         self.assertEqual(report["verdict"], "failed")
 
     def test_boundary_map_non_string_name_fails(self) -> None:
+        """Test boundary map non string name fails."""
         report = doctor_mod.examine_model(self.root, boundary_map={1: (0,)})  # type: ignore[dict-item]
         self.assertEqual(
             report["model"]["checks"]["boundary_ids:1"],
@@ -576,6 +639,7 @@ class BoundaryChecksTests(_TmpTestCase):
         )
 
     def test_boundary_map_non_dict_fails(self) -> None:
+        """Test boundary map non dict fails."""
         report = doctor_mod.examine_model(self.root, boundary_map=[("a", (1,))])  # type: ignore[arg-type]
         self.assertEqual(
             report["model"]["checks"]["boundary_map"],
@@ -584,6 +648,7 @@ class BoundaryChecksTests(_TmpTestCase):
         self.assertEqual(report["verdict"], "failed")
 
     def test_boundary_map_skipped_without_vocab(self) -> None:
+        """Test boundary map skipped without vocab."""
         with mock.patch.object(
             doctor_mod, "_build_primary_tokenizer", side_effect=ImportError("nope")
         ):
@@ -605,19 +670,24 @@ class BoundaryChecksTests(_TmpTestCase):
 
 
 class VerdictLogicTests(_TmpTestCase):
+    """Verdict logic tests."""
+
     def test_clean_checkpoint_verdict_ok(self) -> None:
+        """Test clean checkpoint verdict ok."""
         root = self.ckpt(config={"model_type": "llama", "max_position_embeddings": 512})
         report = doctor_mod.examine_model(root, boundary_ids=(0, 1))
         self.assertEqual(report["verdict"], "ok")
         self.assertTrue(all(c["status"] != "failed" for c in report["model"]["checks"].values()))
 
     def test_single_failed_check_fails_verdict(self) -> None:
+        """Test single failed check fails verdict."""
         root = self.ckpt()
         report = doctor_mod.examine_model(root, boundary_ids=(10**9,))
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(report["model"]["checks"]["boundary_ids"]["status"], "failed")
 
     def test_skipped_checks_do_not_fail(self) -> None:
+        """Test skipped checks do not fail."""
         root = self.ckpt()
         with mock.patch.object(
             doctor_mod, "_build_primary_tokenizer", side_effect=ImportError("nope")
@@ -629,6 +699,7 @@ class VerdictLogicTests(_TmpTestCase):
         self.assertEqual(report["verdict"], "ok")
 
     def test_portability_mismatch_does_not_fail_verdict(self) -> None:
+        """Test portability mismatch does not fail verdict."""
         primary = self.ckpt("primary")
         ref = self.tmpdir / "ref"
         ref.mkdir()
@@ -655,30 +726,42 @@ class VerdictLogicTests(_TmpTestCase):
 
 
 class PortabilityCheckUnitTests(_TmpTestCase):
+    """Portability check unit tests."""
+
     def test_primary_tokenizer_none(self) -> None:
+        """Test primary tokenizer none."""
         check = doctor_mod._portability_check(self.tmpdir, (1,), None)
         self.assertEqual(check, {"status": "skipped", "detail": "primary tokenizer unavailable"})
 
     def test_boundary_ids_none(self) -> None:
+        """Test boundary ids none."""
         check = doctor_mod._portability_check(self.tmpdir, None, object())
         self.assertEqual(check, {"status": "skipped", "detail": "needs --boundary-ids"})
 
     def test_invalid_boundary_ids(self) -> None:
+        """Test invalid boundary ids."""
         for bad in ((), (True,), (-1,), (1.5,), "ab", 5, (None,)):
             with self.subTest(bad=repr(bad)):
                 check = doctor_mod._portability_check(self.tmpdir, bad, object())  # type: ignore[arg-type]
                 self.assertEqual(check, {"status": "skipped", "detail": "invalid boundary ids"})
 
     def test_decode_failure_degrades(self) -> None:
+        """Test decode failure degrades."""
+
         class ExplodingTokenizer:
+            """Exploding tokenizer."""
+
             @staticmethod
-            def decode(ids):  # noqa: ANN001, ANN202
+            def decode(ids):
+                """Decode."""
+                # noqa: ANN001, ANN202
                 raise RuntimeError("boom")
 
         check = doctor_mod._portability_check(self.tmpdir, (1,), ExplodingTokenizer())
         self.assertEqual(check, {"status": "skipped", "detail": "boundary_decode_failed"})
 
     def test_non_string_or_empty_decode_degrades(self) -> None:
+        """Test non string or empty decode degrades."""
         for decoded in ("", None, 123):
             with self.subTest(decoded=repr(decoded)):
                 fake = SimpleNamespace(decode=lambda ids, d=decoded: d)
@@ -686,6 +769,7 @@ class PortabilityCheckUnitTests(_TmpTestCase):
                 self.assertEqual(check, {"status": "skipped", "detail": "boundary_decode_failed"})
 
     def test_reference_is_file(self) -> None:
+        """Test reference is file."""
         target = self.tmpdir / "afile"
         target.write_text("x")
         root = self.ckpt()
@@ -696,6 +780,7 @@ class PortabilityCheckUnitTests(_TmpTestCase):
         )
 
     def test_reference_without_tokenizer_json(self) -> None:
+        """Test reference without tokenizer json."""
         ref = self.tmpdir / "refdir"
         ref.mkdir()
         root = self.ckpt()
@@ -706,6 +791,7 @@ class PortabilityCheckUnitTests(_TmpTestCase):
         )
 
     def test_reference_non_path_type_degrades(self) -> None:
+        """Test reference non path type degrades."""
         root = self.ckpt()
         report = doctor_mod.examine_model(root, boundary_ids=(1,), reference_model_path=123)  # type: ignore[arg-type]
         self.assertEqual(
@@ -714,6 +800,7 @@ class PortabilityCheckUnitTests(_TmpTestCase):
         )
 
     def test_secondary_encode_failure_maps_to_unavailable(self) -> None:
+        """Test secondary encode failure maps to unavailable."""
         ref = self.tmpdir / "refok"
         ref.mkdir()
         _write_wordlevel_tokenizer(ref)
@@ -731,6 +818,7 @@ class PortabilityCheckUnitTests(_TmpTestCase):
         self.assertEqual(check, {"status": "skipped", "detail": "reference_tokenizer_unavailable"})
 
     def test_identical_boundary_ok(self) -> None:
+        """Test identical boundary ok."""
         root = self.ckpt()
         ref = self.tmpdir / "refsame"
         ref.mkdir()
@@ -748,12 +836,16 @@ class PortabilityCheckUnitTests(_TmpTestCase):
 
 
 class SecondaryRegisteredTests(unittest.TestCase):
+    """Secondary registered tests."""
+
     @staticmethod
     def _registered(doc: dict, **attrs) -> dict:
+        """Registered."""
         fake = SimpleNamespace(convert_tokens_to_ids=lambda tok: {"[BOS]": 25}.get(tok, 0), **attrs)
         return doctor_mod._secondary_registered(fake, doc)
 
     def test_hostile_entries_filtered_first_wins(self) -> None:
+        """Test hostile entries filtered first wins."""
         doc = {
             "added_tokens": [
                 {"content": "good", "id": 100},
@@ -772,9 +864,11 @@ class SecondaryRegisteredTests(unittest.TestCase):
         self.assertEqual(registered, {"good": 100, "zero": 0})
 
     def test_non_list_added_tokens_ignored(self) -> None:
+        """Test non list added tokens ignored."""
         self.assertEqual(self._registered({"added_tokens": {"a": 1}}, bos_token=None), {})
 
     def test_tokenizer_attrs_supplement_document(self) -> None:
+        """Test tokenizer attrs supplement document."""
         doc = {"added_tokens": [{"content": "doc-tok", "id": 42}]}
         registered = self._registered(doc, bos_token="[BOS]", eos_token=None)
         self.assertEqual(registered["doc-tok"], 42)
@@ -782,12 +876,17 @@ class SecondaryRegisteredTests(unittest.TestCase):
         self.assertNotIn(None, registered)
 
     def test_document_wins_over_attr_on_collision(self) -> None:
+        """Test document wins over attr on collision."""
         doc = {"added_tokens": [{"content": "[BOS]", "id": 99}]}
         registered = self._registered(doc, bos_token="[BOS]")
         self.assertEqual(registered["[BOS]"], 99)
 
     def test_hostile_convert_degrades_per_attribute(self) -> None:
+        """Test hostile convert degrades per attribute."""
+
         class HostileTokenizer:
+            """Hostile tokenizer."""
+
             bos_token = "[BOS]"
             eos_token = "[EOS]"
             unk_token = None
@@ -797,13 +896,16 @@ class SecondaryRegisteredTests(unittest.TestCase):
             mask_token = None
 
             @staticmethod
-            def convert_tokens_to_ids(token):  # noqa: ANN001, ANN202
+            def convert_tokens_to_ids(token):
+                """Convert tokens to ids."""
+                # noqa: ANN001, ANN202
                 raise RuntimeError("hostile")
 
         registered = doctor_mod._secondary_registered(HostileTokenizer(), {"added_tokens": []})
         self.assertEqual(registered, {})
 
     def test_non_str_attr_ignored(self) -> None:
+        """Test non str attr ignored."""
         registered = self._registered({"added_tokens": []}, bos_token=123, eos_token="")
         self.assertEqual(registered, {})
 
@@ -814,13 +916,17 @@ class SecondaryRegisteredTests(unittest.TestCase):
 
 
 class LoaderFailureCodeTests(unittest.TestCase):
+    """Loader failure code tests."""
+
     def test_allowlisted_code_passes_through(self) -> None:
+        """Test allowlisted code passes through."""
         self.assertEqual(
             doctor_mod._loader_failure_code(ValueError("oversized_tokenizer_file")),
             "oversized_tokenizer_file",
         )
 
     def test_everything_else_collapses(self) -> None:
+        """Test everything else collapses."""
         for exc in (
             ValueError("invalid_asset_json"),
             ValueError(" Oversized_tokenizer_file "),
@@ -837,17 +943,22 @@ class LoaderFailureCodeTests(unittest.TestCase):
 
 
 class PortabilityMatrixTests(_TmpTestCase):
+    """Portability matrix tests."""
+
     def _second_ckpt(self, name: str = "second", **kwargs) -> Path:
+        """Second ckpt."""
         root = self.tmpdir / name
         root.mkdir(parents=True, exist_ok=True)
         _write_wordlevel_tokenizer(root, **kwargs)
         return root
 
     def test_non_path_input_raises(self) -> None:
+        """Test non path input raises."""
         with self.assertRaises(ValueError):
             doctor_mod.portability_matrix(123)  # type: ignore[arg-type]
 
     def test_unreadable_directory(self) -> None:
+        """Test unreadable directory."""
         section = doctor_mod.portability_matrix(self.tmpdir / "missing")
         self.assertEqual(section["status"], "unavailable")
         self.assertEqual(section["detail"], "not_a_readable_directory")
@@ -856,6 +967,7 @@ class PortabilityMatrixTests(_TmpTestCase):
         self.assertIn("ASYMMETRY WARNING", section["asymmetry"])
 
     def test_file_path_is_unavailable(self) -> None:
+        """Test file path is unavailable."""
         target = self.tmpdir / "afile"
         target.write_text("x")
         section = doctor_mod.portability_matrix(target)
@@ -863,6 +975,7 @@ class PortabilityMatrixTests(_TmpTestCase):
         self.assertEqual(section["detail"], "not_a_readable_directory")
 
     def test_invalid_tokenizer_json_sanitized(self) -> None:
+        """Test invalid tokenizer json sanitized."""
         root = self._second_ckpt()
         (root / "tokenizer.json").write_bytes(b'{"broken": "json" trailing \xff\xfe')
         section = doctor_mod.portability_matrix(root)
@@ -871,6 +984,7 @@ class PortabilityMatrixTests(_TmpTestCase):
         self.assertNotIn("broken", json.dumps(section))
 
     def test_oversized_tokenizer_json(self) -> None:
+        """Test oversized tokenizer json."""
         root = self._second_ckpt()
         target = root / "tokenizer.json"
         target.unlink()
@@ -881,6 +995,7 @@ class PortabilityMatrixTests(_TmpTestCase):
         self.assertEqual(section["detail"], "oversized_tokenizer_file")
 
     def test_unloadable_tokenizer_sanitized(self) -> None:
+        """Test unloadable tokenizer sanitized."""
         root = self._second_ckpt()
         (root / "tokenizer.json").write_text(
             json.dumps({"model": {"type": "NopeXYZ"}, "added_tokens": []}), encoding="utf-8"
@@ -891,6 +1006,7 @@ class PortabilityMatrixTests(_TmpTestCase):
         self.assertNotIn("NopeXYZ", json.dumps(section))
 
     def test_ok_matrix_structure_and_order(self) -> None:
+        """Test ok matrix structure and order."""
         root = self._second_ckpt(extra_specials=("<|im_start|>", "<|im_end|>"))
         section = doctor_mod.portability_matrix(root)
         self.assertEqual(section["status"], "ok")
@@ -920,6 +1036,7 @@ class PortabilityMatrixTests(_TmpTestCase):
         )
 
     def test_compatible_row_when_inventory_registered(self) -> None:
+        """Test compatible row when inventory registered."""
         root = self._second_ckpt(extra_specials=("<|im_start|>", "<|im_end|>"))
         section = doctor_mod.portability_matrix(root)
         # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
@@ -928,6 +1045,7 @@ class PortabilityMatrixTests(_TmpTestCase):
         self.assertTrue(row["bos_skipped"])
 
     def test_incompatible_row_when_inventory_missing(self) -> None:
+        """Test incompatible row when inventory missing."""
         root = self._second_ckpt()
         section = doctor_mod.portability_matrix(root)
         # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
@@ -935,6 +1053,7 @@ class PortabilityMatrixTests(_TmpTestCase):
         self.assertEqual(row["verdict"], "incompatible")
 
     def test_matrix_never_touches_weights(self) -> None:
+        """Test matrix never touches weights."""
         # A second "checkpoint" that is ONLY a tokenizer.json is enough.
         root = self._second_ckpt()
         section = doctor_mod.portability_matrix(root)
@@ -948,13 +1067,17 @@ class PortabilityMatrixTests(_TmpTestCase):
 
 
 class RenderPortabilityTableTests(_TmpTestCase):
+    """Render portability table tests."""
+
     def _ok_section(self) -> dict:
+        """Ok section."""
         root = self.tmpdir / "second"
         root.mkdir()
         _write_wordlevel_tokenizer(root, extra_specials=("<|im_start|>", "<|im_end|>"))
         return doctor_mod.portability_matrix(root)
 
     def test_ok_section_renders_table_and_asymmetry(self) -> None:
+        """Test ok section renders table and asymmetry."""
         text = doctor_mod.render_portability_table(self._ok_section())
         lines = text.split("\n")
         self.assertTrue(
@@ -976,6 +1099,7 @@ class RenderPortabilityTableTests(_TmpTestCase):
         self.assertIn(doctor_mod._PORTABILITY_ASYMMETRY, text)
 
     def test_unavailable_section(self) -> None:
+        """Test unavailable section."""
         text = doctor_mod.render_portability_table(
             {
                 "status": "unavailable",
@@ -990,6 +1114,7 @@ class RenderPortabilityTableTests(_TmpTestCase):
         self.assertIn(doctor_mod._PORTABILITY_ASYMMETRY, text)
 
     def test_hostile_section_degrades(self) -> None:
+        """Test hostile section degrades."""
         text = doctor_mod.render_portability_table(
             {"status": "ok", "rows": "not-a-list", "asymmetry": doctor_mod._PORTABILITY_ASYMMETRY}
         )
@@ -1013,7 +1138,10 @@ class RenderPortabilityTableTests(_TmpTestCase):
 
 
 class ExamineDatasetTests(_TmpTestCase):
+    """Examine dataset tests."""
+
     def test_missing_file_failed(self) -> None:
+        """Test missing file failed."""
         report = doctor_mod.examine_dataset(self.tmpdir / "missing.json")
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(report["dataset"]["status"], "failed")
@@ -1021,17 +1149,20 @@ class ExamineDatasetTests(_TmpTestCase):
         self.assertEqual(report["dataset"]["detail"], "ValueError: Unreadable fixture file")
 
     def test_directory_path_failed(self) -> None:
+        """Test directory path failed."""
         report = doctor_mod.examine_dataset(self.tmpdir)
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(report["dataset"]["status"], "failed")
 
     def test_malformed_json_failed(self) -> None:
+        """Test malformed json failed."""
         target = self.tmpdir / "bad.json"
         target.write_bytes(b"{oops")
         report = doctor_mod.examine_dataset(target)
         self.assertEqual(report["verdict"], "failed")
 
     def test_clean_fixture_ok(self) -> None:
+        """Test clean fixture ok."""
         target = self.tmpdir / "clean.json"
         _write_dataset(target, ["w0 w1 w2"], ["w3 w4"])
         report = doctor_mod.examine_dataset(target)
@@ -1046,6 +1177,7 @@ class ExamineDatasetTests(_TmpTestCase):
         self.assertEqual(audit["findings"], [])
 
     def test_special_token_literal_is_warning_not_failure(self) -> None:
+        """Test special token literal is warning not failure."""
         target = self.tmpdir / "dirty.json"
         _write_dataset(target, ["hello <|im_start|> world"], ["plain"])
         report = doctor_mod.examine_dataset(target)
@@ -1067,8 +1199,11 @@ class ExamineDatasetTests(_TmpTestCase):
 
 
 class TemplateConformanceTests(_TmpTestCase):
+    """Template conformance tests."""
+
     @staticmethod
     def _formats_cases() -> tuple[tuple[Format, ...], tuple[Fixture, ...]]:
+        """Formats cases."""
         fmt = candidates("chatml", mutate=False)[0]
         case = Fixture(
             id="c0", messages=(Message(role="user", content="w0 w1"),), expected="e", group="g"
@@ -1076,6 +1211,7 @@ class TemplateConformanceTests(_TmpTestCase):
         return (fmt,), (case,)
 
     def test_invalid_inputs_raise(self) -> None:
+        """Test invalid inputs raise."""
         formats, cases = self._formats_cases()
         bad_calls = [
             (list(formats), cases),
@@ -1093,6 +1229,7 @@ class TemplateConformanceTests(_TmpTestCase):
                 )
 
     def test_missing_tokenizer_config(self) -> None:
+        """Test missing tokenizer config."""
         root = self.ckpt()
         result = doctor_mod.template_conformance(root, *self._formats_cases())
         self.assertEqual(result["status"], "no_template_declared")
@@ -1100,6 +1237,7 @@ class TemplateConformanceTests(_TmpTestCase):
         self.assertEqual(result["diffs"], [])
 
     def test_no_chat_template_in_config(self) -> None:
+        """Test no chat template in config."""
         for config in ({}, {"chat_template": ""}, {"chat_template": "   "}, {"chat_template": 42}):
             with self.subTest(config=config):
                 root = self.ckpt(raw_files={"tokenizer_config.json": json.dumps(config).encode()})
@@ -1108,6 +1246,7 @@ class TemplateConformanceTests(_TmpTestCase):
                 self.assertEqual(result["detail"], "no_chat_template_in_config")
 
     def test_oversized_template_unavailable(self) -> None:
+        """Test oversized template unavailable."""
         root = self.ckpt(
             raw_files={
                 "tokenizer_config.json": json.dumps({"chat_template": "x" * 1_000_001}).encode()
@@ -1119,6 +1258,7 @@ class TemplateConformanceTests(_TmpTestCase):
         )
 
     def test_happy_path_structure(self) -> None:
+        """Test happy path structure."""
         template = "{% for m in messages %}{{ m['role'] }}: {{ m['content'] }}\n{% endfor %}"
         root = self.ckpt(
             raw_files={"tokenizer_config.json": json.dumps({"chat_template": template}).encode()}
@@ -1142,7 +1282,10 @@ class TemplateConformanceTests(_TmpTestCase):
 
 
 class DoctorIntegrationTests(_TmpTestCase):
+    """Doctor integration tests."""
+
     def test_suggestion_key_always_present(self) -> None:
+        """Test suggestion key always present."""
         root = self.ckpt()
         report = doctor_mod.doctor(root)
         self.assertIn("suggestion", report)
@@ -1151,12 +1294,14 @@ class DoctorIntegrationTests(_TmpTestCase):
         self.assertNotIn("portability_matrix", report)
 
     def test_dataset_failure_flips_verdict(self) -> None:
+        """Test dataset failure flips verdict."""
         root = self.ckpt()
         report = doctor_mod.doctor(root, dataset_path=self.tmpdir / "missing.json")
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(report["dataset"]["status"], "failed")
 
     def test_dataset_warning_keeps_verdict_ok(self) -> None:
+        """Test dataset warning keeps verdict ok."""
         root = self.ckpt()
         ds = self.tmpdir / "dirty.json"
         _write_dataset(ds, ["hello <|im_start|> world"], ["plain"])
@@ -1165,6 +1310,7 @@ class DoctorIntegrationTests(_TmpTestCase):
         self.assertEqual(report["dataset"]["special_token_audit"]["status"], "warning")
 
     def test_matrix_exception_degrades_to_unavailable(self) -> None:
+        """Test matrix exception degrades to unavailable."""
         root = self.ckpt()
         report = doctor_mod.doctor(root, portability_matrix_path=123)  # type: ignore[arg-type]
         section = report["portability_matrix"]
@@ -1174,6 +1320,7 @@ class DoctorIntegrationTests(_TmpTestCase):
         self.assertEqual(report["verdict"], "ok")
 
     def test_matrix_ok_section_attached(self) -> None:
+        """Test matrix ok section attached."""
         root = self.ckpt()
         second = self.tmpdir / "second"
         second.mkdir()
@@ -1183,12 +1330,14 @@ class DoctorIntegrationTests(_TmpTestCase):
         self.assertEqual(len(report["portability_matrix"]["rows"]), 118)
 
     def test_matrix_never_fails_verdict(self) -> None:
+        """Test matrix never fails verdict."""
         root = self.ckpt()
         report = doctor_mod.doctor(root, portability_matrix_path=self.tmpdir / "missing")
         self.assertEqual(report["portability_matrix"]["status"], "unavailable")
         self.assertEqual(report["verdict"], "ok")
 
     def test_suggestion_present_for_clean_preflight(self) -> None:
+        """Test suggestion present for clean preflight."""
         root = self.ckpt(config={"model_type": "gpt2", "n_positions": 4096})
         ds = self.tmpdir / "ds.json"
         _write_dataset(ds, ["w0 w1"], ["w2"])
@@ -1200,6 +1349,7 @@ class DoctorIntegrationTests(_TmpTestCase):
         self.assertIn("--boundary-ids 1,2", suggestion["next_command"])
 
     def test_no_suggestion_without_boundary_ids(self) -> None:
+        """Test no suggestion without boundary ids."""
         root = self.ckpt(config={"model_type": "gpt2", "n_positions": 4096})
         ds = self.tmpdir / "ds.json"
         _write_dataset(ds, ["w0"], ["w1"])
@@ -1231,6 +1381,7 @@ def _make_mutant_package(tmpdir: str, mutations: list[tuple[str, str]]) -> Path:
 
 
 def _import_mutant_doctor(pkgdir: Path):
+    """Import mutant doctor."""
     sys.path.insert(0, str(pkgdir))
     try:
         return importlib.import_module(f"{_MUTANT_PKG}.doctor")
@@ -1239,6 +1390,7 @@ def _import_mutant_doctor(pkgdir: Path):
 
 
 def _cleanup_mutant_modules() -> None:
+    """Cleanup mutant modules."""
     for name in [n for n in sys.modules if n == _MUTANT_PKG or n.startswith(_MUTANT_PKG + ".")]:
         del sys.modules[name]
 
@@ -1247,6 +1399,7 @@ class MutationTests(_TmpTestCase):
     """Each mutant must be caught: the probe assertion must FAIL on the mutant."""
 
     def _assert_mutant_caught(self, mutations: list[tuple[str, str]], probe) -> None:
+        """Assert mutant caught."""
         pkgdir = _make_mutant_package(str(self.tmpdir), mutations)
         try:
             mutant = _import_mutant_doctor(pkgdir)
@@ -1257,11 +1410,15 @@ class MutationTests(_TmpTestCase):
             shutil.rmtree(pkgdir, ignore_errors=True)
 
     def _good_ckpt(self, mutant, name: str) -> Path:
+        """Good ckpt."""
         root = self.tmpdir / name
         return _write_checkpoint(root)
 
     def test_mutant_verdict_inverted(self) -> None:
+        """Test mutant verdict inverted."""
+
         def probe(m):
+            """Probe."""
             report = m.examine_model(self._good_ckpt(m, "m1"), boundary_ids=(10**9,))
             assert report["verdict"] == "failed", "inverted verdict not caught"
 
@@ -1276,7 +1433,10 @@ class MutationTests(_TmpTestCase):
         )
 
     def test_mutant_bool_boundary_ids_accepted(self) -> None:
+        """Test mutant bool boundary ids accepted."""
+
         def probe(m):
+            """Probe."""
             report = m.examine_model(self._good_ckpt(m, "m2"), boundary_ids=(True,))
             check = report["model"]["checks"]["boundary_ids"]
             assert check["status"] == "failed", "bool boundary id accepted"
@@ -1294,7 +1454,10 @@ class MutationTests(_TmpTestCase):
         )
 
     def test_mutant_mismatch_detail_swapped(self) -> None:
+        """Test mutant mismatch detail swapped."""
+
         def probe(m):
+            """Probe."""
             ref = self.tmpdir / "m3ref"
             ref.mkdir(exist_ok=True)
             from tokenizers import Tokenizer
@@ -1320,7 +1483,10 @@ class MutationTests(_TmpTestCase):
         )
 
     def test_mutant_asymmetry_dropped(self) -> None:
+        """Test mutant asymmetry dropped."""
+
         def probe(m):
+            """Probe."""
             text = m.render_portability_table(
                 {
                     "status": "unavailable",
@@ -1338,7 +1504,10 @@ class MutationTests(_TmpTestCase):
         )
 
     def test_mutant_bos_skipped_dropped(self) -> None:
+        """Test mutant bos skipped dropped."""
+
         def probe(m):
+            """Probe."""
             root = self.tmpdir / "m5second"
             root.mkdir(exist_ok=True)
             _write_wordlevel_tokenizer(root)
@@ -1356,7 +1525,10 @@ class MutationTests(_TmpTestCase):
         )
 
     def test_mutant_bool_context_window(self) -> None:
+        """Test mutant bool context window."""
+
         def probe(m):
+            """Probe."""
             root = self.tmpdir / "m6"
             _write_checkpoint(root, config={"model_type": "gpt2", "n_positions": True})
             window = m.examine_model(root)["model"]["context_window"]
@@ -1373,7 +1545,10 @@ class MutationTests(_TmpTestCase):
         )
 
     def test_mutant_portability_detail_reworded(self) -> None:
+        """Test mutant portability detail reworded."""
+
         def probe(m):
+            """Probe."""
             check = m._portability_check(self.tmpdir, None, object())
             assert check == {"status": "skipped", "detail": "needs --boundary-ids"}, check
 
@@ -1388,7 +1563,10 @@ class MutationTests(_TmpTestCase):
         )
 
     def test_mutant_secondary_registered_id_zero_rejected(self) -> None:
+        """Test mutant secondary registered id zero rejected."""
+
         def probe(m):
+            """Probe."""
             fake = SimpleNamespace(bos_token=None)
             registered = m._secondary_registered(
                 fake, {"added_tokens": [{"content": "z", "id": 0}]}
@@ -1401,7 +1579,10 @@ class MutationTests(_TmpTestCase):
         )
 
     def test_mutant_model_result_assets_default(self) -> None:
+        """Test mutant model result assets default."""
+
         def probe(m):
+            """Probe."""
             report = m._model_result("failed", {})
             assert report["model"]["assets"] == [], report["model"]["assets"]
 
@@ -1411,7 +1592,10 @@ class MutationTests(_TmpTestCase):
         )
 
     def test_mutant_template_conformance_validation_removed(self) -> None:
+        """Test mutant template conformance validation removed."""
+
         def probe(m):
+            """Probe."""
             with self.assertRaises(ValueError):
                 m.template_conformance(self.tmpdir, (), ())
 

@@ -24,16 +24,19 @@ class FakeTokenizer:
 
     @staticmethod
     def encode(text: str, add_special_tokens: bool = False) -> tuple[int, ...]:
+        """Encode."""
         assert isinstance(text, str)
         return tuple(ord(char) for char in text)
 
     @staticmethod
     def decode(token_ids: object) -> str:
+        """Decode."""
         assert isinstance(token_ids, (list, tuple))
         return "".join(chr(token_id) for token_id in token_ids)  # type: ignore[union-attr]
 
 
 def _make_split() -> Split:
+    """Make split."""
     search = (
         Fixture(
             id="s1",
@@ -57,6 +60,7 @@ def _make_split() -> Split:
 
 
 def _write_dataset(directory: str) -> str:
+    """Write dataset."""
     path = str(Path(directory) / "ds.json")
     Path(path).write_text(split_to_json_text(_make_split()), encoding="utf-8")
     return path
@@ -65,6 +69,7 @@ def _write_dataset(directory: str) -> str:
 def _make_shell(
     split: Split | None = None, tokenizer: object | None = "fake"
 ) -> tuple[DebugShell, io.StringIO]:
+    """Make shell."""
     buf = io.StringIO()
     shell = DebugShell(
         split or _make_split(),
@@ -84,7 +89,10 @@ def _run(shell: DebugShell, buf: io.StringIO, *commands: str) -> str:
 
 
 class TestBannerAndPrompt(unittest.TestCase):
+    """Test banner and prompt."""
+
     def test_banner_shows_version_and_help_hint(self) -> None:
+        """Test banner shows version and help hint."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".quit")
         self.assertIn("model-protocol-lab debug ", out)
@@ -92,10 +100,12 @@ class TestBannerAndPrompt(unittest.TestCase):
         self.assertIn("3 fixtures", out)
 
     def test_initial_prompt_shows_context(self) -> None:
+        """Test initial prompt shows context."""
         shell, _ = _make_shell()
         self.assertEqual(shell.prompt, "mpl:chatml fixture-1 > ")
 
     def test_output_is_deterministic(self) -> None:
+        """Test output is deterministic."""
         commands = (".families", ".use gemma", ".fixtures", ".fixture 2", ".quit")
         shell_a, buf_a = _make_shell()
         shell_b, buf_b = _make_shell()
@@ -103,13 +113,17 @@ class TestBannerAndPrompt(unittest.TestCase):
 
 
 class TestUseAndFamilies(unittest.TestCase):
+    """Test use and families."""
+
     def test_families_lists_catalog(self) -> None:
+        """Test families lists catalog."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".families", ".quit")
         for name in CATALOG:
             self.assertIn(name, out)
 
     def test_use_validation_rejects_unknown(self) -> None:
+        """Test use validation rejects unknown."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".use nosuchfamily", ".quit")
         self.assertIn("error: unknown family 'nosuchfamily'", out)
@@ -117,6 +131,7 @@ class TestUseAndFamilies(unittest.TestCase):
         self.assertEqual(shell._family, "chatml")
 
     def test_use_switches_family_and_prompt(self) -> None:
+        """Test use switches family and prompt."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".use llama3", ".quit")
         self.assertIn("using family llama3", out)
@@ -124,7 +139,10 @@ class TestUseAndFamilies(unittest.TestCase):
 
 
 class TestFixtures(unittest.TestCase):
+    """Test fixtures."""
+
     def test_fixtures_lists_ids_with_numbers(self) -> None:
+        """Test fixtures lists ids with numbers."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".fixtures", ".quit")
         self.assertIn("1: s1 *", out)
@@ -132,6 +150,7 @@ class TestFixtures(unittest.TestCase):
         self.assertIn("3: h1", out)
 
     def test_fixture_select_by_number_and_id(self) -> None:
+        """Test fixture select by number and id."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".fixture 3", ".fixture s2", ".quit")
         self.assertIn("selected fixture 3: h1", out)
@@ -139,6 +158,7 @@ class TestFixtures(unittest.TestCase):
         self.assertEqual(shell.prompt, "mpl:chatml fixture-2 > ")
 
     def test_fixture_rejects_unknown(self) -> None:
+        """Test fixture rejects unknown."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".fixture 99", ".fixture nope", ".quit")
         self.assertIn("error: unknown fixture '99'", out)
@@ -146,7 +166,10 @@ class TestFixtures(unittest.TestCase):
 
 
 class TestRender(unittest.TestCase):
+    """Test render."""
+
     def test_render_segment_map_chatml(self) -> None:
+        """Test render segment map chatml."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".render", ".quit")
         fmt = CATALOG["chatml"]
@@ -170,6 +193,7 @@ class TestRender(unittest.TestCase):
         self.assertIn("tokens=[104, 101, 108, 108, 111]", content_line)
 
     def test_render_without_tokenizer_omits_ids(self) -> None:
+        """Test render without tokenizer omits ids."""
         shell, buf = _make_shell(tokenizer=None)
         out = _run(shell, buf, ".render", ".quit")
         self.assertIn("tokenizer: none", out)
@@ -180,7 +204,10 @@ class TestRender(unittest.TestCase):
 
 
 class TestTokens(unittest.TestCase):
+    """Test tokens."""
+
     def test_tokens_exact_ids(self) -> None:
+        """Test tokens exact ids."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".tokens", ".quit")
         fmt = CATALOG["chatml"]
@@ -189,6 +216,7 @@ class TestTokens(unittest.TestCase):
         self.assertIn(f"ids=[{', '.join(str(i) for i in expected)}]", out)
 
     def test_tokens_without_tokenizer_hint(self) -> None:
+        """Test tokens without tokenizer hint."""
         shell, buf = _make_shell(tokenizer=None)
         shell.onecmd(".tokens")
         self.assertIn(
@@ -198,12 +226,16 @@ class TestTokens(unittest.TestCase):
 
 
 class TestStep(unittest.TestCase):
+    """Test step."""
+
     @staticmethod
     def _walked(*commands: str) -> str:
+        """Walked."""
         shell, buf = _make_shell(tokenizer=None)
         return _run(shell, buf, *commands)
 
     def test_step_walks_first_boundary(self) -> None:
+        """Test step walks first boundary."""
         out = self._walked(
             ".boundary 7,8",
             ".stream 1,2,7,8,9",
@@ -219,32 +251,40 @@ class TestStep(unittest.TestCase):
         self.assertIn("token 4/5 id=8 overhang=2/2 boundary_at=2", out)
 
     def test_step_typed_stream(self) -> None:
+        """Test step typed stream."""
         out = self._walked(".boundary 7,8", ".step 5,7,8", ".quit")
         self.assertIn("token 1/3 id=5 overhang=0/2 boundary_at=none", out)
         self.assertIn("token 3/3 id=8 overhang=2/2 boundary_at=1", out)
 
     def test_step_requires_boundary(self) -> None:
+        """Test step requires boundary."""
         out = self._walked(".step", ".quit")
         self.assertIn("error: no boundary set", out)
 
     def test_step_requires_stream(self) -> None:
+        """Test step requires stream."""
         out = self._walked(".boundary 7", ".step", ".quit")
         self.assertIn("error: no recorded stream", out)
 
     def test_step_exhausted_stream(self) -> None:
+        """Test step exhausted stream."""
         out = self._walked(".boundary 7", ".stream 1", ".step", ".step", ".quit")
         self.assertIn("token 1/1 id=1", out)
         self.assertIn("error: stream exhausted (1 tokens)", out)
 
     def test_boundary_validation(self) -> None:
+        """Test boundary validation."""
         out = self._walked(".boundary 1,2x", ".boundary", ".quit")
         self.assertIn("error: boundary: expected 1-16 comma-separated ASCII token IDs", out)
         self.assertIn("error: usage: .boundary ID,ID,...", out)
 
 
 class TestAudit(unittest.TestCase):
+    """Test audit."""
+
     @staticmethod
     def _poisoned_shell() -> tuple[DebugShell, io.StringIO]:
+        """Poisoned shell."""
         split = Split(
             search=(
                 Fixture(
@@ -261,19 +301,24 @@ class TestAudit(unittest.TestCase):
         return _make_shell(split)
 
     def test_audit_flags_poisoned_fixture(self) -> None:
+        """Test audit flags poisoned fixture."""
         shell, buf = self._poisoned_shell()
         out = _run(shell, buf, ".audit", ".quit")
         self.assertIn("audit: 1 finding(s) on fixture p1 with family chatml", out)
         self.assertIn("literal='<|im_start|>'", out)
 
     def test_audit_clean_fixture(self) -> None:
+        """Test audit clean fixture."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".audit", ".quit")
         self.assertIn("audit: 0 finding(s) on fixture s1 with family chatml", out)
 
 
 class TestSay(unittest.TestCase):
+    """Test say."""
+
     def test_say_multiline_then_render(self) -> None:
+        """Test say multiline then render."""
         shell, buf = _make_shell()
         out = _run(
             shell,
@@ -293,12 +338,14 @@ class TestSay(unittest.TestCase):
         self.assertEqual(shell.prompt, "mpl:chatml fixture-1 > ")
 
     def test_say_implicit_alternation(self) -> None:
+        """Test say implicit alternation."""
         shell, buf = _make_shell()
         _run(shell, buf, ".say", "first question", "an answer", "second question", ".", ".quit")
         roles = [message.role for message in shell._buffered or ()]
         self.assertEqual(roles, ["user", "assistant", "user"])
 
     def test_say_empty_discards(self) -> None:
+        """Test say empty discards."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".say", ".", ".quit")
         self.assertIn("message buffer discarded (empty)", out)
@@ -306,7 +353,10 @@ class TestSay(unittest.TestCase):
 
 
 class TestSaveAndRead(unittest.TestCase):
+    """Test save and read."""
+
     def test_save_appends_transcript(self) -> None:
+        """Test save appends transcript."""
         shell, buf = _make_shell()
         with TemporaryDirectory() as tmp:
             target = str(Path(tmp) / "session.txt")
@@ -317,6 +367,7 @@ class TestSaveAndRead(unittest.TestCase):
             self.assertIn("chatml", text)
 
     def test_read_executes_script(self) -> None:
+        """Test read executes script."""
         shell, buf = _make_shell()
         with TemporaryDirectory() as tmp:
             script = Path(tmp) / "cmds.txt"
@@ -327,6 +378,7 @@ class TestSaveAndRead(unittest.TestCase):
         self.assertEqual(shell._family, "gemma")
 
     def test_read_refuses_oversize(self) -> None:
+        """Test read refuses oversize."""
         shell, buf = _make_shell()
         with TemporaryDirectory() as tmp:
             big = Path(tmp) / "big.txt"
@@ -338,24 +390,30 @@ class TestSaveAndRead(unittest.TestCase):
         self.assertIn("error: refusing script longer than 10000 lines", out)
 
     def test_read_missing_file(self) -> None:
+        """Test read missing file."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".read /nonexistent/cmds.txt", ".quit")
         self.assertIn("error: unreadable script file", out)
 
 
 class TestHelpQuitUnknown(unittest.TestCase):
+    """Test help quit unknown."""
+
     def test_help_lists_commands(self) -> None:
+        """Test help lists commands."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".help", ".quit")
         for name in (".render", ".step", ".audit", ".save", ".read", ".quit"):
             self.assertIn(name, out)
 
     def test_help_specific_command(self) -> None:
+        """Test help specific command."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".help render", ".quit")
         self.assertIn("Usage: .render", out)
 
     def test_help_pattern_search(self) -> None:
+        """Test help pattern search."""
         shell, buf = _make_shell()
         # ".help e" is not a command prefix, so it falls back to sqlite3-style
         # pattern search over names and summaries.
@@ -364,26 +422,31 @@ class TestHelpQuitUnknown(unittest.TestCase):
         self.assertIn(".tokens", out)
 
     def test_abbreviations(self) -> None:
+        """Test abbreviations."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".fam", ".quit")
         self.assertIn("chatml", out)
 
     def test_ambiguous_abbreviation(self) -> None:
+        """Test ambiguous abbreviation."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".f", ".quit")
         self.assertIn("error: ambiguous command '.f'", out)
 
     def test_unknown_command(self) -> None:
+        """Test unknown command."""
         shell, buf = _make_shell()
         shell.onecmd(".frobnicate")
         self.assertIn("error: unknown dot-command '.frobnicate'", buf.getvalue())
 
     def test_bare_word_rejected(self) -> None:
+        """Test bare word rejected."""
         shell, buf = _make_shell()
         shell.onecmd("render")
         self.assertIn("error: unknown command 'render'", buf.getvalue())
 
     def test_quit_and_q_exit(self) -> None:
+        """Test quit and q exit."""
         shell, _ = _make_shell()
         self.assertTrue(shell.onecmd(".quit"))
         shell2, _ = _make_shell()
@@ -391,7 +454,10 @@ class TestHelpQuitUnknown(unittest.TestCase):
 
 
 class TestCliWiring(unittest.TestCase):
+    """Test cli wiring."""
+
     def test_script_mode_runs_and_exits(self) -> None:
+        """Test script mode runs and exits."""
         with TemporaryDirectory() as tmp:
             dataset = _write_dataset(tmp)
             script = Path(tmp) / "cmds.txt"
@@ -407,6 +473,7 @@ class TestCliWiring(unittest.TestCase):
         self.assertIn("render: family=gemma", out)
 
     def test_script_mode_deterministic(self) -> None:
+        """Test script mode deterministic."""
         with TemporaryDirectory() as tmp:
             dataset = _write_dataset(tmp)
             script = Path(tmp) / "cmds.txt"
@@ -422,6 +489,7 @@ class TestCliWiring(unittest.TestCase):
         self.assertEqual(outs[0], outs[1])
 
     def test_invalid_dataset_exits_1(self) -> None:
+        """Test invalid dataset exits 1."""
         with TemporaryDirectory() as tmp:
             bad = str(Path(tmp) / "missing.json")
             import contextlib
@@ -432,6 +500,7 @@ class TestCliWiring(unittest.TestCase):
         self.assertEqual(code, 1)
 
     def test_run_debug_rejects_bad_tokenizer_dir(self) -> None:
+        """Test run debug rejects bad tokenizer dir."""
         with TemporaryDirectory() as tmp:
             dataset = _write_dataset(tmp)
             import contextlib
@@ -448,8 +517,11 @@ class TestCliWiring(unittest.TestCase):
 
 
 class TestTerminalEscapeSanitization(unittest.TestCase):
+    """Test terminal escape sanitization."""
+
     @staticmethod
     def _evil_split() -> Split:
+        """Evil split."""
         evil_id = "s1\x1b[2J\x1b]0;pwned\x07"
         evil_text = "hello\x1b[31mred\x1b[0m"
         search = (
@@ -471,6 +543,7 @@ class TestTerminalEscapeSanitization(unittest.TestCase):
         return Split(search=search, held_out=held_out)
 
     def test_render_strips_terminal_escapes(self) -> None:
+        """Test render strips terminal escapes."""
         shell, buf = _make_shell(split=self._evil_split())
         out = _run(shell, buf, ".render", ".quit")
         # No ESC byte may reach the terminal; the CSI introducer is gone.
@@ -481,6 +554,7 @@ class TestTerminalEscapeSanitization(unittest.TestCase):
         self.assertIn("\n", out)
 
     def test_fixture_id_strips_terminal_escapes(self) -> None:
+        """Test fixture id strips terminal escapes."""
         shell, buf = _make_shell(split=self._evil_split())
         out = _run(shell, buf, ".fixtures", ".quit")
         self.assertNotIn("\x1b", out)
@@ -488,7 +562,10 @@ class TestTerminalEscapeSanitization(unittest.TestCase):
 
 
 class TestHardeningBounds(unittest.TestCase):
+    """Test hardening bounds."""
+
     def test_read_refuses_non_regular_file(self) -> None:
+        """Test read refuses non regular file."""
         import tempfile
 
         shell, buf = _make_shell()
@@ -497,6 +574,7 @@ class TestHardeningBounds(unittest.TestCase):
         self.assertIn("unreadable script file", out)
 
     def test_transcript_memory_capped(self) -> None:
+        """Test transcript memory capped."""
         from unittest import mock
 
         import model_protocol_lab.debug as debug_mod
@@ -509,6 +587,7 @@ class TestHardeningBounds(unittest.TestCase):
         self.assertTrue(shell._transcript_truncated)
 
     def test_say_buffer_line_cap(self) -> None:
+        """Test say buffer line cap."""
         from unittest import mock
 
         import model_protocol_lab.debug as debug_mod

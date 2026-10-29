@@ -290,6 +290,7 @@ def _arm_verdict(record: dict[str, Any], arm: str) -> bool | None:
     return bool(cell["verdict"])
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-candidate aggregates over ground records (paired contrasts).
 

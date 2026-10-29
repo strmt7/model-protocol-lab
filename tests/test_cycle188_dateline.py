@@ -56,6 +56,7 @@ class _DateBackend:
         self.generate_calls = 0
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -67,9 +68,11 @@ class _DateBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.generate_calls += 1
         text = self.decode(list(input_ids))
         marker = None
@@ -164,6 +167,7 @@ EXPECTED_BY_MARKER = {
 
 
 def _obs(backend, fmt, case, answer=None, ok=True):
+    """Obs."""
     return {
         "candidate": fmt.name,
         "fixture": case.id,
@@ -181,6 +185,7 @@ def _obs(backend, fmt, case, answer=None, ok=True):
 
 
 def _entries(backend, formats=FORMATS, cases=CASES):
+    """Entries."""
     return [
         {
             "format": {"name": fmt.name},
@@ -192,6 +197,7 @@ def _entries(backend, formats=FORMATS, cases=CASES):
 
 
 def _run_stage(backend, formats=FORMATS, cases=CASES, entries=None, **kwargs):
+    """Run stage."""
     kwargs.setdefault("boundary", tuple(backend.encode(BOUNDARY_WORD)))
     kwargs.setdefault("max_new_tokens", 8)
     kwargs.setdefault("max_context", 8192)
@@ -205,16 +211,21 @@ def _run_stage(backend, formats=FORMATS, cases=CASES, entries=None, **kwargs):
 
 
 def _payload(backend, stage, decision="compatible_on_fixture_set", winner="dt-a"):
+    """Payload."""
     return dateline_analysis(stage, decision, winner, tuple(fmt.name for fmt in FORMATS))
 
 
 def _base_payload(**backend_kwargs):
+    """Base payload."""
     backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER, **backend_kwargs)
     return _payload(backend, _run_stage(backend))
 
 
 class TestProtocol(unittest.TestCase):
+    """Test protocol."""
+
     def test_constants(self):
+        """Test constants."""
         self.assertEqual(dateline.PROTOCOL_VERSION, 1)
         self.assertEqual(dateline.JOINER, "\n\n")
         self.assertEqual(dateline.GENERATION_BUDGET, 28 * 2400)
@@ -225,6 +236,7 @@ class TestProtocol(unittest.TestCase):
         self.assertEqual(dateline.SIZING_RULE, "whole-units-plus-one-truncated-suffix-v1")
 
     def test_arm_table_literals(self):
+        """Test arm table literals."""
         table = dateline.date_arm_table()
         self.assertEqual(table["anchor_iso"], "2026-10-21")
         self.assertEqual(table["anchor_long"], "21 October 2026")
@@ -241,6 +253,7 @@ class TestProtocol(unittest.TestCase):
         self.assertEqual(table["lie"], "Thursday, 2026-10-21")
 
     def test_weekdays_computed_from_each_date(self):
+        """Test weekdays computed from each date."""
         # Independent oracle: datetime's own calendar. Every
         # weekday-bearing arm's name must be its own date's
         # weekday -- the anchor-templating bug would fail here.
@@ -250,6 +263,7 @@ class TestProtocol(unittest.TestCase):
             self.assertTrue(rendered.startswith(expected + ","), (value, rendered))
 
     def test_lie_differs_from_honest_anchor(self):
+        """Test lie differs from honest anchor."""
         self.assertNotEqual(
             dateline.lie_date_string(), dateline.format_date("anchor", "weekday_iso")
         )
@@ -260,6 +274,7 @@ class TestProtocol(unittest.TestCase):
             dateline.format_date("anchor", "roman")
 
     def test_protocol_fingerprint_stable_and_bound(self):
+        """Test protocol fingerprint stable and bound."""
         fp1 = dateline.protocol_fingerprint(["fx-b", "fx-a"], "sha256:x")
         fp2 = dateline.protocol_fingerprint(["fx-a", "fx-b"], "sha256:x")
         self.assertEqual(fp1, fp2)  # fixture order is sorted out
@@ -270,6 +285,7 @@ class TestProtocol(unittest.TestCase):
         self.assertEqual(protocol["treated_arms"], list(dateline.TREATED_KEYS))
 
     def test_no_clock_or_locale_calls(self):
+        """Test no clock or locale calls."""
         # G10 pin: the module, the stage/analysis segment of
         # experiments.py, and the reporting section must not read
         # the wall clock or the locale.
@@ -295,7 +311,10 @@ class TestProtocol(unittest.TestCase):
 
 
 class TestScreen(unittest.TestCase):
+    """Test screen."""
+
     def test_battery_screened(self):
+        """Test battery screened."""
         for expected in (
             "21",
             "2026",
@@ -320,10 +339,12 @@ class TestScreen(unittest.TestCase):
             self.assertTrue(dateline.screen_expected(expected), expected)
 
     def test_battery_not_screened(self):
+        """Test battery not screened."""
         for expected in ("March 3", "is", "26", "tomorrow", "alpha", "0", "3", "2024"):
             self.assertFalse(dateline.screen_expected(expected), expected)
 
     def test_parse_candidates(self):
+        """Test parse candidates."""
         self.assertEqual(dateline.parse_date_candidates("2026-10-21"), {(2026, 10, 21)})
         self.assertEqual(dateline.parse_date_candidates("3/4/2026"), {(2026, 3, 4), (2026, 4, 3)})
         self.assertEqual(dateline.parse_date_candidates("29.2.2028"), {(2028, 2, 29)})
@@ -332,10 +353,12 @@ class TestScreen(unittest.TestCase):
         self.assertEqual(dateline.parse_date_candidates("not a date"), set())
 
     def test_blank_expected_not_screened(self):
+        """Test blank expected not screened."""
         self.assertFalse(dateline.screen_expected(""))
         self.assertFalse(dateline.screen_expected("   "))
 
     def test_message_states_date(self):
+        """Test message states date."""
         self.assertTrue(dateline.message_states_date("what happened on 2026-10-21 exactly"))
         self.assertTrue(dateline.message_states_date("due 21 October 2026 at noon"))
         self.assertTrue(dateline.message_states_date("on October 21 we met"))
@@ -343,11 +366,13 @@ class TestScreen(unittest.TestCase):
         self.assertFalse(dateline.message_states_date("the 21 pilots"))
 
     def test_fixture_screen(self):
+        """Test fixture screen."""
         self.assertEqual(dateline.fixture_screen(CASE_SCREENED), (True, False))
         self.assertEqual(dateline.fixture_screen(CASE_DATEY), (False, True))
         self.assertEqual(dateline.fixture_screen(CASE_ONE), (False, False))
 
     def test_screen_neutral(self):
+        """Test screen neutral."""
         screened_fixtures, screened_candidates = dateline.screen_neutral(
             {"fx-1": "the reference panel is mounted", "fx-2": "alpha"},
             {"cand": "on the north wall"},
@@ -357,7 +382,10 @@ class TestScreen(unittest.TestCase):
 
 
 class TestConstruction(unittest.TestCase):
+    """Test construction."""
+
     def test_build_arm_fixture_prepends_block(self):
+        """Test build arm fixture prepends block."""
         treated = dateline.build_arm_fixture(CASE_ONE, "anchor_iso")
         content = treated.messages[-1].content
         self.assertEqual(
@@ -368,11 +396,13 @@ class TestConstruction(unittest.TestCase):
         self.assertEqual(treated.expected, CASE_ONE.expected)
 
     def test_build_control_fixture(self):
+        """Test build control fixture."""
         treated = dateline.build_arm_fixture(CASE_ONE, "nodate_long", "Sized neutral text. ")
         content = treated.messages[-1].content
         self.assertTrue(content.startswith("[Context] Sized neutral text. [/Context]\n\n"))
 
     def test_neutral_text_and_search_order(self):
+        """Test neutral text and search order."""
         self.assertEqual(dateline.neutral_text(0, 5), dateline.NEUTRAL_UNIT[:5])
         self.assertEqual(dateline.neutral_text(2, 0), dateline.NEUTRAL_UNIT * 2)
         order = dateline.neutral_search_order(11, 23)
@@ -381,6 +411,7 @@ class TestConstruction(unittest.TestCase):
         self.assertNotIn((0, 0), order)
 
     def test_classify_construction(self):
+        """Test classify construction."""
         self.assertEqual(
             dateline.classify_construction((1, 2), (7, 8, 9, 1, 2), (7,), (8, 9)),
             ("id_exact", ()),
@@ -391,6 +422,7 @@ class TestConstruction(unittest.TestCase):
         self.assertEqual(dateline.classify_construction(None, (1,), (7,), (8,)), ("text_level", ()))
 
     def test_classify_pair_truth_table(self):
+        """Test classify pair truth table."""
         self.assertEqual(dateline.classify_pair(5, 0, 0), "insufficient")
         self.assertEqual(dateline.classify_pair(6, 0, 0), "no_discordance_observed")
         self.assertEqual(dateline.classify_pair(6, 2, 2), "discordant_balanced")
@@ -400,6 +432,7 @@ class TestConstruction(unittest.TestCase):
         self.assertEqual(_dateline_classify(6, 3, 0), "discordant_asymmetric")
 
     def test_mcnemar_mirror_matches(self):
+        """Test mcnemar mirror matches."""
         for a_only, b_only in ((0, 0), (1, 0), (3, 1), (5, 5), (9, 2)):
             self.assertEqual(
                 _dateline_mcnemar_p(a_only, b_only),
@@ -408,7 +441,10 @@ class TestConstruction(unittest.TestCase):
 
 
 class TestStage(unittest.TestCase):
+    """Test stage."""
+
     def test_stage_available_and_classes(self):
+        """Test stage available and classes."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         stage = _run_stage(backend)
         self.assertTrue(stage["available"])
@@ -423,6 +459,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(backend.generate_calls, 2 * 3 * 28)
 
     def test_control_matches_anchor_tokens(self):
+        """Test control matches anchor tokens."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         stage = _run_stage(backend)
         for candidate in stage["candidates"].values():
@@ -436,6 +473,7 @@ class TestStage(unittest.TestCase):
                         )
 
     def test_scripted_leap_loss(self):
+        """Test scripted leap loss."""
         backend = _DateBackend(
             fail_on={("marktwo", "2028-02-29"), ("marktwo", "29 February 2028")},
             expected_by_marker=EXPECTED_BY_MARKER,
@@ -450,6 +488,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(payload["n_search_fixtures"], len(CASES))
 
     def test_falsified_when_nothing_flips(self):
+        """Test falsified when nothing flips."""
         payload = _base_payload()
         self.assertTrue(_valid_dateline(payload))
         for candidate in payload["candidates"].values():
@@ -457,6 +496,7 @@ class TestStage(unittest.TestCase):
                 self.assertTrue(candidate["date_content_falsified"])
 
     def test_context_exceeded_cells(self):
+        """Test context exceeded cells."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         stage = _run_stage(backend, max_context=10)
         record = stage["candidates"]["dt-a"]["records"][0]
@@ -464,6 +504,7 @@ class TestStage(unittest.TestCase):
         self.assertIsNone(record["cells"]["anchor_iso"])
 
     def test_cancelled_stage(self):
+        """Test cancelled stage."""
         from threading import Event
 
         event = Event()
@@ -474,6 +515,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_native_unavailable_candidate(self):
+        """Test native unavailable candidate."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         entries = _entries(backend)
         entries[0]["summary"]["aggregate_eligible"] = False
@@ -482,6 +524,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["candidates"]["dt-a"]["detail"], "native_search_unavailable")
 
     def test_budget_exceeded(self):
+        """Test budget exceeded."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         with mock.patch.object(dateline, "MAX_GROUND_RECORDS", 3):
             stage = _run_stage(backend)
@@ -489,6 +532,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "dateline_cell_budget_exceeded")
 
     def test_screen_failure_fails_closed(self):
+        """Test screen failure fails closed."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         with mock.patch(
             "model_protocol_lab.fixtures.audit_special_token_literals", return_value=True
@@ -498,6 +542,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "dateline_screen_failed")
 
     def test_stage_rejects_bad_arguments(self):
+        """Test stage rejects bad arguments."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         with self.assertRaises(ValueError):
             dateline_stage(backend, (), CASES, [], boundary=(1,), max_context=100)
@@ -509,120 +554,170 @@ class TestValidatorBattery(unittest.TestCase):
     """One break at a time against a genuine payload."""
 
     def setUp(self):
+        """Set up the test fixture."""
         self.payload = _base_payload(
             fail_on={("marktwo", "2028-02-29"), ("marktwo", "29 February 2028")}
         )
         self.assertTrue(_valid_dateline(self.payload))
 
     def _break(self, mutate):
+        """Break."""
         payload = copy.deepcopy(self.payload)
         mutate(payload)
         self.assertFalse(_valid_dateline(payload))
 
     def test_fingerprint_zeroed(self):
+        """Test fingerprint zeroed."""
         self._break(lambda p: p["protocol"].__setitem__("fingerprint", "0" * 64))
 
     def test_protocol_extra_key(self):
+        """Test protocol extra key."""
         self._break(lambda p: p["protocol"].__setitem__("extra", 1))
 
     def test_arm_table_weekday_templated(self):
+        """Test arm table weekday templated."""
+
         # The anchor-weekday attack: every weekday arm rendered
         # with Wednesday. The validator's own calendar recompute
         # must reject the table.
         def mutate(p):
+            """Mutate."""
             p["protocol"]["arm_dates"]["leap_weekday_iso"] = "Wednesday, 2028-02-29"
 
         self._break(mutate)
 
     def test_lie_made_honest(self):
+        """Test lie made honest."""
+
         def mutate(p):
+            """Mutate."""
             p["protocol"]["arm_dates"]["lie"] = "Wednesday, 2026-10-21"
 
         self._break(mutate)
 
     def test_cell_verdict_flipped(self):
+        """Test cell verdict flipped."""
+
         def mutate(p):
+            """Mutate."""
             cell = p["candidates"]["dt-a"]["records"][0]["cells"]["anchor_iso"]
             cell["verdict"] = not cell["verdict"]
 
         self._break(mutate)
 
     def test_control_tokens_mismatched(self):
+        """Test control tokens mismatched."""
+
         def mutate(p):
+            """Mutate."""
             cell = p["candidates"]["dt-a"]["records"][0]["cells"]["nodate_iso"]
             cell["input_tokens"] += 1
 
         self._break(mutate)
 
     def test_control_evaluable_lied(self):
+        """Test control evaluable lied."""
+
         def mutate(p):
+            """Mutate."""
             record = p["candidates"]["dt-a"]["records"][0]
             record["control_evaluable"]["iso"] = False
 
         self._break(mutate)
 
     def test_screened_flag_one_candidate_only(self):
+        """Test screened flag one candidate only."""
+
         def mutate(p):
+            """Mutate."""
             p["candidates"]["dt-a"]["records"][0]["screened"] = True
 
         self._break(mutate)
 
     def test_aggregate_tampered(self):
+        """Test aggregate tampered."""
+
         def mutate(p):
+            """Mutate."""
             p["candidates"]["dt-a"]["date_loss"]["leap"]["n_loss"] += 1
 
         self._break(mutate)
 
     def test_falsified_flag_tampered(self):
+        """Test falsified flag tampered."""
+
         def mutate(p):
+            """Mutate."""
             p["candidates"]["dt-a"]["date_content_falsified"] = True
 
         self._break(mutate)
 
     def test_arm_selection_tampered(self):
+        """Test arm selection tampered."""
+
         def mutate(p):
+            """Mutate."""
             p["arms"]["anchor_iso"]["flip"] = None
 
         self._break(mutate)
 
     def test_common_population_tampered(self):
+        """Test common population tampered."""
+
         def mutate(p):
+            """Mutate."""
             p["common_population"]["n_common"] += 1
 
         self._break(mutate)
 
     def test_multi_turn_count_tampered(self):
+        """Test multi turn count tampered."""
+
         def mutate(p):
+            """Mutate."""
             p["n_multi_turn_fixtures"] += 1
 
         self._break(mutate)
 
     def test_duplicate_fixture_id(self):
+        """Test duplicate fixture id."""
+
         def mutate(p):
+            """Mutate."""
             records = p["candidates"]["dt-a"]["records"]
             records[1]["fixture"] = records[0]["fixture"]
 
         self._break(mutate)
 
     def test_negative_seam_id(self):
+        """Test negative seam id."""
+
         def mutate(p):
+            """Mutate."""
             p["candidates"]["dt-a"]["records"][0]["seam_ids"] = [-1]
 
         self._break(mutate)
 
     def test_detail_vocabulary(self):
+        """Test detail vocabulary."""
+
         def mutate(p):
+            """Mutate."""
             p["candidates"]["dt-a"]["records"][0]["cell_details"]["anchor_iso"] = "bogus"
 
         self._break(mutate)
 
     def test_unavailable_payload_invalid(self):
+        """Test unavailable payload invalid."""
         self.assertFalse(_valid_dateline({"available": False, "detail": "x", "protocol": None}))
         self.assertFalse(_valid_dateline(None))
 
 
 class TestDiff(unittest.TestCase):
+    """Test diff."""
+
     def test_self_diff_unchanged(self):
+        """Test self diff unchanged."""
         payload = _base_payload()
         diff = diff_dateline(payload, payload)
         self.assertEqual(diff["available"], "both")
@@ -630,6 +725,7 @@ class TestDiff(unittest.TestCase):
         self.assertTrue(diff["comparable"])
 
     def test_foreign_backend_not_comparable(self):
+        """Test foreign backend not comparable."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         stage = _run_stage(backend)
         payload = _payload(backend, stage)
@@ -642,6 +738,7 @@ class TestDiff(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_loss_drift_detected(self):
+        """Test loss drift detected."""
         calm = _base_payload()
         stormy = _base_payload(fail_on={("marktwo", "2028-02-29"), ("marktwo", "29 February 2028")})
         diff = diff_dateline(calm, stormy)
@@ -649,6 +746,7 @@ class TestDiff(unittest.TestCase):
         self.assertTrue(any(entry["metric"] == "leap_loss_rate" for entry in diff["loss_drift"]))
 
     def test_absent_sides(self):
+        """Test absent sides."""
         payload = _base_payload()
         self.assertEqual(diff_dateline(None, payload)["available"], "new")
         self.assertEqual(diff_dateline(payload, None)["available"], "old")
@@ -656,7 +754,10 @@ class TestDiff(unittest.TestCase):
 
 
 class TestReportingAndCli(unittest.TestCase):
+    """Test reporting and cli."""
+
     def test_section_renders(self):
+        """Test section renders."""
         payload = _base_payload(
             fail_on={("marktwo", "2028-02-29"), ("marktwo", "29 February 2028")}
         )
@@ -665,10 +766,12 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertIn('id="dateline"', html)
 
     def test_section_absent_without_payload(self):
+        """Test section absent without payload."""
         html = render_html({"decision": "selected"})
         self.assertNotIn('id="dateline"', html)
 
     def test_cli_helper_gates_on_incomplete_search(self):
+        """Test cli helper gates on incomplete search."""
         result: dict = {"decision": "failed", "search": []}
         cli._run_dateline_probe(
             _DateBackend(),
@@ -691,6 +794,7 @@ class TestParseBattery(unittest.TestCase):
     """Every closed date format, valid and invalid readings."""
 
     def test_all_formats(self):
+        """Test all formats."""
         cases = {
             "21 October 2026": {(2026, 10, 21)},
             "October 21, 2026": {(2026, 10, 21)},
@@ -704,6 +808,7 @@ class TestParseBattery(unittest.TestCase):
             self.assertEqual(dateline.parse_date_candidates(text), expected, text)
 
     def test_parse_hits_arm_direct(self):
+        """Test parse hits arm direct."""
         # Inside screen_expected the component leg fires first
         # for every string below (their components are all
         # date-bearing arm components). The parse leg is pinned
@@ -718,6 +823,7 @@ class TestParseBattery(unittest.TestCase):
         self.assertFalse(dateline._parse_hits_arm("not a date"))
 
     def test_invalid_readings(self):
+        """Test invalid readings."""
         for text in (
             "32 October 2026",  # day out of range
             "October 32, 2026",
@@ -735,6 +841,7 @@ class TestParseBattery(unittest.TestCase):
 
 
 def _synthetic_record(fixture, cells):
+    """Synthetic record."""
     return {
         "fixture": fixture,
         "group": "g",
@@ -748,23 +855,31 @@ def _synthetic_record(fixture, cells):
 
 
 def _verdict_cell(verdict):
+    """Verdict cell."""
     return {"verdict": verdict, "boundary_found": True, "input_tokens": 5}
 
 
 class TestAggregationEdges(unittest.TestCase):
+    """Test aggregation edges."""
+
     def test_cell_helper_rejects_non_dicts(self):
+        """Test cell helper rejects non dicts."""
         self.assertIsNone(dateline._cell({"cells": None}, "x"))
         self.assertIsNone(dateline._cell({"cells": {"x": 5}}, "x"))
         self.assertIsNone(dateline._cell({}, "x"))
 
     def test_aggregate_empty_records(self):
+        """Test aggregate empty records."""
         aggregate = dateline.aggregate_candidate([])
         self.assertIsNone(aggregate["arms"]["anchor_iso"]["rate"])
         self.assertEqual(aggregate["arms"]["anchor_iso"]["n_completed"], 0)
         self.assertTrue(aggregate["date_content_falsified"])
 
     def test_loss_counterpart_and_lie_split(self):
+        """Test loss counterpart and lie split."""
+
         def record(fixture, control, anchor_wd, lie):
+            """Record."""
             cells = {
                 **{f"nodate_{fmt}": _verdict_cell(control) for fmt in dateline.FORMATS},
                 **{f"anchor_{fmt}": _verdict_cell(True) for fmt in dateline.FORMATS},
@@ -786,12 +901,14 @@ class TestAggregationEdges(unittest.TestCase):
         self.assertEqual(block["lie_split"]["n_evaluable"], 3)
 
     def test_loss_block_empty(self):
+        """Test loss block empty."""
         block = dateline._loss_block([], "leap")
         self.assertEqual(block["n_evaluable"], 0)
         self.assertIsNone(block["loss_rate"])
         self.assertIsNone(block["lie_split"])
 
     def test_common_population_empty(self):
+        """Test common population empty."""
         out = dateline.common_population({})
         self.assertEqual(out["n_common"], 0)
         self.assertEqual(out["detail"], "common_population_empty")
@@ -811,6 +928,7 @@ class _DecodeRaisesBoundaryBackend(_DateBackend):
     """
 
     def decode(self, ids):
+        """Decode."""
         if (
             isinstance(ids, tuple)
             and BOUNDARY_WORD in self.vocab
@@ -821,18 +939,24 @@ class _DecodeRaisesBoundaryBackend(_DateBackend):
 
 
 class _EventSettingBackend(_DateBackend):
+    """Event setting backend."""
+
     def __init__(self, event, **kwargs):
         super().__init__(**kwargs)
         self._event = event
 
     def generate(self, input_ids, **kwargs):
+        """Generate."""
         out = super().generate(input_ids, **kwargs)
         self._event.set()
         return out
 
 
 class _DateRaisingBackend(_DateBackend):
+    """Date raising backend."""
+
     def generate(self, input_ids, **kwargs):
+        """Generate."""
         if "2026-10-21" in self.decode(list(input_ids)):
             raise RuntimeError("boom")
         return super().generate(input_ids, **kwargs)
@@ -845,6 +969,7 @@ class _TripleRefBackend(_DateBackend):
     """
 
     def encode(self, text):
+        """Encode."""
         ids = super().encode(text)
         if "reference" in text:
             tripled: list[int] = []
@@ -861,11 +986,15 @@ class _TruncatingBackend(_DateBackend):
     """
 
     def encode(self, text):
+        """Encode."""
         return super().encode(text)[:12]
 
 
 class TestStageEdges(unittest.TestCase):
+    """Test stage edges."""
+
     def test_junk_search_entry_ignored(self):
+        """Test junk search entry ignored."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         entries = _entries(backend)
         entries.append("junk")
@@ -873,6 +1002,7 @@ class TestStageEdges(unittest.TestCase):
         self.assertTrue(stage["available"])
 
     def test_undecodable_boundary_screens_nothing(self):
+        """Test undecodable boundary screens nothing."""
         backend = _DecodeRaisesBoundaryBackend(expected_by_marker=EXPECTED_BY_MARKER)
         stage = _run_stage(backend)
         self.assertTrue(stage["available"])
@@ -880,6 +1010,7 @@ class TestStageEdges(unittest.TestCase):
         self.assertIsNotNone(record["cells"]["anchor_iso"])
 
     def test_bad_observation_shape_unavailable(self):
+        """Test bad observation shape unavailable."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         entries = _entries(backend)
         entries[0]["observations"][0] = {"fixture": 5}
@@ -887,6 +1018,7 @@ class TestStageEdges(unittest.TestCase):
         self.assertEqual(stage["candidates"]["dt-a"]["status"], "unavailable")
 
     def test_missing_observation_unavailable(self):
+        """Test missing observation unavailable."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         entries = _entries(backend)
         entries[0]["observations"] = entries[0]["observations"][:-1]
@@ -894,6 +1026,7 @@ class TestStageEdges(unittest.TestCase):
         self.assertEqual(stage["candidates"]["dt-a"]["status"], "unavailable")
 
     def test_arm_screened_by_boundary_text(self):
+        """Test arm screened by boundary text."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         boundary = tuple(backend.encode("2026-10-21"))
         stage = _run_stage(backend, boundary=boundary)
@@ -903,6 +1036,7 @@ class TestStageEdges(unittest.TestCase):
         self.assertEqual(record["cell_details"]["anchor_long"], "")
 
     def test_control_screened_by_boundary_and_fixture(self):
+        """Test control screened by boundary and fixture."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         boundary = tuple(backend.encode("north"))
         stage = _run_stage(backend, boundary=boundary)
@@ -923,6 +1057,7 @@ class TestStageEdges(unittest.TestCase):
         self.assertEqual(by_id["fx-one"]["cell_details"]["nodate_long"], "")
 
     def test_control_unmatchable(self):
+        """Test control unmatchable."""
         backend = _TripleRefBackend(expected_by_marker=EXPECTED_BY_MARKER)
         stage = _run_stage(backend)
         record = stage["candidates"]["dt-a"]["records"][0]
@@ -933,6 +1068,7 @@ class TestStageEdges(unittest.TestCase):
         self.assertTrue(_valid_dateline(payload))
 
     def test_delta_zero_control(self):
+        """Test delta zero control."""
         backend = _TruncatingBackend(expected_by_marker=EXPECTED_BY_MARKER)
         stage = _run_stage(backend)
         record = stage["candidates"]["dt-a"]["records"][0]
@@ -944,6 +1080,7 @@ class TestStageEdges(unittest.TestCase):
         )
 
     def test_cancel_during_cells(self):
+        """Test cancel during cells."""
         from threading import Event
 
         event = Event()
@@ -953,6 +1090,7 @@ class TestStageEdges(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_evaluation_failed_cells(self):
+        """Test evaluation failed cells."""
         backend = _DateRaisingBackend(expected_by_marker=EXPECTED_BY_MARKER)
         stage = _run_stage(backend)
         record = stage["candidates"]["dt-a"]["records"][0]
@@ -973,7 +1111,10 @@ SEVEN_MARKERS = {f"mark{letter}": f"ans-{letter}" for letter in "abcdefg"}
 
 
 class TestAnalysisEdges(unittest.TestCase):
+    """Test analysis edges."""
+
     def test_analysis_unavailable_stage(self):
+        """Test analysis unavailable stage."""
         out = dateline_analysis(
             {"available": False, "detail": "cancelled", "protocol": None},
             "selected",
@@ -984,6 +1125,7 @@ class TestAnalysisEdges(unittest.TestCase):
         self.assertEqual(out["detail"], "cancelled")
 
     def test_arm_selection_outcomes(self):
+        """Test arm selection outcomes."""
         calm = _base_payload()
         self.assertEqual(calm["arms"]["anchor_iso"]["decision"], "ambiguous")
         one_sided = _base_payload(fail_on={("markone", "USER: ")})
@@ -995,6 +1137,7 @@ class TestAnalysisEdges(unittest.TestCase):
         self.assertTrue(_valid_dateline(none_pass))
 
     def test_mixed_availability_payload_valid_and_withheld(self):
+        """Test mixed availability payload valid and withheld."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         entries = _entries(backend)
         entries[1]["summary"]["aggregate_eligible"] = False
@@ -1003,6 +1146,7 @@ class TestAnalysisEdges(unittest.TestCase):
         self.assertTrue(payload["arms"]["anchor_iso"]["withheld"])
 
     def test_completed_set_mismatch_withholds(self):
+        """Test completed set mismatch withholds."""
         bloated = Format(
             name="dt-bloated",
             bos=" ".join(["filler"] * 300),
@@ -1019,6 +1163,7 @@ class TestAnalysisEdges(unittest.TestCase):
         self.assertTrue(_valid_dateline(payload))
 
     def test_non_selection_primary_decision_payload_valid(self):
+        """Test non selection primary decision payload valid."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         stage = _run_stage(backend)
         # Cycle 196 (oversight edge-case F3): the validator binds
@@ -1030,11 +1175,13 @@ class TestAnalysisEdges(unittest.TestCase):
         self.assertTrue(_valid_dateline(payload))
 
     def test_context_exceeded_payload_valid(self):
+        """Test context exceeded payload valid."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         payload = _payload(backend, _run_stage(backend, max_context=10))
         self.assertTrue(_valid_dateline(payload))
 
     def test_counterpart_and_lie_split_payload(self):
+        """Test counterpart and lie split payload."""
         backend = _DateBackend(
             fail_on={
                 ("markthree", "reference panel"),
@@ -1053,6 +1200,7 @@ class TestAnalysisEdges(unittest.TestCase):
         self.assertEqual(block["lie_split"]["n_loss_content_specific"], 1)
 
     def test_pair_classifications_at_scale(self):
+        """Test pair classifications at scale."""
         backend = _DateBackend(
             fail_on={
                 ("marka", "20 October 2026"),
@@ -1081,145 +1229,199 @@ class TestValidatorBattery2(unittest.TestCase):
     """
 
     def setUp(self):
+        """Set up the test fixture."""
         self.payload = _base_payload()
         self.assertTrue(_valid_dateline(self.payload))
 
     def _break(self, mutate):
+        """Break."""
         payload = copy.deepcopy(self.payload)
         mutate(payload)
         self.assertFalse(_valid_dateline(payload))
 
     @staticmethod
     def _record(p, index=0):
+        """Record."""
         return p["candidates"]["dt-a"]["records"][index]
 
     def test_protocol_not_a_dict(self):
+        """Test protocol not a dict."""
         self._break(lambda p: p.__setitem__("protocol", "junk"))
 
     def test_protocol_version(self):
+        """Test protocol version."""
         self._break(lambda p: p["protocol"].__setitem__("version", 2))
 
     def test_protocol_block_template(self):
+        """Test protocol block template."""
         self._break(lambda p: p["protocol"].__setitem__("block_template", "x"))
 
     def test_protocol_control_template(self):
+        """Test protocol control template."""
         self._break(lambda p: p["protocol"].__setitem__("control_template", "x"))
 
     def test_protocol_joiner(self):
+        """Test protocol joiner."""
         self._break(lambda p: p["protocol"].__setitem__("joiner", " "))
 
     def test_protocol_neutral_unit(self):
+        """Test protocol neutral unit."""
         self._break(lambda p: p["protocol"].__setitem__("neutral_unit", "x"))
 
     def test_protocol_sizing_rule(self):
+        """Test protocol sizing rule."""
         self._break(lambda p: p["protocol"].__setitem__("sizing_rule", "x"))
 
     def test_protocol_screen_rule(self):
+        """Test protocol screen rule."""
         self._break(lambda p: p["protocol"].__setitem__("screen_rule", "x"))
 
     def test_protocol_treated_arms(self):
+        """Test protocol treated arms."""
         self._break(lambda p: p["protocol"].__setitem__("treated_arms", []))
 
     def test_protocol_floors(self):
+        """Test protocol floors."""
         self._break(lambda p: p["protocol"].__setitem__("min_paired_evaluable", 5))
 
     def test_protocol_budget(self):
+        """Test protocol budget."""
         self._break(lambda p: p["protocol"].__setitem__("generation_budget", 1))
 
     def test_protocol_records_bytes_cap_field(self):
+        """Test protocol records bytes cap field."""
         self._break(lambda p: p["protocol"].__setitem__("max_records_bytes", 1))
 
     def test_protocol_fixture_sha(self):
+        """Test protocol fixture sha."""
         self._break(lambda p: p["protocol"].__setitem__("fixture_set_sha256", "0" * 64))
 
     def test_candidates_not_a_dict(self):
+        """Test candidates not a dict."""
         self._break(lambda p: p.__setitem__("candidates", []))
 
     def test_candidate_entry_not_a_dict(self):
+        """Test candidate entry not a dict."""
         self._break(lambda p: p["candidates"].__setitem__("dt-a", "junk"))
 
     def test_candidate_status_vocabulary(self):
+        """Test candidate status vocabulary."""
         self._break(lambda p: p["candidates"]["dt-a"].__setitem__("status", "weird"))
 
     def test_candidate_records_not_a_list(self):
+        """Test candidate records not a list."""
         self._break(lambda p: p["candidates"]["dt-a"].__setitem__("records", {}))
 
     def test_unavailable_with_records(self):
+        """Test unavailable with records."""
+
         def mutate(p):
+            """Mutate."""
             p["candidates"]["dt-a"]["status"] = "unavailable"
 
         self._break(mutate)
 
     def test_candidate_record_count_cap(self):
+        """Test candidate record count cap."""
+
         def mutate(p):
+            """Mutate."""
             entry = p["candidates"]["dt-a"]
             entry["records"] = entry["records"] * 15
 
         self._break(mutate)
 
     def test_record_not_a_dict(self):
+        """Test record not a dict."""
+
         def mutate(p):
+            """Mutate."""
             p["candidates"]["dt-a"]["records"][0] = "junk"
 
         self._break(mutate)
 
     def test_record_fixture_empty(self):
+        """Test record fixture empty."""
         self._break(lambda p: self._record(p).__setitem__("fixture", ""))
 
     def test_record_group_type(self):
+        """Test record group type."""
         self._break(lambda p: self._record(p).__setitem__("group", 5))
 
     def test_record_n_user_messages(self):
+        """Test record n user messages."""
         self._break(lambda p: self._record(p).__setitem__("n_user_messages", 0))
 
     def test_record_flag_type(self):
+        """Test record flag type."""
         self._break(lambda p: self._record(p).__setitem__("vacuous", "yes"))
 
     def test_record_construction_vocabulary(self):
+        """Test record construction vocabulary."""
         self._break(lambda p: self._record(p).__setitem__("construction", "bogus"))
 
     def test_record_seam_type(self):
+        """Test record seam type."""
         self._break(lambda p: self._record(p).__setitem__("seam_ids", "x"))
 
     def test_record_expected_digest_shape(self):
+        """Test record expected digest shape."""
         self._break(lambda p: self._record(p).__setitem__("expected_digest", "zz"))
 
     def test_record_expected_digest_none(self):
+        """Test record expected digest none."""
         self._break(lambda p: self._record(p).__setitem__("expected_digest", None))
 
     def test_record_control_evaluable_keys(self):
+        """Test record control evaluable keys."""
+
         def mutate(p):
+            """Mutate."""
             del self._record(p)["control_evaluable"]["iso"]
 
         self._break(mutate)
 
     def test_record_control_evaluable_value_type(self):
+        """Test record control evaluable value type."""
         self._break(lambda p: self._record(p)["control_evaluable"].__setitem__("iso", "x"))
 
     def test_record_native_verdict_flipped(self):
+        """Test record native verdict flipped."""
+
         def mutate(p):
+            """Mutate."""
             native = self._record(p)["native"]
             native["verdict"] = not native["verdict"]
 
         self._break(mutate)
 
     def test_record_cells_key_dropped(self):
+        """Test record cells key dropped."""
+
         def mutate(p):
+            """Mutate."""
             del self._record(p)["cells"]["lie"]
 
         self._break(mutate)
 
     def test_record_details_key_dropped(self):
+        """Test record details key dropped."""
+
         def mutate(p):
+            """Mutate."""
             del self._record(p)["cell_details"]["lie"]
 
         self._break(mutate)
 
     def test_live_detail_set_to_class_word(self):
+        """Test live detail set to class word."""
         self._break(lambda p: self._record(p)["cell_details"].__setitem__("anchor_iso", "screened"))
 
     def test_control_unmatchable_while_evaluable(self):
+        """Test control unmatchable while evaluable."""
+
         def mutate(p):
+            """Mutate."""
             record = self._record(p)
             record["cells"]["nodate_iso"] = None
             record["cell_details"]["nodate_iso"] = "control_unmatchable"
@@ -1227,12 +1429,16 @@ class TestValidatorBattery2(unittest.TestCase):
         self._break(mutate)
 
     def test_treated_cell_boundary_flipped(self):
+        """Test treated cell boundary flipped."""
+
         def mutate(p):
+            """Mutate."""
             self._record(p)["cells"]["anchor_iso"]["boundary_found"] = False
 
         self._break(mutate)
 
     def _mega_payload(self, n_candidates, id_width):
+        """Mega payload."""
         payload = copy.deepcopy(self.payload)
         template = copy.deepcopy(payload["candidates"]["dt-a"]["records"][0])
         candidates = {}
@@ -1251,37 +1457,50 @@ class TestValidatorBattery2(unittest.TestCase):
         return payload
 
     def test_total_records_cap(self):
+        """Test total records cap."""
         self.assertFalse(_valid_dateline(self._mega_payload(25, 0)))
 
     def test_records_bytes_cap(self):
+        """Test records bytes cap."""
         self.assertFalse(_valid_dateline(self._mega_payload(24, 12000)))
 
     def test_cell_none_with_empty_detail(self):
+        """Test cell none with empty detail."""
+
         def mutate(p):
+            """Mutate."""
             self._record(p)["cells"]["anchor_iso"] = None
 
         self._break(mutate)
 
     def test_reference_group_mismatch_one_candidate(self):
+        """Test reference group mismatch one candidate."""
         self._break(lambda p: self._record(p).__setitem__("group", "g-other"))
 
     def test_fixture_id_order_mismatch(self):
+        """Test fixture id order mismatch."""
+
         def mutate(p):
+            """Mutate."""
             records = p["candidates"]["dt-b"]["records"]
             records.reverse()
 
         self._break(mutate)
 
     def test_primary_decision_wrong_type(self):
+        """Test primary decision wrong type."""
         self._break(lambda p: p.__setitem__("primary_decision", 5))
 
     def test_n_candidates_tampered(self):
+        """Test n candidates tampered."""
         self._break(lambda p: p.__setitem__("n_candidates", p["n_candidates"] + 1))
 
     def test_n_search_fixtures_tampered(self):
+        """Test n search fixtures tampered."""
         self._break(lambda p: p.__setitem__("n_search_fixtures", p["n_search_fixtures"] + 1))
 
     def test_validator_lie_self_check(self):
+        """Test validator lie self check."""
         # The validator's own lie diff differs from the honest
         # rendering by construction; patch its table to the honest
         # string and the self-check must reject the payload even
@@ -1294,6 +1513,7 @@ class TestValidatorBattery2(unittest.TestCase):
             self.assertFalse(_valid_dateline(payload))
 
     def test_all_candidates_unavailable_is_invalid(self):
+        """Test all candidates unavailable is invalid."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         entries = _entries(backend)
         for entry in entries:
@@ -1303,11 +1523,15 @@ class TestValidatorBattery2(unittest.TestCase):
 
 
 class TestReportingEdges(unittest.TestCase):
+    """Test reporting edges."""
+
     def test_candidates_not_a_dict(self):
+        """Test candidates not a dict."""
         html = render_html({"dateline": {"available": True, "candidates": []}})
         self.assertEqual(html.count('id="dateline"'), 0)
 
     def test_hostile_candidate_entries(self):
+        """Test hostile candidate entries."""
         html = render_html(
             {
                 "dateline": {
@@ -1319,10 +1543,12 @@ class TestReportingEdges(unittest.TestCase):
         self.assertIn("unavailable", html)
 
     def test_falsified_banner_renders(self):
+        """Test falsified banner renders."""
         html = render_html({"decision": "selected", "dateline": _base_payload()})
         self.assertIn("Date content falsified", html)
 
     def test_hostile_loss_and_pairs(self):
+        """Test hostile loss and pairs."""
         payload = _base_payload()
         payload["candidates"]["dt-a"]["date_loss"]["anchor"] = "junk"
         payload["candidates"]["dt-a"]["pairs_by_format"]["iso"]["anchor|minus_day"] = "junk"
@@ -1331,6 +1557,7 @@ class TestReportingEdges(unittest.TestCase):
         self.assertIn('id="dateline"', html)
 
     def test_non_numeric_rate_renders_na(self):
+        """Test non numeric rate renders na."""
         payload = _base_payload()
         payload["candidates"]["dt-a"]["date_loss"]["anchor"]["loss_rate"] = "x"
         html = render_html({"decision": "selected", "dateline": payload})
@@ -1338,7 +1565,10 @@ class TestReportingEdges(unittest.TestCase):
 
 
 class TestDiffEdges(unittest.TestCase):
+    """Test diff edges."""
+
     def test_pair_drift_reported(self):
+        """Test pair drift reported."""
         scripted = _DateBackend(
             fail_on={
                 ("marka", "20 October 2026"),
@@ -1356,6 +1586,7 @@ class TestDiffEdges(unittest.TestCase):
         self.assertTrue(diff["pair_drift"])
 
     def test_tampered_side_is_one_sided(self):
+        """Test tampered side is one sided."""
         payload = _base_payload()
         tampered = copy.deepcopy(payload)
         tampered["candidates"]["dt-a"]["date_loss"]["leap"]["n_loss"] += 1
@@ -1364,6 +1595,7 @@ class TestDiffEdges(unittest.TestCase):
         self.assertFalse(diff["changed"])
 
     def test_status_drift_reported(self):
+        """Test status drift reported."""
         backend = _DateBackend(expected_by_marker=EXPECTED_BY_MARKER)
         entries = _entries(backend)
         entries[1]["summary"]["aggregate_eligible"] = False
@@ -1382,6 +1614,7 @@ class TestMutationGates(unittest.TestCase):
     """
 
     def _run_gate(self, name, old_text, new_text, scenario):
+        """Run gate."""
         import importlib.util
         import os
         import tempfile
@@ -1409,10 +1642,12 @@ class TestMutationGates(unittest.TestCase):
 
     @staticmethod
     def _lie_scenario(mod):
+        """Lie scenario."""
         assert mod.lie_date_string() == "Thursday, 2026-10-21"
         assert mod.lie_date_string() != mod.format_date("anchor", "weekday_iso")
 
     def test_mutant_lie_shift_dropped_caught(self):
+        """Test mutant lie shift dropped caught."""
         self._run_gate(
             "lie_shift",
             "(_calendar_weekday(year, month, day) + LIE_WEEKDAY_SHIFT) % 7",
@@ -1422,10 +1657,12 @@ class TestMutationGates(unittest.TestCase):
 
     @staticmethod
     def _floor_scenario(mod):
+        """Floor scenario."""
         assert mod.classify_pair(3, 2, 0) == "insufficient"
         assert mod.classify_pair(6, 2, 0) == "discordant_asymmetric"
 
     def test_mutant_floor_dropped_caught(self):
+        """Test mutant floor dropped caught."""
         self._run_gate(
             "floor",
             "if n_paired < MIN_PAIRED_EVALUABLE:",
@@ -1435,10 +1672,12 @@ class TestMutationGates(unittest.TestCase):
 
     @staticmethod
     def _screen_scenario(mod):
+        """Screen scenario."""
         assert mod.screen_expected("21") is True  # component leg only
         assert mod.screen_expected("26") is False
 
     def test_mutant_screen_component_leg_dropped_caught(self):
+        """Test mutant screen component leg dropped caught."""
         self._run_gate(
             "screen_components",
             "if any(rung_match(component, arm_component, 4) for arm_component in components):",
@@ -1448,7 +1687,10 @@ class TestMutationGates(unittest.TestCase):
 
     @staticmethod
     def _loss_scenario(mod):
+        """Loss scenario."""
+
         def cell(verdict):
+            """Cell."""
             return {"verdict": verdict}
 
         record = {
@@ -1468,6 +1710,7 @@ class TestMutationGates(unittest.TestCase):
         assert block["n_counterpart"] == 0
 
     def test_mutant_loss_direction_swapped_caught(self):
+        """Test mutant loss direction swapped caught."""
         self._run_gate(
             "loss_direction",
             '            if control["verdict"] and not cell["verdict"]:\n'

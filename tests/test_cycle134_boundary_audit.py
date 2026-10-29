@@ -53,10 +53,12 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _identity_encode(text: str) -> tuple[int, ...]:
+    """Identity encode."""
     return tuple(map(ord, text))
 
 
 def _identity_decode(ids) -> str:
+    """Identity decode."""
     return "".join(map(chr, ids))
 
 
@@ -68,23 +70,31 @@ def _seam_merging_encode(text: str) -> tuple[int, ...]:
 
 
 class TestCheckBoundary(unittest.TestCase):
+    """Test check boundary."""
+
     def test_clean_identity(self) -> None:
+        """Test clean identity."""
         check = check_boundary("ab", (97, 98), (99, 100), _identity_encode, _identity_decode)
         self.assertEqual(check, BoundaryCheck(False, None, True))
 
     def test_empty_completion_clean(self) -> None:
+        """Test empty completion clean."""
         check = check_boundary("ab", (97, 98), (), _identity_encode, _identity_decode)
         self.assertFalse(check.has_problem)
         self.assertTrue(check.usable)
 
     def test_planted_seam_merge_detected_with_index(self) -> None:
+        """Test planted seam merge detected with index."""
         check = check_boundary("ab", (97, 98), (99, 100), _seam_merging_encode, _identity_decode)
         self.assertTrue(check.has_problem)
         self.assertTrue(check.usable)
         self.assertEqual(check.first_divergence_index, 1)
 
     def test_length_mismatch_diverges_at_shorter_end(self) -> None:
+        """Test length mismatch diverges at shorter end."""
+
         def short_encode(text: str) -> tuple[int, ...]:
+            """Short encode."""
             return tuple(map(ord, text))[:2]
 
         check = check_boundary("ab", (97, 98), (99, 100), short_encode, _identity_decode)
@@ -92,54 +102,72 @@ class TestCheckBoundary(unittest.TestCase):
         self.assertEqual(check.first_divergence_index, 2)
 
     def test_non_string_prompt_unusable(self) -> None:
+        """Test non string prompt unusable."""
         check = check_boundary(None, (97,), (98,), _identity_encode, _identity_decode)  # type: ignore[arg-type]
         self.assertFalse(check.usable)
         self.assertFalse(check.has_problem)
 
     def test_encode_failure_unusable(self) -> None:
+        """Test encode failure unusable."""
+
         def boom(text: str) -> tuple[int, ...]:
+            """Boom."""
             raise RuntimeError("encode exploded")
 
         check = check_boundary("ab", (97, 98), (99, 100), boom, _identity_decode)
         self.assertFalse(check.usable)
 
     def test_decode_failure_unusable(self) -> None:
+        """Test decode failure unusable."""
+
         def boom(ids) -> str:
+            """Boom."""
             raise RuntimeError("decode exploded")
 
         check = check_boundary("ab", (97, 98), (99, 100), _identity_encode, boom)
         self.assertFalse(check.usable)
 
     def test_decode_non_string_unusable(self) -> None:
+        """Test decode non string unusable."""
         check = check_boundary("ab", (97, 98), (99, 100), _identity_encode, lambda ids: 42)  # type: ignore[return-value]
         self.assertFalse(check.usable)
 
     def test_non_integer_ids_unusable(self) -> None:
+        """Test non integer ids unusable."""
         check = check_boundary("ab", ("x",), (99,), _identity_encode, _identity_decode)  # type: ignore[arg-type]
         self.assertFalse(check.usable)
 
 
 class TestBoundaryProblemRate(unittest.TestCase):
+    """Test boundary problem rate."""
+
     def test_all_clean(self) -> None:
+        """Test all clean."""
         checks = [BoundaryCheck(False, None, True)] * 4
         self.assertEqual(boundary_problem_rate(checks), (0, 4, 0.0))
 
     def test_exact_fraction(self) -> None:
+        """Test exact fraction."""
         checks = [BoundaryCheck(True, 1, True), BoundaryCheck(False, None, True)]
         self.assertEqual(boundary_problem_rate(checks), (1, 2, 0.5))
 
     def test_unusable_excluded(self) -> None:
+        """Test unusable excluded."""
         checks = [BoundaryCheck(False, None, False), BoundaryCheck(True, 0, True)]
         self.assertEqual(boundary_problem_rate(checks), (1, 1, 1.0))
 
     def test_no_usable_none_rate(self) -> None:
+        """Test no usable none rate."""
         self.assertEqual(boundary_problem_rate([]), (0, 0, None))
         self.assertEqual(boundary_problem_rate([BoundaryCheck(False, None, False)]), (0, 0, None))
 
 
 class TestAuditSearchObservations(unittest.TestCase):
+    """Test audit search observations."""
+
     @staticmethod
     def _entries():
+        """Entries."""
         return [
             {
                 "format": {"name": "chatml/x"},
@@ -159,6 +187,7 @@ class TestAuditSearchObservations(unittest.TestCase):
         ]
 
     def test_rates_and_rollup(self) -> None:
+        """Test rates and rollup."""
         audit = audit_search_observations(self._entries(), _identity_encode, _identity_decode)
         self.assertTrue(audit["available"])
         self.assertEqual(audit["n_observations"], 3)
@@ -172,6 +201,7 @@ class TestAuditSearchObservations(unittest.TestCase):
         self.assertIn("llama3", audit["per_family"])
 
     def test_planted_problem_shows_in_rate(self) -> None:
+        """Test planted problem shows in rate."""
         entries = [
             {
                 "format": {"name": "chatml"},
@@ -190,16 +220,21 @@ class TestAuditSearchObservations(unittest.TestCase):
         self.assertEqual(audit["per_candidate"]["chatml"]["n_problem"], 1)
 
     def test_empty_entries_unavailable(self) -> None:
+        """Test empty entries unavailable."""
         audit = audit_search_observations([], _identity_encode, _identity_decode)
         self.assertFalse(audit["available"])
         self.assertIsNone(audit["overall_rate"])
 
     def test_non_list_input_degrades(self) -> None:
+        """Test non list input degrades."""
         audit = audit_search_observations(None, _identity_encode, _identity_decode)  # type: ignore[arg-type]
         self.assertFalse(audit["available"])
 
     def test_encode_failure_marks_unusable_not_problem(self) -> None:
+        """Test encode failure marks unusable not problem."""
+
         def boom(text: str) -> tuple[int, ...]:
+            """Boom."""
             raise RuntimeError("nope")
 
         entries = [
@@ -215,6 +250,7 @@ class TestAuditSearchObservations(unittest.TestCase):
         self.assertEqual(audit["n_usable"], 0)
 
     def test_malformed_entries_skipped_fail_closed(self) -> None:
+        """Test malformed entries skipped fail closed."""
         # Defensive `continue` guards: entries with a non-str name, a
         # non-list observations field, or non-dict observations are
         # skipped without raising, and contribute no candidates.
@@ -244,18 +280,22 @@ class IdentityBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(map(chr, token_ids))
 
     @staticmethod
     def generate(input_ids, *, max_new_tokens: int, seed: int, cancel: Event) -> Generation:
+        """Generate."""
         return Generation((65,), "limit")
 
 
 def _fixture() -> Fixture:
+    """Fixture."""
     return Fixture(
         id="f1",
         messages=(Message(role="user", content="say A"),),
@@ -265,6 +305,7 @@ def _fixture() -> Fixture:
 
 
 def _format() -> Format:
+    """Format."""
     return Format(
         name="chatml",
         bos="",
@@ -279,7 +320,10 @@ def _format() -> Format:
 
 
 class TestInputTextRecording(unittest.TestCase):
+    """Test input text recording."""
+
     def test_evaluate_records_rendered_prompt_text(self) -> None:
+        """Test evaluate records rendered prompt text."""
         fmt = _format()
         report = evaluate(IdentityBackend(), fmt, (_fixture(),), boundary=(65,), max_new_tokens=8)
         self.assertEqual(len(report.observations), 1)
@@ -288,6 +332,7 @@ class TestInputTextRecording(unittest.TestCase):
         self.assertEqual(obs.input_ids, tuple(map(ord, obs.input_text)))
 
     def test_observation_input_text_defaults_empty(self) -> None:
+        """Test observation input text defaults empty."""
         from model_protocol_lab.core import Observation
 
         obs = Observation(
@@ -306,6 +351,7 @@ class TestInputTextRecording(unittest.TestCase):
         self.assertEqual(obs.input_text, "")
 
     def test_audit_over_evaluate_output_is_canonical(self) -> None:
+        """Test audit over evaluate output is canonical."""
         fmt = _format()
         report = evaluate(IdentityBackend(), fmt, (_fixture(),), boundary=(65,), max_new_tokens=8)
         entries = [
@@ -321,8 +367,11 @@ class TestInputTextRecording(unittest.TestCase):
 
 
 class TestHtmlSection(unittest.TestCase):
+    """Test html section."""
+
     @staticmethod
     def _result(per_family):
+        """Result."""
         return {
             "decision": "select_best",
             "selected_candidate": "chatml",
@@ -339,25 +388,31 @@ class TestHtmlSection(unittest.TestCase):
         }
 
     def test_section_renders_certificate(self) -> None:
+        """Test section renders certificate."""
         html = render_html(self._result({"chatml": {"n_usable": 4, "n_problem": 0, "rate": 0.0}}))
         self.assertIn("Prompt-boundary canonicality", html)
         self.assertIn("certificate", html)
         self.assertIn("chatml", html)
 
     def test_section_renders_nonzero_rate(self) -> None:
+        """Test section renders nonzero rate."""
         html = render_html(self._result({"llama3": {"n_usable": 4, "n_problem": 1, "rate": 0.25}}))
         self.assertIn("Prompt-boundary canonicality", html)
         self.assertIn("25.0%", html)
         self.assertIn("non-canonical", html)
 
     def test_section_absent_when_unavailable(self) -> None:
+        """Test section absent when unavailable."""
         html = render_html({"decision": "failed"})
         self.assertNotIn("Prompt-boundary canonicality", html)
 
 
 class TestDiffBoundaryAudit(unittest.TestCase):
+    """Test diff boundary audit."""
+
     @staticmethod
     def _audit(rate, families=None):
+        """Audit."""
         chatml_entry = {"n_usable": 4, "n_problem": int(rate * 4), "rate": rate}
         return {
             "available": True,
@@ -371,12 +426,14 @@ class TestDiffBoundaryAudit(unittest.TestCase):
         }
 
     def test_identical_audits(self) -> None:
+        """Test identical audits."""
         diff = diff_boundary_audit(self._audit(0.0), self._audit(0.0))
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
         self.assertEqual(diff["family_drift"], [])
 
     def test_rate_drift_detected(self) -> None:
+        """Test rate drift detected."""
         diff = diff_boundary_audit(self._audit(0.0), self._audit(0.5))
         self.assertTrue(diff["changed"])
         self.assertTrue(diff["overall_rate"]["changed"])
@@ -384,15 +441,18 @@ class TestDiffBoundaryAudit(unittest.TestCase):
         self.assertEqual(diff["family_drift"][0]["family"], "chatml")
 
     def test_one_sided(self) -> None:
+        """Test one sided."""
         diff = diff_boundary_audit(self._audit(0.0), {"available": False})
         self.assertEqual(diff["available"], "old")
         self.assertFalse(diff["changed"])
 
     def test_neither(self) -> None:
+        """Test neither."""
         diff = diff_boundary_audit(None, None)
         self.assertEqual(diff["available"], "neither")
 
     def test_new_family_appears_as_drift(self) -> None:
+        """Test new family appears as drift."""
         old = self._audit(0.0, {"chatml": {"n_usable": 2, "n_problem": 0, "rate": 0.0}})
         new = self._audit(
             0.25,
@@ -406,6 +466,7 @@ class TestDiffBoundaryAudit(unittest.TestCase):
         self.assertEqual(diff["family_drift"][0]["family"], "llama3")
 
     def test_family_with_no_usable_observations_is_not_drift(self) -> None:
+        """Test family with no usable observations is not drift."""
         old = self._audit(0.0, {"chatml": {"n_usable": 2, "n_problem": 0, "rate": 0.0}})
         new = self._audit(
             0.0,
@@ -420,8 +481,11 @@ class TestDiffBoundaryAudit(unittest.TestCase):
 
 
 class TestDiffReportsWiring(unittest.TestCase):
+    """Test diff reports wiring."""
+
     @staticmethod
     def _report(rate):
+        """Report."""
         return {
             "decision": "select_best",
             "selected_candidate": "chatml",
@@ -439,6 +503,7 @@ class TestDiffReportsWiring(unittest.TestCase):
         }
 
     def test_summary_flags_and_payload_key(self) -> None:
+        """Test summary flags and payload key."""
         diff = diff_reports(self._report(0.0), self._report(0.5))
         self.assertIn("boundary_audit", diff)
         self.assertTrue(diff["summary"]["boundary_audit_changed"])
@@ -446,12 +511,15 @@ class TestDiffReportsWiring(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_identical_when_audits_match(self) -> None:
+        """Test identical when audits match."""
         diff = diff_reports(self._report(0.0), self._report(0.0))
         self.assertFalse(diff["summary"]["boundary_audit_changed"])
         self.assertTrue(diff["summary"]["identical"])
 
 
 class TestMutationGate(unittest.TestCase):
+    """Test mutation gate."""
+
     SOURCE = _REPO_ROOT / "model_protocol_lab" / "boundary_audit.py"
 
     # Mutant anchors, kept as constants so the (anchor, mutant) pairs stay
@@ -491,6 +559,7 @@ class TestMutationGate(unittest.TestCase):
     ]
 
     def test_mutants_are_killed(self) -> None:
+        """Test mutants are killed."""
         source = self.SOURCE.read_text()
         killed = []
         survived = []

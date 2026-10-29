@@ -27,6 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def run_module(*args: str) -> subprocess.CompletedProcess:
+    """Run module."""
     return subprocess.run(
         [sys.executable, "-m", "model_protocol_lab", *args],
         cwd=REPO_ROOT,
@@ -38,7 +39,10 @@ def run_module(*args: str) -> subprocess.CompletedProcess:
 
 
 class ModuleEntryTests(unittest.TestCase):
+    """Module entry tests."""
+
     def test_module_catalog_via_subprocess(self):
+        """Test module catalog via subprocess."""
         proc = run_module("catalog")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         entries = json.loads(proc.stdout)
@@ -78,10 +82,12 @@ class ModuleEntryTests(unittest.TestCase):
         )
 
     def test_module_no_args_exits_two(self):
+        """Test module no args exits two."""
         proc = run_module()
         self.assertEqual(proc.returncode, 2)
 
     def test_console_script_entry_point(self):
+        """Test console script entry point."""
         script = Path(sys.executable).parent / "model-protocol-lab"
         if not script.exists():
             self.skipTest("console script not installed in this environment")
@@ -93,8 +99,11 @@ class ModuleEntryTests(unittest.TestCase):
 
 @unittest.skipUnless(HAS_HF, "the 'hf' extra is not installed")
 class RunCommandTests(unittest.TestCase):
+    """Run command tests."""
+
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         from tests.test_adapter_integration import build_tiny_gpt2
 
         cls._tmp = TemporaryDirectory()
@@ -105,6 +114,7 @@ class RunCommandTests(unittest.TestCase):
         cls.dataset = REPO_ROOT / "examples" / "fixtures.json"
 
     def _run(self, extra=()):
+        """Run."""
         tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         output = Path(tmp.name) / "report"
@@ -133,6 +143,7 @@ class RunCommandTests(unittest.TestCase):
         return code, output
 
     def test_full_run_writes_report_and_returns_decision_code(self):
+        """Test full run writes report and returns decision code."""
         with redirect_stdout(io.StringIO()):
             code, output = self._run()
         # Random weights: no candidate passes; the lab must abstain honestly.
@@ -146,6 +157,7 @@ class RunCommandTests(unittest.TestCase):
         self.assertNotIn("https://", html)
 
     def test_full_run_with_mutations(self):
+        """Test full run with mutations."""
         with redirect_stdout(io.StringIO()):
             code, output = self._run(("--mutate",))
         self.assertEqual(code, 2)
@@ -153,6 +165,7 @@ class RunCommandTests(unittest.TestCase):
         self.assertGreater(len(results["search"]), 1)
 
     def test_run_with_evidence_flag(self):
+        """Test run with evidence flag."""
         with redirect_stdout(io.StringIO()):
             code, output = self._run(("--include-evidence",))
         self.assertEqual(code, 2)
@@ -161,6 +174,7 @@ class RunCommandTests(unittest.TestCase):
         self.assertIn("observations", results["search"][0])
 
     def test_run_rejects_missing_model(self):
+        """Test run rejects missing model."""
         with TemporaryDirectory() as tmp, redirect_stdout(io.StringIO()):
             code = main(
                 [
@@ -180,6 +194,7 @@ class RunCommandTests(unittest.TestCase):
         self.assertEqual(code, 1)
 
     def test_keyboard_interrupt_maps_to_130(self):
+        """Test keyboard interrupt maps to 130."""
         with (
             TemporaryDirectory() as tmp,
             patch("model_protocol_lab.cli.run_experiment", side_effect=KeyboardInterrupt),

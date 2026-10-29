@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (cycle 222 — DeepSource remediation, docs-publishing migration, 2026-10-29)
+
+- The active DeepSource inventory was remediated to zero
+  dispositions: every occurrence was fixed in code (missing
+  docstrings — including the test suite's, which the provider's
+  full-strength runs report — docstring formatting, static-method
+  conversions, explicit subprocess `check=False`, completed type
+  annotations in `tools/` and `examples/`, hardened URL and
+  executable resolution) or suppressed per site with a written
+  reason where a rule's premise does not apply to a deliberate
+  pattern of this codebase. A `.deepsource.toml` landed early in
+  the cycle was withdrawn after controlled captures proved the
+  provider applies no repo-file configuration for this
+  repository's connection; the adjudication is recorded in
+  `docs/SECURITY.md`. One genuine defect surfaced: a test method
+  nested inside another method, collected by no runner, was
+  dedented to class level and now executes (suite: 8,846 tests).
+- Docs publishing migrated from the `deploy-pages` action to
+  branch publishing: the Docs workflow now pushes the built site
+  to the `gh-pages` branch, the `github-pages` environment was
+  deleted, and no repo-side automation creates GitHub deployments.
+
 ### Added (cycle 221 — record-notation probe, 2026-10-29)
 
 - A record-notation probe (`run --record-notation`,

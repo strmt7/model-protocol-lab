@@ -44,6 +44,7 @@ CANDIDATES = ("alpha", "beta")
 
 
 def _spec(options=("w", "x", "y", "z"), correct="y", spec_id="s1"):
+    """Spec."""
     return {
         "id": spec_id,
         "question": "Which one?",
@@ -53,74 +54,89 @@ def _spec(options=("w", "x", "y", "z"), correct="y", spec_id="s1"):
 
 
 class ValidatePositionSpecsTests(unittest.TestCase):
+    """Validate position specs tests."""
+
     def test_valid_specs_pass(self):
+        """Test valid specs pass."""
         specs = validate_position_specs(POSITION_SPECS)
         self.assertEqual(len(specs), 8)
         self.assertIs(type(specs[0]["options"]), tuple)
 
     def test_empty_rejected(self):
+        """Test empty rejected."""
         with self.assertRaises(ValueError):
             validate_position_specs(())
         with self.assertRaises(ValueError):
             validate_position_specs([])
 
     def test_non_dict_rejected(self):
+        """Test non dict rejected."""
         with self.assertRaises(ValueError):
             validate_position_specs((POSITION_SPECS[0], "junk"))
 
     def test_blank_id_rejected(self):
+        """Test blank id rejected."""
         bad = dict(POSITION_SPECS[0])
         bad["id"] = "  "
         with self.assertRaises(ValueError):
             validate_position_specs((bad,))
 
     def test_blank_question_rejected(self):
+        """Test blank question rejected."""
         bad = dict(POSITION_SPECS[0])
         bad["question"] = ""
         with self.assertRaises(ValueError):
             validate_position_specs((bad,))
 
     def test_non_string_option_rejected(self):
+        """Test non string option rejected."""
         bad = dict(POSITION_SPECS[0])
         bad["options"] = ("a", 7, "c", "d")
         with self.assertRaises(ValueError):
             validate_position_specs((bad,))
 
     def test_blank_option_rejected(self):
+        """Test blank option rejected."""
         bad = dict(POSITION_SPECS[0])
         bad["options"] = ("a", " ", "c", "d")
         with self.assertRaises(ValueError):
             validate_position_specs((bad,))
 
     def test_duplicate_options_rejected(self):
+        """Test duplicate options rejected."""
         bad = dict(POSITION_SPECS[0])
         bad["options"] = ("a", "b", "a", "c")
         with self.assertRaises(ValueError):
             validate_position_specs((bad,))
 
     def test_single_option_rejected(self):
+        """Test single option rejected."""
         bad = dict(POSITION_SPECS[0])
         bad["options"] = ("a",)
         with self.assertRaises(ValueError):
             validate_position_specs((bad,))
 
     def test_five_options_rejected(self):
+        """Test five options rejected."""
         bad = dict(POSITION_SPECS[0])
         bad["options"] = ("a", "b", "c", "d", "e")
         with self.assertRaises(ValueError):
             validate_position_specs((bad,))
 
     def test_correct_not_in_options_rejected(self):
+        """Test correct not in options rejected."""
         bad = dict(POSITION_SPECS[0])
         bad["correct"] = "nope"
         with self.assertRaises(ValueError):
             validate_position_specs((bad,))
 
     def test_duplicate_id_rejected(self):
+        """Test duplicate id rejected."""
         with self.assertRaises(ValueError):
             validate_position_specs((POSITION_SPECS[0], POSITION_SPECS[0]))
 
     def test_two_and_three_options_accepted(self):
+        """Test two and three options accepted."""
         specs = validate_position_specs(
             (
                 _spec(options=("a", "b"), correct="a", spec_id="two"),
@@ -131,26 +147,33 @@ class ValidatePositionSpecsTests(unittest.TestCase):
 
 
 class LayoutOptionsTests(unittest.TestCase):
+    """Layout options tests."""
+
     def test_correct_first_places_at_zero(self):
+        """Test correct first places at zero."""
         layout = layout_options(("a", "b", "c", "d"), "c", condition="correct_first", seed=0)
         self.assertEqual(layout[0], "c")
         self.assertEqual(sorted(layout), ["a", "b", "c", "d"])
 
     def test_correct_last_places_at_end(self):
+        """Test correct last places at end."""
         layout = layout_options(("a", "b", "c", "d"), "c", condition="correct_last", seed=0)
         self.assertEqual(layout[-1], "c")
         self.assertEqual(sorted(layout), ["a", "b", "c", "d"])
 
     def test_correct_middle_places_at_midpoint(self):
+        """Test correct middle places at midpoint."""
         layout = layout_options(("a", "b", "c", "d"), "c", condition="correct_middle", seed=0)
         self.assertEqual(layout[len(layout) // 2], "c")
 
     def test_seeded_determinism(self):
+        """Test seeded determinism."""
         first = layout_options(("a", "b", "c", "d"), "c", condition="correct_middle", seed=42)
         second = layout_options(("a", "b", "c", "d"), "c", condition="correct_middle", seed=42)
         self.assertEqual(first, second)
 
     def test_correct_placement_invariant_under_seed(self):
+        """Test correct placement invariant under seed."""
         # Pre-registered falsifiable claim 3: the correct placement is
         # invariant under the distractor shuffle -- the shuffle only
         # reorders the other options.
@@ -165,6 +188,7 @@ class LayoutOptionsTests(unittest.TestCase):
                 self.assertEqual(layout.index("c"), expected, (condition, seed))
 
     def test_two_option_middle_is_last(self):
+        """Test two option middle is last."""
         # len(options) // 2 == 1 for two options: the middle slot is
         # the final slot.
         layout = layout_options(("a", "b"), "b", condition="correct_middle", seed=0)
@@ -172,6 +196,7 @@ class LayoutOptionsTests(unittest.TestCase):
         self.assertEqual(layout.index("b"), 1)
 
     def test_bad_inputs_rejected(self):
+        """Test bad inputs rejected."""
         with self.assertRaises(ValueError):
             layout_options([], "a", condition="correct_first", seed=0)
         with self.assertRaises(ValueError):
@@ -187,7 +212,10 @@ class LayoutOptionsTests(unittest.TestCase):
 
 
 class RenderOptionsTests(unittest.TestCase):
+    """Render options tests."""
+
     def test_render_format(self):
+        """Test render format."""
         text = render_options("Which?", ("b", "a", "c"))
         self.assertIn("Which?", text)
         self.assertIn("A. b", text)
@@ -197,6 +225,7 @@ class RenderOptionsTests(unittest.TestCase):
         self.assertTrue(text.endswith("Reply with exactly the correct option text."))
 
     def test_bad_inputs_rejected(self):
+        """Test bad inputs rejected."""
         with self.assertRaises(ValueError):
             render_options("", ("a", "b"))
         with self.assertRaises(ValueError):
@@ -219,7 +248,10 @@ def _ref_layout(options, correct, condition, seed):
 
 
 class BuildPositionFixturesTests(unittest.TestCase):
+    """Build position fixtures tests."""
+
     def test_one_fixture_per_spec_per_condition(self):
+        """Test one fixture per spec per condition."""
         specs = validate_position_specs(POSITION_SPECS)
         for condition in CONDITIONS:
             fixtures = build_position_fixtures(specs, condition=condition, seed=20261012)
@@ -229,6 +261,7 @@ class BuildPositionFixturesTests(unittest.TestCase):
             self.assertEqual(fixtures[0].group, f"position-{condition}")
 
     def test_fixture_text_matches_oracle_layout(self):
+        """Test fixture text matches oracle layout."""
         specs = validate_position_specs((_spec(),))
         for condition in CONDITIONS:
             for seed in (0, 1, 20261012):
@@ -240,6 +273,7 @@ class BuildPositionFixturesTests(unittest.TestCase):
                 )
 
     def test_brute_force_oracle_differential(self):
+        """Test brute force oracle differential."""
         rng = random.Random(0xC154)  # noqa: S311 -- deterministic test seed
         words = ["aa", "bb", "cc", "dd", "ee"]
         for _trial in range(200):
@@ -254,30 +288,39 @@ class BuildPositionFixturesTests(unittest.TestCase):
             self.assertEqual(got.index(correct), want.index(correct))
 
     def test_bad_condition_rejected(self):
+        """Test bad condition rejected."""
         specs = validate_position_specs(POSITION_SPECS)
         with self.assertRaises(ValueError):
             build_position_fixtures(specs, condition="sideways", seed=0)
 
     def test_bad_seed_rejected(self):
+        """Test bad seed rejected."""
         specs = validate_position_specs(POSITION_SPECS)
         with self.assertRaises(ValueError):
             build_position_fixtures(specs, condition="correct_first", seed=-1)
 
 
 class PrimacyIndexTests(unittest.TestCase):
+    """Primacy index tests."""
+
     def test_pure_primacy(self):
+        """Test pure primacy."""
         self.assertEqual(primacy_index(8, 8, 8, 0), 1.0)
 
     def test_pure_recency(self):
+        """Test pure recency."""
         self.assertEqual(primacy_index(8, 0, 8, 8), -1.0)
 
     def test_neutral(self):
+        """Test neutral."""
         self.assertEqual(primacy_index(8, 4, 8, 4), 0.0)
 
     def test_mixed(self):
+        """Test mixed."""
         self.assertAlmostEqual(primacy_index(4, 3, 4, 1), 0.5)
 
     def test_malformed_returns_none(self):
+        """Test malformed returns none."""
         self.assertIsNone(primacy_index(-1, 0, 8, 0))
         self.assertIsNone(primacy_index(8, 9, 8, 0))
         self.assertIsNone(primacy_index(0, 0, 8, 0))
@@ -290,6 +333,7 @@ class PrimacyIndexTests(unittest.TestCase):
     )
     @settings(max_examples=100)
     def test_index_bounded(self, n_first, n_last):
+        """Test index bounded."""
         for correct_first in (0, n_first // 2, n_first):
             for correct_last in (0, n_last // 2, n_last):
                 index = primacy_index(n_first, correct_first, n_last, correct_last)
@@ -299,6 +343,7 @@ class PrimacyIndexTests(unittest.TestCase):
 
 
 def _format(name: str) -> Format:
+    """Format."""
     return Format(
         name=name,
         bos="",
@@ -323,13 +368,16 @@ class ScriptedPositionBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(ids):
+        """Decode."""
         return "".join(map(chr, ids))
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         prompt = self.decode(input_ids)
         candidate = next((n for n in CANDIDATES if f"[{n}]" in prompt), None)
         if candidate is None:
@@ -346,6 +394,7 @@ class ScriptedPositionBackend:
 
 
 def _run_stage(policy, condition="correct_first", seed=20261012):
+    """Run stage."""
     specs = validate_position_specs(POSITION_SPECS)
     fixtures = build_position_fixtures(specs, condition=condition, seed=seed)
     return position_stage(
@@ -360,7 +409,10 @@ def _run_stage(policy, condition="correct_first", seed=20261012):
 
 
 class PositionStageTests(unittest.TestCase):
+    """Position stage tests."""
+
     def test_primacy_policy_passes_correct_first(self):
+        """Test primacy policy passes correct first."""
         stage = _run_stage({"alpha": 0, "beta": 0})
         self.assertEqual(stage["condition"], "correct_first")
         self.assertEqual(stage["n_fixtures"], 8)
@@ -368,26 +420,31 @@ class PositionStageTests(unittest.TestCase):
         self.assertTrue(stage["per_candidate"]["alpha"]["pass"])
 
     def test_primacy_policy_fails_correct_last(self):
+        """Test primacy policy fails correct last."""
         stage = _run_stage({"alpha": 0, "beta": 0}, condition="correct_last")
         self.assertEqual(stage["per_candidate"]["alpha"]["correct"], 0)
         self.assertFalse(stage["per_candidate"]["alpha"]["pass"])
 
     def test_recency_policy_passes_correct_last(self):
+        """Test recency policy passes correct last."""
         stage = _run_stage({"alpha": -1, "beta": -1}, condition="correct_last")
         self.assertTrue(stage["per_candidate"]["alpha"]["pass"])
 
     def test_middle_condition_scores_partially(self):
+        """Test middle condition scores partially."""
         # Primacy policy under correct_middle: the correct option is at
         # index 2, never the first -- zero correct.
         stage = _run_stage({"alpha": 0, "beta": 0}, condition="correct_middle")
         self.assertEqual(stage["per_candidate"]["alpha"]["correct"], 0)
 
     def test_raising_backend_cell_is_none(self):
+        """Test raising backend cell is none."""
         stage = _run_stage({"alpha": "raise", "beta": 0})
         self.assertIsNone(stage["per_candidate"]["alpha"])
         self.assertIsNotNone(stage["per_candidate"]["beta"])
 
     def test_bad_inputs_rejected(self):
+        """Test bad inputs rejected."""
         specs = validate_position_specs(POSITION_SPECS)
         fixtures = build_position_fixtures(specs, condition="correct_first", seed=0)
         fmts = tuple(_format(c) for c in CANDIDATES)
@@ -425,6 +482,7 @@ class PositionStageTests(unittest.TestCase):
 
 
 def _run_analysis(policy):
+    """Run analysis."""
     specs = validate_position_specs(POSITION_SPECS)
     stages = {}
     for condition in CONDITIONS:
@@ -442,13 +500,17 @@ def _run_analysis(policy):
 
 
 class PositionSensitivityTests(unittest.TestCase):
+    """Position sensitivity tests."""
+
     def test_primacy_indexes(self):
+        """Test primacy indexes."""
         result = _run_analysis({"alpha": 0, "beta": -1})
         self.assertTrue(result["available"])
         self.assertEqual(result["primacy_index"]["alpha"], 1.0)
         self.assertEqual(result["primacy_index"]["beta"], -1.0)
 
     def test_flips_detected(self):
+        """Test flips detected."""
         # Under correct_last the recency-biased beta wins; under
         # correct_first the primacy-biased alpha wins.
         result = _run_analysis({"alpha": 0, "beta": -1})
@@ -458,6 +520,7 @@ class PositionSensitivityTests(unittest.TestCase):
         self.assertNotIn("correct_first", flip_conditions)
 
     def test_condition_effect(self):
+        """Test condition effect."""
         result = _run_analysis({"alpha": 0, "beta": -1})
         effect = result["condition_effect"]
         self.assertEqual(effect["n_candidates"], 2)
@@ -466,6 +529,7 @@ class PositionSensitivityTests(unittest.TestCase):
         self.assertAlmostEqual(effect["mean_index"], 0.0)
 
     def test_no_flips_when_all_conditions_agree(self):
+        """Test no flips when all conditions agree."""
         # Hand-built stages: alpha uniquely passes every condition, so
         # every condition matches the primary verdict.
         stages = {}
@@ -491,6 +555,7 @@ class PositionSensitivityTests(unittest.TestCase):
         self.assertEqual(effect["n_negative"], 0)
 
     def test_missing_condition_degrades_index(self):
+        """Test missing condition degrades index."""
         specs = validate_position_specs(POSITION_SPECS)
         stages = {}
         for condition in ("correct_first", "correct_middle"):
@@ -510,6 +575,7 @@ class PositionSensitivityTests(unittest.TestCase):
         self.assertIsNone(result["condition_effect"])
 
     def test_fail_closed_details(self):
+        """Test fail closed details."""
         specs = validate_position_specs(POSITION_SPECS)
         fixtures = build_position_fixtures(specs, condition="correct_first", seed=0)
         fmts = tuple(_format(c) for c in CANDIDATES)
@@ -564,6 +630,7 @@ class PositionSensitivityTests(unittest.TestCase):
         )
 
     def test_unavailable_condition_not_a_flip(self):
+        """Test unavailable condition not a flip."""
         # A condition where no candidate could be evaluated is
         # "unavailable", never a flip.
         stage = _run_stage({"alpha": "raise", "beta": "raise"})
@@ -579,6 +646,7 @@ class PositionMutationGateTests(unittest.TestCase):
     """Tempdir-module mutation gates (the real tree is never rewritten)."""
 
     def _run_gate(self, module_name, name, old_text, new_text, scenario):
+        """Run gate."""
         mod = __import__(f"model_protocol_lab.{module_name}", fromlist=["x"])
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
@@ -598,10 +666,12 @@ class PositionMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _index_sign_scenario(mod):
+        """Index sign scenario."""
         assert mod.primacy_index(8, 8, 8, 0) == 1.0
         assert mod.primacy_index(8, 0, 8, 8) == -1.0
 
     def test_mutant_flipped_index_sign_caught(self):
+        """Test mutant flipped index sign caught."""
         self._run_gate(
             "position",
             "flipped_index",
@@ -612,6 +682,7 @@ class PositionMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _boundary_gate_scenario(mod):
+        """Boundary gate scenario."""
         specs = validate_position_specs(POSITION_SPECS)
         fixtures = build_position_fixtures(specs, condition="correct_first", seed=20261012)
         stage = mod.position_stage(
@@ -627,6 +698,7 @@ class PositionMutationGateTests(unittest.TestCase):
         assert stage["per_candidate"]["beta"]["correct"] == 8
 
     def test_mutant_dropped_boundary_gate_caught(self):
+        """Test mutant dropped boundary gate caught."""
         # The mutant counts non-exact observations as "correct": the
         # scenario pins the all-exact count, so it fails on the mutant.
         self._run_gate(
@@ -641,11 +713,13 @@ class PositionMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _index_drift_scenario(mod):
+        """Index drift scenario."""
         old = _position_payload(index_alpha=1.0)
         new = _position_payload(index_alpha=-1.0)
         assert mod.diff_position(old, new)["changed"] is True
 
     def test_mutant_dropped_index_drift_caught(self):
+        """Test mutant dropped index drift caught."""
         self._run_gate(
             "diffreports",
             "dropped_index_drift",
@@ -656,11 +730,13 @@ class PositionMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _mean_drift_scenario(mod):
+        """Mean drift scenario."""
         old = _position_payload(mean_index=0.5)
         new = _position_payload(mean_index=-0.5)
         assert mod.diff_position(old, new)["changed"] is True
 
     def test_mutant_dropped_mean_drift_caught(self):
+        """Test mutant dropped mean drift caught."""
         self._run_gate(
             "diffreports",
             "dropped_mean_drift",
@@ -671,6 +747,7 @@ class PositionMutationGateTests(unittest.TestCase):
 
 
 def _position_payload(index_alpha=1.0, mean_index=0.0):
+    """Position payload."""
     per_condition = {}
     for condition in CONDITIONS:
         per_condition[condition] = {
@@ -701,13 +778,17 @@ def _position_payload(index_alpha=1.0, mean_index=0.0):
 
 
 class DiffPositionTests(unittest.TestCase):
+    """Diff position tests."""
+
     def test_identical_payloads_unchanged(self):
+        """Test identical payloads unchanged."""
         payload = _position_payload()
         diff = diff_position(payload, copy.deepcopy(payload))
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
 
     def test_index_drift_only_still_changed(self):
+        """Test index drift only still changed."""
         # Single-disjunct pin: only the primacy index moves.
         diff = diff_position(_position_payload(index_alpha=1.0), _position_payload(index_alpha=0.5))
         self.assertTrue(diff["changed"])
@@ -715,11 +796,13 @@ class DiffPositionTests(unittest.TestCase):
         self.assertEqual(diff["index_drift"][0]["candidate"], "alpha")
 
     def test_mean_drift_only_still_changed(self):
+        """Test mean drift only still changed."""
         diff = diff_position(_position_payload(mean_index=0.5), _position_payload(mean_index=-0.5))
         self.assertTrue(diff["changed"])
         self.assertTrue(diff["mean_index"]["changed"])
 
     def test_condition_drift_only_still_changed(self):
+        """Test condition drift only still changed."""
         old = _position_payload()
         new = _position_payload()
         new["per_condition"]["correct_last"]["winner"] = "beta"
@@ -728,6 +811,7 @@ class DiffPositionTests(unittest.TestCase):
         self.assertTrue(diff["condition_changed"]["correct_last"]["changed"])
 
     def test_flip_only_still_changed(self):
+        """Test flip only still changed."""
         old = _position_payload()
         new = _position_payload()
         new["flips"] = [
@@ -744,6 +828,7 @@ class DiffPositionTests(unittest.TestCase):
         self.assertTrue(diff["flips_changed"])
 
     def test_candidate_rate_drift_only_still_changed(self):
+        """Test candidate rate drift only still changed."""
         old = _position_payload()
         new = _position_payload()
         new["per_condition"]["correct_first"]["per_candidate"]["beta"]["correct_rate"] = 0.5
@@ -752,6 +837,7 @@ class DiffPositionTests(unittest.TestCase):
         self.assertEqual(len(diff["candidate_drift"]), 1)
 
     def test_conditions_added_removed(self):
+        """Test conditions added removed."""
         old = _position_payload()
         new = _position_payload()
         del new["per_condition"]["correct_middle"]
@@ -761,6 +847,7 @@ class DiffPositionTests(unittest.TestCase):
         self.assertEqual(diff["conditions_removed"], ["correct_middle"])
 
     def test_asymmetric(self):
+        """Test asymmetric."""
         payload = _position_payload()
         self.assertEqual(diff_position(payload, None)["available"], "old")
         self.assertEqual(diff_position(None, payload)["available"], "new")
@@ -768,6 +855,7 @@ class DiffPositionTests(unittest.TestCase):
         self.assertFalse(diff_position(payload, None)["changed"])
 
     def test_hostile_payloads_degrade(self):
+        """Test hostile payloads degrade."""
         good = _position_payload()
         for hostile in (
             None,
@@ -787,6 +875,7 @@ class DiffPositionTests(unittest.TestCase):
             self.assertFalse(diff["changed"])
 
     def test_feeds_identical(self):
+        """Test feeds identical."""
         old_report = {"decision": "x", "winner": "y", "position": _position_payload()}
         new_report = copy.deepcopy(old_report)
         diff = diff_reports(old_report, new_report)
@@ -800,6 +889,7 @@ class DiffPositionTests(unittest.TestCase):
         self.assertTrue(diff["summary"]["position_changed"])
 
     def test_summary_renders_hostile_names(self):
+        """Test summary renders hostile names."""
         old = _position_payload()
         new = _position_payload(index_alpha=-1.0)
         diff = diff_reports(
@@ -819,7 +909,10 @@ class DiffPositionTests(unittest.TestCase):
 
 
 class PositionSectionTests(unittest.TestCase):
+    """Position section tests."""
+
     def test_section_renders(self):
+        """Test section renders."""
         result = _run_analysis({"alpha": 0, "beta": -1})
         html = _position_section({"position": result})
         self.assertIn('id="position-sensitivity"', html)
@@ -829,11 +922,13 @@ class PositionSectionTests(unittest.TestCase):
         self.assertIn("differs", html)
 
     def test_section_absent_when_unavailable(self):
+        """Test section absent when unavailable."""
         self.assertEqual(_position_section({}), "")
         self.assertEqual(_position_section({"position": {"available": False}}), "")
         self.assertEqual(_position_section({"position": "junk"}), "")
 
     def test_section_escapes_hostile(self):
+        """Test section escapes hostile."""
         result = _run_analysis({"alpha": 0, "beta": 0})
         hostile = copy.deepcopy(result)
         hostile["per_condition"]["correct_first"]["per_candidate"]["<script>alert(1)"] = {
@@ -852,19 +947,23 @@ class PositionCoverageTests(unittest.TestCase):
 
     @staticmethod
     def _reports(old_pos, new_pos):
+        """Reports."""
         base = {"decision": "selected", "winner": "alpha"}
         return {**base, "position": old_pos}, {**base, "position": new_pos}
 
     def test_summary_position_only_in_old(self):
+        """Test summary position only in old."""
         old, new = self._reports(_position_payload(), None)
         summary = render_summary(diff_reports(old, new))
         self.assertIn("did not record the position probe", summary)
 
     def test_summary_neither_side_has_position(self):
+        """Test summary neither side has position."""
         summary = render_summary(diff_reports({"decision": "x"}, {"decision": "x"}))
         self.assertNotIn("Position", summary)
 
     def test_summary_changed_condition_line(self):
+        """Test summary changed condition line."""
         old = _position_payload()
         new = _position_payload()
         new["per_condition"]["correct_last"]["decision"] = "no_candidate"
@@ -873,6 +972,7 @@ class PositionCoverageTests(unittest.TestCase):
         self.assertIn("Position (correct_last):", summary)
 
     def test_summary_conditions_added_and_removed(self):
+        """Test summary conditions added and removed."""
         old = _position_payload()
         new = _position_payload()
         del new["per_condition"]["correct_middle"]
@@ -893,6 +993,7 @@ class PositionCoverageTests(unittest.TestCase):
         self.assertIn("Position conditions added: correct_extra", summary)
 
     def test_summary_flips_changed_line(self):
+        """Test summary flips changed line."""
         old = _position_payload()
         new = _position_payload()
         new["flips"] = [
@@ -908,6 +1009,7 @@ class PositionCoverageTests(unittest.TestCase):
         self.assertIn("Position flip pattern changed between runs.", summary)
 
     def test_summary_index_drift_truncates(self):
+        """Test summary index drift truncates."""
         old = _position_payload()
         new = _position_payload()
         old["primacy_index"] = {f"cand{i}": 1.0 for i in range(6)}
@@ -917,12 +1019,14 @@ class PositionCoverageTests(unittest.TestCase):
         self.assertIn("... and 1 more", summary)
 
     def test_summary_mean_index_changed(self):
+        """Test summary mean index changed."""
         old = _position_payload()
         new = _position_payload(mean_index=0.5)
         summary = render_summary(diff_reports(*self._reports(old, new)))
         self.assertIn("Mean primacy index:", summary)
 
     def test_summary_candidates_added_removed(self):
+        """Test summary candidates added removed."""
         old = _position_payload()
         new = _position_payload()
         new["per_condition"]["correct_first"]["per_candidate"]["gamma"] = {
@@ -940,6 +1044,7 @@ class PositionCoverageTests(unittest.TestCase):
         self.assertIn("Position candidates removed: beta", summary)
 
     def test_section_hostile_structure_degrades(self):
+        """Test section hostile structure degrades."""
         # per_condition not a dict -> empty section.
         self.assertEqual(_position_section({"position": {"available": True}}), "")
         self.assertEqual(
@@ -955,6 +1060,7 @@ class PositionCoverageTests(unittest.TestCase):
         self.assertIn('id="position-sensitivity"', html)
 
     def test_section_non_numeric_rate_and_index(self):
+        """Test section non numeric rate and index."""
         payload = _run_analysis({"alpha": 0, "beta": 0})
         payload["per_condition"]["correct_first"]["per_candidate"]["alpha"] = {
             "correct_rate": "junk",
@@ -968,6 +1074,7 @@ class PositionCoverageTests(unittest.TestCase):
         self.assertIn('id="position-sensitivity"', html)
 
     def test_section_missing_primacy_effect_flips(self):
+        """Test section missing primacy effect flips."""
         payload = _run_analysis({"alpha": 0, "beta": 0})
         del payload["primacy_index"]
         del payload["condition_effect"]
@@ -977,9 +1084,14 @@ class PositionCoverageTests(unittest.TestCase):
         self.assertNotIn("Condition effect", html)
 
     def test_stage_evaluate_raise_degrades_cell(self):
+        """Test stage evaluate raise degrades cell."""
+
         class EncodeBoomBackend(ScriptedPositionBackend):
+            """Encode boom backend."""
+
             @staticmethod
             def encode(text):
+                """Encode."""
                 raise RuntimeError("encode boom")
 
         specs = validate_position_specs(POSITION_SPECS)
@@ -994,6 +1106,7 @@ class PositionCoverageTests(unittest.TestCase):
         self.assertIsNone(stage["per_candidate"]["alpha"])
 
     def test_sensitivity_rejects_malformed_entries(self):
+        """Test sensitivity rejects malformed entries."""
         specs = validate_position_specs(POSITION_SPECS)
         fixtures = build_position_fixtures(specs, condition="correct_first", seed=0)
         stage = position_stage(
@@ -1019,6 +1132,7 @@ class PositionCoverageTests(unittest.TestCase):
             )
 
     def test_sensitivity_rejects_malformed_stage_shapes(self):
+        """Test sensitivity rejects malformed stage shapes."""
         specs = validate_position_specs(POSITION_SPECS)
         fixtures = build_position_fixtures(specs, condition="correct_first", seed=0)
         stage = position_stage(
@@ -1044,7 +1158,10 @@ class PositionCoverageTests(unittest.TestCase):
 
 
 class CliProbeTests(unittest.TestCase):
+    """Cli probe tests."""
+
     def test_run_position_flag(self):
+        """Test run position flag."""
         from model_protocol_lab import cli
 
         self.assertTrue(hasattr(cli, "_run_position_probe"))
@@ -1066,6 +1183,7 @@ class CliProbeTests(unittest.TestCase):
         self.assertEqual(position["primacy_index"]["alpha"], 1.0)
 
     def test_probe_never_raises(self):
+        """Test probe never raises."""
         from model_protocol_lab import cli
 
         result = {"decision": "selected"}
@@ -1082,7 +1200,10 @@ class CliProbeTests(unittest.TestCase):
 
 
 class SampleReportTests(unittest.TestCase):
+    """Sample report tests."""
+
     def test_sample_position_exercise_deterministic(self):
+        """Test sample position exercise deterministic."""
         script = Path(__file__).resolve().parent.parent / "examples" / "make_sample_report.py"
         spec = importlib.util.spec_from_file_location("make_sample_report_c154", script)
         assert spec is not None and spec.loader is not None
@@ -1104,6 +1225,7 @@ class SampleReportTests(unittest.TestCase):
         self.assertTrue(result_a["position"]["flips"])
 
     def test_committed_sample_has_position(self):
+        """Test committed sample has position."""
         sample = Path(__file__).resolve().parent.parent / "examples" / "sample-report"
         results = json.loads((sample / "results.json").read_text(encoding="utf-8"))
         self.assertTrue(results["position"]["available"])

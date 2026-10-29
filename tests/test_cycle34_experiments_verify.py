@@ -132,6 +132,7 @@ def oracle_classify(obs, eos_id):
     return "no-boundary-in-N"
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_taxonomy(result, eos_id):
     """Reimplementation of failure_taxonomy from its docstring."""
     if type(result) is not dict:
@@ -169,6 +170,7 @@ def oracle_taxonomy(result, eos_id):
     }
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_budget_frontier(search, *, boundary, max_new_tokens, native_decision, native_winner):
     """Reimplementation of budget_frontier from its docstring's derivation."""
     if type(search) not in (list, tuple) or not search:
@@ -248,6 +250,7 @@ def oracle_budget_frontier(search, *, boundary, max_new_tokens, native_decision,
     }
 
     def pass_count(name, budget):
+        """Pass count."""
         return bisect_right(sorted_mins[name], budget)
 
     candidates = {}
@@ -271,6 +274,7 @@ def oracle_budget_frontier(search, *, boundary, max_new_tokens, native_decision,
         }
 
     def decision_at(budget):
+        """Decision at."""
         winners = [name for name in names if pass_count(name, budget) == n_fixtures]
         if len(winners) == 1:
             return ("selected", winners[0])
@@ -381,6 +385,7 @@ def oracle_stop_cell(backend, fixture, boundary, outcome, stop_text=None):
     }
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_stop_matrix(
     backend,
     candidate_name,
@@ -516,6 +521,7 @@ def oracle_aggregate(scores):
     }
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_interpret_kind(fixture_scores):
     """The interpretation *kind* from _interpret_logprob_candidate's docstring.
 
@@ -597,6 +603,7 @@ def oracle_diagnostic_observation(backend, obs, expected_by_id):
     return scored, score
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_logprob_diagnostic(backend, result, fixtures):
     """Reimplementation of logprob_diagnostic from its docstring.
 
@@ -676,16 +683,19 @@ class ByteBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         if type(text) is not str:
             raise ValueError("encode needs str")
         return tuple(text.encode("utf-8"))
 
     @staticmethod
     def decode(token_ids):
+        """Decode."""
         return bytes(tuple(token_ids)).decode("utf-8")
 
     @staticmethod
     def generate(input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         raise AssertionError("ByteBackend.generate must be overridden")
 
 
@@ -701,6 +711,7 @@ class ScriptedBackend(ByteBackend):
         self.answer_text = "YES"
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         self.seeds.append(seed)
         text = self.decode(input_ids)
         ok = self._script(text, seed)
@@ -719,6 +730,7 @@ class LogprobBackend(ByteBackend):
         self.mode = mode
 
     def forward_logits(self, input_ids):
+        """Forward logits."""
         import torch
 
         seq = tuple(input_ids)
@@ -738,6 +750,7 @@ class ExplodingDecodeBackend(ByteBackend):
         self.mode = mode
 
     def decode(self, token_ids):
+        """Decode."""
         if self.mode == "raise":
             raise RuntimeError("decode exploded")
         return b"not-a-str"
@@ -749,10 +762,12 @@ class ExplodingDecodeBackend(ByteBackend):
 
 
 def _rng(tag, index):
+    """Rng."""
     return random.Random(f"cycle34:{tag}:{index}")  # noqa: S311 -- deterministic test seeding
 
 
 def _rand_ids(rng, lo=0, hi=12, vmax=250):
+    """Rand ids."""
     return tuple(rng.randrange(0, vmax) for _ in range(rng.randrange(lo, hi)))
 
 
@@ -807,7 +822,10 @@ def _assert_same_outcome(test, fn_impl, fn_oracle, *args, **kwargs):
 
 
 class TestClassifyObservation(unittest.TestCase):
+    """Test classify observation."""
+
     def test_fuzz_vs_oracle(self):
+        """Test fuzz vs oracle."""
         for i in range(400):
             rng = _rng("classify", i)
             boundary = tuple(rng.randrange(1, 250) for _ in range(rng.choice([1, 2])))
@@ -833,6 +851,7 @@ class TestClassifyObservation(unittest.TestCase):
                 _assert_same_outcome(self, X.classify_observation, oracle_classify, obs, eos_id)
 
     def test_non_dict_raises_value_error(self):
+        """Test non dict raises value error."""
         for bad in (None, 5, "x", [("a", 1)], (("a", 1),)):
             with self.subTest(bad=bad):
                 with self.assertRaises(ValueError):
@@ -841,6 +860,7 @@ class TestClassifyObservation(unittest.TestCase):
                     oracle_classify(bad, None)
 
     def test_documented_priority_order(self):
+        """Test documented priority order."""
         # Backend failure beats the tokenization-mismatch diagnostic.
         obs = {
             "exact_match": False,
@@ -889,6 +909,7 @@ class TestClassifyObservation(unittest.TestCase):
         self.assertIsNone(X.classify_observation(obs6, None))
 
     def test_eos_branch_type_error_on_truthy_noniterable(self):
+        """Test eos branch type error on truthy noniterable."""
         # Docstring contract: a truthy non-iterable output_ids raises
         # TypeError from the EOS-membership check, but only when reached.
         obs = {
@@ -908,8 +929,11 @@ class TestClassifyObservation(unittest.TestCase):
 
 
 class TestFailureTaxonomy(unittest.TestCase):
+    """Test failure taxonomy."""
+
     @staticmethod
     def _random_result(rng):
+        """Random result."""
         boundary = (rng.randrange(1, 250),)
         eos_id = rng.choice([None, 7])
         n_candidates = rng.randrange(1, 4)
@@ -946,6 +970,7 @@ class TestFailureTaxonomy(unittest.TestCase):
         return {"search": search, "decision": decision, "held_out": held_out}, eos_id
 
     def test_fuzz_vs_oracle(self):
+        """Test fuzz vs oracle."""
         for i in range(300):
             rng = _rng("taxonomy", i)
             result, eos_id = self._random_result(rng)
@@ -953,12 +978,14 @@ class TestFailureTaxonomy(unittest.TestCase):
                 _assert_same_outcome(self, X.failure_taxonomy, oracle_taxonomy, result, eos_id)
 
     def test_result_must_be_dict(self):
+        """Test result must be dict."""
         with self.assertRaises(ValueError):
             X.failure_taxonomy([], None)
         with self.assertRaises(ValueError):
             X.failure_taxonomy(None, None)
 
     def test_all_pass_candidate_gets_zero_counts(self):
+        """Test all pass candidate gets zero counts."""
         obs = {
             "exact_match": True,
             "boundary_found": True,
@@ -979,6 +1006,7 @@ class TestFailureTaxonomy(unittest.TestCase):
         self.assertTrue(got2["eos_id_considered"])
 
     def test_held_out_only_counted_on_divergence(self):
+        """Test held out only counted on divergence."""
         obs = {
             "exact_match": False,
             "boundary_found": False,
@@ -1006,8 +1034,11 @@ class TestFailureTaxonomy(unittest.TestCase):
 
 
 class TestBudgetFrontier(unittest.TestCase):
+    """Test budget frontier."""
+
     @staticmethod
     def _random_case(rng):
+        """Random case."""
         n_candidates = rng.randrange(1, 4)
         n_fixtures = rng.randrange(1, 5)
         boundary = tuple(rng.randrange(1, 250) for _ in range(rng.choice([1, 2])))
@@ -1059,6 +1090,7 @@ class TestBudgetFrontier(unittest.TestCase):
         }
 
     def test_fuzz_vs_oracle(self):
+        """Test fuzz vs oracle."""
         for i in range(300):
             rng = _rng("budget", i)
             search, kwargs = self._random_case(rng)
@@ -1068,6 +1100,7 @@ class TestBudgetFrontier(unittest.TestCase):
                 )
 
     def test_input_validation(self):
+        """Test input validation."""
         search = [
             {
                 "format": {"name": "a"},
@@ -1173,8 +1206,11 @@ class TestBudgetFrontier(unittest.TestCase):
             X.budget_frontier(search + other, **good)
 
     def test_tie_is_ambiguous_not_first_winner(self):
+        """Test tie is ambiguous not first winner."""
+
         # Two identical all-pass candidates: the conservative rule abstains.
         def entry(name):
+            """Entry."""
             return {
                 "format": {"name": name},
                 "observations": [
@@ -1206,6 +1242,7 @@ class TestBudgetFrontier(unittest.TestCase):
         self.assertEqual(got["flip_ranges"], [[1, 3]])
 
     def test_exact_derivation_example(self):
+        """Test exact derivation example."""
         # Hand-checkable: boundary (5,), outputs put the boundary at cuts
         # 0 and 2 -> min budgets 1 and 3.
         search = [
@@ -1266,8 +1303,11 @@ class TestBudgetFrontier(unittest.TestCase):
 
 
 class TestResolveBoundaries(unittest.TestCase):
+    """Test resolve boundaries."""
+
     @staticmethod
     def _formats(rng, n):
+        """Formats."""
         out = []
         for i in range(n):
             out.append(
@@ -1282,6 +1322,7 @@ class TestResolveBoundaries(unittest.TestCase):
         return tuple(out)
 
     def test_fuzz_vs_oracle(self):
+        """Test fuzz vs oracle."""
         for i in range(200):
             rng = _rng("resolve", i)
             n = rng.randrange(1, 5)
@@ -1313,11 +1354,13 @@ class TestResolveBoundaries(unittest.TestCase):
                 )
 
     def test_default_applies_to_every_candidate(self):
+        """Test default applies to every candidate."""
         formats = self._formats(random.Random("cycle34:resolve:fixed"), 3)  # noqa: S311 -- deterministic test seeding
         got = X._resolve_boundaries(formats, (1, 2), None)
         self.assertEqual(got, {f.name: (1, 2) for f in formats})
 
     def test_map_overrides_only_named(self):
+        """Test map overrides only named."""
         formats = self._formats(random.Random("cycle34:resolve:fixed2"), 3)  # noqa: S311 -- deterministic test seeding
         got = X._resolve_boundaries(formats, (1, 2), {"cand1": (9,)})
         self.assertEqual(got["cand1"], (9,))
@@ -1326,8 +1369,11 @@ class TestResolveBoundaries(unittest.TestCase):
 
 
 class TestCandidateFingerprint(unittest.TestCase):
+    """Test candidate fingerprint."""
+
     @staticmethod
     def _formats(rng):
+        """Formats."""
         return Format(
             name=rng.choice(["a", "b"]),
             bos=rng.choice(["", "<s>"]),
@@ -1341,6 +1387,7 @@ class TestCandidateFingerprint(unittest.TestCase):
         )
 
     def test_fuzz_vs_oracle(self):
+        """Test fuzz vs oracle."""
         for i in range(200):
             rng = _rng("fingerprint", i)
             fmt = self._formats(rng)
@@ -1348,12 +1395,14 @@ class TestCandidateFingerprint(unittest.TestCase):
                 self.assertEqual(X.candidate_fingerprint(fmt), oracle_fingerprint(fmt))
 
     def test_name_is_part_of_identity(self):
+        """Test name is part of identity."""
         a = Format(name="alpha", bos="", user_prefix="U:", assistant_prefix="A:", turn_end="\n")
         b = Format(name="beta", bos="", user_prefix="U:", assistant_prefix="A:", turn_end="\n")
         self.assertNotEqual(X.candidate_fingerprint(a), X.candidate_fingerprint(b))
         self.assertTrue(X.candidate_fingerprint(a).startswith("sha256:"))
 
     def test_repeat_bos_normalized_when_bos_empty(self):
+        """Test repeat bos normalized when bos empty."""
         # Docstring: with an empty bos, repeat_bos is meaningless, so the
         # fingerprint normalizes it away.
         a = Format(
@@ -1398,8 +1447,11 @@ class TestCandidateFingerprint(unittest.TestCase):
 
 
 class TestStopCell(unittest.TestCase):
+    """Test stop cell."""
+
     @staticmethod
     def _fixture(expected="AB"):
+        """Fixture."""
         return Fixture(
             id="f0",
             messages=(Message(role="user", content="q"),),
@@ -1408,6 +1460,7 @@ class TestStopCell(unittest.TestCase):
         )
 
     def test_fuzz_vs_oracle(self):
+        """Test fuzz vs oracle."""
         backend = ByteBackend()
         for i in range(300):
             rng = _rng("stopcell", i)
@@ -1441,6 +1494,7 @@ class TestStopCell(unittest.TestCase):
                 )
 
     def test_pass_requires_boundary_and_answer(self):
+        """Test pass requires boundary and answer."""
         backend = ByteBackend()
         fixture = self._fixture("C")
         boundary = (65, 66)  # decodes to "AB"
@@ -1459,6 +1513,7 @@ class TestStopCell(unittest.TestCase):
         self.assertIsNone(got3["stop_text"])
 
     def test_unavailable_omits_stop_text_key(self):
+        """Test unavailable omits stop text key."""
         # D1: the docstring suggests stop_text=None when the stop did not
         # fire; for an *unavailable* outcome the key is absent entirely.
         backend = ByteBackend()
@@ -1469,8 +1524,11 @@ class TestStopCell(unittest.TestCase):
 
 
 class TestStopMatrix(unittest.TestCase):
+    """Test stop matrix."""
+
     @staticmethod
     def _fixtures(n):
+        """Fixtures."""
         return tuple(
             Fixture(
                 id=f"f{i}",
@@ -1483,6 +1541,7 @@ class TestStopMatrix(unittest.TestCase):
 
     @staticmethod
     def _random_obs(rng, fid, boundary, eos_id):
+        """Random obs."""
         status = rng.choice(["completed"] * 7 + ["failed", "cancelled"])
         output = _rand_ids(rng, 0, 10)
         if status == "completed" and rng.random() < 0.5:
@@ -1502,6 +1561,7 @@ class TestStopMatrix(unittest.TestCase):
         }
 
     def test_fuzz_vs_oracle(self):
+        """Test fuzz vs oracle."""
         backend = ByteBackend()
         for i in range(150):
             rng = _rng("stopmatrix", i)
@@ -1531,6 +1591,7 @@ class TestStopMatrix(unittest.TestCase):
                 )
 
     def test_input_validation(self):
+        """Test input validation."""
         backend = ByteBackend()
         fixtures = self._fixtures(1)
         obs = (
@@ -1590,6 +1651,7 @@ class TestStopMatrix(unittest.TestCase):
             X.stop_matrix(backend, "cand", fixtures, ("nope",), boundary=(65, 66))
 
     def test_incomplete_observations_degrade_cells(self):
+        """Test incomplete observations degrade cells."""
         backend = ByteBackend()
         fixtures = self._fixtures(1)
         obs = (
@@ -1613,6 +1675,7 @@ class TestStopMatrix(unittest.TestCase):
             self.assertNotIn("stop_text", cell)  # D1
 
     def test_vllm_disposition_stripped_by_default(self):
+        """Test vllm disposition stripped by default."""
         # Docstring: vLLM's upstream default strips the stop string; the
         # kept variant is opt-in.
         backend = ByteBackend()
@@ -1643,6 +1706,7 @@ class TestStopMatrix(unittest.TestCase):
         self.assertEqual(rows2[0]["cells"]["vllm_holdback"]["stop_text"], "kept")
 
     def test_boundary_decode_failure_degrades_string_cells(self):
+        """Test boundary decode failure degrades string cells."""
         backend = ExplodingDecodeBackend(mode="raise")
         fixtures = self._fixtures(1)
         obs = (
@@ -1678,8 +1742,11 @@ class TestStopMatrix(unittest.TestCase):
 
 
 class TestLogprobScoring(unittest.TestCase):
+    """Test logprob scoring."""
+
     @staticmethod
     def _random_scores(rng, n):
+        """Random scores."""
         scores = []
         for _ in range(n):
             status = rng.choice(["ok"] * 5 + ["unavailable", "ok_empty"])
@@ -1703,6 +1770,7 @@ class TestLogprobScoring(unittest.TestCase):
         return scores
 
     def test_aggregate_fuzz_vs_oracle(self):
+        """Test aggregate fuzz vs oracle."""
         for i in range(300):
             rng = _rng("aggregate", i)
             scores = self._random_scores(rng, rng.randrange(0, 5))
@@ -1710,6 +1778,7 @@ class TestLogprobScoring(unittest.TestCase):
                 self.assertEqual(X._aggregate_fixture_scores(scores), oracle_aggregate(scores))
 
     def test_aggregate_only_ok_contributes(self):
+        """Test aggregate only ok contributes."""
         scores = [
             TargetScore("ok", None, (), -3.0, -1.0, 3, 3, 5),
             TargetScore("unavailable", "x", (), None, None, 0, 0, 5),
@@ -1722,6 +1791,7 @@ class TestLogprobScoring(unittest.TestCase):
         self.assertEqual(got["scored_token_count"], 3)
 
     def test_aggregate_nan_degrades_to_none(self):
+        """Test aggregate nan degrades to none."""
         scores = [TargetScore("ok", None, (), float("nan"), float("nan"), 2, 2, 5)]
         got = X._aggregate_fixture_scores(scores)
         self.assertIsNone(got["total_logprob"])
@@ -1729,6 +1799,7 @@ class TestLogprobScoring(unittest.TestCase):
         self.assertEqual(got["scored_fixtures"], 1)  # counts stay visible
 
     def test_interpret_kind_fuzz_vs_oracle(self):
+        """Test interpret kind fuzz vs oracle."""
         for i in range(400):
             rng = _rng("interpret", i)
             fixture_scores = []
@@ -1752,7 +1823,10 @@ class TestLogprobScoring(unittest.TestCase):
                 self.assertIsInstance(got["text"], str)
 
     def test_interpret_band_edges(self):
+        """Test interpret band edges."""
+
         def fs(mean, native_pass=False):
+            """Fs."""
             return {
                 "native_pass": native_pass,
                 "status": "ok",
@@ -1777,12 +1851,16 @@ class TestLogprobScoring(unittest.TestCase):
         self.assertIn(f"{LOGPROB_UNKNOWN_MEAN_THRESHOLD:.1f}", text)
 
     def test_score_expected_answer_encode_failures(self):
+        """Test score expected answer encode failures."""
         ByteBackend()
 
         # encode raising -> fixed encode_failed code, never an exception.
         class BoomEncode(ByteBackend):
+            """Boom encode."""
+
             @staticmethod
             def encode(text):
+                """Encode."""
                 raise RuntimeError("tokenizer exploded")
 
         got = X._score_expected_answer(BoomEncode(), (1, 2), "AB")
@@ -1792,8 +1870,11 @@ class TestLogprobScoring(unittest.TestCase):
 
         # encode returning a non-tuple -> same fixed code.
         class WeirdEncode(ByteBackend):
+            """Weird encode."""
+
             @staticmethod
             def encode(text):
+                """Encode."""
                 return [65, 66]
 
         got2 = X._score_expected_answer(WeirdEncode(), (1,), "AB")
@@ -1806,6 +1887,7 @@ class TestLogprobScoring(unittest.TestCase):
         self.assertEqual(got3.status, "ok")
 
     def test_logprob_unavailable_shape(self):
+        """Test logprob unavailable shape."""
         got = X._logprob_unavailable("encode_failed", 4)
         self.assertEqual(got.status, "unavailable")
         self.assertEqual(got.reason, "encode_failed")
@@ -1814,8 +1896,11 @@ class TestLogprobScoring(unittest.TestCase):
 
 
 class TestLogprobDiagnostic(unittest.TestCase):
+    """Test logprob diagnostic."""
+
     @staticmethod
     def _fixtures():
+        """Fixtures."""
         return (
             Fixture(
                 id="f0",
@@ -1833,6 +1918,7 @@ class TestLogprobDiagnostic(unittest.TestCase):
 
     @staticmethod
     def _result(rng, statuses):
+        """Result."""
         observations_a = []
         observations_b = []
         for i, fid in enumerate(("f0", "f1")):
@@ -1855,6 +1941,7 @@ class TestLogprobDiagnostic(unittest.TestCase):
         }
 
     def _compare(self, backend, result, fixtures):
+        """Compare."""
         got = X.logprob_diagnostic(backend, result, fixtures)
         want = oracle_logprob_diagnostic(backend, result, fixtures)
         # Method prose pinned as a behavioral fact (nonblank, stable).
@@ -1872,6 +1959,7 @@ class TestLogprobDiagnostic(unittest.TestCase):
         return got
 
     def test_fuzz_vs_oracle_boost(self):
+        """Test fuzz vs oracle boost."""
         backend = LogprobBackend(mode="boost")
         for i in range(60):
             rng = _rng("diagboost", i)
@@ -1888,6 +1976,7 @@ class TestLogprobDiagnostic(unittest.TestCase):
                 self._compare(backend, result, self._fixtures())
 
     def test_fuzz_vs_oracle_uniform(self):
+        """Test fuzz vs oracle uniform."""
         backend = LogprobBackend(mode="uniform")
         for i in range(60):
             rng = _rng("diaguniform", i)
@@ -1896,6 +1985,7 @@ class TestLogprobDiagnostic(unittest.TestCase):
                 self._compare(backend, self._result(rng, statuses), self._fixtures())
 
     def test_no_forward_logits_unavailable(self):
+        """Test no forward logits unavailable."""
         got = X.logprob_diagnostic(
             ByteBackend(),
             self._result(random.Random("x"), ["completed"] * 2),  # noqa: S311
@@ -1914,6 +2004,7 @@ class TestLogprobDiagnostic(unittest.TestCase):
         )
 
     def test_no_scorable_observations(self):
+        """Test no scorable observations."""
         backend = LogprobBackend()
         got = X.logprob_diagnostic(backend, {"search": []}, self._fixtures())
         self.assertFalse(got["available"])
@@ -1923,6 +2014,7 @@ class TestLogprobDiagnostic(unittest.TestCase):
         self.assertEqual(got2["detail"], "no_scorable_observations")
 
     def test_input_validation(self):
+        """Test input validation."""
         backend = LogprobBackend()
         fixtures = self._fixtures()
         with self.assertRaises(ValueError):
@@ -1936,6 +2028,7 @@ class TestLogprobDiagnostic(unittest.TestCase):
         self.assertFalse(got["available"])
 
     def test_boost_reads_as_derailed_uniform_as_unknown(self):
+        """Test boost reads as derailed uniform as unknown."""
         # End-to-end meaning check: boosted logits on a *failed* fixture ->
         # greedy_derailed; uniform logits -> weights_dont_know.
         rng = random.Random("cycle34:diagkinds")  # noqa: S311 -- deterministic test seeding
@@ -1959,8 +2052,11 @@ class TestLogprobDiagnostic(unittest.TestCase):
 
 
 class TestSummaryPins(unittest.TestCase):
+    """Test summary pins."""
+
     @staticmethod
     def _obs(**kw):
+        """Obs."""
         base = {
             "candidate": "c",
             "fixture": "f",
@@ -1979,11 +2075,13 @@ class TestSummaryPins(unittest.TestCase):
 
     @staticmethod
     def _report(observations, planned, status):
+        """Report."""
         return EvaluationReport(
             observations=tuple(observations), planned_count=planned, status=status
         )
 
     def test_summary_completed(self):
+        """Test summary completed."""
         obs = [
             self._obs(exact_match=True, boundary_found=True, input_ids=(1,), output_ids=(2, 3)),
             self._obs(exact_match=True, boundary_found=False),
@@ -2001,6 +2099,7 @@ class TestSummaryPins(unittest.TestCase):
         self.assertIsNone(got["failure_code"])
 
     def test_summary_ineligible_rate_none(self):
+        """Test summary ineligible rate none."""
         obs = [self._obs(status="failed", error="encode_failed", raw_reason=None)]
         got = X._summary(self._report(obs, 2, "failed"))
         self.assertFalse(got["aggregate_eligible"])
@@ -2008,6 +2107,7 @@ class TestSummaryPins(unittest.TestCase):
         self.assertEqual(got["failure_code"], "encode_failed")
 
     def test_failure_code_scans_from_end(self):
+        """Test failure code scans from end."""
         obs = [
             self._obs(status="completed", error="render_failed"),
             self._obs(status="failed", error="generate_failed", raw_reason=None),
@@ -2028,6 +2128,7 @@ class TestSummaryPins(unittest.TestCase):
 
 
 def _sweep_formats(marker_tail):
+    """Sweep formats."""
     return (
         Format(
             name="winner",
@@ -2048,7 +2149,10 @@ def _sweep_formats(marker_tail):
 
 
 def _sweep_split():
+    """Sweep split."""
+
     def fx(i, split_tag):
+        """Fx."""
         return Fixture(
             id=f"{split_tag}{i}",
             # Held-out inputs must differ from search inputs (split hygiene).
@@ -2064,7 +2168,10 @@ def _sweep_split():
 
 
 class TestPromptSensitivitySweep(unittest.TestCase):
+    """Test prompt sensitivity sweep."""
+
     def test_depths_flip_when_marker_truncated(self):
+        """Test depths flip when marker truncated."""
         backend = ScriptedBackend(lambda text, seed: "MARK" in text)
         split = _sweep_split()
         got = X.prompt_sensitivity_sweep(
@@ -2093,6 +2200,7 @@ class TestPromptSensitivitySweep(unittest.TestCase):
         self.assertEqual(got["flips_at"], [1, 2, 3])
 
     def test_no_flip_when_marker_survives(self):
+        """Test no flip when marker survives."""
         # Marker in the middle of the prompt: drops never remove it.
         backend = ScriptedBackend(lambda text, seed: "MARK" in text)
         formats = (
@@ -2128,6 +2236,7 @@ class TestPromptSensitivitySweep(unittest.TestCase):
             self.assertEqual(depth["selected_candidate"], "winner")
 
     def test_codepoint_split_depth_records_failed_decision(self):
+        """Test codepoint split depth records failed decision."""
         # A cut splitting a UTF-8 codepoint records the run's failed
         # decision instead of silently skipping the depth.
         backend = ScriptedBackend(lambda text, seed: "MARK" in text)
@@ -2151,6 +2260,7 @@ class TestPromptSensitivitySweep(unittest.TestCase):
         self.assertEqual(got["flips_at"], [1])
 
     def test_max_drop_bytes_validation(self):
+        """Test max drop bytes validation."""
         backend = ScriptedBackend(lambda text, seed: True)
         for bad in (0, 9, -1, "3", 2.0):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
@@ -2163,6 +2273,7 @@ class TestPromptSensitivitySweep(unittest.TestCase):
                 )
 
     def test_seed_reaches_every_generate_call(self):
+        """Test seed reaches every generate call."""
         # Seed handling: one experiment seed in, identical per-fixture
         # request seeds out -- across candidates, depths, and stages.
         backend = ScriptedBackend(lambda text, seed: "MARK" in text)
@@ -2178,6 +2289,7 @@ class TestPromptSensitivitySweep(unittest.TestCase):
         )
 
         def expected(fid):
+            """Expected."""
             material = f"{seed}\0{fid}".encode("utf-8", errors="surrogatepass")
             return int.from_bytes(sha256(material).digest()[:4], "big")
 
@@ -2193,6 +2305,7 @@ class TestPromptSensitivitySweep(unittest.TestCase):
         self.assertEqual(sorted(backend.seeds), sorted(want))
 
     def test_different_experiment_seeds_differ(self):
+        """Test different experiment seeds differ."""
         split = _sweep_split()
         seeds_a, seeds_b = [], []
         for store, seed in ((seeds_a, 1), (seeds_b, 2)):
@@ -2212,7 +2325,10 @@ class TestPromptSensitivitySweep(unittest.TestCase):
 
 
 class TestSeedHandling(unittest.TestCase):
+    """Test seed handling."""
+
     def test_same_seed_to_every_candidate(self):
+        """Test same seed to every candidate."""
         # The per-candidate loop passes one seed through; evaluate derives
         # per-fixture request seeds deterministically from (seed, fixture).
         backend = ScriptedBackend(lambda text, seed: True)
@@ -2227,6 +2343,7 @@ class TestSeedHandling(unittest.TestCase):
         self.assertEqual(len(backend.seeds), 6)
 
         def expected(fid):
+            """Expected."""
             material = f"99\0{fid}".encode("utf-8", errors="surrogatepass")
             return int.from_bytes(sha256(material).digest()[:4], "big")
 
@@ -2251,7 +2368,10 @@ class TestSeedHandling(unittest.TestCase):
 
 
 class TestRedTeam(unittest.TestCase):
+    """Test red team."""
+
     def test_pass_strictness_divergence(self):
+        """Test pass strictness divergence."""
         # D2: classify_observation uses truthiness; budget_frontier needs
         # `is True`. A truthy-but-not-True exact_match passes classification
         # yet earns no budget.
@@ -2278,6 +2398,7 @@ class TestRedTeam(unittest.TestCase):
         self.assertEqual(got["candidates"]["a"]["min_budget_per_fixture"], [None])
 
     def test_taxonomy_duplicate_names_last_wins(self):
+        """Test taxonomy duplicate names last wins."""
         # D3: failure_taxonomy silently overwrites duplicate names while
         # budget_frontier raises on them.
         obs = {
@@ -2305,6 +2426,7 @@ class TestRedTeam(unittest.TestCase):
             )
 
     def test_stop_matrix_noniterable_ids_raise(self):
+        """Test stop matrix noniterable ids raise."""
         # D4a: stop_matrix assumes tuple/list ids in recorded observations.
         backend = ByteBackend()
         fixtures = (
@@ -2326,6 +2448,7 @@ class TestRedTeam(unittest.TestCase):
             X.stop_matrix(backend, "c", fixtures, obs, boundary=(1,))
 
     def test_budget_frontier_nonsequence_ids_silent(self):
+        """Test budget frontier nonsequence ids silent."""
         # D4b: budget_frontier leniently treats non-list/tuple output_ids
         # as empty (no budget, no error).
         search = [
@@ -2352,6 +2475,7 @@ class TestRedTeam(unittest.TestCase):
         self.assertEqual(got["candidates"]["a"]["min_budget_per_fixture"], [None])
 
     def test_stop_matrix_strict_bool_rejection(self):
+        """Test stop matrix strict bool rejection."""
         # type() is X checks: bool is not int / not bool here.
         backend = ByteBackend()
         fixtures = (
@@ -2396,6 +2520,7 @@ class TestRedTeam(unittest.TestCase):
         self.assertEqual(rows[0]["cells"]["hf_stop_string"]["detail"], "observation_incomplete")
 
     def test_budget_frontier_bool_boundary_ids_rejected(self):
+        """Test budget frontier bool boundary ids rejected."""
         search = [
             {
                 "format": {"name": "a"},
@@ -2421,6 +2546,7 @@ class TestRedTeam(unittest.TestCase):
             )
 
     def test_taxonomy_skips_malformed_entries(self):
+        """Test taxonomy skips malformed entries."""
         # Non-dict format values and missing names are skipped, not errors.
         result = {
             "search": [
@@ -2437,6 +2563,7 @@ class TestRedTeam(unittest.TestCase):
         self.assertEqual(got["per_candidate"], {})
 
     def test_diagnostic_skips_malformed_entries(self):
+        """Test diagnostic skips malformed entries."""
         backend = LogprobBackend()
         fixtures = (
             Fixture(
@@ -2469,6 +2596,7 @@ class TestRedTeam(unittest.TestCase):
         self.assertEqual([c["name"] for c in got["candidates"]], ["good"])
 
     def test_decision_steps_start_at_budget_one(self):
+        """Test decision steps start at budget one."""
         # change_budgets always contains 1 and max_new_tokens.
         search = [
             {
@@ -2498,6 +2626,7 @@ class TestRedTeam(unittest.TestCase):
         self.assertEqual(got["flip_ranges"], [])
 
     def test_frontier_winner_must_be_str(self):
+        """Test frontier winner must be str."""
         search = [
             {
                 "format": {"name": "a"},

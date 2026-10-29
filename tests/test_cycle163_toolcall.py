@@ -56,10 +56,12 @@ class ToolcallScriptedBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(map(chr, token_ids))
 
     def generate(
@@ -70,6 +72,7 @@ class ToolcallScriptedBackend:
         seed: int,
         cancel: Event,
     ) -> Generation:
+        """Generate."""
         prompt = self.decode(tuple(input_ids))
         match = re.search(r"\(ref: toolcall/([a-z-]+)\)", prompt)
         answer = self.policy.get(match.group(1), "not a call at all") if match else "x"
@@ -80,6 +83,7 @@ class ToolcallScriptedBackend:
 
 
 def _format(name: str) -> Format:
+    """Format."""
     return Format(
         name=name,
         bos="",
@@ -90,28 +94,35 @@ def _format(name: str) -> Format:
 
 
 def _queries():
+    """Queries."""
     return validate_toolcall_queries(TOOLCALL_QUERIES)
 
 
 def _correct_policy() -> dict[str, str]:
+    """Correct policy."""
     queries = _queries()
     return {q["id"]: canonical_call(q["call"]) for q in queries}
 
 
 class ToolcallCoreTests(unittest.TestCase):
+    """Toolcall core tests."""
+
     def test_tool_defs_validate(self):
+        """Test tool defs validate."""
         for tool in TOOLS:
             normalized = validate_tool_def(tool)
             self.assertEqual(normalized["name"], tool["name"])
             self.assertEqual(set(normalized["required"]), set(tool["required"]))
 
     def test_tool_def_rejects_bad_name(self):
+        """Test tool def rejects bad name."""
         bad = dict(TOOLS[0])
         bad["name"] = "not a name!"
         with self.assertRaises(ValueError):
             validate_tool_def(bad)
 
     def test_tool_def_rejects_unknown_param_type(self):
+        """Test tool def rejects unknown param type."""
         bad = dict(TOOLS[0])
         params = {k: dict(v) for k, v in bad["params"].items()}
         params["city"] = {"type": "object"}
@@ -120,6 +131,7 @@ class ToolcallCoreTests(unittest.TestCase):
             validate_tool_def(bad)
 
     def test_tool_def_rejects_bad_enum(self):
+        """Test tool def rejects bad enum."""
         bad = dict(TOOLS[0])
         params = {k: dict(v) for k, v in bad["params"].items()}
         params["unit"] = {"type": "string", "enum": "CF"}
@@ -128,34 +140,40 @@ class ToolcallCoreTests(unittest.TestCase):
             validate_tool_def(bad)
 
     def test_tool_def_rejects_required_outside_params(self):
+        """Test tool def rejects required outside params."""
         bad = dict(TOOLS[0])
         bad["required"] = ("city", "nope")
         with self.assertRaises(ValueError):
             validate_tool_def(bad)
 
     def test_tool_def_rejects_non_dict(self):
+        """Test tool def rejects non dict."""
         with self.assertRaises(ValueError):
             validate_tool_def(["get_weather"])
 
     def test_tool_def_rejects_empty_params(self):
+        """Test tool def rejects empty params."""
         bad = dict(TOOLS[0])
         bad["params"] = {}
         with self.assertRaises(ValueError):
             validate_tool_def(bad)
 
     def test_tool_def_rejects_non_string_param_name(self):
+        """Test tool def rejects non string param name."""
         bad = dict(TOOLS[0])
         bad["params"] = {123: {"type": "string"}}
         with self.assertRaises(ValueError):
             validate_tool_def(bad)
 
     def test_tool_def_rejects_non_dict_param(self):
+        """Test tool def rejects non dict param."""
         bad = dict(TOOLS[0])
         bad["params"] = {"city": "string"}
         with self.assertRaises(ValueError):
             validate_tool_def(bad)
 
     def test_tool_def_rejects_bad_enum_variants(self):
+        """Test tool def rejects bad enum variants."""
         for bad_enum in ([], ["C", 1], "CF", None.__class__):
             if bad_enum is None.__class__:
                 continue
@@ -168,6 +186,7 @@ class ToolcallCoreTests(unittest.TestCase):
                 validate_tool_def(bad)
 
     def test_tool_def_rejects_non_numeric_bound(self):
+        """Test tool def rejects non numeric bound."""
         bad = dict(TOOLS[0])
         params = {k: dict(v) for k, v in bad["params"].items()}
         # convert_currency amount has minimum 0
@@ -182,6 +201,7 @@ class ToolcallCoreTests(unittest.TestCase):
             validate_tool_def(bad)
 
     def test_tool_def_rejects_bad_required(self):
+        """Test tool def rejects bad required."""
         bad = dict(TOOLS[0])
         bad["required"] = ["city"]  # list, not tuple
         with self.assertRaises(ValueError):
@@ -192,12 +212,14 @@ class ToolcallCoreTests(unittest.TestCase):
             validate_tool_def(bad)
 
     def test_tool_def_rejects_bad_description(self):
+        """Test tool def rejects bad description."""
         bad = dict(TOOLS[0])
         bad["description"] = 123
         with self.assertRaises(ValueError):
             validate_tool_def(bad)
 
     def test_queries_validate_and_normalize(self):
+        """Test queries validate and normalize."""
         queries = _queries()
         self.assertEqual(len(queries), 9)
         self.assertEqual([q["id"] for q in queries][:2], ["weather-paris", "weather-berlin"])
@@ -205,6 +227,7 @@ class ToolcallCoreTests(unittest.TestCase):
         self.assertEqual(len(abstains), 2)
 
     def test_queries_reject_duplicate_id(self):
+        """Test queries reject duplicate id."""
         dup_list = [dict(q) for q in TOOLCALL_QUERIES]
         dup_list[1] = dict(dup_list[1])
         dup_list[1]["id"] = dup_list[0]["id"]
@@ -212,6 +235,7 @@ class ToolcallCoreTests(unittest.TestCase):
             validate_toolcall_queries(tuple(dup_list))
 
     def test_queries_reject_unknown_tool(self):
+        """Test queries reject unknown tool."""
         bad_list = [dict(q) for q in TOOLCALL_QUERIES]
         bad_list[0] = dict(bad_list[0])
         bad_list[0]["call"] = {"name": "nope", "arguments": {}}
@@ -219,6 +243,7 @@ class ToolcallCoreTests(unittest.TestCase):
             validate_toolcall_queries(tuple(bad_list))
 
     def test_queries_reject_bad_enum_arg(self):
+        """Test queries reject bad enum arg."""
         bad_list = [dict(q) for q in TOOLCALL_QUERIES]
         bad_list[0] = dict(bad_list[0])
         bad_list[0]["call"] = {
@@ -229,6 +254,7 @@ class ToolcallCoreTests(unittest.TestCase):
             validate_toolcall_queries(tuple(bad_list))
 
     def test_queries_reject_out_of_bounds_arg(self):
+        """Test queries reject out of bounds arg."""
         bad_list = [dict(q) for q in TOOLCALL_QUERIES]
         bad_list[5] = dict(bad_list[5])
         bad_list[5]["call"] = {
@@ -239,6 +265,7 @@ class ToolcallCoreTests(unittest.TestCase):
             validate_toolcall_queries(tuple(bad_list))
 
     def test_queries_reject_missing_required(self):
+        """Test queries reject missing required."""
         bad_list = [dict(q) for q in TOOLCALL_QUERIES]
         bad_list[0] = dict(bad_list[0])
         bad_list[0]["call"] = {"name": "get_weather", "arguments": {"city": "Paris"}}
@@ -246,18 +273,21 @@ class ToolcallCoreTests(unittest.TestCase):
             validate_toolcall_queries(tuple(bad_list))
 
     def test_queries_reject_non_tuple(self):
+        """Test queries reject non tuple."""
         with self.assertRaises(ValueError):
             validate_toolcall_queries([dict(q) for q in TOOLCALL_QUERIES])
         with self.assertRaises(ValueError):
             validate_toolcall_queries(())
 
     def test_queries_reject_non_dict_query(self):
+        """Test queries reject non dict query."""
         bad_list = [dict(q) for q in TOOLCALL_QUERIES]
         bad_list[0] = "not a dict"
         with self.assertRaises(ValueError):
             validate_toolcall_queries(tuple(bad_list))
 
     def test_queries_reject_bad_id(self):
+        """Test queries reject bad id."""
         for bad_id in (123, "", None):
             bad_list = [dict(q) for q in TOOLCALL_QUERIES]
             bad_list[0] = dict(bad_list[0])
@@ -266,6 +296,7 @@ class ToolcallCoreTests(unittest.TestCase):
                 validate_toolcall_queries(tuple(bad_list))
 
     def test_queries_reject_bad_question(self):
+        """Test queries reject bad question."""
         for bad_q in (123, "", None):
             bad_list = [dict(q) for q in TOOLCALL_QUERIES]
             bad_list[0] = dict(bad_list[0])
@@ -274,6 +305,7 @@ class ToolcallCoreTests(unittest.TestCase):
                 validate_toolcall_queries(tuple(bad_list))
 
     def test_queries_reject_non_dict_call(self):
+        """Test queries reject non dict call."""
         bad_list = [dict(q) for q in TOOLCALL_QUERIES]
         bad_list[0] = dict(bad_list[0])
         bad_list[0]["call"] = "CALL get_weather"
@@ -281,6 +313,7 @@ class ToolcallCoreTests(unittest.TestCase):
             validate_toolcall_queries(tuple(bad_list))
 
     def test_queries_reject_non_dict_arguments(self):
+        """Test queries reject non dict arguments."""
         bad_list = [dict(q) for q in TOOLCALL_QUERIES]
         bad_list[0] = dict(bad_list[0])
         bad_list[0]["call"] = {"name": "get_weather", "arguments": "city=Paris"}
@@ -288,6 +321,7 @@ class ToolcallCoreTests(unittest.TestCase):
             validate_toolcall_queries(tuple(bad_list))
 
     def test_queries_reject_unknown_params(self):
+        """Test queries reject unknown params."""
         bad_list = [dict(q) for q in TOOLCALL_QUERIES]
         bad_list[0] = dict(bad_list[0])
         bad_list[0]["call"] = {
@@ -298,6 +332,7 @@ class ToolcallCoreTests(unittest.TestCase):
             validate_toolcall_queries(tuple(bad_list))
 
     def test_check_arg_value_boolean_and_bounds(self):
+        """Test check arg value boolean and bounds."""
         from model_protocol_lab.toolcall import _check_arg_value
 
         # Boolean param
@@ -317,6 +352,7 @@ class ToolcallCoreTests(unittest.TestCase):
             _check_arg_value(101, {"type": "number", "maximum": 100}, where="t")
 
     def test_canonical_call_exact(self):
+        """Test canonical call exact."""
         self.assertEqual(
             canonical_call({"name": "get_weather", "arguments": {"unit": "C", "city": "Paris"}}),
             'CALL get_weather {"city": "Paris", "unit": "C"}',
@@ -324,6 +360,7 @@ class ToolcallCoreTests(unittest.TestCase):
         self.assertEqual(canonical_call(None), "NO_CALL")
 
     def test_render_prompt_carries_tools_and_ref(self):
+        """Test render prompt carries tools and ref."""
         queries = _queries()
         prompt = render_prompt(queries[0])
         self.assertIn("get_weather", prompt)
@@ -332,6 +369,7 @@ class ToolcallCoreTests(unittest.TestCase):
         self.assertIn("What is the weather in Paris", prompt)
 
     def test_build_fixtures_ids_and_expected(self):
+        """Test build fixtures ids and expected."""
         fixtures = build_toolcall_fixtures(_queries())
         self.assertEqual(len(fixtures), 9)
         by_id = {f.id: f for f in fixtures}
@@ -343,6 +381,7 @@ class ToolcallCoreTests(unittest.TestCase):
         self.assertTrue(all(f.group == "toolcall" for f in fixtures))
 
     def test_query_calls_mapping(self):
+        """Test query calls mapping."""
         calls = query_calls(_queries())
         self.assertEqual(len(calls), 9)
         self.assertIsNone(calls["toolcall/abstain-capital"])
@@ -350,10 +389,14 @@ class ToolcallCoreTests(unittest.TestCase):
 
 
 class ClassifyToolCallTests(unittest.TestCase):
+    """Classify tool call tests."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.calls = query_calls(_queries())
 
     def test_correct_call_adherent(self):
+        """Test correct call adherent."""
         result = classify_tool_call(
             'CALL get_weather {"city": "Paris", "unit": "C"}',
             self.calls["toolcall/weather-paris"],
@@ -362,6 +405,7 @@ class ClassifyToolCallTests(unittest.TestCase):
         self.assertTrue(result["selection_ok"] and result["args_ok"] and result["relevance_ok"])
 
     def test_correct_call_whitespace_tolerant(self):
+        """Test correct call whitespace tolerant."""
         result = classify_tool_call(
             '  CALL get_weather {"unit": "C", "city": "Paris"}  \n',
             self.calls["toolcall/weather-paris"],
@@ -369,6 +413,7 @@ class ClassifyToolCallTests(unittest.TestCase):
         self.assertEqual(result["outcome"], "adherent")
 
     def test_wrong_tool_call_failed(self):
+        """Test wrong tool call failed."""
         result = classify_tool_call(
             'CALL search_docs {"query": "Paris weather", "top_k": 1}',
             self.calls["toolcall/weather-paris"],
@@ -379,6 +424,7 @@ class ClassifyToolCallTests(unittest.TestCase):
         self.assertTrue(result["relevance_ok"])
 
     def test_unknown_tool_never_correct_selection(self):
+        """Test unknown tool never correct selection."""
         result = classify_tool_call(
             'CALL get_weather_v2 {"city": "Paris", "unit": "C"}',
             self.calls["toolcall/weather-paris"],
@@ -387,6 +433,7 @@ class ClassifyToolCallTests(unittest.TestCase):
         self.assertFalse(result["selection_ok"])
 
     def test_wrong_arg_value_call_failed(self):
+        """Test wrong arg value call failed."""
         result = classify_tool_call(
             'CALL get_weather {"city": "Paris", "unit": "F"}',
             self.calls["toolcall/weather-paris"],
@@ -396,6 +443,7 @@ class ClassifyToolCallTests(unittest.TestCase):
         self.assertFalse(result["args_ok"])
 
     def test_wrong_arg_type_call_failed(self):
+        """Test wrong arg type call failed."""
         result = classify_tool_call(
             'CALL search_docs {"query": "x", "top_k": "3"}',
             self.calls["toolcall/docs-healing"],
@@ -403,6 +451,7 @@ class ClassifyToolCallTests(unittest.TestCase):
         self.assertFalse(result["args_ok"])
 
     def test_extra_arg_call_failed(self):
+        """Test extra arg call failed."""
         result = classify_tool_call(
             'CALL get_weather {"city": "Paris", "unit": "C", "extra": 1}',
             self.calls["toolcall/weather-paris"],
@@ -411,6 +460,7 @@ class ClassifyToolCallTests(unittest.TestCase):
         self.assertFalse(result["args_ok"])
 
     def test_missing_arg_call_failed(self):
+        """Test missing arg call failed."""
         result = classify_tool_call(
             'CALL get_weather {"city": "Paris"}',
             self.calls["toolcall/weather-paris"],
@@ -418,6 +468,7 @@ class ClassifyToolCallTests(unittest.TestCase):
         self.assertFalse(result["args_ok"])
 
     def test_number_equality_across_int_float(self):
+        """Test number equality across int float."""
         result = classify_tool_call(
             'CALL convert_currency {"amount": 100.0, "from_currency": "USD", "to_currency": "EUR"}',
             self.calls["toolcall/currency-usd-eur"],
@@ -425,6 +476,7 @@ class ClassifyToolCallTests(unittest.TestCase):
         self.assertEqual(result["outcome"], "adherent")
 
     def test_bool_is_not_integer(self):
+        """Test bool is not integer."""
         result = classify_tool_call(
             'CALL search_docs {"query": "x", "top_k": true}',
             self.calls["toolcall/docs-healing"],
@@ -432,11 +484,13 @@ class ClassifyToolCallTests(unittest.TestCase):
         self.assertFalse(result["args_ok"])
 
     def test_correct_abstention_adherent(self):
+        """Test correct abstention adherent."""
         result = classify_tool_call("NO_CALL", self.calls["toolcall/abstain-capital"])
         self.assertEqual(result["outcome"], "adherent")
         self.assertTrue(result["selection_ok"] and result["args_ok"] and result["relevance_ok"])
 
     def test_call_when_should_abstain_fails_all(self):
+        """Test call when should abstain fails all."""
         result = classify_tool_call(
             'CALL get_weather {"city": "Paris", "unit": "C"}',
             self.calls["toolcall/abstain-capital"],
@@ -447,11 +501,13 @@ class ClassifyToolCallTests(unittest.TestCase):
         self.assertFalse(result["relevance_ok"])
 
     def test_abstain_when_tool_needed_fails_all(self):
+        """Test abstain when tool needed fails all."""
         result = classify_tool_call("NO_CALL", self.calls["toolcall/weather-paris"])
         self.assertEqual(result["outcome"], "call_failed")
         self.assertFalse(result["relevance_ok"])
 
     def test_garbage_parse_failed(self):
+        """Test garbage parse failed."""
         for text in (
             "Sure, here you go!",
             "CALL",
@@ -468,6 +524,7 @@ class ClassifyToolCallTests(unittest.TestCase):
                 self.assertFalse(result["relevance_ok"])
 
     def test_digit_led_name_parses_as_unknown_tool(self):
+        """Test digit led name parses as unknown tool."""
         # "123" is alnum: parses as a call to an unknown tool -> call_failed,
         # never a phantom parse failure or a correct selection.
         result = classify_tool_call("CALL 123 {}", self.calls["toolcall/weather-paris"])
@@ -475,6 +532,7 @@ class ClassifyToolCallTests(unittest.TestCase):
         self.assertFalse(result["selection_ok"])
 
     def test_non_finite_constant_rejected(self):
+        """Test non finite constant rejected."""
         result = classify_tool_call(
             'CALL convert_currency {"amount": NaN, "from_currency": "USD", "to_currency": "EUR"}',
             self.calls["toolcall/currency-usd-eur"],
@@ -482,21 +540,27 @@ class ClassifyToolCallTests(unittest.TestCase):
         self.assertEqual(result["outcome"], "parse_failed")
 
     def test_non_string_not_text(self):
+        """Test non string not text."""
         for bad in (None, 123, b"CALL x {}"):
             with self.subTest(bad=bad):
                 result = classify_tool_call(bad, self.calls["toolcall/weather-paris"])
                 self.assertEqual(result["outcome"], "not_text")
 
     def test_outcome_vocabulary(self):
+        """Test outcome vocabulary."""
         self.assertEqual(OUTCOMES, ("adherent", "parse_failed", "call_failed", "not_text"))
 
 
 class CandidateAdherenceTests(unittest.TestCase):
+    """Candidate adherence tests."""
+
     @staticmethod
     def _classify(text, expected):
+        """Classify."""
         return classify_tool_call(text, expected)
 
     def test_perfect_model_scores_one_everywhere(self):
+        """Test perfect model scores one everywhere."""
         calls = query_calls(_queries())
         by_id = {q["id"]: q for q in _queries()}
         classifications = [
@@ -511,6 +575,7 @@ class CandidateAdherenceTests(unittest.TestCase):
             self.assertEqual(agg[key], 1.0)
 
     def test_not_text_excluded_not_counted(self):
+        """Test not text excluded not counted."""
         calls = query_calls(_queries())
         classifications = [
             classify_tool_call(None, calls["toolcall/weather-paris"]),
@@ -526,12 +591,14 @@ class CandidateAdherenceTests(unittest.TestCase):
         self.assertEqual(agg["adherent_rate"], 1.0)
 
     def test_empty_evaluable_rates_none(self):
+        """Test empty evaluable rates none."""
         agg = candidate_adherence([])
         self.assertEqual(agg["n"], 0)
         self.assertIsNone(agg["selection_rate"])
         self.assertIsNone(agg["adherent_rate"])
 
     def test_decomposition_selection_vs_args(self):
+        """Test decomposition selection vs args."""
         calls = query_calls(_queries())
         classifications = [
             # right tool, wrong args on both weather queries
@@ -551,8 +618,11 @@ class CandidateAdherenceTests(unittest.TestCase):
 
 
 class ToolcallStageTests(unittest.TestCase):
+    """Toolcall stage tests."""
+
     @staticmethod
     def _run(policy, n_formats=2):
+        """Run."""
         queries = _queries()
         fixtures = build_toolcall_fixtures(queries)
         calls = query_calls(queries)
@@ -569,6 +639,7 @@ class ToolcallStageTests(unittest.TestCase):
         return toolcall_adherence(tuple(f.name for f in formats), stage), stage
 
     def test_perfect_policy_all_adherent(self):
+        """Test perfect policy all adherent."""
         adherence, _stage = self._run(_correct_policy())
         self.assertTrue(adherence["available"])
         for cand, entry in adherence["per_candidate"].items():
@@ -578,6 +649,7 @@ class ToolcallStageTests(unittest.TestCase):
         self.assertEqual(adherence["excluded_candidates"], [])
 
     def test_wrong_tool_policy_selection_zero(self):
+        """Test wrong tool policy selection zero."""
         policy = _correct_policy()
         for qid in ("weather-paris", "weather-berlin"):
             policy[qid] = 'CALL search_docs {"query": "x", "top_k": 1}'
@@ -589,6 +661,7 @@ class ToolcallStageTests(unittest.TestCase):
         self.assertAlmostEqual(entry["adherent_rate"], 7 / 9)
 
     def test_always_abstain_policy(self):
+        """Test always abstain policy."""
         policy = dict.fromkeys(_correct_policy(), "NO_CALL")
         adherence, _ = self._run(policy, n_formats=1)
         entry = adherence["per_candidate"]["cand0"]
@@ -598,6 +671,7 @@ class ToolcallStageTests(unittest.TestCase):
         self.assertAlmostEqual(entry["adherent_rate"], 2 / 9)
 
     def test_gap_and_weakest_across_candidates(self):
+        """Test gap and weakest across candidates."""
         good = _correct_policy()
         bad = dict.fromkeys(good, "definitely not a call")
         queries = _queries()
@@ -605,6 +679,7 @@ class ToolcallStageTests(unittest.TestCase):
         calls = query_calls(queries)
 
         def _fmt(name: str, prefix: str) -> Format:
+            """Fmt."""
             return Format(
                 name=name,
                 bos="",
@@ -614,7 +689,10 @@ class ToolcallStageTests(unittest.TestCase):
             )
 
         class TwoPolicyBackend(ToolcallScriptedBackend):
+            """Two policy backend."""
+
             def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+                """Generate."""
                 prompt = self.decode(tuple(input_ids))
                 self.policy = good if "[user0]" in prompt else bad
                 return super().generate(
@@ -637,6 +715,7 @@ class ToolcallStageTests(unittest.TestCase):
         self.assertFalse(adherence["uniform"])
 
     def test_stage_rejects_bad_contract(self):
+        """Test stage rejects bad contract."""
         queries = _queries()
         fixtures = build_toolcall_fixtures(queries)
         calls = query_calls(queries)
@@ -653,6 +732,7 @@ class ToolcallStageTests(unittest.TestCase):
             toolcall_stage(backend, (_format("a"),), fixtures, calls=calls, boundary=())
 
     def test_stage_rejects_bad_fixtures_and_calls(self):
+        """Test stage rejects bad fixtures and calls."""
         queries = _queries()
         fixtures = build_toolcall_fixtures(queries)
         calls = query_calls(queries)
@@ -695,9 +775,14 @@ class ToolcallStageTests(unittest.TestCase):
             toolcall_stage(backend, fmts, fixtures, calls=calls, boundary=(124,), seed=-1)
 
     def test_backend_failure_cell_degrades_to_none(self):
+        """Test backend failure cell degrades to none."""
+
         class BoomBackend(ToolcallScriptedBackend):
+            """Boom backend."""
+
             @staticmethod
             def generate(input_ids, *, max_new_tokens, seed, cancel):
+                """Generate."""
                 raise RuntimeError("boom")
 
         queries = _queries()
@@ -715,6 +800,7 @@ class ToolcallStageTests(unittest.TestCase):
         self.assertEqual(adherence["excluded_candidates"], ["cand0"])
 
     def test_adherence_invalid_input_unavailable(self):
+        """Test adherence invalid input unavailable."""
         self.assertEqual(toolcall_adherence(("a",), {"available": True})["detail"], "stage_invalid")
         self.assertEqual(toolcall_adherence([], {})["detail"], "invalid_candidates")
         # Non-dict stage
@@ -751,6 +837,7 @@ class ToolcallStageTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_classify(text: object, expected: dict[str, Any] | None) -> dict[str, Any]:
     """Independent oracle for classify_tool_call, written from the docstring."""
     if type(text) is not str:
@@ -846,6 +933,7 @@ def _oracle_classify(text: object, expected: dict[str, Any] | None) -> dict[str,
 
 
 def _oracle_value_equal(got: object, want: object) -> bool:
+    """Oracle value equal."""
     if type(want) is bool or type(got) is bool:
         return type(want) is type(got) and want == got
     if isinstance(want, (int, float)) and isinstance(got, (int, float)):
@@ -894,7 +982,10 @@ def _rand_text(rng: random.Random, queries) -> tuple[str, dict[str, Any] | None]
 
 
 class ToolcallOracleDifferentialTests(unittest.TestCase):
+    """Toolcall oracle differential tests."""
+
     def test_200_case_oracle_agreement(self):
+        """Test 200 case oracle agreement."""
         rng = random.Random(163)  # noqa: S311 -- deterministic test seed
         queries = _queries()
         for case in range(200):
@@ -908,6 +999,7 @@ class ToolcallOracleDifferentialTests(unittest.TestCase):
             )
 
     def test_oracle_aggregation_agreement(self):
+        """Test oracle aggregation agreement."""
         rng = random.Random(164)  # noqa: S311 -- deterministic test seed
         queries = _queries()
         for case in range(50):
@@ -935,9 +1027,12 @@ class ToolcallOracleDifferentialTests(unittest.TestCase):
 
 
 class ToolcallHypothesisTests(unittest.TestCase):
+    """Toolcall hypothesis tests."""
+
     @given(st.text())
     @settings(max_examples=200)
     def test_classify_never_raises(self, text):
+        """Test classify never raises."""
         queries = _queries()
         calls = query_calls(queries)
         for fid in ("toolcall/weather-paris", "toolcall/abstain-capital"):
@@ -949,6 +1044,7 @@ class ToolcallHypothesisTests(unittest.TestCase):
     @given(st.text(min_size=1, max_size=40))
     @settings(max_examples=100)
     def test_canonical_call_round_trips(self, city):
+        """Test canonical call round trips."""
         call = {"name": "get_weather", "arguments": {"city": city, "unit": "C"}}
         text = canonical_call(call)
         name, arguments, error = None, None, None
@@ -962,12 +1058,14 @@ class ToolcallHypothesisTests(unittest.TestCase):
     @given(st.integers(), st.integers())
     @settings(max_examples=100)
     def test_int_float_arg_equality(self, a, b):
+        """Test int float arg equality."""
         from model_protocol_lab.toolcall import _args_match
 
         self.assertEqual(_args_match({"v": a}, {"v": b}), a == b)
         self.assertEqual(_args_match({"v": float(a)}, {"v": b}), float(a) == b)
 
     def test_args_match_numeric_mismatch(self):
+        """Test args match numeric mismatch."""
         from model_protocol_lab.toolcall import _args_match
 
         # Numeric branch with unequal values -> False
@@ -988,7 +1086,10 @@ class ToolcallHypothesisTests(unittest.TestCase):
 
 
 class ToolcallMutationGateTests(unittest.TestCase):
+    """Toolcall mutation gate tests."""
+
     def _run_gate(self, module_name, name, old_text, new_text, scenario):
+        """Run gate."""
         mod = __import__(f"model_protocol_lab.{module_name}", fromlist=["x"])
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
@@ -1008,12 +1109,14 @@ class ToolcallMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _selection_scenario(mod):
+        """Selection scenario."""
         expected = {"name": "get_weather", "arguments": {"city": "Paris", "unit": "C"}}
         result = mod.classify_tool_call('CALL search_docs {"query": "x", "top_k": 1}', expected)
         assert result["outcome"] == "call_failed", result
         assert result["selection_ok"] is False, result
 
     def test_mutant_selection_inverted_caught(self):
+        """Test mutant selection inverted caught."""
         self._run_gate(
             "toolcall",
             "selection_inverted",
@@ -1024,6 +1127,7 @@ class ToolcallMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _args_strict_scenario(mod):
+        """Args strict scenario."""
         expected = {"name": "get_weather", "arguments": {"city": "Paris", "unit": "C"}}
         result = mod.classify_tool_call(
             'CALL get_weather {"city": "Paris", "unit": "C", "extra": 1}', expected
@@ -1032,6 +1136,7 @@ class ToolcallMutationGateTests(unittest.TestCase):
         assert result["args_ok"] is False, result
 
     def test_mutant_args_lax_caught(self):
+        """Test mutant args lax caught."""
         self._run_gate(
             "toolcall",
             "args_lax",
@@ -1042,11 +1147,13 @@ class ToolcallMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _relevance_scenario(mod):
+        """Relevance scenario."""
         result = mod.classify_tool_call("NO_CALL", None)
         assert result["outcome"] == "adherent", result
         assert result["relevance_ok"] is True, result
 
     def test_mutant_relevance_inverted_caught(self):
+        """Test mutant relevance inverted caught."""
         self._run_gate(
             "toolcall",
             "relevance_inverted",
@@ -1057,6 +1164,7 @@ class ToolcallMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _args_drift_scenario(mod):
+        """Args drift scenario."""
         old = _tc_diff_payload()
         new = _tc_diff_payload()
         new["per_candidate"]["c"]["args_rate"] = 0.25
@@ -1069,6 +1177,7 @@ class ToolcallMutationGateTests(unittest.TestCase):
         assert not diff["relevance_drift"], diff
 
     def test_mutant_diff_args_drift_ignored_caught(self):
+        """Test mutant diff args drift ignored caught."""
         self._run_gate(
             "diffreports",
             "args_drift_ignored",
@@ -1079,6 +1188,7 @@ class ToolcallMutationGateTests(unittest.TestCase):
 
 
 def _tc_entry(**overrides):
+    """Tc entry."""
     entry = {
         "n": 9,
         "n_evaluable": 9,
@@ -1096,6 +1206,7 @@ def _tc_entry(**overrides):
 
 
 def _tc_diff_payload():
+    """Tc diff payload."""
     return {
         "available": True,
         "n_fixtures": 9,
@@ -1106,7 +1217,10 @@ def _tc_diff_payload():
 
 
 class DiffToolcallTests(unittest.TestCase):
+    """Diff toolcall tests."""
+
     def test_identical_payloads_unchanged(self):
+        """Test identical payloads unchanged."""
         diff = diffreports.diff_toolcall(_tc_diff_payload(), _tc_diff_payload())
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
@@ -1114,6 +1228,7 @@ class DiffToolcallTests(unittest.TestCase):
         self.assertEqual(diff["candidates_added"], [])
 
     def test_selection_drift_single_cause(self):
+        """Test selection drift single cause."""
         old, new = _tc_diff_payload(), _tc_diff_payload()
         new["per_candidate"]["c"]["selection_rate"] = 0.5
         new["per_candidate"]["c"]["adherent_rate"] = 0.5
@@ -1125,6 +1240,7 @@ class DiffToolcallTests(unittest.TestCase):
         self.assertFalse(diff["relevance_drift"])
 
     def test_relevance_drift_single_cause(self):
+        """Test relevance drift single cause."""
         old, new = _tc_diff_payload(), _tc_diff_payload()
         new["per_candidate"]["d"]["relevance_rate"] = 0.0
         diff = diffreports.diff_toolcall(old, new)
@@ -1134,6 +1250,7 @@ class DiffToolcallTests(unittest.TestCase):
         self.assertFalse(diff["args_drift"])
 
     def test_candidates_added_removed(self):
+        """Test candidates added removed."""
         old, new = _tc_diff_payload(), _tc_diff_payload()
         new["per_candidate"]["e"] = _tc_entry()
         diff = diffreports.diff_toolcall(old, new)
@@ -1146,6 +1263,7 @@ class DiffToolcallTests(unittest.TestCase):
         self.assertEqual(diff2["candidates_removed"], ["d"])
 
     def test_excluded_set_changes(self):
+        """Test excluded set changes."""
         old, new = _tc_diff_payload(), _tc_diff_payload()
         new["excluded_candidates"] = ["c"]
         diff = diffreports.diff_toolcall(old, new)
@@ -1154,6 +1272,7 @@ class DiffToolcallTests(unittest.TestCase):
         self.assertEqual(diff["excluded_removed"], [])
 
     def test_asymmetric_availability(self):
+        """Test asymmetric availability."""
         diff = diffreports.diff_toolcall(_tc_diff_payload(), {"available": False})
         self.assertEqual(diff["available"], "old")
         self.assertFalse(diff["changed"])
@@ -1161,6 +1280,7 @@ class DiffToolcallTests(unittest.TestCase):
         self.assertEqual(neither["available"], "neither")
 
     def test_hostile_payload_rejected(self):
+        """Test hostile payload rejected."""
         hostile = _tc_diff_payload()
         hostile["per_candidate"]["c"]["selection_rate"] = "high"
         diff = diffreports.diff_toolcall(hostile, _tc_diff_payload())
@@ -1168,6 +1288,7 @@ class DiffToolcallTests(unittest.TestCase):
         self.assertFalse(diff["changed"])
 
     def test_none_cell_supported(self):
+        """Test none cell supported."""
         old, new = _tc_diff_payload(), _tc_diff_payload()
         old["per_candidate"]["c"] = None
         new["per_candidate"]["c"] = _tc_entry()
@@ -1178,7 +1299,10 @@ class DiffToolcallTests(unittest.TestCase):
 
 
 class ToolcallSanitizationTests(unittest.TestCase):
+    """Toolcall sanitization tests."""
+
     def test_script_bearing_argument_escaped_in_html(self):
+        """Test script bearing argument escaped in html."""
         from model_protocol_lab import reporting
 
         queries = _queries()
@@ -1206,6 +1330,7 @@ class ToolcallSanitizationTests(unittest.TestCase):
         self.assertIn("evil&lt;script&gt;", html)
 
     def test_terminal_escapes_stripped_from_stderr_summary(self):
+        """Test terminal escapes stripped from stderr summary."""
         old, new = _tc_diff_payload(), _tc_diff_payload()
         evil_name = "cand\x1b[31mRED"
         old["per_candidate"][evil_name] = _tc_entry()
@@ -1217,6 +1342,7 @@ class ToolcallSanitizationTests(unittest.TestCase):
         self.assertNotIn("\x1b[31m", joined)
 
     def test_unavailable_summary_line(self):
+        """Test unavailable summary line."""
         diff = diffreports.diff_toolcall({"available": False}, _tc_diff_payload())
         lines = diffreports._render_toolcall_summary(diff)
         self.assertEqual(len(lines), 1)
@@ -1226,12 +1352,18 @@ class ToolcallSanitizationTests(unittest.TestCase):
 
 
 class ToolcallCliTests(unittest.TestCase):
+    """Toolcall cli tests."""
+
     def test_probe_never_raises_on_backend_failure(self):
+        """Test probe never raises on backend failure."""
         from model_protocol_lab import cli
 
         class BoomBackend(ToolcallScriptedBackend):
+            """Boom backend."""
+
             @staticmethod
             def generate(input_ids, *, max_new_tokens, seed, cancel):
+                """Generate."""
                 raise RuntimeError("boom")
 
         result: dict = {}
@@ -1251,6 +1383,7 @@ class ToolcallCliTests(unittest.TestCase):
         self.assertEqual(result["toolcall"]["excluded_candidates"], ["a"])
 
     def test_probe_degrades_on_invalid_formats(self):
+        """Test probe degrades on invalid formats."""
         from model_protocol_lab import cli
 
         result: dict = {}
@@ -1268,6 +1401,7 @@ class ToolcallCliTests(unittest.TestCase):
         self.assertEqual(result["toolcall"]["detail"], "toolcall_unavailable")
 
     def test_probe_records_available(self):
+        """Test probe records available."""
         from model_protocol_lab import cli
 
         result: dict = {}
@@ -1284,6 +1418,7 @@ class ToolcallCliTests(unittest.TestCase):
         self.assertEqual(result["toolcall"]["per_candidate"]["a"]["adherent_rate"], 1.0)
 
     def test_flag_registered(self):
+        """Test flag registered."""
         from model_protocol_lab import cli as cli_module
 
         parser = cli_module.build_parser()
@@ -1307,7 +1442,10 @@ class ToolcallCliTests(unittest.TestCase):
 
 
 class ToolcallReportIntegrationTests(unittest.TestCase):
+    """Toolcall report integration tests."""
+
     def test_toc_anchor_present(self):
+        """Test toc anchor present."""
         from model_protocol_lab import reporting
 
         queries = _queries()
@@ -1326,13 +1464,17 @@ class ToolcallReportIntegrationTests(unittest.TestCase):
         self.assertIn("Prompt-only tool-call adherence", html)
 
     def test_section_empty_when_unavailable(self):
+        """Test section empty when unavailable."""
         from model_protocol_lab import reporting
 
         self.assertEqual(reporting._toolcall_section({}), "")
         self.assertEqual(reporting._toolcall_section({"toolcall": {"available": False}}), "")
 
     def test_full_diff_reports_toolcall_section(self):
+        """Test full diff reports toolcall section."""
+
         def report():
+            """Report."""
             return {
                 "decision": "select_best",
                 "selected_candidate": "c",
@@ -1348,7 +1490,10 @@ class ToolcallReportIntegrationTests(unittest.TestCase):
         self.assertTrue(diff["summary"]["identical"])
 
     def test_full_diff_reports_toolcall_changed_breaks_identical(self):
+        """Test full diff reports toolcall changed breaks identical."""
+
         def report(payload):
+            """Report."""
             return {
                 "decision": "select_best",
                 "selected_candidate": "c",
@@ -1369,6 +1514,7 @@ class ParseEmittedFailClosedTests(unittest.TestCase):
     """Wave-6 red-team A findings 1+6: _parse_emitted never raises."""
 
     def test_deeply_nested_input_is_bad_json(self):
+        """Test deeply nested input is bad json."""
         # json.loads raises RecursionError (not JSONDecodeError/ValueError)
         # on deep nesting; it must degrade to bad_json, never escape.
         from model_protocol_lab.toolcall import _parse_emitted
@@ -1377,6 +1523,7 @@ class ParseEmittedFailClosedTests(unittest.TestCase):
         self.assertEqual(_parse_emitted(evil), (None, None, "bad_json"))
 
     def test_overflow_float_literal_is_bad_json(self):
+        """Test overflow float literal is bad json."""
         # 1e999 -> inf via float() without ever calling parse_constant.
         from model_protocol_lab.toolcall import _parse_emitted
 
@@ -1384,12 +1531,14 @@ class ParseEmittedFailClosedTests(unittest.TestCase):
         self.assertEqual((name, arguments, error), (None, None, "bad_json"))
 
     def test_underflow_float_literal_is_bad_json(self):
+        """Test underflow float literal is bad json."""
         from model_protocol_lab.toolcall import _parse_emitted
 
         name, arguments, error = _parse_emitted('CALL get_weather {"x": -1e999}')
         self.assertEqual((name, arguments, error), (None, None, "bad_json"))
 
     def test_finite_floats_still_parse(self):
+        """Test finite floats still parse."""
         from model_protocol_lab.toolcall import _parse_emitted
 
         name, arguments, error = _parse_emitted('CALL get_weather {"temp": 21.5, "unit": "C"}')
@@ -1398,6 +1547,7 @@ class ParseEmittedFailClosedTests(unittest.TestCase):
         self.assertEqual(arguments, {"temp": 21.5, "unit": "C"})
 
     def test_classify_never_raises_on_degenerate_answer(self):
+        """Test classify never raises on degenerate answer."""
         # One degenerate observation must not kill the stage: classify
         # degrades to parse_failed.
         # skipcq: PYL-W0404 - test-local import isolates the module under audit

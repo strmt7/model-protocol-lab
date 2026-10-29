@@ -47,6 +47,7 @@ from model_protocol_lab import fixtures as fixtures_mod
 
 
 def _tmpdir() -> Path:
+    """Tmpdir."""
     path = Path(tempfile.mkdtemp(prefix="mpl_cycle96_"))
     return path
 
@@ -56,6 +57,7 @@ def _demo_split():
     from model_protocol_lab.core import Fixture, Message, Split
 
     def _case(cid: str, group: str, content: str) -> Fixture:
+        """Case."""
         return Fixture(
             id=cid,
             messages=(Message(role="user", content=content),),
@@ -73,19 +75,24 @@ class SurrogateSanitizationTests(unittest.TestCase):
     """Lone surrogates must never reach a strict stream write."""
 
     def test_debug_sanitize_strips_lone_surrogate(self):
+        """Test debug sanitize strips lone surrogate."""
         self.assertEqual(debug_mod._sanitize_display("A\ud800B"), "AB")
         self.assertEqual(debug_mod._sanitize_display("x\udfff"), "x")
 
     def test_cli_display_id_strips_lone_surrogate(self):
+        """Test cli display id strips lone surrogate."""
         self.assertEqual(cli_mod._display_id("A\ud800B"), "AB")
 
     def test_diffreports_display_id_strips_lone_surrogate(self):
+        """Test diffreports display id strips lone surrogate."""
         self.assertEqual(dr_mod._display_id("A\ud800B"), "AB")
 
     def test_fixtures_safe_strips_lone_surrogate(self):
+        """Test fixtures safe strips lone surrogate."""
         self.assertEqual(fixtures_mod._safe("A\ud800B"), "AB")
 
     def test_astral_characters_survive(self):
+        """Test astral characters survive."""
         # Astral characters are single codepoints in Python, not surrogate
         # pairs: the strip must not damage valid text (emoji, CJK ext).
         for mod_sanitize in (
@@ -97,6 +104,7 @@ class SurrogateSanitizationTests(unittest.TestCase):
             self.assertEqual(mod_sanitize("hi \U0001f600 \U00024b62"), "hi \U0001f600 \U00024b62")
 
     def test_diffreports_summary_strict_encodable_with_surrogate(self):
+        """Test diffreports summary strict encodable with surrogate."""
         # A hostile results.json with a lone surrogate in a candidate name:
         # the stderr summary must be strict-UTF-8 encodable (previously
         # raised UnicodeEncodeError on a strict terminal).
@@ -135,6 +143,7 @@ class SurrogateSanitizationTests(unittest.TestCase):
         summary.encode("utf-8", errors="strict")
 
     def test_debug_repl_render_with_surrogate_fixture_survives(self):
+        """Test debug repl render with surrogate fixture survives."""
         # A fixture whose content carries a lone surrogate must not kill
         # the REPL session: onecmd completes, stdout is strict-encodable.
         from model_protocol_lab.debug import DebugShell
@@ -155,10 +164,12 @@ class WeightHeaderRobustnessTests(unittest.TestCase):
 
     @staticmethod
     def _write(tmp: Path, payload: bytes) -> None:
+        """Write."""
         header = payload
         (tmp / "model.safetensors").write_bytes(struct.pack("<Q", len(header)) + header)
 
     def test_deeply_nested_header_fails_closed(self):
+        """Test deeply nested header fails closed."""
         from model_protocol_lab.doctor import _check_weight_headers
 
         tmp = _tmpdir()
@@ -168,6 +179,7 @@ class WeightHeaderRobustnessTests(unittest.TestCase):
         self.assertIn("invalid_safetensors_header", result["detail"])
 
     def test_fifo_shard_fails_closed_without_hang(self):
+        """Test fifo shard fails closed without hang."""
         from model_protocol_lab.doctor import _check_weight_headers
 
         tmp = _tmpdir()
@@ -175,6 +187,7 @@ class WeightHeaderRobustnessTests(unittest.TestCase):
         outcome: dict = {}
 
         def run() -> None:
+            """Run."""
             outcome["result"] = _check_weight_headers(tmp, ("model.safetensors",))
 
         thread = threading.Thread(target=run, daemon=True)
@@ -184,6 +197,7 @@ class WeightHeaderRobustnessTests(unittest.TestCase):
         self.assertEqual(outcome["result"]["status"], "failed")
 
     def test_read_json_fifo_fails_closed_without_hang(self):
+        """Test read json fifo fails closed without hang."""
         from model_protocol_lab.backends import _read_json
 
         tmp = _tmpdir()
@@ -191,6 +205,7 @@ class WeightHeaderRobustnessTests(unittest.TestCase):
         outcome: dict = {}
 
         def run() -> None:
+            """Run."""
             try:
                 _read_json(tmp / "x.json")
                 outcome["raised"] = False
@@ -209,12 +224,14 @@ class ConfigOutputBoundTests(unittest.TestCase):
 
     @staticmethod
     def _healthy(tmp: Path, config: dict) -> Path:
+        """Healthy."""
         (tmp / "config.json").write_text(json.dumps(config), encoding="utf-8")
         header = json.dumps({"__metadata__": {}}).encode()
         (tmp / "model.safetensors").write_bytes(struct.pack("<Q", len(header)) + header)
         return tmp
 
     def test_huge_model_type_truncated(self):
+        """Test huge model type truncated."""
         from model_protocol_lab.doctor import examine_model
 
         tmp = _tmpdir()
@@ -226,6 +243,7 @@ class ConfigOutputBoundTests(unittest.TestCase):
         self.assertIn("unsupported model_type", detail)
 
     def test_portability_matrix_unreadable_second_checkpoint(self):
+        """Test portability matrix unreadable second checkpoint."""
         from model_protocol_lab.doctor import portability_matrix
 
         tmp = _tmpdir()
@@ -234,6 +252,7 @@ class ConfigOutputBoundTests(unittest.TestCase):
         real_os_open = os.open
 
         def denied(path: object, flags: int, *args: object, **kwargs: object):
+            """Denied."""
             try:
                 base = os.path.basename(os.fspath(path))  # type: ignore[arg-type]
             except TypeError:
@@ -252,16 +271,21 @@ class ChatTemplateMemoryCapTests(unittest.TestCase):
     """A hostile chat_template must not transiently OOM the process."""
 
     def test_bomb_render_raises_memory_error_without_rss_growth(self):
+        """Test bomb render raises memory error without rss growth."""
         import resource
 
         from model_protocol_lab.doctor import _render_with_memory_cap
 
         class BombTokenizer:
+            """Bomb tokenizer."""
+
             @staticmethod
             def apply_chat_template(conversation, tokenize=False, add_generation_prompt=True):
+                """Apply chat template."""
                 return "x" * 500_000_000
 
         def rss_mb() -> float:
+            """Rss mb."""
             return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
 
         before = rss_mb()
@@ -271,11 +295,15 @@ class ChatTemplateMemoryCapTests(unittest.TestCase):
         self.assertLess(growth, 100, f"RSS grew {growth:.0f}MB on a capped render")
 
     def test_legitimate_render_unaffected(self):
+        """Test legitimate render unaffected."""
         from model_protocol_lab.doctor import _render_with_memory_cap
 
         class OkTokenizer:
+            """Ok tokenizer."""
+
             @staticmethod
             def apply_chat_template(conversation, tokenize=False, add_generation_prompt=True):
+                """Apply chat template."""
                 return "<|user|>hi<|assistant|>"
 
         self.assertEqual(
@@ -284,11 +312,15 @@ class ChatTemplateMemoryCapTests(unittest.TestCase):
         )
 
     def test_non_str_render_rejected(self):
+        """Test non str render rejected."""
         from model_protocol_lab.doctor import _render_with_memory_cap
 
         class WeirdTokenizer:
+            """Weird tokenizer."""
+
             @staticmethod
             def apply_chat_template(conversation, tokenize=False, add_generation_prompt=True):
+                """Apply chat template."""
                 return ["not", "a", "string"]
 
         with self.assertRaises(ValueError):
@@ -300,25 +332,32 @@ class BaseExceptionBoundaryTests(unittest.TestCase):
 
     @staticmethod
     def _backend(exc):
+        """Backend."""
         from model_protocol_lab.core import Backend
 
         class NastyBackend(Backend):
+            """Nasty backend."""
+
             @staticmethod
             def generate(input_ids, max_new_tokens, seed=None, cancel=None):
+                """Generate."""
                 raise exc
 
             @staticmethod
             def encode(text):
+                """Encode."""
                 return (1, 2)
 
             @staticmethod
             def decode(token_ids):
+                """Decode."""
                 return "x"
 
         return NastyBackend()
 
     @staticmethod
     def _case():
+        """Case."""
         from model_protocol_lab.core import Fixture, Format, Message
 
         fmt = Format(name="f", bos="", user_prefix="<u>", assistant_prefix="<a>", turn_end="<e>")
@@ -331,9 +370,12 @@ class BaseExceptionBoundaryTests(unittest.TestCase):
         return fmt, (case,)
 
     def test_generate_base_exception_becomes_failed_observation(self):
+        """Test generate base exception becomes failed observation."""
         from model_protocol_lab.core import evaluate
 
         class NastyError(BaseException):
+            """Nasty error."""
+
             pass
 
         fmt, cases = self._case()
@@ -344,6 +386,7 @@ class BaseExceptionBoundaryTests(unittest.TestCase):
         self.assertEqual(report.observations[0].error, "generate_failed")
 
     def test_generate_keyboard_interrupt_still_propagates(self):
+        """Test generate keyboard interrupt still propagates."""
         from model_protocol_lab.core import evaluate
 
         fmt, cases = self._case()
@@ -353,24 +396,32 @@ class BaseExceptionBoundaryTests(unittest.TestCase):
             )
 
     def test_forward_logits_base_exception_becomes_unavailable(self):
+        """Test forward logits base exception becomes unavailable."""
         from model_protocol_lab.scoring import score_target_logprobs
 
         class NastyError(BaseException):
+            """Nasty error."""
+
             pass
 
         class NastyBackend:
+            """Nasty backend."""
+
             vocab_size = 10
 
             @staticmethod
             def decode(token_ids):
+                """Decode."""
                 return "".join(chr(65 + (t % 26)) for t in token_ids)
 
             @staticmethod
             def encode(text):
+                """Encode."""
                 return tuple(ord(c) - 65 for c in text)
 
             @staticmethod
             def forward_logits(input_ids):
+                """Forward logits."""
                 raise NastyError("boom")
 
         score = score_target_logprobs(NastyBackend(), (1, 2), (3,))
@@ -382,6 +433,7 @@ class TranscriptCounterTests(unittest.TestCase):
     """The debug REPL transcript counter must match the true char count."""
 
     def test_counter_invariant(self):
+        """Test counter invariant."""
         from model_protocol_lab.debug import _MAX_SAVE_BYTES, DebugShell
 
         repl = DebugShell(_demo_split())
@@ -392,6 +444,7 @@ class TranscriptCounterTests(unittest.TestCase):
         self.assertLessEqual(repl._transcript_chars, _MAX_SAVE_BYTES + 10_000)
 
     def test_counter_survives_truncation(self):
+        """Test counter survives truncation."""
         from model_protocol_lab.debug import DebugShell
 
         repl = DebugShell(_demo_split())

@@ -155,9 +155,11 @@ class ConcatBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         raise AssertionError("encode unused in holdback differential tests")
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(self._texts[token] for token in token_ids)
 
     @staticmethod
@@ -168,10 +170,12 @@ class ConcatBackend:
         seed: int,
         cancel: Event,
     ) -> Generation:
+        """Generate."""
         raise AssertionError("generate unused in holdback differential tests")
 
 
 def _as_backend(backend: ConcatBackend) -> Backend:
+    """As backend."""
     return backend  # structural check against the Backend protocol
 
 
@@ -224,6 +228,8 @@ _ADVERSARIAL_CASES: tuple[tuple[str, list[str], str, bool, int], ...] = (
 
 
 class VllmHoldbackDifferentialTests(unittest.TestCase):
+    """Vllm holdback differential tests."""
+
     def check_case(
         self,
         name: str,
@@ -232,6 +238,7 @@ class VllmHoldbackDifferentialTests(unittest.TestCase):
         include: bool,
         min_tokens: int,
     ) -> None:
+        """Check case."""
         backend = _as_backend(ConcatBackend({i + 1: text for i, text in enumerate(texts)}))
         ids = tuple(range(1, len(texts) + 1))
         outcome = emulate_vllm_holdback(
@@ -266,11 +273,13 @@ class VllmHoldbackDifferentialTests(unittest.TestCase):
             self.assertIsNone(outcome.returned_text, name)
 
     def test_adversarial_cases_match_upstream(self) -> None:
+        """Test adversarial cases match upstream."""
         for name, texts, stop, include, min_tokens in _ADVERSARIAL_CASES:
             with self.subTest(name=name):
                 self.check_case(name, texts, stop, include, min_tokens)
 
     def test_fuzz_matches_upstream_reference(self) -> None:
+        """Test fuzz matches upstream reference."""
         rng = random.Random(20261015)  # noqa: S311 -- seeded deterministic fuzz, not crypto
         alphabet = ["a", "b", "STOP", "<stop>", "", "x", "ab", "é", "STOPSTOP", " "]
         stops = ["STOP", "ab", "a", "<stop>", "é", "STOPSTOP", "bST", "xyz"]

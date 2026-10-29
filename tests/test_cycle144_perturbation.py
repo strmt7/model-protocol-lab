@@ -41,6 +41,7 @@ LONG_TEXT = (
 
 
 def _fixture(fid, content, expected="BLUE"):
+    """Fixture."""
     return Fixture(
         id=fid,
         messages=(Message(role="user", content=content),),
@@ -50,6 +51,7 @@ def _fixture(fid, content, expected="BLUE"):
 
 
 def _format(name):
+    """Format."""
     return Format(
         name=name,
         bos="",
@@ -75,13 +77,16 @@ class ScriptedBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(ids):
+        """Decode."""
         return "".join(map(chr, ids))
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         prompt = self.decode(input_ids)
         candidate = next((n for n in CANDIDATES if f"[{n}]" in prompt), None)
         if candidate is None:
@@ -95,13 +100,17 @@ class ScriptedBackend:
 
 
 class PerturbTextTests(unittest.TestCase):
+    """Perturb text tests."""
+
     def test_all_operators_change_suitable_input(self):
+        """Test all operators change suitable input."""
         for op in PERTURBATION_OPERATORS:
             with self.subTest(operator=op):
                 out = perturb_text(LONG_TEXT, op, seed=42)
                 self.assertNotEqual(out, LONG_TEXT, op)
 
     def test_deterministic_in_seed(self):
+        """Test deterministic in seed."""
         for op in PERTURBATION_OPERATORS:
             with self.subTest(operator=op):
                 self.assertEqual(
@@ -111,12 +120,14 @@ class PerturbTextTests(unittest.TestCase):
                 )
 
     def test_seed_sensitivity(self):
+        """Test seed sensitivity."""
         # Two seeds must not silently produce the same perturbation.
         out1 = perturb_text(LONG_TEXT, "typo", seed=1)
         out2 = perturb_text(LONG_TEXT, "typo", seed=2)
         self.assertNotEqual(out1, out2)
 
     def test_unicode_variant_is_nfkc_foldable(self):
+        """Test unicode variant is nfkc foldable."""
         out = perturb_text("GREEN 123", "unicode_variant", seed=3)
         self.assertNotEqual(out, "GREEN 123")
         # Fullwidth forms fold back to the ASCII originals under NFKC.
@@ -124,6 +135,7 @@ class PerturbTextTests(unittest.TestCase):
         self.assertTrue(any(ord(c) > 127 for c in out))
 
     def test_typo_substitutes_different_letter(self):
+        """Test typo substitutes different letter."""
         out = perturb_text("aaaa bbbb cccc dddd eeee ffff", "typo", seed=11)
         self.assertEqual(len(out), len("aaaa bbbb cccc dddd eeee ffff"))
         for a, b in zip("aaaa bbbb cccc dddd eeee ffff", out, strict=True):
@@ -132,11 +144,13 @@ class PerturbTextTests(unittest.TestCase):
                 self.assertNotEqual(a.lower(), b.lower())
 
     def test_punctuation_strip_deterministic_and_complete(self):
+        """Test punctuation strip deterministic and complete."""
         out = perturb_text("Hello, World! (yes?)", "punctuation_strip", seed=5)
         self.assertEqual(out, "Hello World yes")
         self.assertFalse(any(unicodedata.category(c).startswith("P") for c in out))
 
     def test_whitespace_all_three_modes(self):
+        """Test whitespace all three modes."""
         # Seeds pinned to each rng.randrange(3) mode: collapse, double,
         # newline-split. Deterministic by construction.
         self.assertEqual(perturb_text("a  b   c", "whitespace", seed=1), "a b c")
@@ -144,11 +158,13 @@ class PerturbTextTests(unittest.TestCase):
         self.assertEqual(perturb_text("a b", "whitespace", seed=5), "a\nb")
 
     def test_fail_closed_on_would_be_empty(self):
+        """Test fail closed on would be empty."""
         # Stripping every character must not produce an empty prompt.
         self.assertEqual(perturb_text("!!!", "punctuation_strip", seed=5), "!!!")
         self.assertEqual(perturb_text("   ", "whitespace", seed=5), "   ")
 
     def test_noop_when_operator_cannot_apply(self):
+        """Test noop when operator cannot apply."""
         self.assertEqual(perturb_text("abc", "punctuation_strip", seed=5), "abc")
         self.assertEqual(perturb_text("abc", "whitespace", seed=5), "abc")
         self.assertEqual(perturb_text("123", "typo", seed=5), "123")
@@ -156,6 +172,7 @@ class PerturbTextTests(unittest.TestCase):
         self.assertEqual(perturb_text("123", "unicode_variant", seed=5), "123")
 
     def test_validation(self):
+        """Test validation."""
         for bad_op in ("scream", "", None, 42):
             with self.assertRaises(ValueError, msg=repr(bad_op)):
                 perturb_text("text", bad_op, seed=1)
@@ -167,7 +184,10 @@ class PerturbTextTests(unittest.TestCase):
 
 
 class PerturbFixtureTests(unittest.TestCase):
+    """Perturb fixture tests."""
+
     def test_id_group_expected_preserved(self):
+        """Test id group expected preserved."""
         fx = _fixture("S1", LONG_TEXT, expected="BLUE")
         out = perturb_fixture(fx, "typo", seed=9)
         self.assertEqual(out.id, "S1")
@@ -177,6 +197,7 @@ class PerturbFixtureTests(unittest.TestCase):
         self.assertNotEqual(out.messages[0].content, LONG_TEXT)
 
     def test_all_messages_perturbed(self):
+        """Test all messages perturbed."""
         fx = Fixture(
             id="M",
             messages=(
@@ -191,6 +212,7 @@ class PerturbFixtureTests(unittest.TestCase):
             self.assertNotEqual(msg.content, LONG_TEXT)
 
     def test_perturb_fixtures_validates(self):
+        """Test perturb fixtures validates."""
         cases = (_fixture("S1", LONG_TEXT),)
         out = perturb_fixtures(cases, "typo", seed=2)
         self.assertEqual(len(out), 1)
@@ -202,12 +224,16 @@ class PerturbFixtureTests(unittest.TestCase):
 
 
 class VariantPlanTests(unittest.TestCase):
+    """Variant plan tests."""
+
     def test_round_robin_assignment(self):
+        """Test round robin assignment."""
         plan = variant_plan(5, seed=99)
         self.assertEqual([p["operator"] for p in plan], list(PERTURBATION_OPERATORS))
         self.assertEqual([p["variant_id"] for p in plan], ["v00", "v01", "v02", "v03", "v04"])
 
     def test_repeat_operators_with_fresh_seeds(self):
+        """Test repeat operators with fresh seeds."""
         plan = variant_plan(7, seed=99)
         seeds = [p["seed"] for p in plan]
         self.assertEqual(len(set(seeds)), 7)
@@ -215,14 +241,17 @@ class VariantPlanTests(unittest.TestCase):
         self.assertNotEqual(plan[0]["seed"], plan[5]["seed"])
 
     def test_deterministic(self):
+        """Test deterministic."""
         self.assertEqual(variant_plan(4, seed=1), variant_plan(4, seed=1))
         self.assertNotEqual(variant_plan(4, seed=1), variant_plan(4, seed=2))
 
     def test_custom_operator_subset(self):
+        """Test custom operator subset."""
         plan = variant_plan(3, ("typo", "case_flip"), seed=1)
         self.assertEqual([p["operator"] for p in plan], ["typo", "case_flip", "typo"])
 
     def test_validation(self):
+        """Test validation."""
         for bad in (0, 9, -1, "4", None):
             with self.assertRaises(ValueError, msg=repr(bad)):
                 variant_plan(bad, seed=1)  # type: ignore[arg-type]
@@ -235,6 +264,7 @@ class VariantPlanTests(unittest.TestCase):
 
 
 def _stage(behavior, n_variants=2, operators=("punctuation_strip", "typo"), seed=11):
+    """Stage."""
     cases = (_fixture("S1", LONG_TEXT), _fixture("S2", LONG_TEXT))
     formats = tuple(_format(n) for n in CANDIDATES)
     return experiments.perturbation_stage(
@@ -250,7 +280,10 @@ def _stage(behavior, n_variants=2, operators=("punctuation_strip", "typo"), seed
 
 
 class PerturbationStageTests(unittest.TestCase):
+    """Perturbation stage tests."""
+
     def test_outcomes_and_shape(self):
+        """Test outcomes and shape."""
         out = _stage({"alpha": "pass", "beta": "fail"})
         self.assertEqual(out["n_variants"], 2)
         self.assertEqual(out["operators"], ["punctuation_strip", "typo"])
@@ -263,6 +296,7 @@ class PerturbationStageTests(unittest.TestCase):
         self.assertEqual(v00["changed_fixtures"], 2)
 
     def test_changed_fixtures_honest_zero(self):
+        """Test changed fixtures honest zero."""
         # punctuation_strip on punctuation-free content changes nothing;
         # the stage must report 0, not silently drop the variant.
         cases = (_fixture("S1", "abc def"),)
@@ -280,17 +314,20 @@ class PerturbationStageTests(unittest.TestCase):
         self.assertTrue(out["variants"]["v00"]["outcomes"]["alpha"])
 
     def test_backend_error_records_none(self):
+        """Test backend error records none."""
         out = _stage({"alpha": "error", "beta": "pass"})
         self.assertIsNone(out["variants"]["v00"]["outcomes"]["alpha"])
         self.assertTrue(out["variants"]["v00"]["outcomes"]["beta"])
 
     def test_deterministic(self):
+        """Test deterministic."""
         self.assertEqual(
             _stage({"alpha": "pass", "beta": "fail"}),
             _stage({"alpha": "pass", "beta": "fail"}),
         )
 
     def test_validation(self):
+        """Test validation."""
         cases = (_fixture("S1", LONG_TEXT),)
         formats = (_format("alpha"),)
         with self.assertRaises(ValueError):
@@ -316,6 +353,7 @@ class PerturbationStageTests(unittest.TestCase):
 
 
 def _robustness(stage, winner="alpha", decision="selected"):
+    """Robustness."""
     return experiments.perturbation_robustness(winner, decision, CANDIDATES, stage)
 
 
@@ -334,7 +372,10 @@ def _stage_dict(specs):
 
 
 class PerturbationRobustnessTests(unittest.TestCase):
+    """Perturbation robustness tests."""
+
     def test_stable_winner(self):
+        """Test stable winner."""
         stage = _stage_dict(
             {
                 "v00": ("typo", {"alpha": True, "beta": False}, 2, 2),
@@ -351,6 +392,7 @@ class PerturbationRobustnessTests(unittest.TestCase):
         self.assertEqual(out["per_variant"]["v00"]["winner"], "alpha")
 
     def test_flip_detected(self):
+        """Test flip detected."""
         stage = _stage_dict(
             {
                 "v00": ("typo", {"alpha": True, "beta": False}, 2, 2),
@@ -366,6 +408,7 @@ class PerturbationRobustnessTests(unittest.TestCase):
         self.assertEqual(out["stability"]["winner_retained"], 1)
 
     def test_ambiguous_variant(self):
+        """Test ambiguous variant."""
         stage = _stage_dict({"v00": ("typo", {"alpha": True, "beta": True}, 2, 2)})
         out = _robustness(stage)
         self.assertEqual(out["per_variant"]["v00"]["decision"], "ambiguous")
@@ -373,6 +416,7 @@ class PerturbationRobustnessTests(unittest.TestCase):
         self.assertEqual(len(out["flips"]), 1)
 
     def test_unavailable_variant_is_not_a_verdict(self):
+        """Test unavailable variant is not a verdict."""
         stage = _stage_dict(
             {
                 "v00": ("typo", {"alpha": True, "beta": False}, 2, 2),
@@ -387,6 +431,7 @@ class PerturbationRobustnessTests(unittest.TestCase):
         self.assertEqual(out["flips"], [])
 
     def test_no_primary_winner(self):
+        """Test no primary winner."""
         stage = _stage_dict({"v00": ("typo", {"alpha": True, "beta": False}, 2, 2)})
         out = experiments.perturbation_robustness(None, "abstain", CANDIDATES, stage)
         self.assertTrue(out["available"])
@@ -395,6 +440,7 @@ class PerturbationRobustnessTests(unittest.TestCase):
         self.assertEqual(out["stability"]["decision_retained"], 0)
 
     def test_per_operator_aggregation(self):
+        """Test per operator aggregation."""
         stage = _stage_dict(
             {
                 "v00": ("typo", {"alpha": True, "beta": False}, 2, 2),
@@ -411,6 +457,7 @@ class PerturbationRobustnessTests(unittest.TestCase):
         self.assertEqual(out["per_operator"]["case_flip"]["winner_retained"], 1)
 
     def test_order_invariant(self):
+        """Test order invariant."""
         s1 = _stage_dict(
             {
                 "v00": ("typo", {"alpha": True, "beta": False}, 2, 2),
@@ -426,6 +473,7 @@ class PerturbationRobustnessTests(unittest.TestCase):
         self.assertEqual(_robustness(s1), _robustness(s2))
 
     def test_malformed_input_unavailable(self):
+        """Test malformed input unavailable."""
         good = _stage_dict({"v00": ("typo", {"alpha": True, "beta": False}, 2, 2)})
         bad_stages = [
             None,
@@ -459,6 +507,7 @@ class PerturbationRobustnessTests(unittest.TestCase):
             self.assertFalse(out["available"])
 
     def test_end_to_end_stage_to_robustness(self):
+        """Test end to end stage to robustness."""
         stage = _stage({"alpha": "pass", "beta": "fail"})
         out = _robustness(stage)
         self.assertTrue(out["available"])
@@ -468,6 +517,7 @@ class PerturbationRobustnessTests(unittest.TestCase):
 
 
 def _perturbation_payload(**overrides):
+    """Perturbation payload."""
     payload = {
         "available": True,
         "primary_winner": "alpha",
@@ -505,6 +555,7 @@ def _perturbation_payload(**overrides):
 
 
 def _reports(old_pert, new_pert):
+    """Reports."""
     base = {
         "decision": "selected",
         "selected_candidate": "alpha",
@@ -517,7 +568,10 @@ def _reports(old_pert, new_pert):
 
 
 class DiffPerturbationTests(unittest.TestCase):
+    """Diff perturbation tests."""
+
     def test_identical_payloads_no_change(self):
+        """Test identical payloads no change."""
         p = _perturbation_payload()
         diff = diffreports.diff_perturbation(p, _perturbation_payload())
         self.assertEqual(diff["available"], "both")
@@ -526,6 +580,7 @@ class DiffPerturbationTests(unittest.TestCase):
         self.assertEqual(diff["variant_drift"], [])
 
     def test_stability_drift(self):
+        """Test stability drift."""
         old = _perturbation_payload()
         new = _perturbation_payload()
         new["per_variant"]["v01"] = {
@@ -552,6 +607,7 @@ class DiffPerturbationTests(unittest.TestCase):
         self.assertIsNone(drift["new_winner"])
 
     def test_variants_added_removed(self):
+        """Test variants added removed."""
         old = _perturbation_payload()
         new = _perturbation_payload()
         new["per_variant"]["v02"] = {
@@ -567,6 +623,7 @@ class DiffPerturbationTests(unittest.TestCase):
         self.assertEqual(diff["variants_removed"], [])
 
     def test_operators_changed(self):
+        """Test operators changed."""
         old = _perturbation_payload()
         new = _perturbation_payload(operators=["typo", "case_flip"])
         diff = diffreports.diff_perturbation(old, new)
@@ -574,6 +631,7 @@ class DiffPerturbationTests(unittest.TestCase):
         self.assertTrue(diff["operators_changed"])
 
     def test_asymmetric(self):
+        """Test asymmetric."""
         diff = diffreports.diff_perturbation(_perturbation_payload(), {"available": False})
         self.assertEqual(diff["available"], "old")
         self.assertFalse(diff["changed"])
@@ -581,6 +639,7 @@ class DiffPerturbationTests(unittest.TestCase):
         self.assertEqual(diff["available"], "neither")
 
     def test_hostile_non_string_keys_degrade(self):
+        """Test hostile non string keys degrade."""
         hostile = _perturbation_payload()
         hostile["per_variant"] = {1: {"decision": "selected", "winner": "alpha"}}
         diff = diffreports.diff_perturbation(hostile, _perturbation_payload())
@@ -589,6 +648,7 @@ class DiffPerturbationTests(unittest.TestCase):
         self.assertFalse(diff["changed"])
 
     def test_summary_flags_feed_identical(self):
+        """Test summary flags feed identical."""
         old, new = _reports(_perturbation_payload(), _perturbation_payload())
         diff = diffreports.diff_reports(old, new)
         self.assertFalse(diff["summary"]["perturbation_changed"])
@@ -613,7 +673,10 @@ class DiffPerturbationTests(unittest.TestCase):
 
 
 class RenderPerturbationSummaryTests(unittest.TestCase):
+    """Render perturbation summary tests."""
+
     def test_stability_change_line(self):
+        """Test stability change line."""
         old = _perturbation_payload()
         new = _perturbation_payload()
         new["stability"] = dict(new["stability"], winner_retained=0, decision_retained=1)
@@ -655,6 +718,7 @@ class RenderPerturbationSummaryTests(unittest.TestCase):
         self.assertIn("Perturbation variant drift (2):", lines)
 
     def test_hostile_variant_id_sanitized_in_stderr(self):
+        """Test hostile variant id sanitized in stderr."""
         old = _perturbation_payload()
         new = _perturbation_payload()
         evil = "v01\x1b[31m"
@@ -669,12 +733,16 @@ class RenderPerturbationSummaryTests(unittest.TestCase):
 
 
 class PerturbationSectionTests(unittest.TestCase):
+    """Perturbation section tests."""
+
     @staticmethod
     def _result(**overrides):
+        """Result."""
         payload = _perturbation_payload(**overrides)
         return {"perturbation": payload}
 
     def test_section_renders(self):
+        """Test section renders."""
         section_html = _perturbation_section(self._result())
         self.assertIn("Fixture-perturbation robustness", section_html)
         self.assertIn("2/2 evaluable variants retain the primary winner", section_html)
@@ -682,6 +750,7 @@ class PerturbationSectionTests(unittest.TestCase):
         self.assertIn("typo", section_html)
 
     def test_flip_badge(self):
+        """Test flip badge."""
         payload = _perturbation_payload()
         payload["per_variant"]["v01"] = dict(
             payload["per_variant"]["v01"], decision="ambiguous", winner=None
@@ -701,10 +770,12 @@ class PerturbationSectionTests(unittest.TestCase):
         self.assertIn("badge fail", section_html)
 
     def test_unavailable_renders_nothing(self):
+        """Test unavailable renders nothing."""
         self.assertEqual(_perturbation_section({"perturbation": {"available": False}}), "")
         self.assertEqual(_perturbation_section({}), "")
 
     def test_malformed_renders_nothing(self):
+        """Test malformed renders nothing."""
         self.assertEqual(_perturbation_section({"perturbation": {"available": True}}), "")
         self.assertEqual(
             _perturbation_section({"perturbation": {"available": True, "per_variant": []}}),
@@ -712,6 +783,7 @@ class PerturbationSectionTests(unittest.TestCase):
         )
 
     def test_hostile_names_escaped(self):
+        """Test hostile names escaped."""
         # Cycle-142 pattern: pin escaping at the integration point.
         evil = '<script>alert("x")</script>&"\x1b[31m'
         payload = _perturbation_payload(primary_winner=evil)
@@ -733,6 +805,7 @@ class PerturbationSectionTests(unittest.TestCase):
         self.assertIn(escaped, section_html)
 
     def test_no_primary_winner_line(self):
+        """Test no primary winner line."""
         payload = _perturbation_payload(primary_winner=None)
         payload["stability"] = dict(payload["stability"], winner_retained=None)
         section_html = _perturbation_section({"perturbation": payload})
@@ -743,6 +816,7 @@ class PerturbationMutationGateTests(unittest.TestCase):
     """In-place mutation gates use the tempdir-module pattern (no pyc poisoning)."""
 
     def _run_gate(self, name, old_text, new_text, scenario):
+        """Run gate."""
         from model_protocol_lab import perturbation as perturbation_mod
 
         source = Path(perturbation_mod.__file__).read_text(encoding="utf-8")
@@ -765,7 +839,10 @@ class PerturbationMutationGateTests(unittest.TestCase):
                 scenario(mutant)
 
     def test_mutant_guard_removed_caught(self):
+        """Test mutant guard removed caught."""
+
         def scenario(mod):
+            """Scenario."""
             # Without the fail-closed guard, punctuation_strip on "!!!"
             # would return an empty prompt instead of the original.
             self.assertEqual(mod.perturb_text("!!!", "punctuation_strip", seed=5), "!!!")
@@ -780,7 +857,10 @@ class PerturbationMutationGateTests(unittest.TestCase):
         )
 
     def test_mutant_seed_ignored_caught(self):
+        """Test mutant seed ignored caught."""
+
         def scenario(mod):
+            """Scenario."""
             # Without seeding, two seeds must still... no: with seeding,
             # different seeds give different typos on long text.
             out1 = mod.perturb_text(LONG_TEXT, "typo", seed=1)

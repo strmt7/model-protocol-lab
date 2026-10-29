@@ -99,8 +99,11 @@ _CHILD_GENERATE = (
 
 @unittest.skipUnless(HAS_HF, "the 'hf' extra is not installed")
 class BackendDeterminismAuditTests(unittest.TestCase):
+    """Backend determinism audit tests."""
+
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         from tests.test_adapter_integration import build_tiny_gpt2
 
         cls._tmp = TemporaryDirectory()
@@ -117,11 +120,13 @@ class BackendDeterminismAuditTests(unittest.TestCase):
 
     @staticmethod
     def _generate(backend, input_ids, seed, cap=8):
+        """Generate."""
         return backend.generate(input_ids, max_new_tokens=cap, seed=seed, cancel=Event())
 
     # -- 1. byte-identical outputs --------------------------------------
 
     def test_generate_byte_identical_across_instances(self):
+        """Test generate byte identical across instances."""
         for seed in (0, 1, 2**64 - 1):
             with self.subTest(seed=seed):
                 first = self._generate(self.backend_a, self.ids_a, seed)
@@ -132,6 +137,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
                 self.assertEqual(len(first.token_ids), 8)
 
     def test_generate_repeat_calls_same_instance(self):
+        """Test generate repeat calls same instance."""
         for ids in (self.ids_a, self.ids_b):
             with self.subTest(ids=ids):
                 first = self._generate(self.backend_a, ids, 42)
@@ -140,6 +146,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
                 self.assertEqual(first, second)
 
     def test_generate_deterministic_across_process_restart(self):
+        """Test generate deterministic across process restart."""
         import torch
 
         torch.manual_seed(999)  # hostile: perturb global RNG before the child runs
@@ -162,6 +169,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
         self.assertEqual(child["error"], parent.error)
 
     def test_truncated_prompt_backend_is_stateless_wrapper(self):
+        """Test truncated prompt backend is stateless wrapper."""
         from model_protocol_lab.backends import TruncatedPromptBackend
         from model_protocol_lab.core import truncate_text_tail
 
@@ -185,6 +193,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
     # -- 2. cache isolation ----------------------------------------------
 
     def test_seed_values_do_not_alter_greedy_selection(self):
+        """Test seed values do not alter greedy selection."""
         # Adversarial direction 1: a cache keyed by prompt text alone (seed
         # ignored) would be *correct* here -- greedy selection is
         # seed-invariant by design. Pin that the seed genuinely cannot move
@@ -196,6 +205,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
                 self.assertEqual(result.token_ids, reference)
 
     def test_same_seed_different_prompts_no_cache_confusion(self):
+        """Test same seed different prompts no cache confusion."""
         # Adversarial direction 2 (the dangerous one): a cache keyed by seed
         # alone would return prompt A's output for prompt B. The proof of no
         # confusion is that each prompt's output matches a pristine instance.
@@ -212,6 +222,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
                     self.assertEqual(polluted_first.token_ids, clean.token_ids)
 
     def test_heavily_polluted_instance_matches_fresh_instance(self):
+        """Test heavily polluted instance matches fresh instance."""
         # Dozens of alternating requests (the "cache populated by backend A"
         # scenario); a fresh backend B must agree on every (prompt, seed).
         from model_protocol_lab.backends import LocalHFBackend
@@ -229,6 +240,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
                     )
 
     def test_interleaved_requests_stable_regardless_of_order(self):
+        """Test interleaved requests stable regardless of order."""
         from model_protocol_lab.backends import LocalHFBackend
 
         fresh = LocalHFBackend(self.root, device="cpu", max_context=64)
@@ -248,6 +260,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
                 )
 
     def test_greedy_prefix_consistency_across_caps(self):
+        """Test greedy prefix consistency across caps."""
         # Full-prefix recompute with no KV-cache: lengthening the cap can
         # never rewrite earlier tokens. A leaking KV-cache would break this.
         for short, long in ((3, 8), (4, 8), (6, 10)):
@@ -257,6 +270,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
                 self.assertEqual(full.token_ids[:short], prefix.token_ids)
 
     def test_forward_logits_deterministic_across_instances(self):
+        """Test forward logits deterministic across instances."""
         import torch
 
         first = self.backend_a.forward_logits(self.ids_a)
@@ -269,6 +283,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
     # -- 3. use_cache=False / no hidden global or memoized state ---------
 
     def test_no_module_level_or_class_level_memoization(self):
+        """Test no module level or class level memoization."""
         from model_protocol_lab.backends import LocalHFBackend
 
         for name, value in vars(backends_module).items():
@@ -288,7 +303,10 @@ class BackendDeterminismAuditTests(unittest.TestCase):
             )
 
     def test_no_instance_cache_growth_across_traffic(self):
+        """Test no instance cache growth across traffic."""
+
         def mutable_snapshot(backend):
+            """Mutable snapshot."""
             return {
                 key: repr(value)
                 for key, value in vars(backend).items()
@@ -304,6 +322,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
         self.assertEqual(mutable_snapshot(self.backend_a), before)
 
     def test_generate_does_not_touch_global_rng_state(self):
+        """Test generate does not touch global rng state."""
         import torch
 
         torch.manual_seed(20260601)
@@ -317,6 +336,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
         self.assertEqual(random_before, random.getstate())
 
     def test_hf_kv_cache_disabled_end_to_end(self):
+        """Test hf kv cache disabled end to end."""
         # config.use_cache=False at load time AND use_cache=False on every
         # forward inside generate()/forward_logits() -- verified structurally
         # here; the behavioral half is test_greedy_prefix_consistency_*.
@@ -325,6 +345,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
     # -- 4. RNG discipline -----------------------------------------------
 
     def test_seed_validation_boundaries(self):
+        """Test seed validation boundaries."""
         cases = [
             (-1, "invalid_seed"),
             (2**64, "invalid_seed"),
@@ -347,6 +368,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
 
     @staticmethod
     def _fixtures():
+        """Fixtures."""
         from model_protocol_lab.core import Fixture, Message
 
         return (
@@ -355,6 +377,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
         )
 
     def test_evaluate_deterministic_across_runs_and_seeds(self):
+        """Test evaluate deterministic across runs and seeds."""
         from model_protocol_lab.catalog import CATALOG
         from model_protocol_lab.core import evaluate
 
@@ -390,6 +413,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
         self.assertEqual(first.observations, third.observations)
 
     def test_run_experiment_report_bytes_byte_identical(self):
+        """Test run experiment report bytes byte identical."""
         from model_protocol_lab.catalog import CATALOG
         from model_protocol_lab.core import Fixture, Message, Split
         from model_protocol_lab.experiments import run_experiment
@@ -428,6 +452,7 @@ class BackendDeterminismAuditTests(unittest.TestCase):
         self.assertEqual(artifacts[0][1], artifacts[1][1], "report.html differs")
 
     def test_tokenizer_backend_decode_deterministic(self):
+        """Test tokenizer backend decode deterministic."""
         # diffbackends._TokenizerBackend is decode-only; its whole surface
         # is decode determinism across instances sharing one tokenizer.
         from model_protocol_lab.diffbackends import _TokenizerBackend

@@ -301,6 +301,7 @@ def first_flip(answer: str, expected: str) -> tuple[int | None, str | None]:
     return None, None
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _aggregate(records: list[dict[str, Any]], *, eligible: bool) -> dict[str, Any]:
     """Derive every per-candidate aggregate from the ground records.
 

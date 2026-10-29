@@ -40,6 +40,7 @@ from model_protocol_lab.doctor import examine_model
 
 
 def _write_healthy(root: Path, *, sharded: bool = False) -> None:
+    """Write healthy."""
     (root / "config.json").write_text(json.dumps({"model_type": "gpt2", "n_positions": 32}))
     (root / "tokenizer.json").write_text(json.dumps({"version": "1.0"}))
     header = json.dumps(
@@ -78,6 +79,7 @@ class _FailingReader:
 
     @staticmethod
     def read(*args: object, **kwargs: object) -> bytes:
+        """Read."""
         raise OSError(5, "I/O error")
 
 
@@ -100,11 +102,13 @@ class _ReadErrorInjector:
         self._hits = 0
 
     def _fake_open(self, path: object, flags: int, *args: object, **kwargs: object) -> int:
+        """Fake open."""
         fd = self._real_open(path, flags, *args, **kwargs)
         self._fd_paths[fd] = os.fspath(path)  # type: ignore[arg-type]
         return fd
 
     def _fake_fdopen(self, fd: int, *args: object, **kwargs: object) -> object:
+        """Fake fdopen."""
         if os.path.basename(self._fd_paths.get(fd, "")) == self._target:
             self._hits += 1
             if self._hits > self._skip_first:
@@ -124,10 +128,13 @@ class _ReadErrorInjector:
 
 
 def _checks(report: dict) -> dict:
+    """Checks."""
     return report["model"]["checks"]
 
 
 class ExamineModelOSErrorBranchTests(unittest.TestCase):
+    """Examine model os error branch tests."""
+
     def test_index_read_error_fails_asset_layout(self):
         """OSError while _model_assets reads the weight index -> the
         ``except OSError`` around _model_assets fires: failed verdict,

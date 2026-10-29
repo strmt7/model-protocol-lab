@@ -128,6 +128,7 @@ _PLANT_SHAPE = re.compile(
 )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def planted_answer(expected: str) -> str | None:
     """The planted wrong answer for ``expected``, or None.
 
@@ -477,6 +478,7 @@ def _marker_region(
     return ids[:start], ids[start : start + len(marker_ids)], ids[start + len(marker_ids) :]
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def classify_cell_construction(
     fmt: Format,
     fixture: Fixture,
@@ -599,6 +601,7 @@ def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
     return cell if isinstance(cell, dict) else None
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-candidate aggregates over its ground records.
 

@@ -141,6 +141,7 @@ def run_cli(*args: str, env: dict[str, str] | None = None) -> subprocess.Complet
 
 
 def _stderr_tail(proc: subprocess.CompletedProcess[str]) -> str:
+    """Stderr tail."""
     lines = proc.stderr.strip().splitlines()
     return lines[-1] if lines else ""
 
@@ -189,6 +190,7 @@ class ArgparseEdgeUnitTests(unittest.TestCase):
     """argparse wiring edges, in-process with explicit argv lists."""
 
     def test_repeated_scalar_flag_last_wins(self):
+        """Test repeated scalar flag last wins."""
         args = build_parser().parse_args(
             [
                 "run",
@@ -211,6 +213,7 @@ class ArgparseEdgeUnitTests(unittest.TestCase):
         self.assertEqual(args.max_new_tokens, 20)
 
     def test_flag_equals_form_matches_space_form(self):
+        """Test flag equals form matches space form."""
         parser = build_parser()
         via_equals = parser.parse_args(["doctor", "--model=/x/ckpt", "--dataset=/y/f.json"])
         via_space = parser.parse_args(["doctor", "--model", "/x/ckpt", "--dataset", "/y/f.json"])
@@ -218,6 +221,7 @@ class ArgparseEdgeUnitTests(unittest.TestCase):
         self.assertEqual(via_equals.dataset, via_space.dataset)
 
     def test_equals_inside_value_preserved(self):
+        """Test equals inside value preserved."""
         args = build_parser().parse_args(
             [
                 "diff-backends",
@@ -233,6 +237,7 @@ class ArgparseEdgeUnitTests(unittest.TestCase):
         self.assertEqual(args.prompt_text, "a=b")
 
     def test_empty_string_value_accepted_verbatim(self):
+        """Test empty string value accepted verbatim."""
         args = build_parser().parse_args(
             [
                 "diff-backends",
@@ -249,6 +254,7 @@ class ArgparseEdgeUnitTests(unittest.TestCase):
         self.assertEqual(args.prompt_text, "")
 
     def test_unicode_value_preserved(self):
+        """Test unicode value preserved."""
         args = build_parser().parse_args(
             [
                 "diff-backends",
@@ -265,10 +271,12 @@ class ArgparseEdgeUnitTests(unittest.TestCase):
         self.assertEqual(args.prompt_text, "héllo→✓")
 
     def test_dashdash_separator_takes_flag_looking_positional(self):
+        """Test dashdash separator takes flag looking positional."""
         args = build_parser().parse_args(["inspect", "--", "-"])
         self.assertEqual(str(args.dataset), "-")
 
     def test_triple_dash_rejected(self):
+        """Test triple dash rejected."""
         code, _, err = _call_main(["inspect", "---"])
         self.assertEqual(code, "SystemExit(2)")
         # stdlib argparse quirk: a subparser stashes unknown optionals in
@@ -277,33 +285,39 @@ class ArgparseEdgeUnitTests(unittest.TestCase):
         self.assertIn("the following arguments are required: dataset", err)
 
     def test_bare_dashdash_means_missing_command(self):
+        """Test bare dashdash means missing command."""
         code, _, err = _call_main(["--"])
         self.assertEqual(code, "SystemExit(2)")
         self.assertIn("the following arguments are required: command", err)
 
     def test_unknown_subcommand_flag_rejected(self):
+        """Test unknown subcommand flag rejected."""
         code, _, err = _call_main(["catalog", "--frobnicate"])
         self.assertEqual(code, "SystemExit(2)")
         self.assertIn("unrecognized arguments: --frobnicate", err)
 
     def test_extra_positional_rejected(self):
+        """Test extra positional rejected."""
         code, _, err = _call_main(["catalog", "extra"])
         self.assertEqual(code, "SystemExit(2)")
         self.assertIn("unrecognized arguments: extra", err)
 
     def test_main_empty_argv_exits_2(self):
+        """Test main empty argv exits 2."""
         code, out, err = _call_main([])
         self.assertEqual(code, "SystemExit(2)")
         self.assertEqual(out, "")
         self.assertIn("the following arguments are required: command", err)
 
     def test_abbreviated_subcommand_rejected(self):
+        """Test abbreviated subcommand rejected."""
         # allow_abbrev=False everywhere: no prefix matching.
         code, _, err = _call_main(["cata"])
         self.assertEqual(code, "SystemExit(2)")
         self.assertIn("invalid choice", err)
 
     def test_duplicate_boundary_map_name_exits_2(self):
+        """Test duplicate boundary map name exits 2."""
         code, out, err = _call_main(
             ["doctor", "--model", "m", "--boundary-map", "a=1", "--boundary-map", "a=2"]
         )
@@ -312,6 +326,7 @@ class ArgparseEdgeUnitTests(unittest.TestCase):
         self.assertIn("Duplicate --boundary-map candidate: 'a'", err)
 
     def test_unknown_boundary_map_name_on_run_exits_2(self):
+        """Test unknown boundary map name on run exits 2."""
         # candidates() is pure (no model); the typo fails fast, exit 2.
         code, out, err = _call_main(
             [
@@ -335,16 +350,19 @@ class ArgparseEdgeUnitTests(unittest.TestCase):
         self.assertIn("--boundary-map names unknown candidate 'nope'", err)
 
     def test_boundary_map_missing_equals_rejected(self):
+        """Test boundary map missing equals rejected."""
         code, _, err = _call_main(["doctor", "--model", "m", "--boundary-map", "abc"])
         self.assertEqual(code, "SystemExit(2)")
         self.assertIn("Use NAME=ID,ID", err)
 
     def test_boundary_map_empty_name_rejected(self):
+        """Test boundary map empty name rejected."""
         code, _, err = _call_main(["doctor", "--model", "m", "--boundary-map", "=1"])
         self.assertEqual(code, "SystemExit(2)")
         self.assertIn("Use NAME=ID,ID", err)
 
     def test_boundary_ids_and_map_for_same_candidate_are_not_contradictory(self):
+        """Test boundary ids and map for same candidate are not contradictory."""
         # The map overrides the default for that candidate; both parse.
         args = build_parser().parse_args(
             [
@@ -367,11 +385,13 @@ class ArgparseEdgeUnitTests(unittest.TestCase):
         self.assertEqual(args.boundary_map, [("chatml", (199,))])
 
     def test_huge_positional_list_rejected_without_hang(self):
+        """Test huge positional list rejected without hang."""
         code, _, err = _call_main(["catalog", *[f"x{i}" for i in range(20000)]])
         self.assertEqual(code, "SystemExit(2)")
         self.assertIn("unrecognized arguments", err)
 
     def test_repeated_append_flag_accumulates(self):
+        """Test repeated append flag accumulates."""
         args = build_parser().parse_args(
             ["doctor", "--model", "m", "--boundary-map", "a=1", "--boundary-map", "b=2"]
         )
@@ -388,6 +408,7 @@ class ExitCodeContractTests(unittest.TestCase):
         stderr_fragment: str = "",
         stdout_must_be_empty: bool = True,
     ) -> None:
+        """Assert failure."""
         self.assertEqual(proc.returncode, code)
         tail = _stderr_tail(proc)
         self.assertTrue(tail, "failure must leave a machine-parseable stderr line")
@@ -397,15 +418,18 @@ class ExitCodeContractTests(unittest.TestCase):
             self.assertEqual(proc.stdout, "", "failure must not pollute stdout")
 
     def test_bad_subcommand_exits_2(self):
+        """Test bad subcommand exits 2."""
         proc = run_cli("frobnicate")
         self._assert_failure(proc, 2, "invalid choice")
         self.assertIn("usage:", proc.stderr)
 
     def test_missing_required_arg_exits_2(self):
+        """Test missing required arg exits 2."""
         proc = run_cli("run", "--model", "/x")
         self._assert_failure(proc, 2, "the following arguments are required")
 
     def test_invalid_family_exits_2(self):
+        """Test invalid family exits 2."""
         proc = run_cli(
             "run",
             "--model",
@@ -422,6 +446,7 @@ class ExitCodeContractTests(unittest.TestCase):
         self._assert_failure(proc, 2, "invalid choice: 'CHATML'")
 
     def test_invalid_device_exits_2(self):
+        """Test invalid device exits 2."""
         proc = run_cli(
             "run",
             "--model",
@@ -440,6 +465,7 @@ class ExitCodeContractTests(unittest.TestCase):
         self._assert_failure(proc, 2, "invalid choice: 'tpu'")
 
     def test_unicode_family_rejected_as_invalid_choice(self):
+        """Test unicode family rejected as invalid choice."""
         proc = run_cli(
             "run",
             "--model",
@@ -456,6 +482,7 @@ class ExitCodeContractTests(unittest.TestCase):
         self._assert_failure(proc, 2, "invalid choice")
 
     def test_malformed_fixture_json_exits_1(self):
+        """Test malformed fixture json exits 1."""
         with TemporaryDirectory() as tmp:
             bad = Path(tmp) / "bad.json"
             bad.write_text("{not json", encoding="utf-8")
@@ -463,11 +490,13 @@ class ExitCodeContractTests(unittest.TestCase):
         self._assert_failure(proc, 1, "inspect: invalid fixture file:")
 
     def test_fixture_directory_exits_1(self):
+        """Test fixture directory exits 1."""
         with TemporaryDirectory() as tmp:
             proc = run_cli("inspect", tmp)
         self._assert_failure(proc, 1, "inspect: invalid fixture file:")
 
     def test_fixture_path_through_regular_file_exits_1(self):
+        """Test fixture path through regular file exits 1."""
         # Root-proof "unreadable": a path component that is a regular file.
         with TemporaryDirectory() as tmp:
             blocker = Path(tmp) / "blocker"
@@ -477,6 +506,7 @@ class ExitCodeContractTests(unittest.TestCase):
 
     @unittest.skipIf(os.geteuid() == 0, "permission bits do not block root")
     def test_unreadable_fixture_mode_000_exits_1(self):
+        """Test unreadable fixture mode 000 exits 1."""
         with TemporaryDirectory() as tmp:
             fixture = _write_fixture(tmp)
             fixture.chmod(0o000)
@@ -487,21 +517,25 @@ class ExitCodeContractTests(unittest.TestCase):
         self._assert_failure(proc, 1, "inspect: invalid fixture file:")
 
     def test_nonexistent_fixture_exits_1_without_path_leak(self):
+        """Test nonexistent fixture exits 1 without path leak."""
         proc = run_cli("inspect", "/nonexistent-héllo→.json")
         self._assert_failure(proc, 1, "inspect: invalid fixture file: Unreadable fixture file")
         self.assertNotIn("héllo", proc.stderr, "unicode path must not leak into stderr")
 
     def test_empty_string_dataset_exits_1(self):
+        """Test empty string dataset exits 1."""
         proc = run_cli("inspect", "")
         self._assert_failure(proc, 1, "inspect: invalid fixture file:")
 
     def test_triple_dash_after_separator_is_a_literal_filename(self):
+        """Test triple dash after separator is a literal filename."""
         # After `--`, `---` is just a positional value: a nonexistent path
         # then fails as an unreadable fixture (exit 1), not a parse error.
         proc = run_cli("inspect", "--", "---")
         self._assert_failure(proc, 1, "inspect: invalid fixture file:")
 
     def test_run_output_through_regular_file_exits_1(self):
+        """Test run output through regular file exits 1."""
         # Unwritable output (root-proof): claim path goes through a file.
         with TemporaryDirectory() as tmp:
             fixture = _write_fixture(tmp)
@@ -523,6 +557,7 @@ class ExitCodeContractTests(unittest.TestCase):
         self._assert_failure(proc, 1, "Operation failed. Check input paths")
 
     def test_run_existing_output_dir_exits_2(self):
+        """Test run existing output dir exits 2."""
         with TemporaryDirectory() as tmp:
             existing = Path(tmp) / "existing"
             existing.mkdir()
@@ -542,6 +577,7 @@ class ExitCodeContractTests(unittest.TestCase):
         self._assert_failure(proc, 2, "Output path already exists")
 
     def test_contradictory_range_flags_exit_2(self):
+        """Test contradictory range flags exit 2."""
         cases = [
             (["--max-new-tokens", "0"], "--max-new-tokens 1-4096"),
             (["--max-new-tokens", "4097"], "--max-new-tokens 1-4096"),
@@ -572,6 +608,7 @@ class ExitCodeContractTests(unittest.TestCase):
                     self._assert_failure(proc, 2, fragment)
 
     def test_negative_looking_int_flag_value_rejected(self):
+        """Test negative looking int flag value rejected."""
         # argparse binds "-5" as the flag value; the range check then fires.
         with TemporaryDirectory() as tmp:
             proc = run_cli(
@@ -592,6 +629,7 @@ class ExitCodeContractTests(unittest.TestCase):
         self._assert_failure(proc, 2, "--max-new-tokens 1-4096")
 
     def test_nonexistent_checkpoint_doctor_exits_1_with_json_verdict(self):
+        """Test nonexistent checkpoint doctor exits 1 with json verdict."""
         # Deliberate doctor contract: machine-parseable JSON on stdout, the
         # exit code carries the verdict; stderr stays empty.
         proc = run_cli("doctor", "--model", "/nonexistent-ckpt-xyz")
@@ -601,6 +639,7 @@ class ExitCodeContractTests(unittest.TestCase):
         self.assertEqual(payload["verdict"], "failed")
 
     def test_nonexistent_checkpoint_diff_backends_exits_1_fixed_code(self):
+        """Test nonexistent checkpoint diff backends exits 1 fixed code."""
         proc = run_cli(
             "diff-backends",
             "--model",
@@ -618,10 +657,12 @@ class ExitCodeContractTests(unittest.TestCase):
         self.assertTrue(tail.startswith("diff-backends: "), tail)
 
     def test_diff_reports_missing_input_exits_1(self):
+        """Test diff reports missing input exits 1."""
         proc = run_cli("diff-reports", "/nonexistent-a", "/nonexistent-b")
         self._assert_failure(proc, 1, "diff-reports: results_path_missing (old input)")
 
     def test_debug_unreadable_script_exits_1(self):
+        """Test debug unreadable script exits 1."""
         with TemporaryDirectory() as tmp:
             proc = run_cli("debug", "--dataset", str(EXAMPLE_FIXTURES), "--script", tmp)
         self.assertEqual(proc.returncode, 1)
@@ -629,6 +670,7 @@ class ExitCodeContractTests(unittest.TestCase):
         self.assertIn("debug: unreadable script file:", proc.stderr)
 
     def test_fixtures_build_output_through_file_exits_1(self):
+        """Test fixtures build output through file exits 1."""
         with TemporaryDirectory() as tmp:
             blocker = Path(tmp) / "blocker"
             blocker.write_text("x", encoding="utf-8")
@@ -642,11 +684,13 @@ class ExitCodeContractTests(unittest.TestCase):
         self._assert_failure(proc, 1, "fixtures: invalid authoring source:")
 
     def test_global_flag_before_subcommand_exits_2(self):
+        """Test global flag before subcommand exits 2."""
         # No global flags exist; the stray value is treated as the command.
         proc = run_cli("--output", "x", "catalog")
         self._assert_failure(proc, 2, "invalid choice: 'x'")
 
     def test_nul_byte_dataset_exits_1_in_process(self):
+        """Test nul byte dataset exits 1 in process."""
         # subprocess cannot carry NUL in argv; exercise main() directly.
         code, out, err = _call_main(["inspect", "a\x00b"])
         self.assertEqual(code, 1)
@@ -669,6 +713,7 @@ class RunDecisionExitCodeTests(unittest.TestCase):
     """``run`` maps experiment decisions to exact exit codes (0/1/2/130)."""
 
     def _run_with_decision(self, decision: str) -> tuple[int, dict[str, object]]:
+        """Run with decision."""
         with TemporaryDirectory() as tmp:
             fixture = _write_fixture(tmp)
             outdir = Path(tmp) / "report"
@@ -692,6 +737,7 @@ class RunDecisionExitCodeTests(unittest.TestCase):
             )
 
             def fake_prepare(path: object) -> Path:
+                """Fake prepare."""
                 target = Path(str(path))
                 target.mkdir(parents=True, exist_ok=False)
                 return target
@@ -724,31 +770,37 @@ class RunDecisionExitCodeTests(unittest.TestCase):
             return code, payload
 
     def test_compatible_exits_0(self):
+        """Test compatible exits 0."""
         code, payload = self._run_with_decision("compatible_on_fixture_set")
         self.assertEqual(code, 0)
         self.assertEqual(payload["decision"], "compatible_on_fixture_set")
 
     def test_failed_exits_1(self):
+        """Test failed exits 1."""
         code, payload = self._run_with_decision("failed")
         self.assertEqual(code, 1)
         self.assertEqual(payload["decision"], "failed")
 
     def test_cancelled_exits_130(self):
+        """Test cancelled exits 130."""
         code, payload = self._run_with_decision("cancelled")
         self.assertEqual(code, 130)
         self.assertEqual(payload["decision"], "cancelled")
 
     def test_ambiguous_exits_2(self):
+        """Test ambiguous exits 2."""
         code, payload = self._run_with_decision("ambiguous")
         self.assertEqual(code, 2)
         self.assertEqual(payload["decision"], "ambiguous")
 
     def test_held_out_failed_exits_2(self):
+        """Test held out failed exits 2."""
         code, payload = self._run_with_decision("held_out_failed")
         self.assertEqual(code, 2)
         self.assertEqual(payload["decision"], "held_out_failed")
 
     def test_no_candidate_exits_2(self):
+        """Test no candidate exits 2."""
         code, payload = self._run_with_decision("no_candidate")
         self.assertEqual(code, 2)
         self.assertEqual(payload["decision"], "no_candidate")
@@ -759,6 +811,7 @@ class HelpStabilityTests(unittest.TestCase):
 
     @staticmethod
     def _help_argvs() -> list[list[str]]:
+        """Help argvs."""
         argvs = [["--help"]]
         for sub in SUBCOMMANDS:
             argvs.append([sub, "--help"])
@@ -766,6 +819,7 @@ class HelpStabilityTests(unittest.TestCase):
         return argvs
 
     def test_help_byte_stable_across_runs(self):
+        """Test help byte stable across runs."""
         env = {"COLUMNS": "80"}
         for argv in self._help_argvs():
             with self.subTest(argv=argv):
@@ -777,6 +831,7 @@ class HelpStabilityTests(unittest.TestCase):
                 self.assertEqual(second.stderr, "", argv)
 
     def test_help_contains_no_run_varying_data(self):
+        """Test help contains no run varying data."""
         env = {"COLUMNS": "80"}
         pid = str(os.getpid())
         tmpdir = tempfile.gettempdir()
@@ -791,6 +846,7 @@ class HelpStabilityTests(unittest.TestCase):
                 )
 
     def test_catalog_stdout_byte_stable(self):
+        """Test catalog stdout byte stable."""
         first = run_cli("catalog")
         second = run_cli("catalog")
         self.assertEqual(first.returncode, 0)
@@ -798,6 +854,7 @@ class HelpStabilityTests(unittest.TestCase):
         self.assertEqual(second.stderr, "")
 
     def test_no_version_flag_top_level_help(self):
+        """Test no version flag top level help."""
         # Mandate item 3 assumed a --version flag; none exists and cycle 64
         # pins `--version` -> exit 2 as an unrecognized flag, so it is NOT
         # added here. The version lives only in model_protocol_lab.__version__.
@@ -814,6 +871,7 @@ class ConsoleScriptEquivalenceTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         found = shutil.which("model-protocol-lab")
         if found:
             cls.script = found
@@ -825,6 +883,7 @@ class ConsoleScriptEquivalenceTests(unittest.TestCase):
         raise unittest.SkipTest("model-protocol-lab console script not installed")
 
     def _run_script(self, *args: str) -> subprocess.CompletedProcess[str]:
+        """Run script."""
         return subprocess.run(
             [self.script, *args],
             cwd=REPO_ROOT,
@@ -835,6 +894,7 @@ class ConsoleScriptEquivalenceTests(unittest.TestCase):
         )
 
     def _assert_identical(self, argv: tuple[str, ...]) -> None:
+        """Assert identical."""
         via_module = run_cli(*argv)
         via_script = self._run_script(*argv)
         self.assertEqual(via_script.returncode, via_module.returncode, argv)
@@ -842,21 +902,26 @@ class ConsoleScriptEquivalenceTests(unittest.TestCase):
         self.assertEqual(via_script.stderr, via_module.stderr, argv)
 
     def test_top_level_help_identical(self):
+        """Test top level help identical."""
         self._assert_identical(("--help",))
 
     def test_subcommand_help_identical(self):
+        """Test subcommand help identical."""
         self._assert_identical(("run", "--help"))
 
     def test_failure_path_inspect_bad_fixture_identical(self):
+        """Test failure path inspect bad fixture identical."""
         with TemporaryDirectory() as tmp:
             bad = Path(tmp) / "bad.json"
             bad.write_text("{nope", encoding="utf-8")
             self._assert_identical(("inspect", str(bad)))
 
     def test_argparse_failure_path_identical(self):
+        """Test argparse failure path identical."""
         self._assert_identical(("run", "--model", "/x"))
 
     def test_diff_reports_failure_path_identical(self):
+        """Test diff reports failure path identical."""
         self._assert_identical(("diff-reports", "/nonexistent-a", "/nonexistent-b"))
 
 
@@ -874,6 +939,7 @@ class EnvironmentInterplayTests(unittest.TestCase):
     }
 
     def test_mpl_env_vars_do_not_change_catalog(self):
+        """Test mpl env vars do not change catalog."""
         plain = run_cli("catalog")
         polluted = run_cli("catalog", env=self.HOSTILE_ENV)
         self.assertEqual(polluted.returncode, 0)
@@ -881,6 +947,7 @@ class EnvironmentInterplayTests(unittest.TestCase):
         self.assertEqual(polluted.stderr, plain.stderr)
 
     def test_mpl_env_vars_do_not_change_inspect(self):
+        """Test mpl env vars do not change inspect."""
         plain = run_cli("inspect", str(EXAMPLE_FIXTURES))
         polluted = run_cli("inspect", str(EXAMPLE_FIXTURES), env=self.HOSTILE_ENV)
         self.assertEqual(polluted.returncode, plain.returncode)
@@ -888,6 +955,7 @@ class EnvironmentInterplayTests(unittest.TestCase):
         self.assertEqual(polluted.stderr, plain.stderr)
 
     def test_package_reads_no_mpl_env_vars(self):
+        """Test package reads no mpl env vars."""
         package = Path(cli.__file__).resolve().parent
         hits = [
             path.name
@@ -897,6 +965,7 @@ class EnvironmentInterplayTests(unittest.TestCase):
         self.assertEqual(hits, [], f"MPL_ references found in: {hits}")
 
     def test_weird_argv0_does_not_crash(self):
+        """Test weird argv0 does not crash."""
         # main() with argv=None reads sys.argv; a hostile argv[0] must not
         # affect parsing because the usage prog is hard-coded.
         old_argv = sys.argv
@@ -911,6 +980,7 @@ class EnvironmentInterplayTests(unittest.TestCase):
         json.loads(out.getvalue())
 
     def test_empty_argv0_help_shows_hardcoded_prog(self):
+        """Test empty argv0 help shows hardcoded prog."""
         old_argv = sys.argv
         sys.argv = ["", "--help"]
         out, err = io.StringIO(), io.StringIO()
@@ -927,6 +997,7 @@ class EnvironmentInterplayTests(unittest.TestCase):
         self.assertIn("usage: model-protocol-lab", out.getvalue())
 
     def test_prog_hardcoded_under_python_m(self):
+        """Test prog hardcoded under python m."""
         # Under `python -m`, argv[0] is the __main__.py path; usage must
         # still show the hard-coded prog name.
         proc = run_cli("frobnicate")

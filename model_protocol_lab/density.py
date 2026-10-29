@@ -428,6 +428,7 @@ def _draw_word(seed: int, index: int, slot: int, forbidden: set[str]) -> str:
         counter += 1
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def generate_cases(seed: int) -> list[dict[str, Any]]:
     """The frozen generated case set for a run seed, in
     canonical index order. Pure and deterministic -- the same

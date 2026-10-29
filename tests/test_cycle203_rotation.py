@@ -85,6 +85,7 @@ class _WordBackend:
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -96,9 +97,11 @@ class _WordBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.calls += 1
         if self.mode == "explode":
             raise RuntimeError("boom")
@@ -131,6 +134,7 @@ class _WordBackend:
 
 
 def _payload(backend=None, formats=FORMATS, seed=0, **stage_kwargs):
+    """Payload."""
     backend = backend if backend is not None else _WordBackend()
     stage_kwargs.setdefault("max_context", 4096)
     stage = experiments.rotation_stage(
@@ -165,7 +169,10 @@ def _payload_with_unavailable():
 
 
 class TestProtocol(unittest.TestCase):
+    """Test protocol."""
+
     def test_constants(self):
+        """Test constants."""
         self.assertEqual(rotation.CASE_COUNT, 20)
         self.assertEqual(len(rotation.ARM_KEYS), 11)
         self.assertEqual(rotation.GENERATION_BUDGET, 5280)
@@ -183,6 +190,7 @@ class TestProtocol(unittest.TestCase):
         )
 
     def test_protocol_object_and_fingerprint(self):
+        """Test protocol object and fingerprint."""
         protocol = rotation.protocol_object(3, "sha256:x")
         self.assertEqual(protocol["seed"], 3)
         self.assertEqual(protocol["backend_fingerprint"], "sha256:x")
@@ -195,11 +203,15 @@ class TestProtocol(unittest.TestCase):
 
 
 class TestGenerator(unittest.TestCase):
+    """Test generator."""
+
     def test_deterministic_and_seed_sensitive(self):
+        """Test deterministic and seed sensitive."""
         self.assertEqual(rotation.generate_cases(0), rotation.generate_cases(0))
         self.assertNotEqual(rotation.generate_cases(0), rotation.generate_cases(1))
 
     def test_case_shape(self):
+        """Test case shape."""
         for seed in (0, 1, 7):
             cases = rotation.generate_cases(seed)
             self.assertEqual(len(cases), 20)
@@ -222,12 +234,14 @@ class TestGenerator(unittest.TestCase):
             self.assertEqual(len(asked_values), 20)
 
     def test_seed_must_be_int(self):
+        """Test seed must be int."""
         with self.assertRaises(ValueError):
             rotation.generate_cases(True)  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
             rotation.generate_cases("0")  # type: ignore[arg-type]
 
     def test_redraw_paths_exercised(self):
+        """Test redraw paths exercised."""
         # Across a seed sweep, the topic redraw rules must
         # actually fire (a frozen rule that never fires is an
         # untested branch wearing a pin's clothes): the
@@ -240,6 +254,7 @@ class TestGenerator(unittest.TestCase):
         original = rotation._derive
 
         def counting(seed, index, slot, counter):
+            """Counting."""
             if counter > 0:
                 seen.add((slot, counter))
             return original(seed, index, slot, counter)
@@ -251,6 +266,7 @@ class TestGenerator(unittest.TestCase):
         self.assertTrue(any(21 <= slot <= 25 for slot, _ in seen), "distractor redraw never fired")
 
     def test_value_redraw_scripted_collision(self):
+        """Test value redraw scripted collision."""
         # Force blocks 0 and 1 of case 0 to draw the same value
         # at counter 0: the frozen rule increments ALL six
         # counters and redraws all six values, leaving the
@@ -258,6 +274,7 @@ class TestGenerator(unittest.TestCase):
         calls: list[tuple[int, int, int]] = []
 
         def scripted(seed, index, slot, counter):
+            """Scripted."""
             calls.append((index, slot, counter))
             if slot == 20:
                 return index
@@ -285,6 +302,7 @@ class TestGenerator(unittest.TestCase):
         )
 
     def test_pool_pins(self):
+        """Test pool pins."""
         # The frozen pool properties the design's containment
         # argument rests on, checked exhaustively (design F15:
         # containment is a pinned pool property, not prose).
@@ -308,6 +326,7 @@ class TestGenerator(unittest.TestCase):
                     self.assertFalse(other.endswith(word) and len(other) > len(word), (word, other))
 
     def test_topic_codeword_prefix_disjoint(self):
+        """Test topic codeword prefix disjoint."""
         # No topic token shares a 4-character prefix with a code
         # word, and neither contains the other (the boundary
         # between a fact-shaped distractor and the asked fact
@@ -321,7 +340,10 @@ class TestGenerator(unittest.TestCase):
 
 
 class TestArmConstruction(unittest.TestCase):
+    """Test arm construction."""
+
     def test_arm_orders_and_slots(self):
+        """Test arm orders and slots."""
         expected_orders = {
             "rot_0": [0, 1, 2, 3, 4],
             "rot_1": [1, 2, 3, 4, 0],
@@ -354,6 +376,7 @@ class TestArmConstruction(unittest.TestCase):
         self.assertEqual(rotation.asked_slot("mir_4"), 4)
 
     def test_arm_content(self):
+        """Test arm content."""
         case = rotation.generate_cases(0)[0]
         content = rotation.arm_content(case, "rot_0")
         blocks = [case["blocks"][b] for b in range(5)]
@@ -370,6 +393,7 @@ class TestArmConstruction(unittest.TestCase):
         self.assertEqual(content_rot2, " ".join(rotated) + "\n\n" + case["question"])
 
     def test_block_and_question_text(self):
+        """Test block and question text."""
         case = rotation.generate_cases(0)[0]
         self.assertEqual(
             case["blocks"][0],
@@ -379,6 +403,7 @@ class TestArmConstruction(unittest.TestCase):
         self.assertEqual(case["expected"], case["values"][0])
 
     def test_inventory_digest(self):
+        """Test inventory digest."""
         ids = (5, 3, 9, 3)
         self.assertEqual(rotation.inventory_digest(ids), rotation.digest_text("3,3,5,9"))
         self.assertEqual(rotation.inventory_digest((9, 5, 3, 3)), rotation.inventory_digest(ids))
@@ -431,7 +456,10 @@ def _all_arms(value):
 
 
 class TestClassify(unittest.TestCase):
+    """Test classify."""
+
     def test_truth_table(self):
+        """Test truth table."""
         c = rotation.classify_rotation
         # n_headline, flip, all_pass, all_fail, paired, flips_paired, flips_mirror
         self.assertEqual(c(5, 0, 5, 0, 5, 0, 0), "insufficient")
@@ -445,6 +473,7 @@ class TestClassify(unittest.TestCase):
         self.assertEqual(c(20, 20, 0, 0, 20, 20, 0), "rotation_sensitive")
 
     def test_enumeration_joint_table(self):
+        """Test enumeration joint table."""
         # The published joint table, pinned over the full
         # feasible tuple space: the falsification boolean is
         # True exactly on {control_set_too_small,
@@ -517,6 +546,7 @@ class TestClassify(unittest.TestCase):
         )
 
     def test_falsification_formula(self):
+        """Test falsification formula."""
         self.assertTrue(rotation.invariance_falsified(6, 1))
         self.assertFalse(rotation.invariance_falsified(6, 0))
         self.assertFalse(rotation.invariance_falsified(5, 3))
@@ -532,9 +562,11 @@ class TestAggregateLabels(unittest.TestCase):
 
     @staticmethod
     def _aggregate(records):
+        """Aggregate."""
         return rotation.aggregate_candidate(records)
 
     def test_invariant_observed(self):
+        """Test invariant observed."""
         records = [_record(f"rotation-{i:02d}", _all_arms(True)) for i in range(8)]
         agg = self._aggregate(records)
         self.assertEqual(agg["classification"], "invariant_observed")
@@ -543,6 +575,7 @@ class TestAggregateLabels(unittest.TestCase):
         self.assertEqual(agg["slot_curve"]["slots"], {str(s): 8 for s in range(5)})
 
     def test_joint_collapse_dominant(self):
+        """Test joint collapse dominant."""
         records = [_record(f"rotation-{i:02d}", _all_arms(False)) for i in range(8)]
         agg = self._aggregate(records)
         self.assertEqual(agg["classification"], "joint_collapse_dominant")
@@ -550,6 +583,7 @@ class TestAggregateLabels(unittest.TestCase):
         self.assertEqual(agg["headline"]["n_all_fail"], 8)
 
     def test_rotation_sensitive(self):
+        """Test rotation sensitive."""
         # Rotations flip (rot_1 fails), the whole control set
         # agrees with rot_0: the mirror statistic stays at zero.
         verdicts = _all_arms(True)
@@ -564,6 +598,7 @@ class TestAggregateLabels(unittest.TestCase):
         self.assertEqual(agg["headline"]["n_flip_from_pass"], 8)
 
     def test_within_mirror_control(self):
+        """Test within mirror control."""
         # A pure slot effect: slot 4 fails in both sets
         # (rot_1 and mir_4 sit there), so the statistics tie.
         verdicts = _all_arms(True)
@@ -577,6 +612,7 @@ class TestAggregateLabels(unittest.TestCase):
         self.assertEqual(agg["reversal"]["n_discordant"], 8)
 
     def test_control_set_too_small(self):
+        """Test control set too small."""
         verdicts = _all_arms(True)
         verdicts["rot_1"] = False
         for arm in rotation.MIRROR_ARMS:
@@ -588,12 +624,14 @@ class TestAggregateLabels(unittest.TestCase):
         self.assertEqual(agg["mirror"]["n_paired"], 0)
 
     def test_insufficient(self):
+        """Test insufficient."""
         records = [_record(f"rotation-{i:02d}", _all_arms(True)) for i in range(5)]
         agg = self._aggregate(records)
         self.assertEqual(agg["classification"], "insufficient")
         self.assertFalse(agg["invariance_falsified"])
 
     def test_exactness_gate_drops_headline(self):
+        """Test exactness gate drops headline."""
         # One record's rot_2 inventory differs: the record
         # leaves the headline population (its arms rates still
         # count it), and the exactness share reports the loss.
@@ -606,6 +644,7 @@ class TestAggregateLabels(unittest.TestCase):
         self.assertEqual(agg["headline"]["evaluable_share"], 7 / 8)
 
     def test_absent_false_recall(self):
+        """Test absent false recall."""
         verdicts = _all_arms(False)
         verdicts["absent"] = True
         records = [_record(f"rotation-{i:02d}", dict(verdicts)) for i in range(4)]
@@ -614,6 +653,7 @@ class TestAggregateLabels(unittest.TestCase):
         self.assertEqual(agg["absent"]["rate"], 1.0)
 
     def test_aggregate_tolerates_malformed_record(self):
+        """Test aggregate tolerates malformed record."""
         agg = rotation.aggregate_candidate([{"fixture": "rotation-00", "cells": None}])
         self.assertEqual(agg["headline"]["n_headline"], 0)
         self.assertEqual(agg["n_closed_book_incomplete"], 1)
@@ -626,6 +666,7 @@ class TestMirrorAgreement(unittest.TestCase):
     """
 
     def test_mirror_generator(self):
+        """Test mirror generator."""
         for seed in (0, 1, 2, 13):
             mirrored = diffreports._rotation_generate(seed)
             produced = rotation.generate_cases(seed)
@@ -636,6 +677,7 @@ class TestMirrorAgreement(unittest.TestCase):
                 self.assertEqual(m_case["values"], p_case["values"])
 
     def test_mirror_protocol(self):
+        """Test mirror protocol."""
         for seed in (0, 5):
             mirrored = diffreports._rotation_protocol(seed, "sha256:z")
             produced = dict(rotation.protocol_object(seed, "sha256:z"))
@@ -643,6 +685,7 @@ class TestMirrorAgreement(unittest.TestCase):
             self.assertEqual(mirrored, produced)
 
     def test_mirror_classify(self):
+        """Test mirror classify."""
         for args in (
             (5, 0, 5, 0, 5, 0, 0),
             (6, 0, 2, 4, 6, 0, 0),
@@ -661,6 +704,7 @@ class TestMirrorAgreement(unittest.TestCase):
             )
 
     def test_mirror_aggregate_and_selection_on_stage_records(self):
+        """Test mirror aggregate and selection on stage records."""
         payload = _payload()
         raw = {
             name: entry["records"]
@@ -680,7 +724,10 @@ class TestMirrorAgreement(unittest.TestCase):
 
 
 class TestStage(unittest.TestCase):
+    """Test stage."""
+
     def test_perfect_backend_invariant(self):
+        """Test perfect backend invariant."""
         payload = _payload()
         self.assertTrue(payload["available"])
         self.assertTrue(_valid_rotation(payload))
@@ -709,6 +756,7 @@ class TestStage(unittest.TestCase):
         self.assertFalse(condition["flip"])
 
     def test_slot_fail_absorbed_by_mirror_control(self):
+        """Test slot fail absorbed by mirror control."""
         # A pure slot effect flips the rotations AND the
         # control set identically (their asked-slot multisets
         # match), so the classification acquits -- the B-F1
@@ -728,6 +776,7 @@ class TestStage(unittest.TestCase):
         )
 
     def test_wrong_backend_joint_collapse(self):
+        """Test wrong backend joint collapse."""
         payload = _payload(_WordBackend(mode="wrong"))
         self.assertTrue(_valid_rotation(payload))
         entry = payload["candidates"]["rt-a"]
@@ -736,6 +785,7 @@ class TestStage(unittest.TestCase):
         self.assertFalse(entry["invariance_falsified"])
 
     def test_stage_rejects_bad_formats(self):
+        """Test stage rejects bad formats."""
         backend = _WordBackend()
         with self.assertRaises(ValueError):
             experiments.rotation_stage(backend, [], boundary=(1,), max_context=100)
@@ -745,12 +795,14 @@ class TestStage(unittest.TestCase):
             experiments.rotation_stage(backend, [FORMATS[0]], boundary=(1,), max_context=100)
 
     def test_duplicate_format_names_rejected(self):
+        """Test duplicate format names rejected."""
         backend = _WordBackend()
         dup = (FORMATS[0], FORMATS[0])
         with self.assertRaises(ValueError):
             experiments.rotation_stage(backend, dup, boundary=(1,), max_context=100)
 
     def test_record_budget(self):
+        """Test record budget."""
         backend = _WordBackend()
         formats = tuple(
             Format(name=f"f{i}", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>")
@@ -763,6 +815,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "rotation_record_budget_exceeded")
 
     def test_screen_failed_stage(self):
+        """Test screen failed stage."""
         # A boundary whose decoded text occurs inside the
         # frozen texts ("the" occurs in the question template)
         # screens the whole stage closed.
@@ -780,6 +833,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "rotation_screen_failed")
 
     def test_screen_audit_findings_fail_closed(self):
+        """Test screen audit findings fail closed."""
         backend = _WordBackend()
         with mock.patch(
             "model_protocol_lab.fixtures.audit_special_token_literals",
@@ -792,6 +846,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "rotation_screen_failed")
 
     def test_boundary_screened_case(self):
+        """Test boundary screened case."""
         # A boundary text that occurs in one case's rendered
         # blocks (crossing the topic/template seam, so it is in
         # no frozen literal) boundary-screens exactly the cases
@@ -818,6 +873,7 @@ class TestStage(unittest.TestCase):
             self.assertEqual(set(record["arm_inventory_digests"]), set(rotation.SPAN_ARMS))
 
     def test_context_exceeded_cells(self):
+        """Test context exceeded cells."""
         payload = _payload(max_context=8)
         self.assertTrue(payload["available"])
         self.assertTrue(_valid_rotation(payload))
@@ -828,6 +884,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(set(record["cell_details"].values()), {"arm_context_exceeded"})
 
     def test_exploding_backend_degrades_cells(self):
+        """Test exploding backend degrades cells."""
         payload = _payload(_WordBackend(mode="explode"))
         self.assertTrue(payload["available"])
         self.assertTrue(_valid_rotation(payload))
@@ -835,10 +892,14 @@ class TestStage(unittest.TestCase):
         self.assertEqual(set(record["cell_details"].values()), {"arm_evaluation_failed"})
 
     def test_cancel_at_case_boundary(self):
+        """Test cancel at case boundary."""
         event = threading.Event()
 
         class _DecodeCancels(_WordBackend):
+            """Decode cancels."""
+
             def decode(self, ids):
+                """Decode."""
                 event.set()
                 return super().decode(ids)
 
@@ -855,10 +916,14 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_cancel_before_first_evaluation(self):
+        """Test cancel before first evaluation."""
         event = threading.Event()
 
         class _EncodeCancels(_WordBackend):
+            """Encode cancels."""
+
             def encode(self, text):
+                """Encode."""
                 ids = super().encode(text)
                 if len(text) > 20:  # arm renders only; setup encodes stay clean
                     event.set()
@@ -877,11 +942,13 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_cancel_at_arm_boundary(self):
+        """Test cancel at arm boundary."""
         event = threading.Event()
         backend = _WordBackend()
         original = experiments._rotation_cell
 
         def wrapper(*args, **kwargs):
+            """Wrapper."""
             outcome = original(*args, **kwargs)
             event.set()
             return outcome
@@ -899,6 +966,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_cancel_unwinds_stage(self):
+        """Test cancel unwinds stage."""
         backend = _WordBackend(cancel_after=3)
         event = threading.Event()
         backend.cancel_event = event
@@ -916,6 +984,7 @@ class TestStage(unittest.TestCase):
         self.assertFalse(payload["available"])
 
     def test_analysis_unavailable_candidate(self):
+        """Test analysis unavailable candidate."""
         payload = _payload_with_unavailable()
         self.assertEqual(
             payload["candidates"]["rt-b"],
@@ -925,7 +994,10 @@ class TestStage(unittest.TestCase):
 
 
 class TestScreeningAndConditions(unittest.TestCase):
+    """Test screening and conditions."""
+
     def test_closed_book_screen_excludes_case(self):
+        """Test closed book screen excludes case."""
         first = rotation.generate_cases(0)[0]
         backend = _WordBackend(known={first["topic"]: first["values"][0]})
         payload = _payload(backend)
@@ -937,6 +1009,7 @@ class TestScreeningAndConditions(unittest.TestCase):
         self.assertEqual(entry["n_live"], 19)
 
     def test_union_screening_across_candidates(self):
+        """Test union screening across candidates."""
         # Selections run over the population screened for NO
         # candidate in the run, even when screening itself is
         # per-candidate: rt-a's closed-book pass on case 0 must
@@ -944,7 +1017,10 @@ class TestScreeningAndConditions(unittest.TestCase):
         first = rotation.generate_cases(0)[0]
 
         class _PerFormatBackend(_WordBackend):
+            """Per format backend."""
+
             def generate(self, input_ids, **kwargs):
+                """Generate."""
                 text = self.decode(list(input_ids))
                 if text.startswith("u:") and first["topic"] in text and "code is" not in text:
                     boundary = self.encode("endmark")[0]
@@ -966,13 +1042,17 @@ class TestScreeningAndConditions(unittest.TestCase):
             self.assertFalse(payload["conditions"][arm]["withheld"], arm)
 
     def test_shared_live_fixtures_empty(self):
+        """Test shared live fixtures empty."""
         self.assertEqual(rotation.shared_live_fixtures({}), frozenset())
 
     def test_selection_withheld_on_mismatched_exactness(self):
+        """Test selection withheld on mismatched exactness."""
+
         # The per-arm exactness gate: if one candidate's rot_2
         # renders are not token-exact, the rot_2 selection is
         # withheld for the whole run while rot_0 still selects.
         def rec(fixture, verdict, exact=True):
+            """Rec."""
             record = _record(fixture, _all_arms(verdict), exact=exact)
             record["cells"]["closed_book"] = {
                 "verdict": False,
@@ -1003,15 +1083,19 @@ class TestValidatorBattery(unittest.TestCase):
 
     @staticmethod
     def _breaks():
+        """Breaks."""
         payload = _payload()
 
         def entry(payload):
+            """Entry."""
             return payload["candidates"]["rt-a"]
 
         def record(payload):
+            """Record."""
             return entry(payload)["records"][0]
 
         def cell(payload):
+            """Cell."""
             return record(payload)["cells"]["rot_1"]
 
         breaks = {
@@ -1056,6 +1140,7 @@ class TestValidatorBattery(unittest.TestCase):
         return payload, breaks
 
     def test_battery(self):
+        """Test battery."""
         payload, breaks = self._breaks()
         self.assertTrue(_valid_rotation(payload))
         for name, mutate in breaks.items():
@@ -1065,6 +1150,7 @@ class TestValidatorBattery(unittest.TestCase):
                 self.assertFalse(_valid_rotation(broken), name)
 
     def test_unavailable_entry_with_records_rejected(self):
+        """Test unavailable entry with records rejected."""
         payload = _payload_with_unavailable()
         self.assertTrue(_valid_rotation(payload))
         broken = copy.deepcopy(payload)
@@ -1073,7 +1159,10 @@ class TestValidatorBattery(unittest.TestCase):
 
 
 class TestDiff(unittest.TestCase):
+    """Test diff."""
+
     def test_identical_payloads_unchanged(self):
+        """Test identical payloads unchanged."""
         payload = _payload()
         diff = diff_rotation(payload, copy.deepcopy(payload))
         self.assertEqual(diff["available"], "both")
@@ -1081,6 +1170,7 @@ class TestDiff(unittest.TestCase):
         self.assertTrue(diff["comparable"])
 
     def test_classification_drift(self):
+        """Test classification drift."""
         old = _payload()
         new = _payload(_WordBackend(mode="slot_fail"))
         diff = diff_rotation(old, new)
@@ -1091,6 +1181,7 @@ class TestDiff(unittest.TestCase):
         self.assertIn(("rt-a", "n_flip_any"), metrics)
 
     def test_foreign_backend_not_comparable(self):
+        """Test foreign backend not comparable."""
         old = _payload()
         new = copy.deepcopy(old)
         protocol = dict(rotation.protocol_object(0, "sha256:other-backend"))
@@ -1102,11 +1193,13 @@ class TestDiff(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_both_unavailable_no_status_drift(self):
+        """Test both unavailable no status drift."""
         payload = _payload_with_unavailable()
         diff = diff_rotation(payload, copy.deepcopy(payload))
         self.assertFalse(diff["changed"])
 
     def test_status_drift(self):
+        """Test status drift."""
         old = _payload_with_unavailable()
         new = _payload()
         diff = diff_rotation(old, new)
@@ -1115,6 +1208,7 @@ class TestDiff(unittest.TestCase):
         self.assertIn(("rt-b", "status"), metrics)
 
     def test_missing_sides(self):
+        """Test missing sides."""
         payload = _payload()
         self.assertEqual(diff_rotation(None, None)["available"], "neither")
         self.assertEqual(diff_rotation(payload, None)["available"], "old")
@@ -1123,7 +1217,10 @@ class TestDiff(unittest.TestCase):
 
 
 class TestReportingAndCli(unittest.TestCase):
+    """Test reporting and cli."""
+
     def test_section_renders(self):
+        """Test section renders."""
         payload = _payload()
         html = render_html({"rotation": payload})
         self.assertIn("Context rotation", html)
@@ -1132,10 +1229,12 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertIn("Fact-absent false recall", html)
 
     def test_section_absent_without_payload(self):
+        """Test section absent without payload."""
         self.assertNotIn('id="rotation"', render_html({}))
         self.assertNotIn('id="rotation"', render_html({"rotation": {"available": False}}))
 
     def test_section_hostile_payload(self):
+        """Test section hostile payload."""
         payload = _payload()
         hostile = {"rotation": copy.deepcopy(payload)}
         hostile["rotation"]["candidates"] = {
@@ -1145,6 +1244,7 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertNotIn("<script>alert(1)</script>", html)
 
     def test_section_na_rates(self):
+        """Test section na rates."""
         payload = _payload()
         sparse = copy.deepcopy(payload)
         entry = sparse["candidates"]["rt-a"]
@@ -1158,11 +1258,13 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertIn("Context rotation", html)
 
     def test_section_unavailable_row(self):
+        """Test section unavailable row."""
         payload = _payload_with_unavailable()
         html = render_html({"rotation": payload})
         self.assertIn("unavailable", html)
 
     def test_section_withheld_conditions(self):
+        """Test section withheld conditions."""
         payload = _payload()
         for cond in payload["conditions"].values():
             cond["withheld"] = True
@@ -1171,6 +1273,7 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertIn("selection withheld", html)
 
     def test_cli_helper_attaches_payload(self):
+        """Test cli helper attaches payload."""
         sentinel = {"available": True, "detail": ""}
         with (
             mock.patch.object(experiments, "rotation_stage", return_value={"available": True}),
@@ -1191,6 +1294,7 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertIs(result["rotation"], sentinel)
 
     def test_cli_helper_never_raises(self):
+        """Test cli helper never raises."""
         with mock.patch.object(experiments, "rotation_stage", side_effect=RuntimeError("boom")):
             result: dict = {}
             cli._run_rotation_probe(
@@ -1214,6 +1318,7 @@ class TestGapCoverage(unittest.TestCase):
     """
 
     def test_arm_id_exact_malformed_record(self):
+        """Test arm id exact malformed record."""
         self.assertFalse(rotation.arm_id_exact({"fixture": "rotation-00"}, "rot_1"))
         self.assertFalse(
             rotation.arm_id_exact({"arm_inventory_digests": "b" * 64, "arm_tokens": {}}, "rot_1")
@@ -1222,6 +1327,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertTrue(rotation.arm_id_exact({"fixture": "rotation-00"}, "rot_0"))
 
     def test_selection_withheld_on_empty_completed_set(self):
+        """Test selection withheld on empty completed set."""
         raw = {
             "a": [_record(f"rotation-{i:02d}", _all_arms(True)) for i in range(3)],
             "b": [
@@ -1240,6 +1346,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertFalse(baseline["withheld"])
 
     def test_selection_withheld_on_mismatched_completed_sets(self):
+        """Test selection withheld on mismatched completed sets."""
         # Non-empty but differing completed sets take the
         # mismatched-sets return (not the empty-set return):
         # candidate b completes only two of the three gated
@@ -1260,6 +1367,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertIsNone(gated["flip"])
 
     def test_mirror_exactness_share_drops(self):
+        """Test mirror exactness share drops."""
         records = [_record(f"rotation-{i:02d}", _all_arms(True)) for i in range(8)]
         perturbed = _record("rotation-00", _all_arms(True))
         perturbed["arm_inventory_digests"] = dict.fromkeys(rotation.SPAN_ARMS, "b" * 64)
@@ -1284,6 +1392,7 @@ class TestValidatorGapBattery(unittest.TestCase):
     """
 
     def test_mirror_generator_value_redraw(self):
+        """Test mirror generator value redraw."""
         # Force blocks 0 and 1 of case 0 to collide at counter
         # 0 in the MIRROR's generator: its whole-set redraw
         # (counters increment) must fire, as the producer's
@@ -1292,6 +1401,7 @@ class TestValidatorGapBattery(unittest.TestCase):
         original = diffreports._rotation_derive
 
         def scripted(seed, index, slot, counter):
+            """Scripted."""
             calls.append((index, slot, counter))
             if index == 0 and counter == 0 and slot in (0, 1, 2, 3):
                 return 0
@@ -1306,6 +1416,7 @@ class TestValidatorGapBattery(unittest.TestCase):
         self.assertEqual(len({c["values"][0] for c in mirrored}), 20)
 
     def test_mirror_aggregate_malformed_record(self):
+        """Test mirror aggregate malformed record."""
         agg = diffreports._rotation_aggregate([{"fixture": "rotation-00", "cells": None}])
         self.assertEqual(agg["n_fixtures"], 1)
         self.assertEqual(agg["headline"]["n_headline"], 0)
@@ -1318,6 +1429,7 @@ class TestValidatorGapBattery(unittest.TestCase):
         self.assertFalse(diffreports._rotation_boundary_screened({"cell_details": None}))
 
     def test_mirror_aggregate_absent_false_pass(self):
+        """Test mirror aggregate absent false pass."""
         verdicts = _all_arms(False)
         verdicts["absent"] = True
         records = [_record(f"rotation-{i:02d}", dict(verdicts)) for i in range(4)]
@@ -1326,7 +1438,10 @@ class TestValidatorGapBattery(unittest.TestCase):
         self.assertEqual(agg["absent"]["rate"], 1.0)
 
     def test_mirror_selection_unique_winner(self):
+        """Test mirror selection unique winner."""
+
         def rec(fixture, rot1):
+            """Rec."""
             verdicts = _all_arms(True)
             verdicts["rot_1"] = rot1
             return _record(fixture, verdicts)
@@ -1349,18 +1464,23 @@ class TestValidatorGapBattery(unittest.TestCase):
         self.assertIsNone(diffreports._rotation_selection_over(mismatched, "rot_1", fixtures))
 
     def test_recompute_reject_branches(self):
+        """Test recompute reject branches."""
         payload = _payload()
 
         def entry(p):
+            """Entry."""
             return p["candidates"]["rt-a"]
 
         def record(p):
+            """Record."""
             return entry(p)["records"][0]
 
         def cell(p):
+            """Cell."""
             return record(p)["cells"]["rot_1"]
 
         def total_records_over(p):
+            """Total records over."""
             base = copy.deepcopy(entry(p))
             for i in range(23):
                 p["candidates"][f"c{i:02d}"] = copy.deepcopy(base)
@@ -1392,6 +1512,7 @@ class TestValidatorGapBattery(unittest.TestCase):
                 self.assertFalse(_valid_rotation(broken), name)
 
     def test_unavailable_reject_branches(self):
+        """Test unavailable reject branches."""
         payload = _payload_with_unavailable()
         self.assertTrue(_valid_rotation(payload))
         extra_key = copy.deepcopy(payload)
@@ -1415,13 +1536,17 @@ class _SecondFormatSlotFail(_WordBackend):
     """
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         text = self.decode(list(input_ids))
         self.mode = "slot_fail" if text.startswith("U>") else "perfect"
         return super().generate(input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel)
 
 
 class TestValidatorGapBattery2(unittest.TestCase):
+    """Test validator gap battery2."""
+
     def test_unique_winner_selection_recomputed(self):
+        """Test unique winner selection recomputed."""
         payload = _payload(_SecondFormatSlotFail())
         self.assertTrue(payload["available"])
         self.assertTrue(_valid_rotation(payload))
@@ -1434,11 +1559,16 @@ class TestStageGapBranches(unittest.TestCase):
     """Stage branches the main stage tests did not reach."""
 
     def test_boundary_decode_failure_screens_nothing(self):
+        """Test boundary decode failure screens nothing."""
+
         # A boundary that will not decode (singleton id) falls
         # back to an empty boundary text: the screen is inert,
         # the stage stays available, nothing is screened.
         class _SingletonUndecodable(_WordBackend):
+            """Singleton undecodable."""
+
             def decode(self, ids):
+                """Decode."""
                 if len(ids) == 1:
                     raise RuntimeError("singleton undecodable")
                 return super().decode(ids)
@@ -1449,6 +1579,7 @@ class TestStageGapBranches(unittest.TestCase):
         self.assertEqual(entry["n_boundary_screened"], 0)
 
     def test_cell_none_none_defensive_branch(self):
+        """Test cell none none defensive branch."""
         # _rotation_cell's contract is exactly one of the pair
         # set; the stage's elif chain must still not invent a
         # cell or a detail when a (patched) helper returns
@@ -1470,10 +1601,12 @@ class TestReportingGapBranches(unittest.TestCase):
     """
 
     def test_section_candidates_not_dict(self):
+        """Test section candidates not dict."""
         html = render_html({"rotation": {"available": True, "candidates": [], "conditions": {}}})
         self.assertNotIn('id="rotation"', html)
 
     def test_section_entry_not_dict(self):
+        """Test section entry not dict."""
         html = render_html(
             {
                 "rotation": {
@@ -1486,6 +1619,7 @@ class TestReportingGapBranches(unittest.TestCase):
         self.assertIn("Context rotation", html)
 
     def test_section_condition_not_dict_and_count_na(self):
+        """Test section condition not dict and count na."""
         payload = _payload()
         hostile = copy.deepcopy(payload)
         hostile["conditions"]["rot_0"] = "bogus"
@@ -1516,6 +1650,7 @@ class TestMainDispatchGap(unittest.TestCase):
     """
 
     def test_placement_and_rotation_dispatch(self):
+        """Test placement and rotation dispatch."""
         fixture_doc = {
             "search": [
                 {
@@ -1547,6 +1682,7 @@ class TestMainDispatchGap(unittest.TestCase):
             outdir = Path(tmp) / "report"
 
             def fake_prepare(path):
+                """Fake prepare."""
                 Path(path).mkdir(parents=True, exist_ok=False)
                 return Path(path)
 

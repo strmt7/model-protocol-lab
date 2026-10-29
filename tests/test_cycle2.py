@@ -65,16 +65,19 @@ FMT_B = Format("cand-b", "", "<u>", "<a>", "<e>")
 
 
 def _split():
+    """Split."""
     return Split((case("s1"), case("s2")), (case("h1"),))
 
 
 def _gen(text, cap=8):
+    """Gen."""
     # A "limit" generation must carry exactly max_new_tokens tokens; pad
     # after the boundary so the pass analysis is unaffected.
     return Generation(ids(text) + ids("x") * (cap - len(text)), "limit")
 
 
 def _run_map(backend, boundary_map, formats=(FMT_A, FMT_B)):
+    """Run map."""
     return run_experiment(
         backend,
         formats,
@@ -91,31 +94,41 @@ def _run_map(backend, boundary_map, formats=(FMT_A, FMT_B)):
 
 
 class ResolveBoundariesTests(unittest.TestCase):
+    """Resolve boundaries tests."""
+
     def test_none_map_applies_default_to_all(self):
+        """Test none map applies default to all."""
         resolved = _resolve_boundaries((FMT_A, FMT_B), ids("|"), None)
         self.assertEqual(resolved, {"cand-a": ids("|"), "cand-b": ids("|")})
 
     def test_override_applies_per_candidate(self):
+        """Test override applies per candidate."""
         resolved = _resolve_boundaries((FMT_A, FMT_B), ids("|"), {"cand-b": ids("#")})
         self.assertEqual(resolved["cand-a"], ids("|"))
         self.assertEqual(resolved["cand-b"], ids("#"))
 
     def test_unknown_candidate_rejected(self):
+        """Test unknown candidate rejected."""
         with self.assertRaises(ValueError):
             _resolve_boundaries((FMT_A,), ids("|"), {"nope": ids("#")})
 
     def test_non_dict_map_rejected(self):
+        """Test non dict map rejected."""
         with self.assertRaises(ValueError):
             _resolve_boundaries((FMT_A,), ids("|"), [("cand-a", ids("#"))])  # type: ignore[arg-type]
 
     def test_bad_boundary_values_rejected(self):
+        """Test bad boundary values rejected."""
         for bad in ((), (1, -2), "12", (True,)):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 _resolve_boundaries((FMT_A,), ids("|"), {"cand-a": bad})
 
 
 class RunExperimentBoundaryMapTests(unittest.TestCase):
+    """Run experiment boundary map tests."""
+
     def test_each_candidate_measured_with_own_boundary(self):
+        """Test each candidate measured with own boundary."""
         # cand-a emits "ok|" (passes with "|"), cand-b emits "ok#" (passes
         # with "#" under the map, fails without it).
         backend = FakeBackend(
@@ -128,6 +141,7 @@ class RunExperimentBoundaryMapTests(unittest.TestCase):
         self.assertEqual(by_name["cand-b"]["boundary_token_ids"], list(ids("#")))
 
     def test_without_map_second_candidate_fails(self):
+        """Test without map second candidate fails."""
         backend = FakeBackend(
             generate_script=[_gen("ok|"), _gen("ok|"), _gen("ok#"), _gen("ok#"), _gen("ok|")]
         )
@@ -138,6 +152,7 @@ class RunExperimentBoundaryMapTests(unittest.TestCase):
         self.assertEqual(result["selected_boundary_token_ids"], list(ids("|")))
 
     def test_held_out_uses_winner_boundary(self):
+        """Test held out uses winner boundary."""
         backend = FakeBackend(
             generate_script=[_gen("ok#"), _gen("ok#"), _gen("ok~"), _gen("ok~"), _gen("ok#")]
         )
@@ -147,6 +162,7 @@ class RunExperimentBoundaryMapTests(unittest.TestCase):
         self.assertEqual(result["decision"], "compatible_on_fixture_set")
 
     def test_entries_record_boundaries_without_map(self):
+        """Test entries record boundaries without map."""
         backend = FakeBackend(generate_script=[_gen("ok|")] * 5)
         result = _run_map(backend, None)
         for entry in result["search"]:
@@ -154,8 +170,11 @@ class RunExperimentBoundaryMapTests(unittest.TestCase):
 
 
 class BudgetFrontierBoundaryTests(unittest.TestCase):
+    """Budget frontier boundary tests."""
+
     @staticmethod
     def _entry(name, output_text, boundary_ids):
+        """Entry."""
         obs = {
             "fixture": "s1",
             "status": "completed",
@@ -170,6 +189,7 @@ class BudgetFrontierBoundaryTests(unittest.TestCase):
         }
 
     def test_entry_boundary_overrides_argument(self):
+        """Test entry boundary overrides argument."""
         search = [self._entry("a", "ok|", ids("|"))]
         frontier = budget_frontier(
             search,
@@ -183,6 +203,7 @@ class BudgetFrontierBoundaryTests(unittest.TestCase):
         self.assertEqual(frontier["candidates"]["a"]["min_budget_per_fixture"], [3])
 
     def test_missing_entry_boundary_falls_back_to_argument(self):
+        """Test missing entry boundary falls back to argument."""
         obs = {
             "fixture": "s1",
             "status": "completed",
@@ -201,6 +222,7 @@ class BudgetFrontierBoundaryTests(unittest.TestCase):
         self.assertEqual(frontier["candidates"]["a"]["min_budget_per_fixture"], [3])
 
     def test_malformed_entry_boundary_rejected(self):
+        """Test malformed entry boundary rejected."""
         search = [self._entry("a", "ok|", ())]
         with self.assertRaises(ValueError):
             budget_frontier(
@@ -212,6 +234,7 @@ class BudgetFrontierBoundaryTests(unittest.TestCase):
             )
 
     def test_tuple_entry_boundary_accepted(self):
+        """Test tuple entry boundary accepted."""
         search = [self._entry("a", "ok|", ids("|"))]
         search[0]["boundary_token_ids"] = tuple(ids("|"))
         frontier = budget_frontier(
@@ -224,6 +247,7 @@ class BudgetFrontierBoundaryTests(unittest.TestCase):
         self.assertEqual(frontier["candidates"]["a"]["min_budget_per_fixture"], [3])
 
     def test_observations_without_usable_output_ids(self):
+        """Test observations without usable output ids."""
         search = [
             {
                 "format": {"name": "a"},
@@ -263,7 +287,10 @@ class BudgetFrontierBoundaryTests(unittest.TestCase):
 
 
 class SensitivitySweepBoundaryMapTests(unittest.TestCase):
+    """Sensitivity sweep boundary map tests."""
+
     def test_map_threads_through_sweep(self):
+        """Test map threads through sweep."""
         backend = FakeBackend(generate_script=[_gen("ok|")] * 40)
         formats = (replace(FMT_A, name="a"),)
         result = prompt_sensitivity_sweep(
@@ -281,38 +308,50 @@ class SensitivitySweepBoundaryMapTests(unittest.TestCase):
 
 
 class ParseBoundaryMapTests(unittest.TestCase):
+    """Parse boundary map tests."""
+
     def test_valid_forms(self):
+        """Test valid forms."""
         self.assertEqual(parse_boundary_map("chatml=1,2"), ("chatml", (1, 2)))
         self.assertEqual(parse_boundary_map("chatml/toggle-bos=5"), ("chatml/toggle-bos", (5,)))
 
     def test_invalid_forms_rejected(self):
+        """Test invalid forms rejected."""
         for bad in ("chatml", "=1,2", "chatml=", "chatml=1,,2", "chatml=x"):
             with self.subTest(bad=bad), self.assertRaises(argparse.ArgumentTypeError):
                 parse_boundary_map(bad)
 
 
 class ResolveBoundaryMapTests(unittest.TestCase):
+    """Resolve boundary map tests."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.parser = build_parser()
 
     def test_none_returns_none(self):
+        """Test none returns none."""
         self.assertIsNone(_resolve_boundary_map(None, {"a"}, self.parser))
 
     def test_valid_names_resolve(self):
+        """Test valid names resolve."""
         resolved = _resolve_boundary_map([("a", (1,)), ("b", (2, 3))], {"a", "b"}, self.parser)
         self.assertEqual(resolved, {"a": (1,), "b": (2, 3)})
 
     def test_duplicate_name_exits_two(self):
+        """Test duplicate name exits two."""
         with self.assertRaises(SystemExit) as ctx:
             _resolve_boundary_map([("a", (1,)), ("a", (2,))], {"a"}, self.parser)
         self.assertEqual(ctx.exception.code, 2)
 
     def test_unknown_name_exits_two(self):
+        """Test unknown name exits two."""
         with self.assertRaises(SystemExit) as ctx:
             _resolve_boundary_map([("zzz", (1,))], {"a"}, self.parser)
         self.assertEqual(ctx.exception.code, 2)
 
     def test_unknown_names_allowed_without_candidate_set(self):
+        """Test unknown names allowed without candidate set."""
         # doctor does not know the candidate set: duplicates are still
         # rejected, unknown names pass through to per-name vocab checks.
         resolved = _resolve_boundary_map([("zzz", (1,))], None, self.parser)
@@ -322,8 +361,11 @@ class ResolveBoundaryMapTests(unittest.TestCase):
 
 
 class RunBoundaryMapCliTests(unittest.TestCase):
+    """Run boundary map cli tests."""
+
     @staticmethod
     def _run_args(tmp, extra):
+        """Run args."""
         return [
             "run",
             "--model",
@@ -340,6 +382,7 @@ class RunBoundaryMapCliTests(unittest.TestCase):
         ]
 
     def test_duplicate_map_flag_exits_two(self):
+        """Test duplicate map flag exits two."""
         with (
             TemporaryDirectory() as tmp,
             redirect_stderr(io.StringIO()),
@@ -359,6 +402,7 @@ class RunBoundaryMapCliTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 2)
 
     def test_unknown_map_name_exits_two(self):
+        """Test unknown map name exits two."""
         with (
             TemporaryDirectory() as tmp,
             redirect_stderr(io.StringIO()),
@@ -368,6 +412,7 @@ class RunBoundaryMapCliTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 2)
 
     def test_unknown_map_name_lists_valid_names(self):
+        """Test unknown map name lists valid names."""
         with (
             TemporaryDirectory() as tmp,
             redirect_stderr(io.StringIO()) as err,
@@ -379,8 +424,11 @@ class RunBoundaryMapCliTests(unittest.TestCase):
 
 @unittest.skipUnless(HAS_HF, "the 'hf' extra is not installed")
 class RunBoundaryMapEndToEndTests(unittest.TestCase):
+    """Run boundary map end to end tests."""
+
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         from tests.test_adapter_integration import build_tiny_gpt2
 
         cls._tmp = TemporaryDirectory()
@@ -391,6 +439,7 @@ class RunBoundaryMapEndToEndTests(unittest.TestCase):
         cls.dataset = Path(__file__).resolve().parent.parent / "examples" / "fixtures.json"
 
     def test_run_with_boundary_map_records_per_candidate_boundaries(self):
+        """Test run with boundary map records per candidate boundaries."""
         tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         output = Path(tmp.name) / "report"
@@ -429,12 +478,16 @@ class RunBoundaryMapEndToEndTests(unittest.TestCase):
 
 
 class DoctorBoundaryMapTests(unittest.TestCase):
+    """Doctor boundary map tests."""
+
     @staticmethod
     def _model(root):
+        """Model."""
         root.mkdir(parents=True, exist_ok=True)
         return write_model_dir(root)
 
     def test_map_checks_degrade_to_skipped_without_transformers(self):
+        """Test map checks degrade to skipped without transformers."""
         # Without the hf extra the vocabulary is unknown: per-name checks
         # degrade to "skipped", never to a raw failure. Simulate the missing
         # extra by blocking the transformers import the deep check uses.
@@ -451,6 +504,7 @@ class DoctorBoundaryMapTests(unittest.TestCase):
         self.assertEqual(checks["boundary_ids:b"]["status"], "skipped")
 
     def test_invalid_map_shape_fails_closed(self):
+        """Test invalid map shape fails closed."""
         with TemporaryDirectory() as tmp:
             root = self._model(Path(tmp) / "model")
             report = examine_model(root, boundary_map=[("a", (0,))])  # type: ignore[arg-type]
@@ -458,6 +512,7 @@ class DoctorBoundaryMapTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_HF, "the 'hf' extra is not installed")
     def test_map_validated_against_vocabulary(self):
+        """Test map validated against vocabulary."""
         with TemporaryDirectory() as tmp:
             root = self._model(Path(tmp) / "model")
             report = examine_model(root, boundary_map={"a": (0,), "b": (10**9,)})
@@ -467,6 +522,7 @@ class DoctorBoundaryMapTests(unittest.TestCase):
         self.assertEqual(report["verdict"], "failed")
 
     def test_suggestion_note_mentions_boundary_map(self):
+        """Test suggestion note mentions boundary map."""
         report = {
             "verdict": "ok",
             "model": {"context_window": 64},
@@ -488,7 +544,10 @@ h1,g3,held_out,ok,held question,,
 
 
 class ParseFixtureCsvTests(unittest.TestCase):
+    """Parse fixture csv tests."""
+
     def test_valid_csv_builds_split(self):
+        """Test valid csv builds split."""
         split, empty = parse_fixture_csv(VALID_CSV)
         self.assertEqual([c.id for c in split.search], ["s1", "s2"])
         self.assertEqual([c.id for c in split.held_out], ["h1"])
@@ -497,6 +556,7 @@ class ParseFixtureCsvTests(unittest.TestCase):
         self.assertEqual(empty, [])
 
     def test_quoted_newlines_preserved(self):
+        """Test quoted newlines preserved."""
         text = (
             "id,group,partition,expected,user_1\n"
             's1,g1,search,ok,"line one\nline two"\n'
@@ -506,6 +566,7 @@ class ParseFixtureCsvTests(unittest.TestCase):
         self.assertEqual(split.search[0].messages[0].content, "line one\nline two")
 
     def test_blank_lines_and_short_rows_tolerated(self):
+        """Test blank lines and short rows tolerated."""
         text = (
             "\n"
             "id,group,partition,expected,user_1,assistant_1\n"
@@ -518,12 +579,14 @@ class ParseFixtureCsvTests(unittest.TestCase):
         self.assertEqual(len(split.search), 1)
 
     def test_empty_expected_reported_not_rejected(self):
+        """Test empty expected reported not rejected."""
         text = "id,group,partition,expected,user_1\ns1,g1,search,,q\nh1,g2,held_out,ok,q2\n"
         split, empty = parse_fixture_csv(text)
         self.assertEqual(empty, ["s1"])
         self.assertEqual(split.search[0].expected, "")
 
     def test_row_numbers_in_errors(self):
+        """Test row numbers in errors."""
         cases = [
             (
                 "id,group,partition,expected,user_1\ns1,g1,bogus,ok,q\nh1,g2,held_out,ok,q2\n",
@@ -550,6 +613,7 @@ class ParseFixtureCsvTests(unittest.TestCase):
             self.assertIn(marker, str(ctx.exception))
 
     def test_discipline_violations_refuse_build(self):
+        """Test discipline violations refuse build."""
         # Group overlap across partitions.
         text = "id,group,partition,expected,user_1\ns1,g1,search,ok,q1\nh1,g1,held_out,ok,q2\n"
         with self.assertRaises(ValueError) as ctx:
@@ -565,6 +629,7 @@ class ParseFixtureCsvTests(unittest.TestCase):
             parse_fixture_csv(text)
 
     def test_bad_headers_rejected(self):
+        """Test bad headers rejected."""
         for header in (
             "identifier,group,partition,expected,user_1",
             "id,group,partition,expected,assistant_1",
@@ -576,18 +641,21 @@ class ParseFixtureCsvTests(unittest.TestCase):
                 parse_fixture_csv(text)
 
     def test_missing_partition_rejected(self):
+        """Test missing partition rejected."""
         text = "id,group,partition,expected,user_1\nh1,g2,held_out,ok,q2\n"
         with self.assertRaises(ValueError) as ctx:
             parse_fixture_csv(text)
         self.assertIn("no 'search' fixtures", str(ctx.exception))
 
     def test_empty_source_rejected(self):
+        """Test empty source rejected."""
         with self.assertRaises(ValueError):
             parse_fixture_csv("")
         with self.assertRaises(ValueError):
             parse_fixture_csv("id,group,partition,expected,user_1\n")
 
     def test_oversize_and_non_text_sources_rejected(self):
+        """Test oversize and non text sources rejected."""
         from model_protocol_lab.datasets import MAX_BYTES
 
         with self.assertRaises(ValueError):
@@ -596,6 +664,7 @@ class ParseFixtureCsvTests(unittest.TestCase):
             parse_fixture_csv("x" * (MAX_BYTES + 1))
 
     def test_too_many_fixtures_rejected(self):
+        """Test too many fixtures rejected."""
         header = "id,group,partition,expected,user_1\n"
         rows = "".join(f"s{i},g{i},search,ok,q{i}\n" for i in range(101)) + "".join(
             f"h{i},gg{i},held_out,ok,q{i}\n" for i in range(101)
@@ -605,18 +674,21 @@ class ParseFixtureCsvTests(unittest.TestCase):
         self.assertIn("more than 200", str(ctx.exception))
 
     def test_too_many_cells_rejected(self):
+        """Test too many cells rejected."""
         text = "id,group,partition,expected,user_1\ns1,g1,search,ok,q,EXTRA\nh1,g2,held_out,ok,q2\n"
         with self.assertRaises(ValueError) as ctx:
             parse_fixture_csv(text)
         self.assertIn("row 2", str(ctx.exception))
 
     def test_blank_group_rejected(self):
+        """Test blank group rejected."""
         text = "id,group,partition,expected,user_1\ns1,,search,ok,q\nh1,g2,held_out,ok,q2\n"
         with self.assertRaises(ValueError) as ctx:
             parse_fixture_csv(text)
         self.assertIn("group is blank", str(ctx.exception))
 
     def test_oversize_cell_rejected(self):
+        """Test oversize cell rejected."""
         from model_protocol_lab.datasets import MAX_TEXT
 
         text = (
@@ -629,6 +701,7 @@ class ParseFixtureCsvTests(unittest.TestCase):
         self.assertIn("exceeds size limit", str(ctx.exception))
 
     def test_missing_user_message_rejected(self):
+        """Test missing user message rejected."""
         text = (
             "id,group,partition,expected,user_1,assistant_1\n"
             "s1,g1,search,ok,,\n"
@@ -639,6 +712,7 @@ class ParseFixtureCsvTests(unittest.TestCase):
         self.assertIn("user_1 message", str(ctx.exception))
 
     def test_too_many_per_partition_rejected(self):
+        """Test too many per partition rejected."""
         header = "id,group,partition,expected,user_1\n"
         rows = "".join(f"s{i},g{i},search,ok,q{i}\n" for i in range(101))
         rows += "h1,gg1,held_out,ok,q\n"
@@ -647,6 +721,7 @@ class ParseFixtureCsvTests(unittest.TestCase):
         self.assertIn("'search' fixtures", str(ctx.exception))
 
     def test_control_chars_stripped_from_error_ids(self):
+        """Test control chars stripped from error ids."""
         text = "id,group,partition,expected,user_1\n\x1b[31mx,g1,bogus,ok,q\nh1,g2,held_out,ok,q2\n"
         with self.assertRaises(ValueError) as ctx:
             parse_fixture_csv(text)
@@ -654,7 +729,10 @@ class ParseFixtureCsvTests(unittest.TestCase):
 
 
 class SplitToJsonTests(unittest.TestCase):
+    """Split to json tests."""
+
     def test_emitted_json_passes_strict_loader(self):
+        """Test emitted json passes strict loader."""
         split, _ = parse_fixture_csv(VALID_CSV)
         text = split_to_json_text(split)
         from model_protocol_lab.datasets import parse_dataset
@@ -664,22 +742,28 @@ class SplitToJsonTests(unittest.TestCase):
         self.assertEqual(text.splitlines()[0], "{")
 
     def test_rejects_non_split(self):
+        """Test rejects non split."""
         with self.assertRaises(ValueError):
             split_to_json_text("nope")  # type: ignore[arg-type]
 
 
 class ReadAuthoringFileTests(unittest.TestCase):
+    """Read authoring file tests."""
+
     def test_reads_regular_file(self):
+        """Test reads regular file."""
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "cases.csv"
             path.write_text(VALID_CSV, encoding="utf-8")
             self.assertEqual(read_authoring_file(path), VALID_CSV)
 
     def test_refuses_directory(self):
+        """Test refuses directory."""
         with TemporaryDirectory() as tmp, self.assertRaises(ValueError):
             read_authoring_file(Path(tmp))
 
     def test_refuses_non_utf8(self):
+        """Test refuses non utf8."""
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "cases.csv"
             path.write_bytes(b"id,\xff\n")
@@ -687,6 +771,7 @@ class ReadAuthoringFileTests(unittest.TestCase):
                 read_authoring_file(path)
 
     def test_refuses_oversize(self):
+        """Test refuses oversize."""
         from model_protocol_lab.datasets import MAX_BYTES
 
         with TemporaryDirectory() as tmp:
@@ -696,12 +781,16 @@ class ReadAuthoringFileTests(unittest.TestCase):
                 read_authoring_file(path)
 
     def test_refuses_non_path(self):
+        """Test refuses non path."""
         with self.assertRaises(ValueError):
             read_authoring_file(123)  # type: ignore[arg-type]
 
 
 class WriteFixtureFileTests(unittest.TestCase):
+    """Write fixture file tests."""
+
     def test_writes_with_owner_only_permissions(self):
+        """Test writes with owner only permissions."""
         with TemporaryDirectory() as tmp:
             target = Path(tmp) / "out.json"
             write_fixture_file("{}", target)
@@ -710,6 +799,7 @@ class WriteFixtureFileTests(unittest.TestCase):
             self.assertEqual(mode, 0o600)
 
     def test_refuses_existing_path(self):
+        """Test refuses existing path."""
         with TemporaryDirectory() as tmp:
             target = Path(tmp) / "out.json"
             target.write_text("{}", encoding="utf-8")
@@ -717,10 +807,12 @@ class WriteFixtureFileTests(unittest.TestCase):
                 write_fixture_file("{}", target)
 
     def test_refuses_missing_parent(self):
+        """Test refuses missing parent."""
         with TemporaryDirectory() as tmp, self.assertRaises(ValueError):
             write_fixture_file("{}", Path(tmp) / "nope" / "out.json")
 
     def test_rejects_bad_argument_types(self):
+        """Test rejects bad argument types."""
         with TemporaryDirectory() as tmp:
             target = Path(tmp) / "out.json"
             with self.assertRaises(ValueError):
@@ -729,6 +821,7 @@ class WriteFixtureFileTests(unittest.TestCase):
                 write_fixture_file("{}", 123)  # type: ignore[arg-type]
 
     def test_unwritable_path_reports_cleanly(self):
+        """Test unwritable path reports cleanly."""
         # ENAMETOOLONG from the OS surfaces as the fixed "not writable"
         # vocabulary, never raw OS text.
         with TemporaryDirectory() as tmp:
@@ -738,6 +831,7 @@ class WriteFixtureFileTests(unittest.TestCase):
             self.assertIn("not writable", str(ctx.exception))
 
     def test_partial_write_leaves_no_file(self):
+        """Test partial write leaves no file."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import os as _os
         from unittest.mock import patch
@@ -753,7 +847,10 @@ class WriteFixtureFileTests(unittest.TestCase):
 
 
 class FixturesBuildCliTests(unittest.TestCase):
+    """Fixtures build cli tests."""
+
     def _run_build(self, csv_text, extra=()):
+        """Run build."""
         tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         source = Path(tmp.name) / "cases.csv"
@@ -764,6 +861,7 @@ class FixturesBuildCliTests(unittest.TestCase):
         return code, output, out.getvalue(), err.getvalue()
 
     def test_build_writes_valid_fixture_json(self):
+        """Test build writes valid fixture json."""
         code, output, stdout, _ = self._run_build(VALID_CSV)
         self.assertEqual(code, 0)
         summary = json.loads(stdout)
@@ -774,12 +872,14 @@ class FixturesBuildCliTests(unittest.TestCase):
         self.assertEqual([c.id for c in split.search], ["s1", "s2"])
 
     def test_build_warns_on_empty_expected(self):
+        """Test build warns on empty expected."""
         text = "id,group,partition,expected,user_1\ns1,g1,search,,q\nh1,g2,held_out,ok,q2\n"
         code, _, _, stderr = self._run_build(text)
         self.assertEqual(code, 0)
         self.assertIn("pass vacuously", stderr)
 
     def test_build_rejects_bad_csv(self):
+        """Test build rejects bad csv."""
         code, output, _, stderr = self._run_build(
             "id,group,partition,expected,user_1\ns1,g1,bogus,ok,q\nh1,g2,held_out,ok,q2\n"
         )
@@ -788,6 +888,7 @@ class FixturesBuildCliTests(unittest.TestCase):
         self.assertFalse(output.exists())
 
     def test_build_rejects_existing_output(self):
+        """Test build rejects existing output."""
         tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         source = Path(tmp.name) / "cases.csv"
@@ -800,6 +901,7 @@ class FixturesBuildCliTests(unittest.TestCase):
         self.assertEqual(output.read_text(encoding="utf-8"), "{}")
 
     def test_missing_source_exits_one(self):
+        """Test missing source exits one."""
         with (
             TemporaryDirectory() as tmp,
             redirect_stdout(io.StringIO()),
@@ -822,7 +924,10 @@ class FixturesBuildCliTests(unittest.TestCase):
 
 
 def _result_with_search():
+    """Result with search."""
+
     def obs(fid, passed):
+        """Obs."""
         return {
             "fixture": fid,
             "status": "completed",
@@ -852,7 +957,10 @@ def _result_with_search():
 
 
 class OutcomeGridTests(unittest.TestCase):
+    """Outcome grid tests."""
+
     def test_glyphs_and_winner_star(self):
+        """Test glyphs and winner star."""
         html = _outcome_grid_section(_result_with_search())
         self.assertIn("Per-fixture outcomes", html)
         self.assertIn("\u2713", html)  # pass
@@ -861,12 +969,14 @@ class OutcomeGridTests(unittest.TestCase):
         self.assertIn("s1", html)
 
     def test_incomplete_observations_render_dash(self):
+        """Test incomplete observations render dash."""
         result = _result_with_search()
         result["search"][1]["observations"][0]["status"] = "error"
         html = _outcome_grid_section(result)
         self.assertIn("\u2013", html)
 
     def test_hostile_fixture_ids_escaped(self):
+        """Test hostile fixture ids escaped."""
         result = _result_with_search()
         result["search"][0]["observations"][0]["fixture"] = '<script>alert("x")</script>'
         html = _outcome_grid_section(result)
@@ -874,11 +984,15 @@ class OutcomeGridTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;", html)
 
     def test_empty_search_renders_nothing(self):
+        """Test empty search renders nothing."""
         self.assertEqual(_outcome_grid_section({"search": []}), "")
 
 
 class DecisiveFixtureTests(unittest.TestCase):
+    """Decisive fixture tests."""
+
     def test_winner_decisive_fixture_listed(self):
+        """Test winner decisive fixture listed."""
         html = _decisive_section(_result_with_search())
         self.assertIn("Decisive fixtures", html)
         self.assertIn("cand-a", html)
@@ -886,6 +1000,7 @@ class DecisiveFixtureTests(unittest.TestCase):
         self.assertNotIn("s1", html.split("</ul>")[0].split("<ul>")[-1])
 
     def test_no_solo_pass_message(self):
+        """Test no solo pass message."""
         result = _result_with_search()
         for entry in result["search"]:
             for obs_item in entry["observations"]:
@@ -895,6 +1010,7 @@ class DecisiveFixtureTests(unittest.TestCase):
         self.assertIn("No fixture was passed by exactly one candidate", html)
 
     def test_incomplete_observation_disqualifies(self):
+        """Test incomplete observation disqualifies."""
         result = _result_with_search()
         result["search"][1]["observations"][1]["status"] = "error"
         html = _decisive_section(result)
@@ -902,15 +1018,20 @@ class DecisiveFixtureTests(unittest.TestCase):
 
 
 class SparklineTests(unittest.TestCase):
+    """Sparkline tests."""
+
     def test_scaling(self):
+        """Test scaling."""
         self.assertEqual(_sparkline([0, 2, 4], 4), "\u2581\u2585\u2588")
         self.assertEqual(_sparkline([4, 4], 4), "\u2588\u2588")
 
     def test_degenerate_inputs(self):
+        """Test degenerate inputs."""
         self.assertEqual(_sparkline([], 4), "?")
         self.assertEqual(_sparkline([1], 0), "?")
 
     def test_frontier_table_renders_all_candidates(self):
+        """Test frontier table renders all candidates."""
         frontier = {
             "max_new_tokens": 8,
             "candidates": {
@@ -934,6 +1055,7 @@ class SparklineTests(unittest.TestCase):
         self.assertIn("\u2014", html)  # no full-pass budget for b
 
     def test_frontier_table_handles_bad_input(self):
+        """Test frontier table handles bad input."""
         self.assertEqual(_frontier_spark_table({}), "")
         self.assertEqual(_frontier_spark_table({"candidates": {}}), "")
         self.assertEqual(
@@ -945,6 +1067,7 @@ class SparklineTests(unittest.TestCase):
         )
 
     def test_frontier_table_samples_large_budgets(self):
+        """Test frontier table samples large budgets."""
         frontier = {
             "max_new_tokens": 4096,
             "candidates": {
@@ -959,6 +1082,7 @@ class SparklineTests(unittest.TestCase):
         self.assertIn("over budgets 1 to 4096", html)
 
     def test_outcome_grid_tolerates_malformed_runs(self):
+        """Test outcome grid tolerates malformed runs."""
         result = {
             "search": [
                 "not-a-dict",
@@ -971,7 +1095,10 @@ class SparklineTests(unittest.TestCase):
 
 
 class ReportViewsIntegrationTests(unittest.TestCase):
+    """Report views integration tests."""
+
     def test_render_html_includes_new_sections(self):
+        """Test render html includes new sections."""
         result = _result_with_search()
         result["budget_frontier"] = {
             "max_new_tokens": 8,
@@ -1001,6 +1128,7 @@ class ReportViewsIntegrationTests(unittest.TestCase):
         self.assertNotIn("https://", html)
 
     def test_config_section_lists_per_candidate_boundaries(self):
+        """Test config section lists per candidate boundaries."""
         result = _result_with_search()
         result["search"][1]["boundary_token_ids"] = [125]
         html = render_html(result)
@@ -1008,6 +1136,7 @@ class ReportViewsIntegrationTests(unittest.TestCase):
         self.assertIn("Boundary token IDs (cand-b)", html)
 
     def test_config_section_single_line_when_uniform(self):
+        """Test config section single line when uniform."""
         html = render_html(_result_with_search())
         self.assertIn("Boundary token IDs", html)
         self.assertNotIn("Boundary token IDs (cand-a)", html)

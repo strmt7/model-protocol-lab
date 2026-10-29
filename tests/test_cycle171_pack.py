@@ -25,6 +25,7 @@ _SAMPLE = _REPO / "examples" / "sample-report"
 
 
 def _sample_report_dir(tmpdir: Path) -> Path:
+    """Sample report dir."""
     report = Path(tmpdir) / "report"
     report.mkdir()
     for name in ("results.json", "report.html"):
@@ -33,10 +34,12 @@ def _sample_report_dir(tmpdir: Path) -> Path:
 
 
 def _pack_to_bytes(report: Path, includes: list | None = None) -> tuple[bytes, dict, str]:
+    """Pack to bytes."""
     return pk.pack_bundle(report, [Path(p) for p in (includes or [])])
 
 
 def _hostile_zip(entries: list[tuple[str, bytes]], comment: bytes = b"") -> bytes:
+    """Hostile zip."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         for name, data in entries:
@@ -46,24 +49,31 @@ def _hostile_zip(entries: list[tuple[str, bytes]], comment: bytes = b"") -> byte
 
 
 def _manifest_entry(bundle: bytes) -> bytes:
+    """Manifest entry."""
     with zipfile.ZipFile(io.BytesIO(bundle)) as archive:
         return archive.read(pk.MANIFEST_NAME)
 
 
 def _manifest_dict(bundle: bytes) -> dict:
+    """Manifest dict."""
     return json.loads(_manifest_entry(bundle).decode("utf-8"))
 
 
 def _report_from_bundle(bundle: bytes, digest: str | None = None) -> dict:
+    """Report from bundle."""
     return pk.verify_bundle_bytes(bundle, expect_digest=digest)
 
 
 class PathGrammarTests(unittest.TestCase):
+    """Path grammar tests."""
+
     def test_accepts_canonical_paths(self):
+        """Test accepts canonical paths."""
         for path in ("results.json", "report.html", "inputs/dataset.json", "a/b/c.txt"):
             self.assertTrue(pk._valid_bundle_path(path), path)
 
     def test_rejects_non_canonical(self):
+        """Test rejects non canonical."""
         for path in (
             "",
             ".",
@@ -81,13 +91,17 @@ class PathGrammarTests(unittest.TestCase):
             self.assertFalse(pk._valid_bundle_path(path), repr(path))
 
     def test_rejects_non_strings(self):
+        """Test rejects non strings."""
         for value in (None, 12, b"results.json", ["results.json"]):
             self.assertFalse(pk._valid_bundle_path(value))
 
 
 class ManifestSchemaTests(unittest.TestCase):
+    """Manifest schema tests."""
+
     @staticmethod
     def _valid() -> dict:
+        """Valid."""
         return {
             "context": {
                 "backend_fingerprint": "fp",
@@ -106,9 +120,11 @@ class ManifestSchemaTests(unittest.TestCase):
         }
 
     def test_valid_manifest(self):
+        """Test valid manifest."""
         self.assertIsNone(pk._valid_manifest(self._valid()))
 
     def test_rejects_wrong_types(self):
+        """Test rejects wrong types."""
         cases = [
             ({"format": 1}, "manifest_format_mismatch"),
             ({"files": "x"}, "manifest_files_invalid"),
@@ -206,34 +222,42 @@ class ManifestSchemaTests(unittest.TestCase):
             self.assertEqual(pk._valid_manifest(manifest), detail, patch)
 
     def test_rejects_duplicate_paths(self):
+        """Test rejects duplicate paths."""
         manifest = self._valid()
         manifest["files"].append(dict(manifest["files"][0]))
         self.assertEqual(pk._valid_manifest(manifest), "manifest_path_duplicate")
 
     def test_rejects_bad_context(self):
+        """Test rejects bad context."""
         for key in ("package_version", "catalog_sha256", "backend_fingerprint"):
             manifest = self._valid()
             manifest["context"][key] = ""
             self.assertEqual(pk._valid_manifest(manifest), "manifest_context_invalid", key)
 
     def test_accepts_unknown_keys_and_roles_forward_compat(self):
+        """Test accepts unknown keys and roles forward compat."""
         manifest = self._valid()
         manifest["future_extension"] = {"note": "ignored"}
         manifest["files"][0]["role"] = "results-v2"
         self.assertIsNone(pk._valid_manifest(manifest))
 
     def test_rejects_non_object(self):
+        """Test rejects non object."""
         self.assertEqual(pk._valid_manifest([1, 2]), "manifest_not_an_object")
 
 
 class DigestTests(unittest.TestCase):
+    """Digest tests."""
+
     def test_digest_is_sha256_of_stored_bytes(self):
+        """Test digest is sha256 of stored bytes."""
         manifest = {"b": 1, "a": [2, 3]}
         data = pk.manifest_bytes(manifest)
         self.assertEqual(data, b'{"a":[2,3],"b":1}')
         self.assertEqual(pk.bundle_digest(data), sha256(data).hexdigest())
 
     def test_digest_not_reserialisation(self):
+        """Test digest not reserialisation."""
         # A manifest whose stored bytes are canonical parses to the same
         # object, but the digest contract is explicitly over stored bytes.
         data = b'{"format":"x"}'
@@ -242,11 +266,13 @@ class DigestTests(unittest.TestCase):
         self.assertEqual(reparsed, data)
 
     def test_canonical_form_stable(self):
+        """Test canonical form stable."""
         self.assertEqual(
             pk.manifest_bytes({"z": 1, "a": "x"}), pk.manifest_bytes({"a": "x", "z": 1})
         )
 
     def test_catalog_digest_deterministic_and_contentful(self):
+        """Test catalog digest deterministic and contentful."""
         first = pk.catalog_digest()
         second = pk.catalog_digest()
         self.assertEqual(first, second)
@@ -254,7 +280,10 @@ class DigestTests(unittest.TestCase):
 
 
 class GoldenRoundTripTests(unittest.TestCase):
+    """Golden round trip tests."""
+
     def test_pack_verify_ok_and_deterministic(self):
+        """Test pack verify ok and deterministic."""
         with tempfile.TemporaryDirectory(prefix="c171_gold_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             bundle1, manifest, digest = _pack_to_bytes(report)
@@ -279,6 +308,7 @@ class GoldenRoundTripTests(unittest.TestCase):
             self.assertEqual(report_out["bundle_digest"], digest)
 
     def test_include_files_sealed_under_inputs(self):
+        """Test include files sealed under inputs."""
         with tempfile.TemporaryDirectory(prefix="c171_inc_") as tmpdir:
             tmpdir_path = Path(tmpdir)
             report = _sample_report_dir(tmpdir_path)
@@ -291,6 +321,7 @@ class GoldenRoundTripTests(unittest.TestCase):
             self.assertEqual(report_out["verdict"], "ok")
 
     def test_expect_digest_match_and_mismatch(self):
+        """Test expect digest match and mismatch."""
         with tempfile.TemporaryDirectory(prefix="c171_exp_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             bundle, _, digest = _pack_to_bytes(report)
@@ -303,20 +334,25 @@ class GoldenRoundTripTests(unittest.TestCase):
 
 
 class TamperTests(unittest.TestCase):
+    """Tamper tests."""
+
     @staticmethod
     def _golden() -> bytes:
+        """Golden."""
         with tempfile.TemporaryDirectory(prefix="c171_t_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             bundle, _, _ = _pack_to_bytes(report)
             return bundle
 
     def _verify_failed(self, bundle: bytes, check_id: str) -> None:
+        """Verify failed."""
         report_out = _report_from_bundle(bundle)
         self.assertEqual(report_out["verdict"], "failed")
         statuses = {c["id"]: (c["status"], c["detail"]) for c in report_out["checks"]}
         self.assertEqual(statuses[check_id][0], "failed", check_id)
 
     def test_byte_flip_fails_hashes(self):
+        """Test byte flip fails hashes."""
         bundle = self._golden()
         src = zipfile.ZipFile(io.BytesIO(bundle))
         out = io.BytesIO()
@@ -330,6 +366,7 @@ class TamperTests(unittest.TestCase):
         self._verify_failed(out.getvalue(), "seal_file_hashes")
 
     def test_comment_tamper_fails_digest(self):
+        """Test comment tamper fails digest."""
         bundle = self._golden()
         src = zipfile.ZipFile(io.BytesIO(bundle))
         out = io.BytesIO()
@@ -340,6 +377,7 @@ class TamperTests(unittest.TestCase):
         self._verify_failed(out.getvalue(), "seal_comment_digest")
 
     def test_comment_suffix_fails_digest(self):
+        """Test comment suffix fails digest."""
         bundle = self._golden()
         src = zipfile.ZipFile(io.BytesIO(bundle))
         out = io.BytesIO()
@@ -350,6 +388,7 @@ class TamperTests(unittest.TestCase):
         self._verify_failed(out.getvalue(), "seal_comment_digest")
 
     def test_extra_entry_fails_file_set(self):
+        """Test extra entry fails file set."""
         bundle = self._golden()
         src = zipfile.ZipFile(io.BytesIO(bundle))
         out = io.BytesIO()
@@ -361,18 +400,21 @@ class TamperTests(unittest.TestCase):
         self._verify_failed(out.getvalue(), "seal_file_set")
 
     def test_prepended_bytes_rejected(self):
+        """Test prepended bytes rejected."""
         bundle = self._golden()
         with self.assertRaises(ValueError) as ctx:
             pk.verify_bundle_bytes(b"<html>" + bundle)
         self.assertEqual(str(ctx.exception), "bundle_container_invalid")
 
     def test_trailing_bytes_rejected(self):
+        """Test trailing bytes rejected."""
         bundle = self._golden()
         with self.assertRaises(ValueError) as ctx:
             pk.verify_bundle_bytes(bundle + b"junk")
         self.assertEqual(str(ctx.exception), "bundle_container_invalid")
 
     def test_duplicate_entry_fails_container(self):
+        """Test duplicate entry fails container."""
         bundle = self._golden()
         manifest_raw = _manifest_entry(bundle)
         digest_comment = b"mpl-bundle-sha256:" + pk.bundle_digest(manifest_raw).encode("ascii")
@@ -386,6 +428,7 @@ class TamperTests(unittest.TestCase):
         self.assertEqual(statuses["seal_container"], "failed")
 
     def test_manifest_duplicate_key_rejected(self):
+        """Test manifest duplicate key rejected."""
         manifest_raw = (
             b'{"format":"mpl-bundle/1","format":"mpl-bundle/1",'
             b'"context":{"package_version":"0.1.0","catalog_sha256":"'
@@ -403,6 +446,7 @@ class TamperTests(unittest.TestCase):
         self._verify_failed(out, "seal_manifest_schema")
 
     def test_results_duplicate_decision_key_is_unreadable(self):
+        """Test results duplicate decision key is unreadable."""
         # The bundle path must agree with plain `verify`: a results.json
         # that load_results rejects is unreadable, never ok.
         with tempfile.TemporaryDirectory(prefix="c171_dupk_") as tmpdir:
@@ -415,6 +459,7 @@ class TamperTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "results_duplicate_field")
 
     def test_list_results_json_refused_at_pack(self):
+        """Test list results json refused at pack."""
         with tempfile.TemporaryDirectory(prefix="c171_lst_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             (report / "results.json").write_text("[1, 2]", encoding="utf-8")
@@ -423,6 +468,7 @@ class TamperTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "results_not_an_object")
 
     def test_results_missing_fingerprint_refused(self):
+        """Test results missing fingerprint refused."""
         with tempfile.TemporaryDirectory(prefix="c171_fp_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             data = json.loads((_SAMPLE / "results.json").read_text(encoding="utf-8"))
@@ -434,7 +480,10 @@ class TamperTests(unittest.TestCase):
 
 
 class PackDisciplineTests(unittest.TestCase):
+    """Pack discipline tests."""
+
     def test_symlink_entry_rejected(self):
+        """Test symlink entry rejected."""
         with tempfile.TemporaryDirectory(prefix="c171_sym_") as tmpdir:
             tmpdir_path = Path(tmpdir)
             report = _sample_report_dir(tmpdir_path)
@@ -446,6 +495,7 @@ class PackDisciplineTests(unittest.TestCase):
             self.assertIn(str(ctx.exception), ("pack_entry_unreadable", "pack_entry_not_regular"))
 
     def test_subdirectory_rejected(self):
+        """Test subdirectory rejected."""
         with tempfile.TemporaryDirectory(prefix="c171_dir_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             (report / "nested").mkdir()
@@ -454,6 +504,7 @@ class PackDisciplineTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "pack_subdirectory_not_allowed")
 
     def test_missing_results_refused(self):
+        """Test missing results refused."""
         with tempfile.TemporaryDirectory(prefix="c171_nor_") as tmpdir:
             report = Path(tmpdir) / "report"
             report.mkdir()
@@ -463,6 +514,7 @@ class PackDisciplineTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "pack_results_missing")
 
     def test_include_duplicate_basename_rejected(self):
+        """Test include duplicate basename rejected."""
         with tempfile.TemporaryDirectory(prefix="c171_dbi_") as tmpdir:
             tmpdir_path = Path(tmpdir)
             report = _sample_report_dir(tmpdir_path)
@@ -477,6 +529,7 @@ class PackDisciplineTests(unittest.TestCase):
             self.assertEqual(str(ctx.exception), "pack_include_duplicate")
 
     def test_include_dotdot_basename_rejected(self):
+        """Test include dotdot basename rejected."""
         # Stored include names must be single canonical segments; "..",
         # empty, and separator-bearing names can never become one.
         self.assertFalse(pk._valid_segment(".."))
@@ -486,8 +539,11 @@ class PackDisciplineTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    """Cli tests."""
+
     @staticmethod
     def _run_main(argv: list[str]) -> tuple[int, str, str]:
+        """Run main."""
         from model_protocol_lab.cli import main
 
         stdout, stderr = io.StringIO(), io.StringIO()
@@ -500,6 +556,7 @@ class CliTests(unittest.TestCase):
         return code, stdout.getvalue(), stderr.getvalue()
 
     def test_pack_and_verify_round_trip_cli(self):
+        """Test pack and verify round trip cli."""
         with tempfile.TemporaryDirectory(prefix="c171_cli_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             bundle = Path(tmpdir) / "out.zip"
@@ -511,6 +568,7 @@ class CliTests(unittest.TestCase):
             self.assertIn('"verdict": "ok"', out)
 
     def test_verify_both_or_neither_is_exit_1(self):
+        """Test verify both or neither is exit 1."""
         with tempfile.TemporaryDirectory(prefix="c171_cli2_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             code, _, err = self._run_main(["verify"])
@@ -520,11 +578,13 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 1)
 
     def test_verify_bundle_missing_is_exit_1(self):
+        """Test verify bundle missing is exit 1."""
         code, _, err = self._run_main(["verify", "--bundle", "/nonexistent.zip"])
         self.assertEqual(code, 1)
         self.assertIn("verify: bundle_path_missing", err)
 
     def test_verify_expect_digest_requires_bundle(self):
+        """Test verify expect digest requires bundle."""
         with tempfile.TemporaryDirectory(prefix="c171_cli3_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             code, _, err = self._run_main(["verify", str(report), "--expect-digest", "0" * 64])
@@ -532,6 +592,7 @@ class CliTests(unittest.TestCase):
             self.assertIn("--expect-digest requires --bundle", err)
 
     def test_pack_refuses_output_inside_report_dir(self):
+        """Test pack refuses output inside report dir."""
         with tempfile.TemporaryDirectory(prefix="c171_cli4_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             code, _, err = self._run_main(
@@ -541,6 +602,7 @@ class CliTests(unittest.TestCase):
             self.assertIn("pack: output_inside_report_dir", err)
 
     def test_pack_refuses_existing_output(self):
+        """Test pack refuses existing output."""
         with tempfile.TemporaryDirectory(prefix="c171_cli5_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             bundle = Path(tmpdir) / "out.zip"
@@ -551,6 +613,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(bundle.read_bytes(), b"existing")
 
     def test_hostile_manifest_path_sanitised(self):
+        """Test hostile manifest path sanitised."""
         manifest = {
             "context": {
                 "backend_fingerprint": "x",
@@ -573,7 +636,10 @@ class CliTests(unittest.TestCase):
 
 
 class PackMutationGateTests(unittest.TestCase):
+    """Pack mutation gate tests."""
+
     def _run_gate(self, name, old_text, new_text, scenario):
+        """Run gate."""
         source = Path(pk.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
         mutated = source.replace(old_text, new_text)
@@ -594,6 +660,7 @@ class PackMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _tampered_comment_bundle() -> bytes:
+        """Tampered comment bundle."""
         with tempfile.TemporaryDirectory(prefix="c171_g1_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             bundle, _, _ = _pack_to_bytes(report)
@@ -607,6 +674,7 @@ class PackMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _extra_entry_bundle() -> bytes:
+        """Extra entry bundle."""
         with tempfile.TemporaryDirectory(prefix="c171_g2_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             bundle, _, _ = _pack_to_bytes(report)
@@ -620,7 +688,10 @@ class PackMutationGateTests(unittest.TestCase):
         return out.getvalue()
 
     def test_mutant_comment_digest_ignored_caught(self):
+        """Test mutant comment digest ignored caught."""
+
         def scenario(mod):
+            """Scenario."""
             report_out = mod.verify_bundle_bytes(self._tampered_comment_bundle())
             assert report_out["verdict"] == "failed", report_out
             statuses = {c["id"]: c["status"] for c in report_out["checks"]}
@@ -634,7 +705,10 @@ class PackMutationGateTests(unittest.TestCase):
         )
 
     def test_mutant_file_set_not_checked_caught(self):
+        """Test mutant file set not checked caught."""
+
         def scenario(mod):
+            """Scenario."""
             report_out = mod.verify_bundle_bytes(self._extra_entry_bundle())
             assert report_out["verdict"] == "failed", report_out
             statuses = {c["id"]: c["status"] for c in report_out["checks"]}
@@ -648,7 +722,10 @@ class PackMutationGateTests(unittest.TestCase):
         )
 
     def test_mutant_entry_cap_removed_caught(self):
+        """Test mutant entry cap removed caught."""
+
         def scenario(mod):
+            """Scenario."""
             big = b"\x00" * (pk.MAX_BUNDLE_FILE_BYTES + 1)
             manifest = {
                 "context": {
@@ -692,7 +769,10 @@ class PackMutationGateTests(unittest.TestCase):
         )
 
     def test_mutant_replay_layering_removed_caught(self):
+        """Test mutant replay layering removed caught."""
+
         def scenario(mod):
+            """Scenario."""
             report_out = mod.verify_bundle_bytes(self._tampered_comment_bundle())
             assert report_out["verdict"] == "failed", report_out
             replay = [c for c in report_out["checks"] if not c["id"].startswith("seal_")]

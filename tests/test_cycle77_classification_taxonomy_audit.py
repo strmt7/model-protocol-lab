@@ -82,10 +82,9 @@ def oracle_classify_observation(obs: Any, eos_id: int | None) -> str | None:
                 if token == eos_id:
                     return "eos-without-boundary"
         return "no-boundary-in-N"
-    else:
-        # Boundary found but the answer was wrong: the expected answer never
-        # appeared boundary-delimited within the token cap.
-        return "no-boundary-in-N"
+    # Boundary found but the answer was wrong: the expected answer never
+    # appeared boundary-delimited within the token cap.
+    return "no-boundary-in-N"
 
 
 def oracle_first_boundary(tokens: tuple[int, ...], stop: tuple[int, ...]) -> int | None:
@@ -155,6 +154,7 @@ class ClassifyDifferentialTests(unittest.TestCase):
     """Oracle-vs-implementation over the full field cartesian product."""
 
     def test_differential_over_cartesian_product(self):
+        """Test differential over cartesian product."""
         exacts = [True, False, None, 1]
         founds = [True, False, None]
         mismatches = [True, False, None, 1, "yes"]
@@ -192,6 +192,7 @@ class ClassifyMinimalPairTests(unittest.TestCase):
 
     @staticmethod
     def _obs(**overrides: Any) -> dict[str, Any]:
+        """Obs."""
         obs: dict[str, Any] = {
             "exact_match": False,
             "boundary_found": False,
@@ -204,49 +205,58 @@ class ClassifyMinimalPairTests(unittest.TestCase):
         return obs
 
     def test_failed_status_beats_eos_signal(self):
+        """Test failed status beats eos signal."""
         base = self._obs(output_ids=(1, self.EOS, 2))
         self.assertEqual(classify_observation(base, self.EOS), "eos-without-boundary")
         flipped = self._obs(output_ids=(1, self.EOS, 2), status="failed")
         self.assertEqual(classify_observation(flipped, self.EOS), "backend-error")
 
     def test_cancelled_groups_with_backend_error(self):
+        """Test cancelled groups with backend error."""
         base = self._obs(output_ids=(1, self.EOS, 2))
         self.assertEqual(classify_observation(base, self.EOS), "eos-without-boundary")
         flipped = self._obs(output_ids=(1, self.EOS, 2), status="cancelled")
         self.assertEqual(classify_observation(flipped, self.EOS), "backend-error")
 
     def test_raw_reason_error_alone_is_backend_error(self):
+        """Test raw reason error alone is backend error."""
         base = self._obs(output_ids=(1, self.EOS, 2))
         self.assertEqual(classify_observation(base, self.EOS), "eos-without-boundary")
         flipped = self._obs(output_ids=(1, self.EOS, 2), raw_reason="error")
         self.assertEqual(classify_observation(flipped, self.EOS), "backend-error")
 
     def test_failed_status_beats_text_mismatch(self):
+        """Test failed status beats text mismatch."""
         base = self._obs(boundary_text_match=True)
         self.assertEqual(classify_observation(base, self.EOS), "boundary-text-mismatch")
         flipped = self._obs(boundary_text_match=True, status="failed")
         self.assertEqual(classify_observation(flipped, self.EOS), "backend-error")
 
     def test_cancelled_beats_text_mismatch(self):
+        """Test cancelled beats text mismatch."""
         flipped = self._obs(boundary_text_match=True, status="cancelled")
         self.assertEqual(classify_observation(flipped, self.EOS), "backend-error")
 
     def test_text_mismatch_beats_eos_signal(self):
+        """Test text mismatch beats eos signal."""
         base = self._obs(output_ids=(1, self.EOS, 2))
         self.assertEqual(classify_observation(base, self.EOS), "eos-without-boundary")
         flipped = self._obs(output_ids=(1, self.EOS, 2), boundary_text_match=True)
         self.assertEqual(classify_observation(flipped, self.EOS), "boundary-text-mismatch")
 
     def test_eos_id_none_downgrades_to_no_boundary(self):
+        """Test eos id none downgrades to no boundary."""
         base = self._obs(output_ids=(1, self.EOS, 2))
         self.assertEqual(classify_observation(base, self.EOS), "eos-without-boundary")
         self.assertEqual(classify_observation(base, None), "no-boundary-in-N")
 
     def test_eos_absent_from_ids_is_no_boundary(self):
+        """Test eos absent from ids is no boundary."""
         base = self._obs(output_ids=(1, 2))
         self.assertEqual(classify_observation(base, self.EOS), "no-boundary-in-N")
 
     def test_pass_requires_both_flags(self):
+        """Test pass requires both flags."""
         # boundary found but answer wrong -> not a pass, and not a mismatch:
         # the fallthrough records no-boundary-in-N.
         obs = self._obs(boundary_found=True)
@@ -255,16 +265,19 @@ class ClassifyMinimalPairTests(unittest.TestCase):
         self.assertIsNone(classify_observation(passing, self.EOS))
 
     def test_pass_beats_failed_status(self):
+        """Test pass beats failed status."""
         # Contradictory record (claims pass AND failed status): the docstring
         # contract is "None when it passed".
         obs = self._obs(exact_match=True, boundary_found=True, status="failed")
         self.assertIsNone(classify_observation(obs, self.EOS))
 
     def test_truthy_flags_count_as_pass(self):
+        """Test truthy flags count as pass."""
         obs = self._obs(exact_match=1, boundary_found=1)
         self.assertIsNone(classify_observation(obs, self.EOS))
 
     def test_boundary_text_match_must_be_exactly_true(self):
+        """Test boundary text match must be exactly true."""
         # `is True`, not truthiness: a truthy non-True flag does not diagnose
         # a tokenization mismatch.
         for flag in (1, "yes", [True]):
@@ -279,22 +292,27 @@ class ClassifyAdversarialTests(unittest.TestCase):
     EOS = 99
 
     def test_empty_observation(self):
+        """Test empty observation."""
         self.assertEqual(classify_observation({}, None), "no-boundary-in-N")
 
     def test_empty_observation_with_eos_id(self):
+        """Test empty observation with eos id."""
         self.assertEqual(classify_observation({}, self.EOS), "no-boundary-in-N")
 
     def test_empty_output_ids(self):
+        """Test empty output ids."""
         obs = {"boundary_found": False, "status": "completed", "output_ids": ()}
         self.assertEqual(classify_observation(obs, self.EOS), "no-boundary-in-N")
 
     def test_falsy_output_id_containers(self):
+        """Test falsy output id containers."""
         for ids in (None, (), [], "", 0, False):
             with self.subTest(ids=ids):
                 obs = {"boundary_found": False, "status": "completed", "output_ids": ids}
                 self.assertEqual(classify_observation(obs, self.EOS), "no-boundary-in-N")
 
     def test_contradictory_stop_text_claim_without_stop_ids(self):
+        """Test contradictory stop text claim without stop ids."""
         # The classifier trusts the stored boundary_text_match flag even when
         # no ids are present: the flag is the measurement, ids are context.
         obs = {
@@ -306,12 +324,14 @@ class ClassifyAdversarialTests(unittest.TestCase):
         self.assertEqual(classify_observation(obs, self.EOS), "boundary-text-mismatch")
 
     def test_contradictory_boundary_claim_with_passing_flags(self):
+        """Test contradictory boundary claim with passing flags."""
         # exact+boundary true but no boundary ids at all: still a pass --
         # classification reads the record, it does not re-derive it.
         obs = {"exact_match": True, "boundary_found": True, "output_ids": ()}
         self.assertIsNone(classify_observation(obs, self.EOS))
 
     def test_unicode_fields_never_leak_into_codes(self):
+        """Test unicode fields never leak into codes."""
         obs = {
             "exact_match": False,
             "boundary_found": False,
@@ -324,21 +344,25 @@ class ClassifyAdversarialTests(unittest.TestCase):
         self.assertIn(classify_observation(obs, self.EOS), ALL_MODES)
 
     def test_huge_observation_with_late_eos(self):
+        """Test huge observation with late eos."""
         ids = tuple(range(100_000)) + (self.EOS,)
         obs = {"boundary_found": False, "status": "completed", "output_ids": ids}
         self.assertEqual(classify_observation(obs, self.EOS), "eos-without-boundary")
 
     def test_huge_observation_without_eos(self):
+        """Test huge observation without eos."""
         ids = tuple(i for i in range(100_000) if i != self.EOS)
         obs = {"boundary_found": False, "status": "completed", "output_ids": ids}
         self.assertEqual(classify_observation(obs, self.EOS), "no-boundary-in-N")
 
     def test_non_dict_raises_valueerror(self):
+        """Test non dict raises valueerror."""
         for bad in ("nope", None, 123, [("exact_match", True)], b"bytes"):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 classify_observation(cast(Any, bad), None)
 
     def test_truthy_non_iterable_output_ids_raises_typeerror(self):
+        """Test truthy non iterable output ids raises typeerror."""
         # Documented contract: a truthy non-iterable output_ids raises
         # TypeError from the EOS-membership check.
         obs = {"boundary_found": False, "status": "completed", "output_ids": 123}
@@ -346,14 +370,17 @@ class ClassifyAdversarialTests(unittest.TestCase):
             classify_observation(obs, self.EOS)
 
     def test_truthy_non_iterable_short_circuits_on_pass(self):
+        """Test truthy non iterable short circuits on pass."""
         obs = {"exact_match": True, "boundary_found": True, "output_ids": 123}
         self.assertIsNone(classify_observation(obs, self.EOS))
 
     def test_truthy_non_iterable_short_circuits_on_backend_failure(self):
+        """Test truthy non iterable short circuits on backend failure."""
         obs = {"status": "failed", "output_ids": 123}
         self.assertEqual(classify_observation(obs, self.EOS), "backend-error")
 
     def test_extra_keys_ignored(self):
+        """Test extra keys ignored."""
         obs = {
             "exact_match": False,
             "boundary_found": False,
@@ -366,6 +393,7 @@ class ClassifyAdversarialTests(unittest.TestCase):
 
 
 def _obs_pass() -> dict[str, Any]:
+    """Obs pass."""
     return {
         "exact_match": True,
         "boundary_found": True,
@@ -375,10 +403,12 @@ def _obs_pass() -> dict[str, Any]:
 
 
 def _obs_failed() -> dict[str, Any]:
+    """Obs failed."""
     return {"exact_match": False, "boundary_found": False, "status": "failed", "output_ids": ()}
 
 
 def _obs_mismatch() -> dict[str, Any]:
+    """Obs mismatch."""
     return {
         "exact_match": False,
         "boundary_found": False,
@@ -389,6 +419,7 @@ def _obs_mismatch() -> dict[str, Any]:
 
 
 def _obs_eos(eos: int = 99) -> dict[str, Any]:
+    """Obs eos."""
     return {
         "exact_match": False,
         "boundary_found": False,
@@ -399,6 +430,7 @@ def _obs_eos(eos: int = 99) -> dict[str, Any]:
 
 
 def _obs_no_boundary() -> dict[str, Any]:
+    """Obs no boundary."""
     return {
         "exact_match": False,
         "boundary_found": False,
@@ -409,6 +441,7 @@ def _obs_no_boundary() -> dict[str, Any]:
 
 
 def _entry(name: Any, observations: Any) -> dict[str, Any]:
+    """Entry."""
     return {"format": {"name": name}, "observations": observations}
 
 
@@ -418,6 +451,7 @@ class FailureTaxonomyTests(unittest.TestCase):
     EOS = 99
 
     def test_hand_computed_two_candidates(self):
+        """Test hand computed two candidates."""
         result = {
             "search": [
                 _entry(
@@ -452,6 +486,7 @@ class FailureTaxonomyTests(unittest.TestCase):
         self.assertTrue(tax["eos_id_considered"])
 
     def test_eos_id_none_reclassifies_eos_obs(self):
+        """Test eos id none reclassifies eos obs."""
         # Same observations, eos_id=None: the eos observation drops into
         # no-boundary-in-N and the flag reports the eos id was not considered.
         result = {
@@ -464,6 +499,7 @@ class FailureTaxonomyTests(unittest.TestCase):
         self.assertFalse(tax["eos_id_considered"])
 
     def test_empty_input(self):
+        """Test empty input."""
         tax = failure_taxonomy({"search": []}, None)
         self.assertEqual(tax["modes"], list(FAILURE_MODES))
         self.assertEqual(tax["per_candidate"], {})
@@ -471,11 +507,13 @@ class FailureTaxonomyTests(unittest.TestCase):
         self.assertFalse(tax["eos_id_considered"])
 
     def test_missing_search_key(self):
+        """Test missing search key."""
         tax = failure_taxonomy({"decision": "no_candidate"}, self.EOS)
         self.assertEqual(tax["per_candidate"], {})
         self.assertTrue(tax["eos_id_considered"])
 
     def test_all_failed_input(self):
+        """Test all failed input."""
         result = {
             "search": [_entry("A", [_obs_failed(), _obs_failed(), _obs_failed()])],
             "decision": "failed",
@@ -486,11 +524,13 @@ class FailureTaxonomyTests(unittest.TestCase):
         self.assertEqual(sum(counts.values()), 3)
 
     def test_all_pass_candidate_gets_zero_counts(self):
+        """Test all pass candidate gets zero counts."""
         result = {"search": [_entry("A", [_obs_pass(), _obs_pass()])], "decision": "ambiguous"}
         tax = failure_taxonomy(result, self.EOS)
         self.assertEqual(tax["per_candidate"]["A"], dict.fromkeys(FAILURE_MODES, 0))
 
     def test_non_dict_search_entry_skipped(self):
+        """Test non dict search entry skipped."""
         result = {
             "search": ["junk", None, 42, _entry("A", [_obs_failed()])],
             "decision": "no_candidate",
@@ -499,6 +539,7 @@ class FailureTaxonomyTests(unittest.TestCase):
         self.assertEqual(list(tax["per_candidate"]), ["A"])
 
     def test_entry_without_str_name_skipped(self):
+        """Test entry without str name skipped."""
         result = {
             "search": [
                 {"format": {"name": None}, "observations": [_obs_failed()]},
@@ -513,6 +554,7 @@ class FailureTaxonomyTests(unittest.TestCase):
         self.assertEqual(list(tax["per_candidate"]), ["A"])
 
     def test_non_list_observations_gives_zero_counts(self):
+        """Test non list observations gives zero counts."""
         for bad_obs in (None, "junk", {"not": "a-list"}, 42):
             with self.subTest(bad_obs=bad_obs):
                 result = {"search": [_entry("A", bad_obs)], "decision": "no_candidate"}
@@ -520,16 +562,19 @@ class FailureTaxonomyTests(unittest.TestCase):
                 self.assertEqual(tax["per_candidate"]["A"], dict.fromkeys(FAILURE_MODES, 0))
 
     def test_non_dict_observation_propagates_valueerror(self):
+        """Test non dict observation propagates valueerror."""
         result = {"search": [_entry("A", [_obs_pass(), "junk"])], "decision": "no_candidate"}
         with self.assertRaises(ValueError):
             failure_taxonomy(result, self.EOS)
 
     def test_result_non_dict_raises(self):
+        """Test result non dict raises."""
         for bad in ("nope", None, [1, 2]):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 failure_taxonomy(cast(Any, bad), None)
 
     def test_held_out_divergence_counts_every_non_passing_dict(self):
+        """Test held out divergence counts every non passing dict."""
         result = {
             "search": [_entry("A", [_obs_pass()])],
             "decision": "held_out_failed",
@@ -552,6 +597,7 @@ class FailureTaxonomyTests(unittest.TestCase):
         self.assertEqual(tax["per_candidate"]["A"], dict.fromkeys(FAILURE_MODES, 0))
 
     def test_held_out_absent_without_divergence_decision(self):
+        """Test held out absent without divergence decision."""
         for decision in ("compatible_on_fixture_set", "ambiguous", "no_candidate", "failed"):
             with self.subTest(decision=decision):
                 result = {
@@ -562,6 +608,7 @@ class FailureTaxonomyTests(unittest.TestCase):
                 self.assertIsNone(failure_taxonomy(result, self.EOS)["held_out"])
 
     def test_held_out_failed_without_held_dict_gives_zero_counts(self):
+        """Test held out failed without held dict gives zero counts."""
         # Deliberate asymmetry: held-out counts exist (zeroed) whenever the
         # decision says the stage diverged, even with no held-out records.
         result = {"search": [_entry("A", [_obs_pass()])], "decision": "held_out_failed"}
@@ -570,6 +617,7 @@ class FailureTaxonomyTests(unittest.TestCase):
         self.assertEqual(held, dict.fromkeys(FAILURE_MODES, 0))
 
     def test_held_out_failed_with_non_dict_held(self):
+        """Test held out failed with non dict held."""
         result = {
             "search": [_entry("A", [_obs_pass()])],
             "decision": "held_out_failed",
@@ -580,6 +628,7 @@ class FailureTaxonomyTests(unittest.TestCase):
         self.assertEqual(held, dict.fromkeys(FAILURE_MODES, 0))
 
     def test_counts_keys_cover_all_modes(self):
+        """Test counts keys cover all modes."""
         result = {"search": [_entry("A", [_obs_pass()])], "decision": "no_candidate"}
         tax = failure_taxonomy(result, self.EOS)
         self.assertEqual(set(tax["per_candidate"]["A"]), ALL_MODES)
@@ -594,18 +643,22 @@ class ScriptBackend:
         self._texts = dict(texts) if texts else {}
 
     def decode(self, token_ids: Any) -> str:
+        """Decode."""
         return "".join(self._texts.get(t, f"<{t}>") for t in tuple(token_ids))
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         raise AssertionError("encode unused in classification-audit tests")
 
     @staticmethod
     def generate(*args: Any, **kwargs: Any) -> Any:
+        """Generate."""
         raise AssertionError("generate unused in classification-audit tests")
 
 
 def _audit_fixture(fid: str = "f1", expected: str = "ab") -> Fixture:
+    """Audit fixture."""
     return Fixture(fid, (Message("user", "q-" + fid),), expected, "group-" + fid)
 
 
@@ -613,6 +666,7 @@ class StopCellDifferentialTests(unittest.TestCase):
     """Oracle-vs-implementation over token sequences x boundaries x outcomes."""
 
     def test_differential_over_sequences(self):
+        """Test differential over sequences."""
         backend = ScriptBackend({1: "a", 2: "b", 3: "c"})
         fixture = _audit_fixture()
         alphabet = (1, 2, 3)
@@ -646,14 +700,20 @@ class StopCellFixedTests(unittest.TestCase):
     """Decode degradation, stop-text disposition, pass-rule sharp edges."""
 
     def test_unavailable_outcome_passes_through(self):
+        """Test unavailable outcome passes through."""
         outcome = StopOutcome(False, False, (1, 2), "decode_unavailable")
         cell = _stop_cell(ScriptBackend(), _audit_fixture(), (2,), outcome, stop_text="kept")
         self.assertEqual(cell, {"available": False, "detail": "decode_unavailable"})
 
     def test_decode_exception_degrades_cell(self):
+        """Test decode exception degrades cell."""
+
         class RaisingDecode(ScriptBackend):
+            """Raising decode."""
+
             @staticmethod
             def decode(token_ids: Any) -> str:
+                """Decode."""
                 raise RuntimeError("synthetic decode failure")
 
         outcome = StopOutcome(True, True, (1, 2), "fired_at_step_2")
@@ -661,9 +721,14 @@ class StopCellFixedTests(unittest.TestCase):
         self.assertEqual(cell, {"available": False, "detail": "answer_decode_unavailable"})
 
     def test_decode_non_string_degrades_cell(self):
+        """Test decode non string degrades cell."""
+
         class NonStringDecode(ScriptBackend):
+            """Non string decode."""
+
             @staticmethod
             def decode(token_ids: Any) -> Any:
+                """Decode."""
                 return 12345
 
         outcome = StopOutcome(True, True, (1, 2), "fired_at_step_2")
@@ -671,6 +736,7 @@ class StopCellFixedTests(unittest.TestCase):
         self.assertEqual(cell, {"available": False, "detail": "answer_decode_unavailable"})
 
     def test_stop_text_none_when_not_fired(self):
+        """Test stop text none when not fired."""
         outcome = StopOutcome(True, False, (1, 2), "no_stop_within_cap")
         cell = _stop_cell(
             ScriptBackend({1: "a", 2: "b"}), _audit_fixture(), (3,), outcome, stop_text="kept"
@@ -681,6 +747,7 @@ class StopCellFixedTests(unittest.TestCase):
         self.assertFalse(cell["pass"])
 
     def test_stop_text_passes_through_when_fired(self):
+        """Test stop text passes through when fired."""
         outcome = StopOutcome(True, True, (1, 2), "fired_at_step_2")
         cell = _stop_cell(
             ScriptBackend({1: "a", 2: "b"}),
@@ -693,6 +760,7 @@ class StopCellFixedTests(unittest.TestCase):
         self.assertTrue(cell["pass"])
 
     def test_unicode_stop_text_preserved(self):
+        """Test unicode stop text preserved."""
         outcome = StopOutcome(True, True, (1, 2), "fired_at_step_2")
         cell = _stop_cell(
             ScriptBackend({1: "a", 2: "b"}), _audit_fixture(), (2,), outcome, stop_text="🔥kept"
@@ -700,6 +768,7 @@ class StopCellFixedTests(unittest.TestCase):
         self.assertEqual(cell["stop_text"], "🔥kept")
 
     def test_pass_requires_boundary_even_when_answer_matches(self):
+        """Test pass requires boundary even when answer matches."""
         # answer (1,) decodes to "a" == expected "a", but no boundary in the
         # truncated ids: the pass rule is boundary AND answer, not answer alone.
         outcome = StopOutcome(True, False, (1,), "no_stop_within_cap")
@@ -708,6 +777,7 @@ class StopCellFixedTests(unittest.TestCase):
         self.assertFalse(cell["pass"])
 
     def test_boundary_at_offset_zero(self):
+        """Test boundary at offset zero."""
         # The boundary at offset 0 leaves an empty answer region; with an
         # empty expected answer the cell still passes.
         outcome = StopOutcome(True, True, (2, 1), "fired_at_step_2")
@@ -717,6 +787,7 @@ class StopCellFixedTests(unittest.TestCase):
         self.assertTrue(cell["pass"])
 
     def test_first_boundary_occurrence_wins(self):
+        """Test first boundary occurrence wins."""
         # (2,) occurs at offsets 1 and 3; cutting at the FIRST occurrence
         # leaves answer (1,) -> "a". Cutting at the last would give "aba".
         outcome = StopOutcome(True, True, (1, 2, 1, 2), "fired_at_step_4")
@@ -737,6 +808,7 @@ class TinyBackend(ScriptBackend):
 
 
 def _matrix_observation(**overrides: Any) -> dict[str, Any]:
+    """Matrix observation."""
     obs: dict[str, Any] = {
         "fixture": "f1",
         "input_ids": (),
@@ -750,6 +822,7 @@ def _matrix_observation(**overrides: Any) -> dict[str, Any]:
 
 
 def _matrix_fixture() -> Fixture:
+    """Matrix fixture."""
     # TinyBackend decodes (65, 66) as "AB".
     return _audit_fixture(expected="AB")
 
@@ -765,6 +838,7 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
     """
 
     def test_simple_case_all_agree_with_native(self):
+        """Test simple case all agree with native."""
         rows = stop_matrix(
             TinyBackend(),
             "tiny",
@@ -808,6 +882,7 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
         )
 
     def test_eos_and_stop_fire_flip_cells(self):
+        """Test eos and stop fire flip cells."""
         # Output (65,66,99,33): the EOS at index 2 kills the eos cell; the
         # trailing "!" fires HF/vLLM AFTER the EOS token, so their answers
         # decode to "AB<99>" != "AB".
@@ -836,6 +911,7 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
         self.assertEqual(row["flips"], ["hf_stop_string", "vllm_holdback", "eos_appended"])
 
     def test_vllm_keep_flag_surfaces_kept_disposition(self):
+        """Test vllm keep flag surfaces kept disposition."""
         rows = stop_matrix(
             TinyBackend(),
             "tiny",
@@ -852,6 +928,7 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
         self.assertEqual(row["flips"], [])
 
     def test_unicode_boundary_text(self):
+        """Test unicode boundary text."""
         # Boundary id 8364 decodes to "€": the string cells must work in
         # non-ASCII text, not degrade.
         fixture = _audit_fixture(expected="A")
@@ -881,6 +958,7 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
         self.assertEqual(row["flips"], [])
 
     def test_incomplete_observation_disables_string_cells(self):
+        """Test incomplete observation disables string cells."""
         rows = stop_matrix(
             TinyBackend(),
             "tiny",
@@ -900,6 +978,7 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
         self.assertEqual(row["flips"], [])
 
     def test_non_int_output_ids_are_incomplete(self):
+        """Test non int output ids are incomplete."""
         rows = stop_matrix(
             TinyBackend(),
             "tiny",
@@ -914,6 +993,7 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
                 self.assertFalse(row["cells"][semantic]["available"])
 
     def test_native_is_not_a_cell(self):
+        """Test native is not a cell."""
         # STOP_SEMANTICS[0] == "native" is a label, not a competitor cell.
         rows = stop_matrix(
             TinyBackend(),
@@ -945,6 +1025,7 @@ class StopMatrixWiringTests(unittest.TestCase):
         eos_id: int | None,
         keep_vllm: bool = False,
     ) -> dict[str, Any]:
+        """Predict."""
         output_ids = tuple(obs.get("output_ids") or ())
         prompt_ids = tuple(obs.get("input_ids") or ())
         complete = obs.get("status") == "completed" and all(type(t) is int for t in output_ids)
@@ -981,6 +1062,7 @@ class StopMatrixWiringTests(unittest.TestCase):
         return {"fixture": fixture.id, "native_pass": native_pass, "cells": cells, "flips": flips}
 
     def test_wiring_over_observation_shapes(self):
+        """Test wiring over observation shapes."""
         backend = TinyBackend()
         fixture = _matrix_fixture()
         shapes = [
@@ -1019,6 +1101,7 @@ class StopMatrixValidationTests(unittest.TestCase):
 
     @staticmethod
     def _good_args() -> dict[str, Any]:
+        """Good args."""
         return {
             "backend": TinyBackend(),
             "candidate_name": "tiny",
@@ -1028,6 +1111,7 @@ class StopMatrixValidationTests(unittest.TestCase):
         }
 
     def _run(self, **overrides: Any) -> Any:
+        """Run."""
         args = self._good_args()
         args.update(overrides)
         backend = args.pop("backend")
@@ -1041,6 +1125,7 @@ class StopMatrixValidationTests(unittest.TestCase):
         )
 
     def test_rejects_bad_inputs(self):
+        """Test rejects bad inputs."""
         cases: list[tuple[str, dict[str, Any]]] = [
             ("blank name", {"candidate_name": ""}),
             ("non-str name", {"candidate_name": 42}),
@@ -1065,13 +1150,19 @@ class StopMatrixValidationTests(unittest.TestCase):
                 self._run(**overrides)
 
     def test_fixture_observation_alignment_mismatch(self):
+        """Test fixture observation alignment mismatch."""
         with self.assertRaises(ValueError):
             self._run(observations=(_matrix_observation(fixture="other"),))
 
     def test_undecodable_boundary_disables_string_cells(self):
+        """Test undecodable boundary disables string cells."""
+
         class NoBoundaryText(TinyBackend):
+            """No boundary text."""
+
             # skipcq: PYL-R0201 - zero-arg super() requires an instance method
             def decode(self, token_ids: Any) -> Any:
+                """Decode."""
                 if tuple(token_ids) == (33,):
                     return ""
                 return super().decode(token_ids)

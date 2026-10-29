@@ -69,6 +69,7 @@ class PeakEstimateTests(unittest.TestCase):
     """The byte-budget arithmetic, pinned against the design formula."""
 
     def test_formula_terms(self) -> None:
+        """Test formula terms."""
         # logits 4*rows*L*vocab; scores 8*rows*heads*L^2 (matmul and
         # softmax outputs co-live); additive mask 4*rows*L^2.
         self.assertEqual(backends._batch_peak_bytes(2, 10, 64, 2), 5120 + 3200 + 800)
@@ -76,9 +77,11 @@ class PeakEstimateTests(unittest.TestCase):
         self.assertEqual(backends._batch_peak_bytes(3, 7, 128, 4), 10752 + 4704 + 588)
 
     def test_budget_constant(self) -> None:
+        """Test budget constant."""
         self.assertEqual(backends._BATCH_FORWARD_BYTE_BUDGET, 1 << 33)
 
     def test_default_caller_scale_fits(self) -> None:
+        """Test default caller scale fits."""
         # The audit's default caller scale (100-fixture split,
         # paragraph prompts, GPT-2 vocab) must sit under the budget:
         # the bound refuses pathological shapes, not ordinary runs.
@@ -107,6 +110,7 @@ class _StubBackend:
         seed: int,
         cancel: Event,
     ) -> Generation:
+        """Generate."""
         # The stage keys solo failures by prompt id via its own loop;
         # here the prompt content encodes the id (see stage tests).
         if input_ids and input_ids[0] == 99:
@@ -121,6 +125,7 @@ class _StubBackend:
         seed: int,
         cancel: Event,
     ) -> tuple[tuple[int, ...], ...]:
+        """Generate batch."""
         self.batch_calls += 1
         self.fed = prompts
         if self.batch_error is not None:
@@ -132,6 +137,7 @@ class StageFeedingTests(unittest.TestCase):
     """F1 regression: the stage feeds the batch path evaluable rows only."""
 
     def test_solo_failed_prompt_is_not_fed(self) -> None:
+        """Test solo failed prompt is not fed."""
         backend = _StubBackend()
         payload = experiments.batch_stage(
             backend,  # type: ignore[arg-type]
@@ -147,6 +153,7 @@ class StageFeedingTests(unittest.TestCase):
         self.assertEqual(payload["verdict"], "batch_invariant")
 
     def test_all_solo_failed_skips_the_batch_call(self) -> None:
+        """Test all solo failed skips the batch call."""
         backend = _StubBackend(batch_error=RuntimeError("must not be called"))
         payload = experiments.batch_stage(
             backend,  # type: ignore[arg-type]
@@ -161,6 +168,7 @@ class StageFeedingTests(unittest.TestCase):
         self.assertIsNone(payload["divergence_rate"])
 
     def test_size_refusal_keeps_its_own_detail(self) -> None:
+        """Test size refusal keeps its own detail."""
         backend = _StubBackend(batch_error=ValueError("batch_size_exceeded"))
         payload = experiments.batch_stage(
             backend,  # type: ignore[arg-type]
@@ -171,6 +179,7 @@ class StageFeedingTests(unittest.TestCase):
         self.assertEqual(payload, {"available": False, "detail": "batch_size_exceeded"})
 
     def test_other_value_error_is_batch_failed(self) -> None:
+        """Test other value error is batch failed."""
         backend = _StubBackend(batch_error=ValueError("context_limit_exceeded"))
         payload = experiments.batch_stage(
             backend,  # type: ignore[arg-type]
@@ -190,6 +199,7 @@ class BatchPathTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        """Set up the test fixture."""
         tmp = TemporaryDirectory()
         cls.addClassCleanup(tmp.cleanup)
         cls.root = Path(tmp.name) / "ckpt"
@@ -198,14 +208,17 @@ class BatchPathTests(unittest.TestCase):
         cls.backend = backends.LocalHFBackend(cls.root, device="cpu", max_context=64)
 
     def solo(self, prompt: tuple[int, ...], cap: int) -> tuple[int, ...]:
+        """Solo."""
         generation = self.backend.generate(prompt, max_new_tokens=cap, seed=0, cancel=Event())
         self.assertEqual(generation.reason, "limit")
         return generation.token_ids
 
     def batch(self, prompts: tuple[tuple[int, ...], ...], cap: int) -> tuple[tuple[int, ...], ...]:
+        """Batch."""
         return self.backend.generate_batch(prompts, max_new_tokens=cap, seed=0, cancel=Event())
 
     def test_equivalence_sizes_and_mixed_lengths(self) -> None:
+        """Test equivalence sizes and mixed lengths."""
         pool = [(1,), (2, 3), (0,), (0, 0, 5), (7, 0, 9, 11, 13)]
         for size in (1, 2, 3, 5):
             prompts = tuple(pool[:size])
@@ -216,6 +229,7 @@ class BatchPathTests(unittest.TestCase):
                     self.assertEqual(row, self.solo(prompt, 5))
 
     def test_equivalence_32_rows(self) -> None:
+        """Test equivalence 32 rows."""
         prompts = tuple((i % 61 + 1,) * (i % 8 + 1) for i in range(32))
         result = self.batch(prompts, 4)
         self.assertEqual(len(result), 32)
@@ -223,6 +237,7 @@ class BatchPathTests(unittest.TestCase):
             self.assertEqual(row, self.solo(prompt, 4))
 
     def test_permutation_invariance(self) -> None:
+        """Test permutation invariance."""
         prompts = ((3, 1), (9,), (0, 4, 4), (17, 2))
         forward = self.batch(prompts, 4)
         backward = self.batch(tuple(reversed(prompts)), 4)
@@ -231,6 +246,7 @@ class BatchPathTests(unittest.TestCase):
             self.assertEqual(row, self.solo(prompt, 4))
 
     def test_output_shape_contract(self) -> None:
+        """Test output shape contract."""
         result = self.batch(((5, 5), (1,)), 3)
         self.assertIs(type(result), tuple)
         for row in result:
@@ -242,6 +258,7 @@ class BatchPathTests(unittest.TestCase):
                 self.assertLess(token, 64)
 
     def test_one_forward_per_step_over_the_whole_batch(self) -> None:
+        """Test one forward per step over the whole batch."""
         # I3 anti-theater: a wrapper that secretly looped solo calls
         # would show len(prompts) forwards per step with width-1 rows;
         # the real path shows one forward per step whose width grows
@@ -250,6 +267,7 @@ class BatchPathTests(unittest.TestCase):
         original = self.backend._model.forward
 
         def counting(*args: Any, **kwargs: Any) -> Any:
+            """Counting."""
             shapes.append(tuple(kwargs["input_ids"].shape))
             return original(*args, **kwargs)
 
@@ -259,6 +277,7 @@ class BatchPathTests(unittest.TestCase):
         self.assertEqual(len(result), 3)
 
     def test_head_count_falls_back_to_gpt2_n_head(self) -> None:
+        """Test head count falls back to gpt2 n head."""
         # GPT-2 configs name the query-head count n_head; a config
         # view hiding the unified name must still size the bound
         # (transformers v5 aliases the two names inside
@@ -271,6 +290,7 @@ class BatchPathTests(unittest.TestCase):
         self.assertEqual(result, (expected,))
 
     def test_config_without_any_head_count_fails_closed(self) -> None:
+        """Test config without any head count fails closed."""
         view = _ConfigView(
             self.backend._model.config, hide=frozenset({"num_attention_heads", "n_head"})
         )
@@ -282,6 +302,7 @@ class BatchPathTests(unittest.TestCase):
         self.assertEqual(str(caught.exception), "local_batch_failed")
 
     def test_wrappers_do_not_forward_the_batch_path(self) -> None:
+        """Test wrappers do not forward the batch path."""
         # Deliberate: the wrappers' solo contract rewrites inputs the
         # batch path would bypass, so they stay batch_unsupported.
         truncated = backends.TruncatedPromptBackend(self.backend, 4)
@@ -290,6 +311,7 @@ class BatchPathTests(unittest.TestCase):
         self.assertFalse(callable(getattr(healing, "generate_batch", None)))
 
     def test_stage_end_to_end_on_the_real_backend(self) -> None:
+        """Test stage end to end on the real backend."""
         payload = experiments.batch_stage(
             self.backend, {"a": (1, 2, 3), "b": (4, 5)}, max_new_tokens=4, seed=0
         )
@@ -298,6 +320,7 @@ class BatchPathTests(unittest.TestCase):
         self.assertEqual(payload["verdict"], "batch_invariant")
 
     def test_cli_probe_records_the_available_payload(self) -> None:
+        """Test cli probe records the available payload."""
         # The probe composition -- render with the first candidate's
         # format, encode on the real backend, run the real stage --
         # pinned end-to-end: cycle 153 pins the probe with a scripted
@@ -338,6 +361,7 @@ class BatchValidationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        """Set up the test fixture."""
         tmp = TemporaryDirectory()
         cls.addClassCleanup(tmp.cleanup)
         cls.root = Path(tmp.name) / "ckpt"
@@ -346,16 +370,19 @@ class BatchValidationTests(unittest.TestCase):
         cls.backend = backends.LocalHFBackend(cls.root, device="cpu", max_context=64)
 
     def call(self, prompts: Any, **overrides: Any) -> tuple[tuple[int, ...], ...]:
+        """Call."""
         kwargs: dict[str, Any] = {"max_new_tokens": 2, "seed": 0, "cancel": Event()}
         kwargs.update(overrides)
         return self.backend.generate_batch(prompts, **kwargs)
 
     def assert_code(self, code: str, prompts: Any, **overrides: Any) -> None:
+        """Assert code."""
         with self.assertRaises((ValueError, RuntimeError)) as caught:
             self.call(prompts, **overrides)
         self.assertEqual(str(caught.exception), code)
 
     def test_invalid_input_ids(self) -> None:
+        """Test invalid input ids."""
         cases = [
             [(1, 2)],  # container is a list, not a tuple
             ([1, 2],),  # a prompt that is a list
@@ -372,6 +399,7 @@ class BatchValidationTests(unittest.TestCase):
                 self.assert_code("invalid_input_ids", prompts)
 
     def test_invalid_cap_seed_cancel(self) -> None:
+        """Test invalid cap seed cancel."""
         for cap in (True, 0, -1, 4097, "3", 2.0):
             with self.subTest(cap=cap):
                 self.assert_code("invalid_output_cap", ((1,),), max_new_tokens=cap)
@@ -383,6 +411,7 @@ class BatchValidationTests(unittest.TestCase):
                 self.assert_code("invalid_cancellation_event", ((1,),), cancel=cancel)
 
     def test_precedence_multi_violation(self) -> None:
+        """Test precedence multi violation."""
         # Bad ids beat a bad cap; a bad cap beats a bad seed; a
         # pre-set cancel beats the context check (solo's order).
         self.assert_code("invalid_input_ids", ((999,),), max_new_tokens=0)
@@ -392,6 +421,7 @@ class BatchValidationTests(unittest.TestCase):
         self.assert_code("local_batch_cancelled", ((1,) * 70,), cancel=cancel)
 
     def test_cancel_pre_set(self) -> None:
+        """Test cancel pre set."""
         cancel = Event()
         cancel.set()
         with self.assertRaises(RuntimeError) as caught:
@@ -399,12 +429,14 @@ class BatchValidationTests(unittest.TestCase):
         self.assertEqual(str(caught.exception), "local_batch_cancelled")
 
     def test_context_limit(self) -> None:
+        """Test context limit."""
         self.assert_code("context_limit_exceeded", ((1,) * 63,), max_new_tokens=2)
         # Exactly at the limit is allowed.
         result = self.call(((1,) * 62,), max_new_tokens=2)
         self.assertEqual(len(result), 1)
 
     def test_empty_batch(self) -> None:
+        """Test empty batch."""
         self.assertEqual(self.call(()), ())
         self.assert_code("invalid_output_cap", (), max_new_tokens=0)
         cancel = Event()
@@ -412,6 +444,7 @@ class BatchValidationTests(unittest.TestCase):
         self.assert_code("local_batch_cancelled", (), cancel=cancel)
 
     def test_unready_backend(self) -> None:
+        """Test unready backend."""
         backend = backends.LocalHFBackend(self.root, device="cpu", max_context=64)
         backend._model = None
         backend._tokenizer = None
@@ -424,6 +457,7 @@ class BatchValidationTests(unittest.TestCase):
         self.assertEqual(str(caught.exception), "local_backend_not_initialized")
 
     def test_size_bound_refusal_and_boundary(self) -> None:
+        """Test size bound refusal and boundary."""
         prompts = ((1, 2), (3,))
         peak = backends._batch_peak_bytes(2, 2 + 3, 64, 2)
         with patch.object(backends, "_BATCH_FORWARD_BYTE_BUDGET", peak - 1):
@@ -433,10 +467,12 @@ class BatchValidationTests(unittest.TestCase):
             self.assertEqual(len(result), 2)
 
     def test_size_refusal_happens_before_any_forward(self) -> None:
+        """Test size refusal happens before any forward."""
         calls: list[int] = []
         original = self.backend._model.forward
 
         def counting(*args: Any, **kwargs: Any) -> Any:
+            """Counting."""
             calls.append(1)
             return original(*args, **kwargs)
 
@@ -484,6 +520,7 @@ class _CountingEvent(Event):
         self._true_after = true_after
 
     def is_set(self) -> bool:
+        """Is set."""
         self._calls += 1
         return self._calls > self._true_after or super().is_set()
 
@@ -497,6 +534,7 @@ class BatchFailureTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        """Set up the test fixture."""
         tmp = TemporaryDirectory()
         cls.addClassCleanup(tmp.cleanup)
         cls.root = Path(tmp.name) / "ckpt"
@@ -505,6 +543,7 @@ class BatchFailureTests(unittest.TestCase):
         cls.backend = backends.LocalHFBackend(cls.root, device="cpu", max_context=64)
 
     def test_cancel_seen_at_the_post_acquire_check(self) -> None:
+        """Test cancel seen at the post acquire check."""
         # Checks in order: pre-validation (1), lock poll (2),
         # post-acquire (3). Turning True at the third check must
         # raise before any forward runs.
@@ -514,6 +553,7 @@ class BatchFailureTests(unittest.TestCase):
         self.assertEqual(str(caught.exception), "local_batch_cancelled")
 
     def test_cancel_seen_at_a_later_step_pre_forward_check(self) -> None:
+        """Test cancel seen at a later step pre forward check."""
         # Checks 4 and 5 are step 0's pre- and post-forward checks;
         # check 6 is step 1's pre-forward check. Turning True there
         # must still raise the cancelled code with no partial result.
@@ -523,6 +563,7 @@ class BatchFailureTests(unittest.TestCase):
         self.assertEqual(str(caught.exception), "local_batch_cancelled")
 
     def test_cancel_during_first_forward(self) -> None:
+        """Test cancel during first forward."""
         # Cancel raised inside the inference try surfaces as the
         # cancelled code, never eaten by the failure conversion, and
         # no partial rows are returned (the call raises).
@@ -530,6 +571,7 @@ class BatchFailureTests(unittest.TestCase):
         original = self.backend._model.forward
 
         def cancelling(*args: Any, **kwargs: Any) -> Any:
+            """Cancelling."""
             result = original(*args, **kwargs)
             cancel.set()
             return result
@@ -542,10 +584,12 @@ class BatchFailureTests(unittest.TestCase):
         self.assertEqual(str(caught.exception), "local_batch_cancelled")
 
     def test_cancel_while_waiting_for_the_lock(self) -> None:
+        """Test cancel while waiting for the lock."""
         cancel = Event()
         captured: list[BaseException] = []
 
         def run() -> None:
+            """Run."""
             try:
                 self.backend.generate_batch(((1, 2),), max_new_tokens=2, seed=0, cancel=cancel)
             except BaseException as exc:  # noqa: BLE001 -- captured for assertion
@@ -565,7 +609,10 @@ class BatchFailureTests(unittest.TestCase):
         self.assertEqual(str(captured[0]), "local_batch_cancelled")
 
     def test_raising_forward_becomes_the_fixed_code(self) -> None:
+        """Test raising forward becomes the fixed code."""
+
         def boom(*args: Any, **kwargs: Any) -> Any:
+            """Boom."""
             raise RuntimeError("raw torch complaint with internals")
 
         with (
@@ -576,9 +623,11 @@ class BatchFailureTests(unittest.TestCase):
         self.assertEqual(str(caught.exception), "local_batch_failed")
 
     def test_non_finite_logits_fail_the_batch(self) -> None:
+        """Test non finite logits fail the batch."""
         import torch
 
         def nan_forward(*args: Any, **kwargs: Any) -> Any:
+            """Nan forward."""
             rows = kwargs["input_ids"].shape[0]
             logits = torch.full((rows, 3, 64), float("nan"))
             return SimpleNamespace(logits=logits)
@@ -591,9 +640,11 @@ class BatchFailureTests(unittest.TestCase):
         self.assertEqual(str(caught.exception), "local_batch_failed")
 
     def test_mis_shaped_logits_fail_the_batch(self) -> None:
+        """Test mis shaped logits fail the batch."""
         import torch
 
         def short_forward(*args: Any, **kwargs: Any) -> Any:
+            """Short forward."""
             rows = kwargs["input_ids"].shape[0]
             logits = torch.zeros((rows, 3, 63))
             return SimpleNamespace(logits=logits)

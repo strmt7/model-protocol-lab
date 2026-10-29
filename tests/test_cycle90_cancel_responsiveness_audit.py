@@ -99,6 +99,7 @@ def make_split(n_search: int, n_held: int) -> Split:
     """Fixtures whose answers decode to "" under the null codec below."""
 
     def fx(prefix: str, i: int) -> Fixture:
+        """Fx."""
         return Fixture(
             id=f"{prefix}-{i}",
             messages=(Message("user", f"q-{prefix}-{i}"),),
@@ -121,10 +122,12 @@ class SlowCooperativeBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return (1, 2, 3)
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return ""
 
     @staticmethod
@@ -135,6 +138,7 @@ class SlowCooperativeBackend:
         seed: int,
         cancel: Event,
     ) -> Generation:
+        """Generate."""
         if not isinstance(cancel, Event):
             return Generation((), "error", "invalid_cancellation_event")
         if cancel.is_set():
@@ -165,10 +169,12 @@ class SlowLogprobBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(ord(c) for c in text)
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(chr(i) for i in token_ids)
 
     @staticmethod
@@ -179,9 +185,11 @@ class SlowLogprobBackend:
         seed: int,
         cancel: Event,
     ) -> Generation:
+        """Generate."""
         raise AssertionError("logprob_diagnostic never calls generate")
 
     def forward_logits(self, input_ids: tuple[int, ...]) -> list[list[float]]:
+        """Forward logits."""
         self.forward_calls += 1
         if self._cancel is not None and self.forward_calls == 1:
             self._cancel.set()
@@ -218,11 +226,13 @@ class CancelWiringTest(unittest.TestCase):
     """Pin the cancel-event call graph: which functions accept the event."""
 
     def test_cancel_param_present_where_model_compute_runs(self) -> None:
+        """Test cancel param present where model compute runs."""
         for func in (run_experiment, evaluate, prompt_sensitivity_sweep, logprob_diagnostic):
             with self.subTest(func=func.__name__):
                 self.assertIn("cancel", inspect.signature(func).parameters)
 
     def test_logprob_diagnostic_rejects_non_event_cancel(self) -> None:
+        """Test logprob diagnostic rejects non event cancel."""
         result, fixtures = make_diag_inputs()
         with self.assertRaises(ValueError):
             logprob_diagnostic(
@@ -237,6 +247,7 @@ class RunExperimentResponsivenessTest(unittest.TestCase):
     """Measure that run_experiment honors a mid-run cancel promptly."""
 
     def test_cancel_returns_well_before_uncancelled_runtime(self) -> None:
+        """Test cancel returns well before uncancelled runtime."""
         split = make_split(1, 1)
         nominal = 2 * GEN_SECONDS  # one search generate + one held-out generate
 
@@ -284,6 +295,7 @@ class RunExperimentResponsivenessTest(unittest.TestCase):
         self.assertEqual(observations[-1]["status"], "cancelled")
 
     def test_cancelled_decision_shape(self) -> None:
+        """Test cancelled decision shape."""
         cancel = Event()
         cancel.set()  # pre-set: the run must not do any real work
         result = run_experiment(
@@ -305,6 +317,7 @@ class RunExperimentResponsivenessTest(unittest.TestCase):
         self.assertEqual(result["search"][0]["observations"], [])
 
     def test_evaluate_preset_cancel_never_generates(self) -> None:
+        """Test evaluate preset cancel never generates."""
         backend = SlowCooperativeBackend()
         cancel = Event()
         cancel.set()
@@ -327,6 +340,7 @@ class LogprobDiagnosticCancelTest(unittest.TestCase):
     """The cycle-90 bug: logprob_diagnostic ignored cancellation entirely."""
 
     def test_preset_cancel_scores_nothing(self) -> None:
+        """Test preset cancel scores nothing."""
         backend = SlowLogprobBackend(forward_seconds=0.25)
         cancel = Event()
         cancel.set()
@@ -341,6 +355,7 @@ class LogprobDiagnosticCancelTest(unittest.TestCase):
         self.assertEqual(diag["candidates"], [])
 
     def test_mid_run_cancel_stops_at_next_fixture(self) -> None:
+        """Test mid run cancel stops at next fixture."""
         # Deterministic: the backend sets the event during its first forward.
         cancel = Event()
         backend = SlowLogprobBackend(forward_seconds=0.25, cancel=cancel)
@@ -354,6 +369,7 @@ class LogprobDiagnosticCancelTest(unittest.TestCase):
         self.assertEqual(diag["candidates"], [])
 
     def test_no_cancel_runs_to_completion_unchanged(self) -> None:
+        """Test no cancel runs to completion unchanged."""
         backend = SlowLogprobBackend(forward_seconds=0.05)
         result, fixtures = make_diag_inputs(3)
         diag = logprob_diagnostic(backend, result, fixtures)
@@ -367,6 +383,7 @@ class SensitivitySweepDrainTest(unittest.TestCase):
     """The sweep forwards cancel to every nested run_experiment."""
 
     def test_preset_cancel_drains_promptly(self) -> None:
+        """Test preset cancel drains promptly."""
         cancel = Event()
         cancel.set()
         start = time.perf_counter()
@@ -391,6 +408,7 @@ class DeliberateExclusionsTest(unittest.TestCase):
     """
 
     def test_no_cancel_plumbing_by_design(self) -> None:
+        """Test no cancel plumbing by design."""
         for func in (
             run_debug,
             doctor,

@@ -59,6 +59,7 @@ class _MTBackend:
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -70,9 +71,12 @@ class _MTBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.calls += 1
         if self.mode == "explode":
             raise RuntimeError("boom")
@@ -132,6 +136,7 @@ class _MTBackend:
 
 
 def _payload(backend=None, formats=FORMATS, seed=0, **stage_kwargs):
+    """Payload."""
     backend = backend if backend is not None else _MTBackend()
     stage_kwargs.setdefault("max_context", 8192)
     stage = experiments.multiturn_stage(
@@ -145,6 +150,7 @@ def _payload(backend=None, formats=FORMATS, seed=0, **stage_kwargs):
 
 
 def _record(fixture_id, family, depth, verdicts, details=None):
+    """Record."""
     cells = {}
     cell_details = {}
     for arm in multiturn.ARMS:
@@ -178,7 +184,10 @@ def _depth_records(depth, patterns):
 
 
 class TestGenerator(unittest.TestCase):
+    """Test generator."""
+
     def test_constants(self):
+        """Test constants."""
         self.assertEqual(multiturn.FAMILIES, ("ledger", "shelf"))
         self.assertEqual(multiturn.DEPTHS, (2, 3))
         self.assertEqual(multiturn.FIXTURES_PER_FAMILY_DEPTH, 12)
@@ -193,6 +202,7 @@ class TestGenerator(unittest.TestCase):
         self.assertEqual(per_candidate * 24, multiturn.GENERATION_BUDGET)
 
     def test_fixture_set_shape(self):
+        """Test fixture set shape."""
         fixtures = multiturn.generate_fixtures(0)
         self.assertEqual(len(fixtures), 48)
         ids = [f["fixture_id"] for f in fixtures]
@@ -204,6 +214,7 @@ class TestGenerator(unittest.TestCase):
             )
 
     def test_deterministic_and_seed_sensitive(self):
+        """Test deterministic and seed sensitive."""
         self.assertEqual(multiturn.generate_fixtures(7), multiturn.generate_fixtures(7))
         self.assertNotEqual(multiturn.generate_fixtures(7), multiturn.generate_fixtures(8))
         self.assertNotEqual(multiturn.ground_sha256(7), multiturn.ground_sha256(8))
@@ -217,6 +228,7 @@ class TestGenerator(unittest.TestCase):
         )
 
     def test_ledger_construction(self):
+        """Test ledger construction."""
         for seed in range(30):
             for fixture in multiturn.generate_fixtures(seed):
                 if fixture["family"] != "ledger":
@@ -237,6 +249,7 @@ class TestGenerator(unittest.TestCase):
                 self.assertTrue(text.endswith("What is the ledger total?"))
 
     def test_shelf_construction(self):
+        """Test shelf construction."""
         for seed in range(30):
             for fixture in multiturn.generate_fixtures(seed):
                 if fixture["family"] != "shelf":
@@ -252,6 +265,7 @@ class TestGenerator(unittest.TestCase):
                 self.assertTrue(text.endswith("Answer with the shelf label."))
 
     def test_entries_are_str_int_form(self):
+        """Test entries are str int form."""
         # No sign-prefix or zero-padded spellings: a "+42" style
         # against a str(int) expected would manufacture a form
         # trap (red-team B's correction to A8).
@@ -262,7 +276,10 @@ class TestGenerator(unittest.TestCase):
 
 
 class TestStage(unittest.TestCase):
+    """Test stage."""
+
     def test_perfect_backend_all_pass(self):
+        """Test perfect backend all pass."""
         backend = _MTBackend()
         payload = _payload(backend)
         self.assertTrue(payload["available"])
@@ -284,6 +301,7 @@ class TestStage(unittest.TestCase):
                 self.assertFalse(selection["withheld"])
 
     def test_drift_backend_classifies_self_history_drift(self):
+        """Test drift backend classifies self history drift."""
         payload = _payload(_MTBackend(mode="drift"), formats=FORMATS[:1])
         entry = payload["candidates"]["mt-a"]
         self.assertEqual(entry["classification"], "self_history_drift")
@@ -297,6 +315,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(block["pass_rates"]["sharded"], 0.0)
 
     def test_forged_history_is_screened(self):
+        """Test forged history is screened."""
         payload = _payload(_MTBackend(mode="forge"), formats=FORMATS[:1])
         entry = payload["candidates"]["mt-a"]
         for record in entry["records"]:
@@ -312,6 +331,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(selection["decision"], "unavailable")
 
     def test_empty_intermediate_flagged_not_fatal(self):
+        """Test empty intermediate flagged not fatal."""
         payload = _payload(_MTBackend(mode="empty"), formats=FORMATS[:1])
         entry = payload["candidates"]["mt-a"]
         for record in entry["records"]:
@@ -321,6 +341,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(entry["classification"], "no_drift")
 
     def test_unbounded_intermediate_flagged(self):
+        """Test unbounded intermediate flagged."""
         payload = _payload(_MTBackend(mode="noboundary"), formats=FORMATS[:1])
         entry = payload["candidates"]["mt-a"]
         for record in entry["records"]:
@@ -330,6 +351,7 @@ class TestStage(unittest.TestCase):
             self.assertFalse(cell["verdict"])
 
     def test_context_exceeded_cells(self):
+        """Test context exceeded cells."""
         payload = _payload(_MTBackend(), formats=FORMATS[:1], max_context=4)
         self.assertTrue(payload["available"])
         entry = payload["candidates"]["mt-a"]
@@ -340,6 +362,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(entry["classification"], "insufficient_evidence")
 
     def test_cancel_pre_set_fails_closed(self):
+        """Test cancel pre set fails closed."""
         event = threading.Event()
         event.set()
         payload = _payload(_MTBackend(), formats=FORMATS[:1], cancel=event)
@@ -348,6 +371,7 @@ class TestStage(unittest.TestCase):
         self.assertNotIn("candidates", payload)
 
     def test_cancel_mid_run_is_cancelled_not_evaluation_failure(self):
+        """Test cancel mid run is cancelled not evaluation failure."""
         # S3 pin: a cancel observed after an evaluate returns is
         # a cancellation, never an arm_evaluation_failed cell.
         event = threading.Event()
@@ -358,6 +382,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(payload["detail"], "cancelled")
 
     def test_stage_rejects_bad_arguments(self):
+        """Test stage rejects bad arguments."""
         backend = _MTBackend()
         with self.assertRaises(ValueError):
             experiments.multiturn_stage(backend, [], boundary=(1,), max_context=100)
@@ -366,19 +391,24 @@ class TestStage(unittest.TestCase):
 
 
 class TestAggregateClassify(unittest.TestCase):
+    """Test aggregate classify."""
+
     @staticmethod
     def _classify(patterns_by_depth):
+        """Classify."""
         records = []
         for depth, patterns in patterns_by_depth.items():
             records.extend(_depth_records(depth, patterns))
         return multiturn.aggregate_candidate(records)
 
     def test_no_discordance_is_no_drift(self):
+        """Test no discordance is no drift."""
         patterns = [(True, True, True)] * 12
         out = self._classify({2: patterns, 3: patterns})
         self.assertEqual(out["classification"], "no_drift")
 
     def test_single_drift_pair_is_below_threshold(self):
+        """Test single drift pair is below threshold."""
         # A2 row 1: one sharded-only failure routes to
         # below_threshold, never to self_history_drift.
         patterns = [(True, True, True)] * 11 + [(True, False, True)]
@@ -390,6 +420,7 @@ class TestAggregateClassify(unittest.TestCase):
         self.assertEqual(block["self_history"]["sc_only"], 0)
 
     def test_scripted_discordance_is_framing_only(self):
+        """Test scripted discordance is framing only."""
         # A2 row 2: the scripted control discordant while the
         # sharded arm is below its own bar is a framing effect.
         patterns = [(True, True, True)] * 9 + [(True, True, False)] * 3
@@ -400,6 +431,7 @@ class TestAggregateClassify(unittest.TestCase):
         self.assertEqual(block["scripted_contrast"]["drift"], 3)
 
     def test_drift_dominant_is_self_history_drift(self):
+        """Test drift dominant is self history drift."""
         patterns = [(True, True, True)] * 7 + [(True, False, True)] * 3
         patterns.append((True, True, False))  # scripted-only failure
         patterns.append((False, True, True))  # full fails: not a full-passer
@@ -412,18 +444,21 @@ class TestAggregateClassify(unittest.TestCase):
         self.assertEqual(block["self_history"]["net_excess"], 2)
 
     def test_balanced_discordance_is_framing_only(self):
+        """Test balanced discordance is framing only."""
         patterns = [(True, True, True)] * 8 + [(True, False, True)] * 2
         patterns += [(True, True, False)] * 2
         out = self._classify({2: patterns, 3: [(True, True, True)] * 12})
         self.assertEqual(out["classification"], "framing_only")
 
     def test_below_floor_is_insufficient_evidence(self):
+        """Test below floor is insufficient evidence."""
         patterns = [(True, True, True)] * 5 + [(True, None, True)] * 7
         out = self._classify({2: patterns, 3: list(patterns)})
         self.assertEqual(out["classification"], "insufficient_evidence")
         self.assertEqual(out["depths"]["2"]["n_paired"], 5)
 
     def test_mcnemar_diagnostic_present(self):
+        """Test mcnemar diagnostic present."""
         patterns = [(True, True, True)] * 9 + [(True, False, True)] * 3
         out = self._classify({2: patterns, 3: [(True, True, True)] * 12})
         block = out["depths"]["2"]
@@ -437,81 +472,115 @@ class TestValidatorBattery(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls.payload = _payload(_MTBackend(), formats=FORMATS[:1])
 
     def _broken(self, mutate):
+        """Broken."""
         payload = copy.deepcopy(self.payload)
         mutate(payload)
         return payload
 
     def test_valid_payload_accepted(self):
+        """Test valid payload accepted."""
         self.assertTrue(_valid_multiturn(self.payload))
 
     def test_unavailable_payload_rejected(self):
+        """Test unavailable payload rejected."""
         self.assertFalse(_valid_multiturn({"available": False, "detail": "cancelled"}))
 
     def test_verdict_flipped(self):
+        """Test verdict flipped."""
+
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["mt-a"]["records"][0]
             record["cells"]["full"]["verdict"] = False
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_digest_forged(self):
+        """Test digest forged."""
+
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["mt-a"]["records"][0]
             record["cells"]["full"]["answer_digest"] = hashlib.sha256(b"forged").hexdigest()
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_record_values_forged(self):
+        """Test record values forged."""
+
         # The generator mirror regenerates the set from the
         # seed; a stored-values forgery cannot validate (the
         # numform F2 lesson).
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["mt-a"]["records"][0]
             record["values"][0] += 1
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_classification_tampered(self):
+        """Test classification tampered."""
+
         def mutate(payload):
+            """Mutate."""
             payload["candidates"]["mt-a"]["classification"] = "self_history_drift"
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_paired_count_tampered(self):
+        """Test paired count tampered."""
+
         def mutate(payload):
+            """Mutate."""
             payload["candidates"]["mt-a"]["depths"]["2"]["n_paired"] += 1
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_pass_rate_tampered(self):
+        """Test pass rate tampered."""
+
         def mutate(payload):
+            """Mutate."""
             payload["candidates"]["mt-a"]["depths"]["2"]["pass_rates"]["full"] = 0.5
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_self_history_pair_tampered(self):
+        """Test self history pair tampered."""
+
         def mutate(payload):
+            """Mutate."""
             payload["candidates"]["mt-a"]["depths"]["2"]["self_history"]["sh_only"] = 2
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_record_dropped(self):
+        """Test record dropped."""
+
         def mutate(payload):
+            """Mutate."""
             payload["candidates"]["mt-a"]["records"].pop()
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_record_extra_key(self):
+        """Test record extra key."""
+
         def mutate(payload):
+            """Mutate."""
             payload["candidates"]["mt-a"]["records"][0]["extra"] = 1
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_detail_vocabulary_enforced(self):
+        """Test detail vocabulary enforced."""
+
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["mt-a"]["records"][0]
             record["cells"]["full"] = None
             record["cell_details"]["full"] = "arm_melted"
@@ -519,60 +588,87 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_cell_with_detail_rejected(self):
+        """Test cell with detail rejected."""
+
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["mt-a"]["records"][0]
             record["cell_details"]["full"] = "arm_screened"
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_turns_truncated(self):
+        """Test turns truncated."""
+
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["mt-a"]["records"][0]
             record["cells"]["sharded"]["turns"].pop()
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_turns_last_entry_mismatch(self):
+        """Test turns last entry mismatch."""
+
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["mt-a"]["records"][0]
             record["cells"]["sharded"]["turns"][-1]["input_tokens"] += 1
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_intermediate_flag_flipped(self):
+        """Test intermediate flag flipped."""
+
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["mt-a"]["records"][0]
             record["cells"]["sharded"]["intermediate_unbounded"] = True
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_protocol_fingerprint_zeroed(self):
+        """Test protocol fingerprint zeroed."""
+
         def mutate(payload):
+            """Mutate."""
             payload["protocol"]["fingerprint"] = "0" * 64
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_protocol_seed_changed(self):
+        """Test protocol seed changed."""
+
         def mutate(payload):
+            """Mutate."""
             payload["protocol"]["seed"] = 99
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_selection_winner_tampered(self):
+        """Test selection winner tampered."""
+
         def mutate(payload):
+            """Mutate."""
             payload["selections"]["2"]["full"]["winner"] = "mt-b"
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_counts_tampered(self):
+        """Test counts tampered."""
+
         def mutate(payload):
+            """Mutate."""
             payload["n_candidates"] = 7
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
 
 class TestDiff(unittest.TestCase):
+    """Test diff."""
+
     def test_self_diff_unchanged(self):
+        """Test self diff unchanged."""
         payload = _payload(_MTBackend(), formats=FORMATS[:1])
         diff = diff_multiturn(payload, payload)
         self.assertEqual(diff["available"], "both")
@@ -580,6 +676,7 @@ class TestDiff(unittest.TestCase):
         self.assertTrue(diff["comparable"])
 
     def test_foreign_backend_not_comparable(self):
+        """Test foreign backend not comparable."""
         payload = _payload(_MTBackend(), formats=FORMATS[:1])
         other_backend = _MTBackend()
         other_backend.fingerprint = "sha256:other"
@@ -591,6 +688,7 @@ class TestDiff(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_classification_drift_detected(self):
+        """Test classification drift detected."""
         calm = _payload(_MTBackend(), formats=FORMATS[:1])
         stormy = _payload(_MTBackend(mode="drift"), formats=FORMATS[:1])
         diff = diff_multiturn(calm, stormy)
@@ -601,6 +699,7 @@ class TestDiff(unittest.TestCase):
         self.assertIn("depth_2_sharded_rate", rate_metrics)
 
     def test_absent_sides(self):
+        """Test absent sides."""
         payload = _payload(_MTBackend(), formats=FORMATS[:1])
         self.assertEqual(diff_multiturn(None, payload)["available"], "new")
         self.assertEqual(diff_multiturn(payload, None)["available"], "old")
@@ -617,10 +716,12 @@ class TestGapCoverage(unittest.TestCase):
     """
 
     def test_seed_must_be_int(self):
+        """Test seed must be int."""
         with self.assertRaises(ValueError):
             multiturn.generate_fixtures("0")  # type: ignore[arg-type]
 
     def test_pair_counts_skip_incomplete_records(self):
+        """Test pair counts skip incomplete records."""
         record = _record("mt-ledger-2-00", "ledger", 2, {"full": True})
         record["cells"] = None
         counts = multiturn._pair_counts([record], "full", "sharded")
@@ -629,6 +730,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(out["depths"]["2"]["n_paired"], 0)
 
     def test_both_history_arms_fail(self):
+        """Test both history arms fail."""
         payload = _payload(_MTBackend(mode="historyfail"), formats=FORMATS[:1])
         entry = payload["candidates"]["mt-a"]
         block = entry["depths"]["2"]
@@ -637,10 +739,14 @@ class TestGapCoverage(unittest.TestCase):
         self.assertTrue(_valid_multiturn(payload))
 
     def test_cancel_set_during_encode_unwinds_stage(self):
+        """Test cancel set during encode unwinds stage."""
         event = threading.Event()
 
         class _EncodeCancelBackend(_MTBackend):
+            """Encode cancel backend."""
+
             def encode(self, text):
+                """Encode."""
                 event.set()
                 return super().encode(text)
 
@@ -649,6 +755,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(payload["detail"], "cancelled")
 
     def test_evaluation_failed_cells(self):
+        """Test evaluation failed cells."""
         payload = _payload(_MTBackend(mode="explode"), formats=FORMATS[:1])
         entry = payload["candidates"]["mt-a"]
         for record in entry["records"]:
@@ -658,6 +765,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(entry["classification"], "insufficient_evidence")
 
     def test_record_budget_exceeded(self):
+        """Test record budget exceeded."""
         formats = tuple(
             Format(
                 name=f"mt-{i}",
@@ -680,6 +788,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(stage["detail"], "multiturn_record_budget_exceeded")
 
     def test_stage_screen_failure_fails_closed(self):
+        """Test stage screen failure fails closed."""
         # A boundary whose decoded text appears inside the
         # frozen template text would let a generation forge
         # protocol structure; the stage fails closed before
@@ -696,6 +805,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(stage["detail"], "multiturn_screen_failed")
 
     def test_analysis_over_unavailable_candidate(self):
+        """Test analysis over unavailable candidate."""
         backend = _MTBackend()
         stage = experiments.multiturn_stage(
             backend,
@@ -711,6 +821,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertTrue(payload["selections"]["2"]["full"]["withheld"])
 
     def test_mismatched_completed_sets_withheld(self):
+        """Test mismatched completed sets withheld."""
         # One candidate complete, the other fully screened:
         # the completed sets differ across candidates, which
         # is its own withholding branch in the analysis (and
@@ -740,56 +851,79 @@ class TestMirrorBatteryAdditions(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls.payload = _payload(_MTBackend(), formats=FORMATS[:1])
 
     def _broken(self, mutate):
+        """Broken."""
         payload = copy.deepcopy(self.payload)
         mutate(payload)
         return payload
 
     def test_cell_input_tokens_negative(self):
+        """Test cell input tokens negative."""
+
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["mt-a"]["records"][0]
             record["cells"]["full"]["input_tokens"] = -1
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_cell_boundary_text_match_wrong_type(self):
+        """Test cell boundary text match wrong type."""
+
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["mt-a"]["records"][0]
             record["cells"]["full"]["boundary_text_match"] = "yes"
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_cell_verdict_not_bool(self):
+        """Test cell verdict not bool."""
+
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["mt-a"]["records"][0]
             record["cells"]["full"]["verdict"] = 1
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_cell_digest_not_hex(self):
+        """Test cell digest not hex."""
+
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["mt-a"]["records"][0]
             record["cells"]["full"]["answer_digest"] = "z" * 64
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_turn_entry_boundary_not_bool(self):
+        """Test turn entry boundary not bool."""
+
         def mutate(payload):
+            """Mutate."""
             record = payload["candidates"]["mt-a"]["records"][0]
             record["cells"]["sharded"]["turns"][0]["boundary_found"] = "x"
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_candidates_empty(self):
+        """Test candidates empty."""
+
         def mutate(payload):
+            """Mutate."""
             payload["candidates"] = {}
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_entry_status_unavailable_rejected(self):
+        """Test entry status unavailable rejected."""
+
         def mutate(payload):
+            """Mutate."""
             entry = payload["candidates"]["mt-a"]
             entry["status"] = "unavailable"
             entry["records"] = []
@@ -797,18 +931,25 @@ class TestMirrorBatteryAdditions(unittest.TestCase):
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_record_cells_not_dict(self):
+        """Test record cells not dict."""
+
         def mutate(payload):
+            """Mutate."""
             payload["candidates"]["mt-a"]["records"][0]["cells"] = []
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_protocol_seed_missing(self):
+        """Test protocol seed missing."""
+
         def mutate(payload):
+            """Mutate."""
             del payload["protocol"]["seed"]
 
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_records_byte_cap_engages(self):
+        """Test records byte cap engages."""
         # Every field is individually legal (the int stays
         # under the str-conversion limit, turns agree with
         # their cells, aggregates ignore input_tokens), so
@@ -831,7 +972,10 @@ class TestMirrorBatteryAdditions(unittest.TestCase):
 
 
 class TestReportingAndCli(unittest.TestCase):
+    """Test reporting and cli."""
+
     def test_section_renders(self):
+        """Test section renders."""
         payload = _payload(_MTBackend(mode="drift"), formats=FORMATS[:1])
         html = render_html({"decision": "selected", "multiturn": payload})
         self.assertIn("Multi-turn drift", html)
@@ -839,10 +983,12 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertIn("self_history_drift", html)
 
     def test_section_absent_without_payload(self):
+        """Test section absent without payload."""
         html = render_html({"decision": "selected"})
         self.assertNotIn('id="multiturn"', html)
 
     def test_section_defensive_shapes(self):
+        """Test section defensive shapes."""
         # Hostile payload shapes degrade to rows or nothing,
         # never to an exception (the renderer's guards are
         # the boundary).
@@ -866,6 +1012,7 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertIn("unavailable", html)
 
     def test_cli_helper_attaches_payload(self):
+        """Test cli helper attaches payload."""
         backend = _MTBackend()
         result: dict = {"decision": "selected"}
         cli._run_multiturn_probe(
@@ -883,6 +1030,7 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertEqual(result["multiturn"]["n_fixtures"], 48)
 
     def test_cli_helper_never_raises(self):
+        """Test cli helper never raises."""
         result: dict = {"decision": "selected"}
         with mock.patch.object(experiments, "multiturn_stage", side_effect=RuntimeError("boom")):
             cli._run_multiturn_probe(

@@ -32,6 +32,7 @@ def _run_session(requests, timeout=120):
 
 
 def _req(id_, method, params=None):
+    """Req."""
     request = {"jsonrpc": "2.0", "id": id_, "method": method}
     if params is not None:
         request["params"] = params
@@ -39,7 +40,10 @@ def _req(id_, method, params=None):
 
 
 class MCPContractTests(unittest.TestCase):
+    """Mcp contract tests."""
+
     def test_self_test_flag(self):
+        """Test self test flag."""
         proc = subprocess.run(
             SERVER_CMD + ["--self-test"], capture_output=True, text=True, timeout=60, check=False
         )
@@ -47,6 +51,7 @@ class MCPContractTests(unittest.TestCase):
         self.assertIn("self-test: OK", proc.stderr)
 
     def test_tools_list(self):
+        """Test tools list."""
         # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session([_req(1, "tools/list")])
         self.assertEqual(resp["id"], 1)
@@ -66,6 +71,7 @@ class MCPContractTests(unittest.TestCase):
             self.assertIn("description", tool)
 
     def test_server_discover(self):
+        """Test server discover."""
         # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session([_req(1, "server/discover")])
         self.assertIn("tools", resp["result"]["capabilities"])
@@ -73,6 +79,7 @@ class MCPContractTests(unittest.TestCase):
         self.assertIn("2026-07-28", resp["result"]["protocolVersions"])
 
     def test_initialize_compat(self):
+        """Test initialize compat."""
         # The server accepts initialize without a prior handshake (liberal
         # acceptance); it must not require the 2026-07-28 stateless
         # framing nor the older stateful one.
@@ -84,6 +91,7 @@ class MCPContractTests(unittest.TestCase):
         self.assertIn("protocolVersion", resp["result"])
 
     def test_probe_tool_end_to_end(self):
+        """Test probe tool end to end."""
         # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session(
             [
@@ -118,6 +126,7 @@ class MCPContractTests(unittest.TestCase):
         self.assertIn("surface-form", text.lower())
 
     def test_controls_tool(self):
+        """Test controls tool."""
         # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session(
             [
@@ -136,6 +145,7 @@ class MCPContractTests(unittest.TestCase):
         self.assertEqual(len(structured["controls"]), 2)
 
     def test_protocol_info_tool(self):
+        """Test protocol info tool."""
         # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session(
             [_req(1, "tools/call", {"name": "surface_noise_protocol_info", "arguments": {}})]
@@ -145,6 +155,7 @@ class MCPContractTests(unittest.TestCase):
         self.assertIn("adapter_rule", structured)
 
     def test_hardening_notes_tool(self):
+        """Test hardening notes tool."""
         # hardening_notes surfaces counterfactuals from an existing probe
         # report: run the probe first, then pass its structured content.
         responses = _run_session(
@@ -207,17 +218,20 @@ class MCPContractTests(unittest.TestCase):
         self.assertEqual(err["error"]["code"], -32602)
 
     def test_unknown_tool_error(self):
+        """Test unknown tool error."""
         # tools/call exists, so an unknown tool NAME is an invalid param.
         # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session([_req(1, "tools/call", {"name": "nope", "arguments": {}})])
         self.assertEqual(resp["error"]["code"], -32602)
 
     def test_unknown_method_error(self):
+        """Test unknown method error."""
         # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session([_req(1, "frobnicate")])
         self.assertEqual(resp["error"]["code"], -32601)
 
     def test_invalid_params_error(self):
+        """Test invalid params error."""
         # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session(
             [
@@ -234,6 +248,7 @@ class MCPContractTests(unittest.TestCase):
         self.assertEqual(resp["error"]["code"], -32602)
 
     def test_parse_error(self):
+        """Test parse error."""
         # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}])
         # Sanity: a well-formed request still works through _run_session.
@@ -251,6 +266,7 @@ class MCPContractTests(unittest.TestCase):
         self.assertIsNone(resp["id"])
 
     def test_prompt_size_cap(self):
+        """Test prompt size cap."""
         # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session(
             [
@@ -278,6 +294,7 @@ class MCPContractTests(unittest.TestCase):
         self.assertEqual(resp["error"]["code"], -32602)
 
     def test_fixture_group_defaults(self):
+        """Test fixture group defaults."""
         # Fixtures without an explicit group are accepted (defaulted).
         # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session(
@@ -306,6 +323,7 @@ class MCPContractTests(unittest.TestCase):
         self.assertEqual(resp["result"]["structuredContent"]["status"], "ok")
 
     def test_batch_requests(self):
+        """Test batch requests."""
         responses = _run_session(
             [
                 _req(1, "tools/list"),
@@ -317,6 +335,7 @@ class MCPContractTests(unittest.TestCase):
         self.assertTrue(all("result" in r for r in responses))
 
     def test_finding8_falsy_backend_rejected(self):
+        """Test finding8 falsy backend rejected."""
         # "backend": [] (or "", 0, {}) must be -32602, not silent selftest.
         for bad in ([], "", 0, {}):
             responses = _run_session(
@@ -355,6 +374,7 @@ class MCPPosixGuardTests(unittest.TestCase):
 
     @staticmethod
     def _load_server():
+        """Load server."""
         # The shipped module, shared with the rest of the process:
         # callers that patch its globals must restore them (see the
         # SIGALRM test's addCleanup below).
@@ -363,6 +383,7 @@ class MCPPosixGuardTests(unittest.TestCase):
         return importlib.import_module("model_protocol_lab.mcp_server")
 
     def test_probe_without_sigalrm_degrades_to_best_effort(self):
+        """Test probe without sigalrm degrades to best effort."""
         # Simulate a platform without SIGALRM (Windows): the probe must
         # still run instead of raising AttributeError.
         import signal as real_signal
@@ -374,6 +395,8 @@ class MCPPosixGuardTests(unittest.TestCase):
         self.addCleanup(setattr, server, "signal", real_signal)
 
         class NoAlarmSignal:
+            """No alarm signal."""
+
             ITIMER_REAL = real_signal.ITIMER_REAL
 
             def __getattr__(self, name):
@@ -399,5 +422,6 @@ class MCPPosixGuardTests(unittest.TestCase):
         self.assertEqual(result["structuredContent"]["status"], "ok")
 
     def test_timeout_doc_mentions_posix_only(self):
+        """Test timeout doc mentions posix only."""
         server = self._load_server()
         self.assertIn("POSIX-only", server.__doc__)

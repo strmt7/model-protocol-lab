@@ -183,9 +183,11 @@ class ConcatBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         raise AssertionError("encode unused in sglang differential tests")
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(self._texts[token] for token in token_ids)
 
     @staticmethod
@@ -196,10 +198,12 @@ class ConcatBackend:
         seed: int,
         cancel: Event,
     ) -> Generation:
+        """Generate."""
         raise AssertionError("generate unused in sglang differential tests")
 
 
 def _as_backend(backend: ConcatBackend) -> Backend:
+    """As backend."""
     return backend  # structural check against the Backend protocol
 
 
@@ -209,7 +213,9 @@ class _NonStrDecodeBackend(ConcatBackend):
     fingerprint = "cycle14-sglang-nonstr-decode-not-a-model"
 
     @staticmethod
-    def decode(token_ids: tuple[int, ...]) -> str:  # type: ignore[override]
+    def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
+        # type: ignore[override]
         return None  # type: ignore[return-value]
 
 
@@ -272,12 +278,16 @@ _ADVERSARIAL_MULTI: tuple[tuple[str, list[str], list[str], bool], ...] = (
 
 
 class SglangStopDifferentialTests(unittest.TestCase):
+    """Sglang stop differential tests."""
+
     @staticmethod
     def _backend(texts: list[str]) -> tuple[Backend, tuple[int, ...]]:
+        """Backend."""
         backend = _as_backend(ConcatBackend({i + 1: text for i, text in enumerate(texts)}))
         return backend, tuple(range(1, len(texts) + 1))
 
     def check_single(self, name: str, texts: list[str], stop: str, no_stop_trim: bool) -> None:
+        """Check single."""
         backend, ids = self._backend(texts)
         outcome = emulate_sglang_stop(backend, ids, stop, no_stop_trim=no_stop_trim)
         fired, step, returned, matched = _upstream_request_lifecycle(texts, [stop], no_stop_trim)
@@ -300,6 +310,7 @@ class SglangStopDifferentialTests(unittest.TestCase):
     def check_multi(
         self, name: str, texts: list[str], stops: list[str], no_stop_trim: bool
     ) -> None:
+        """Check multi."""
         self.assertEqual(len(set(stops)), len(stops), f"{name}: stops must be unique")
         backend, ids = self._backend(texts)
         # Reference: one upstream request carrying the full stop list --
@@ -335,19 +346,23 @@ class SglangStopDifferentialTests(unittest.TestCase):
             self.assertIsNone(pick, name)
 
     def test_adversarial_single_matches_upstream(self) -> None:
+        """Test adversarial single matches upstream."""
         for name, texts, stop, no_stop_trim in _ADVERSARIAL_SINGLE:
             with self.subTest(name=name):
                 self.check_single(name, texts, stop, no_stop_trim)
 
     def test_adversarial_multi_matches_upstream(self) -> None:
+        """Test adversarial multi matches upstream."""
         for name, texts, stops, no_stop_trim in _ADVERSARIAL_MULTI:
             with self.subTest(name=name):
                 self.check_multi(name, texts, stops, no_stop_trim)
 
     def test_invalid_inputs(self) -> None:
+        """Test invalid inputs."""
         backend, ids = self._backend(["a", "STOP"])
 
         def check_invalid(name: str, outcome: object) -> None:
+            """Check invalid."""
             assert isinstance(outcome, StopOutcome)
             self.assertFalse(outcome.available, name)
             self.assertFalse(outcome.fired, name)
@@ -369,6 +384,7 @@ class SglangStopDifferentialTests(unittest.TestCase):
         )
 
     def test_non_str_decode_unavailable(self) -> None:
+        """Test non str decode unavailable."""
         backend = _as_backend(_NonStrDecodeBackend({1: "a", 2: "STOP"}))
         outcome = emulate_sglang_stop(backend, (1, 2), "STOP")
         self.assertFalse(outcome.available)
@@ -377,6 +393,7 @@ class SglangStopDifferentialTests(unittest.TestCase):
         self.assertEqual(outcome.truncated_ids, (1, 2))
 
     def test_fuzz_single_matches_upstream_reference(self) -> None:
+        """Test fuzz single matches upstream reference."""
         rng = random.Random(20261015)  # noqa: S311 -- seeded deterministic fuzz, not crypto
         alphabet = [
             "a",
@@ -418,6 +435,7 @@ class SglangStopDifferentialTests(unittest.TestCase):
                 self.check_single(f"fuzz-{trial}", texts, stop, no_stop_trim)
 
     def test_fuzz_multi_matches_upstream_reference(self) -> None:
+        """Test fuzz multi matches upstream reference."""
         rng = random.Random(20261016)  # noqa: S311 -- seeded deterministic fuzz, not crypto
         alphabet = [
             "a",

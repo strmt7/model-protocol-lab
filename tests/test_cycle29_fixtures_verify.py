@@ -116,10 +116,12 @@ class _OracleRejected(Exception):
 
 
 def _oracle_nfc(text: str) -> str:
+    """Oracle nfc."""
     return unicodedata.normalize("NFC", text)
 
 
 def _oracle_conversation_key(messages: tuple[Message, ...]) -> tuple[tuple[str, str], ...]:
+    """Oracle conversation key."""
     # Docstring: "identical message sequences" compared "NFC-normalized".
     return tuple((_oracle_nfc(m.role), _oracle_nfc(m.content)) for m in messages)
 
@@ -144,6 +146,7 @@ def _oracle_check_discipline(search: list[Fixture], held_out: list[Fixture]) -> 
         raise _OracleRejected("message leakage")
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_parse_fixture_csv(text: str) -> tuple[list[Fixture], list[Fixture], list[str]]:
     """Independent re-implementation of ``parse_fixture_csv`` from its
     docstring.  Returns (search, held_out, empty_expected_ids); raises
@@ -266,6 +269,7 @@ def _oracle_audit_targets(
     triples: list[tuple[str, str, str]] = []
 
     def _one(case: Fixture) -> None:
+        """One."""
         for pos, msg in enumerate(case.messages):
             triples.append((case.id, f"{msg.role}_{pos // 2 + 1}", msg.content))
 
@@ -348,6 +352,7 @@ _WORDS = ["alpha", "beta", "gamma", "delta", "hello world", "café", "naïve"]
 
 
 def _rng_word(rng: random.Random) -> str:
+    """Rng word."""
     word = rng.choice(_WORDS)
     if rng.random() < 0.25:
         word += rng.choice([",", '"', "\n", "  ", "<|im_start|>", "[INST]"])
@@ -392,6 +397,7 @@ def _make_csv_text(rng: random.Random, n_cols: int, n_rows: int) -> str:
 
 
 def _oracle_ok(text: str) -> tuple[list[Fixture], list[Fixture], list[str]] | None:
+    """Return whether the oracle is well-formed."""
     try:
         return _oracle_parse_fixture_csv(text)
     except _OracleRejected:
@@ -404,7 +410,10 @@ def _oracle_ok(text: str) -> tuple[list[Fixture], list[Fixture], list[str]] | No
 
 
 class TestOracleFuzzParse(unittest.TestCase):
+    """Test oracle fuzz parse."""
+
     def test_fuzz_valid_and_invalid_csvs(self):
+        """Test fuzz valid and invalid csvs."""
         for seed in _SEEDS:
             with self.subTest(seed=seed):
                 for n_cols in [1, 2, 3, 5]:
@@ -437,6 +446,7 @@ class TestOracleFuzzParse(unittest.TestCase):
                             )
 
     def test_fuzz_serialize_roundtrip(self):
+        """Test fuzz serialize roundtrip."""
         rng = random.Random("cycle29-roundtrip")  # noqa: S311 -- deterministic test seed
         for trial in range(40):
             text = _make_csv_text(rng, rng.choice([1, 2, 3, 4]), rng.randint(2, 8))
@@ -451,10 +461,12 @@ class TestOracleFuzzParse(unittest.TestCase):
             assert parse_dataset(out) == split, f"trial {trial} roundtrip mismatch"
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
@@ -464,6 +476,7 @@ class TestOracleFuzzParse(unittest.TestCase):
 
 
 def _simple_csv(rows: list[list[str]], header: list[str] | None = None) -> str:
+    """Simple csv."""
     header = header or ["id", "group", "partition", "expected", "user_1", "assistant_1", "user_2"]
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
@@ -473,6 +486,7 @@ def _simple_csv(rows: list[list[str]], header: list[str] | None = None) -> str:
 
 
 def _two_row_csv() -> str:
+    """Two row csv."""
     return _simple_csv(
         [
             ["a1", "g1", "search", "yes", "hello", "hi", "again?"],
@@ -482,8 +496,11 @@ def _two_row_csv() -> str:
 
 
 class TestPinnedBehavior(unittest.TestCase):
+    """Test pinned behavior."""
+
     @staticmethod
     def test_empty_expected_ids_reported():
+        """Test empty expected ids reported."""
         split, empty = fx.parse_fixture_csv(_two_row_csv())
         assert empty == ["b1"]
         assert split.search[0].expected == "yes"
@@ -491,6 +508,7 @@ class TestPinnedBehavior(unittest.TestCase):
 
     @staticmethod
     def test_verbatim_cells_no_stripping():
+        """Test verbatim cells no stripping."""
         text = _simple_csv(
             [
                 ["  a1  ", "  g1  ", "search", " e ", "  hi  ", "", ""],
@@ -506,6 +524,7 @@ class TestPinnedBehavior(unittest.TestCase):
 
     @staticmethod
     def test_quoted_newline_cell():
+        """Test quoted newline cell."""
         text = _simple_csv(
             [
                 ["a1", "g1", "search", "e", "line1\nline2", "", ""],
@@ -517,15 +536,18 @@ class TestPinnedBehavior(unittest.TestCase):
 
     @staticmethod
     def test_blank_lines_ignored():
+        """Test blank lines ignored."""
         text = "\n\n" + _two_row_csv().replace("\n", "\n\n", 1) + "\n\n"
         split, _ = fx.parse_fixture_csv(text)
         assert len(split.search) == 1 and len(split.held_out) == 1
 
     def test_leading_blank_lines_are_not_a_header(self):
+        """Test leading blank lines are not a header."""
         with self.assertRaisesRegex(ValueError, "no header"):
             fx.parse_fixture_csv("\n\n\n")
 
     def test_row_number_only_on_row_errors(self):
+        """Test row number only on row errors."""
         bad_row = _simple_csv([["", "g1", "search", "e", "hi", "", ""]])
         with self.assertRaisesRegex(ValueError, r"row 2"):
             fx.parse_fixture_csv(bad_row)
@@ -539,22 +561,29 @@ class TestPinnedBehavior(unittest.TestCase):
             assert "row" not in str(exc.exception)
 
     def test_non_string_source_rejected(self):
+        """Test non string source rejected."""
         for bad in (b"id,group", 123, None, ["id"]):
             with self.assertRaises(ValueError):
                 fx.parse_fixture_csv(bad)  # type: ignore[arg-type]
 
     def test_str_subclass_rejected(self):
+        """Test str subclass rejected."""
+
         class S(str):
+            """S."""
+
             pass
 
         with self.assertRaises(ValueError):
             fx.parse_fixture_csv(S(_two_row_csv()))
 
     def test_oversize_source_rejected(self):
+        """Test oversize source rejected."""
         with self.assertRaisesRegex(ValueError, "[Ss]ize"):
             fx.parse_fixture_csv("x" * (MAX_BYTES + 1))
 
     def test_total_row_cap_checked_first(self):
+        """Test total row cap checked first."""
         buf = io.StringIO()
         writer = csv.writer(buf, lineterminator="\n")
         writer.writerow(["id", "group", "partition", "expected", "user_1"])
@@ -564,6 +593,7 @@ class TestPinnedBehavior(unittest.TestCase):
             fx.parse_fixture_csv(buf.getvalue())
 
     def test_oversize_id_group_rejected_at_parse(self):
+        """Test oversize id group rejected at parse."""
         # Cycle 172 closed the divergence this pin originally recorded
         # (oversize id/group used to parse and fail only inside
         # split_to_json_text): the limit now applies at parse time.
@@ -577,15 +607,19 @@ class TestPinnedBehavior(unittest.TestCase):
                 fx.parse_fixture_csv(text)
 
     def test_oversize_expected_rejected_at_parse(self):
+        """Test oversize expected rejected at parse."""
         big = "x" * (MAX_TEXT + 1)
         text = _simple_csv([["a1", "g1", "search", big, "hi", "", ""]])
         with self.assertRaisesRegex(ValueError, "[Ss]ize|[Ll]imit"):
             fx.parse_fixture_csv(text)
 
     def test_split_subclass_rejected_by_serializer(self):
+        """Test split subclass rejected by serializer."""
         split, _ = fx.parse_fixture_csv(_two_row_csv())
 
         class SubSplit(Split):
+            """Sub split."""
+
             pass
 
         with self.assertRaises(ValueError):
@@ -593,6 +627,7 @@ class TestPinnedBehavior(unittest.TestCase):
 
     @staticmethod
     def test_serializer_keeps_non_ascii_verbatim():
+        """Test serializer keeps non ascii verbatim."""
         text = _simple_csv(
             [
                 ["a1", "g1", "search", "café", "naïve", "", ""],
@@ -605,6 +640,7 @@ class TestPinnedBehavior(unittest.TestCase):
         assert parse_dataset(out) == split
 
     def test_whitespace_id_rejected_with_row_number(self):
+        """Test whitespace id rejected with row number."""
         text = _simple_csv(
             [
                 ["a1", "g1", "search", "", "hi", "", ""],
@@ -615,6 +651,7 @@ class TestPinnedBehavior(unittest.TestCase):
             fx.parse_fixture_csv(text)
 
     def test_whitespace_group_rejected_with_row_number(self):
+        """Test whitespace group rejected with row number."""
         text = _simple_csv(
             [
                 ["a1", "g1", "search", "", "hi", "", ""],
@@ -625,6 +662,7 @@ class TestPinnedBehavior(unittest.TestCase):
             fx.parse_fixture_csv(text)
 
     def test_control_chars_scrubbed_from_error_text(self):
+        """Test control chars scrubbed from error text."""
         with self.assertRaises(ValueError) as exc:
             fx.parse_fixture_csv(_simple_csv([["a1", "   ", "search", "e", "hi", "", ""]]))
         assert "\x1b" not in str(exc.exception)
@@ -640,10 +678,12 @@ class TestPinnedBehavior(unittest.TestCase):
         assert "abc" in str(exc3.exception)
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
@@ -671,7 +711,10 @@ def _discipline_csv(rng: random.Random) -> str:
 
 
 class TestSplitDiscipline(unittest.TestCase):
+    """Test split discipline."""
+
     def test_discipline_differential(self):
+        """Test discipline differential."""
         for seed in _SEEDS:
             with self.subTest(seed=seed):
                 rng = random.Random(f"{seed}-discipline")  # noqa: S311 -- deterministic test seed
@@ -692,6 +735,7 @@ class TestSplitDiscipline(unittest.TestCase):
                         assert impl_split.held_out == tuple(oracle[1]), f"trial {trial}"
 
     def test_nfc_id_collision_rejected(self):
+        """Test nfc id collision rejected."""
         nfc, nfd = "café", "café"
         assert nfc != nfd and unicodedata.normalize("NFC", nfc) == unicodedata.normalize("NFC", nfd)
         text = _simple_csv(
@@ -704,6 +748,7 @@ class TestSplitDiscipline(unittest.TestCase):
             fx.parse_fixture_csv(text)
 
     def test_nfc_group_overlap_rejected(self):
+        """Test nfc group overlap rejected."""
         nfc, nfd = "café", "café"
         text = _simple_csv(
             [
@@ -715,6 +760,7 @@ class TestSplitDiscipline(unittest.TestCase):
             fx.parse_fixture_csv(text)
 
     def test_nfc_message_leakage_rejected(self):
+        """Test nfc message leakage rejected."""
         nfc, nfd = "naïve", "naïve"
         text = _simple_csv(
             [
@@ -727,6 +773,7 @@ class TestSplitDiscipline(unittest.TestCase):
 
     @staticmethod
     def test_same_group_within_one_partition_ok():
+        """Test same group within one partition ok."""
         text = _simple_csv(
             [
                 ["a1", "g1", "search", "", "hi", "", ""],
@@ -738,10 +785,12 @@ class TestSplitDiscipline(unittest.TestCase):
         assert len(split.search) == 2
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
@@ -790,6 +839,7 @@ def _fuzz_format(rng: random.Random, name: str) -> Format:
     ]
 
     def pick() -> str:
+        """Pick."""
         return rng.choice(pieces)
 
     fmt = Format(
@@ -814,6 +864,7 @@ def _fuzz_format(rng: random.Random, name: str) -> Format:
 
 
 def _fuzz_text(rng: random.Random, tokens: list[str]) -> str:
+    """Fuzz text."""
     parts = []
     for _ in range(rng.randint(0, 6)):
         r = rng.random()
@@ -827,11 +878,15 @@ def _fuzz_text(rng: random.Random, tokens: list[str]) -> str:
 
 
 def _finding_tuple(f: fx.AuditFinding) -> tuple[str, str, str, str, int]:
+    """Finding tuple."""
     return (f.fixture_id, f.field, f.literal, f.format_name, f.offset)
 
 
 class TestTokenInventory(unittest.TestCase):
+    """Test token inventory."""
+
     def test_inventory_differential(self):
+        """Test inventory differential."""
         for seed in _SEEDS:
             with self.subTest(seed=seed):
                 rng = random.Random(f"{seed}-inventory")  # noqa: S311 -- deterministic test seed
@@ -843,6 +898,7 @@ class TestTokenInventory(unittest.TestCase):
 
     @staticmethod
     def test_none_optionals_add_nothing():
+        """Test none optionals add nothing."""
         base = Format(
             name="b", bos="<s>", user_prefix="[INST] ", assistant_prefix="", turn_end="</s>"
         )
@@ -862,6 +918,7 @@ class TestTokenInventory(unittest.TestCase):
 
     @staticmethod
     def test_open_suffix_only_token_is_found():
+        """Test open suffix only token is found."""
         fmt = Format(
             name="g",
             bos="",
@@ -874,6 +931,7 @@ class TestTokenInventory(unittest.TestCase):
 
     @staticmethod
     def test_plain_words_are_not_tokens():
+        """Test plain words are not tokens."""
         fmt = Format(
             name="p", bos="hello", user_prefix="user: ", assistant_prefix="asst: ", turn_end="\n"
         )
@@ -881,6 +939,7 @@ class TestTokenInventory(unittest.TestCase):
 
     @staticmethod
     def test_full_width_shape():
+        """Test full width shape."""
         fmt = Format(
             name="d",
             bos="＜｜begin▁of▁sentence｜＞",
@@ -892,19 +951,25 @@ class TestTokenInventory(unittest.TestCase):
         assert "＜｜User｜＞" in toks and "＜｜begin▁of▁sentence｜＞" in toks
 
     def test_reject_non_format(self):
+        """Test reject non format."""
         with self.assertRaises(ValueError):
             fx._extract_special_tokens("nope")  # type: ignore[arg-type]
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
 class TestAuditDifferential(unittest.TestCase):
+    """Test audit differential."""
+
     def test_audit_differential_on_strings(self):
+        """Test audit differential on strings."""
         for seed in _SEEDS:
             with self.subTest(seed=seed):
                 rng = random.Random(f"{seed}-audit-str")  # noqa: S311 -- deterministic test seed
@@ -919,6 +984,7 @@ class TestAuditDifferential(unittest.TestCase):
                     assert tuple(_finding_tuple(f) for f in impl) == oracle, f"trial {trial}"
 
     def test_audit_differential_on_fixtures(self):
+        """Test audit differential on fixtures."""
         for seed in _SEEDS:
             with self.subTest(seed=seed):
                 rng = random.Random(f"{seed}-audit-fixture")  # noqa: S311 -- deterministic test seed
@@ -939,6 +1005,7 @@ class TestAuditDifferential(unittest.TestCase):
 
     @staticmethod
     def test_audit_differential_on_split():
+        """Test audit differential on split."""
         rng = random.Random("cycle29-audit-split")  # noqa: S311 -- deterministic test seed
         formats = tuple(_fuzz_format(rng, f"F{k}") for k in range(2))
         # Deterministic valid split (distinct ids/groups/messages).
@@ -950,6 +1017,7 @@ class TestAuditDifferential(unittest.TestCase):
         assert tuple(_finding_tuple(f) for f in impl) == _oracle_audit(split, formats)
 
     def test_audit_input_validation(self):
+        """Test audit input validation."""
         fmt = Format(name="f", bos="", user_prefix="", assistant_prefix="", turn_end="")
         with self.assertRaises(ValueError):
             fx.audit_special_token_literals("x", ())  # empty formats
@@ -964,6 +1032,7 @@ class TestAuditDifferential(unittest.TestCase):
 
     @staticmethod
     def test_field_naming_user1_assistant1_user2():
+        """Test field naming user1 assistant1 user2."""
         fmt = Format(name="f", bos="", user_prefix="<|u|>", assistant_prefix="", turn_end="")
         case = Fixture(
             id="c",
@@ -980,17 +1049,20 @@ class TestAuditDifferential(unittest.TestCase):
 
     @staticmethod
     def test_overlapping_occurrences_each_get_a_finding():
+        """Test overlapping occurrences each get a finding."""
         fmt = Format(name="f", bos="", user_prefix="[INST]", assistant_prefix="", turn_end="")
         findings = fx.audit_special_token_literals("[INST][INST]", (fmt,))
         assert [f.offset for f in findings] == [0, 6]
 
     @staticmethod
     def test_case_sensitive():
+        """Test case sensitive."""
         fmt = Format(name="f", bos="", user_prefix="[INST]", assistant_prefix="", turn_end="")
         assert fx.audit_special_token_literals("[inst]", (fmt,)) == ()
 
     @staticmethod
     def test_deterministic_ordering():
+        """Test deterministic ordering."""
         f1 = Format(name="first", bos="<a><b>", user_prefix="", assistant_prefix="", turn_end="")
         f2 = Format(name="second", bos="<b><a>", user_prefix="", assistant_prefix="", turn_end="")
         findings = fx.audit_special_token_literals("<a> <b>", (f1, f2))
@@ -1003,6 +1075,7 @@ class TestAuditDifferential(unittest.TestCase):
 
     @staticmethod
     def test_real_catalog_spot_check():
+        """Test real catalog spot check."""
         fmts = tuple(CATALOG[name] for name in list(CATALOG)[:5])
         texts = (
             "plain text with no tokens",
@@ -1013,6 +1086,7 @@ class TestAuditDifferential(unittest.TestCase):
         assert tuple(_finding_tuple(f) for f in impl) == _oracle_audit(texts, fmts)
 
     def test_audit_finding_validation(self):
+        """Test audit finding validation."""
         with self.assertRaises(ValueError):
             fx.AuditFinding(fixture_id="a", field="text", literal="", format_name="f", offset=0)
         with self.assertRaises(ValueError):
@@ -1029,16 +1103,21 @@ class TestAuditDifferential(unittest.TestCase):
             )
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
 class TestAuditFindingsJson(unittest.TestCase):
+    """Test audit findings json."""
+
     @staticmethod
     def test_sidecar_shape_and_roundtrip():
+        """Test sidecar shape and roundtrip."""
         rng = random.Random("cycle29-sidecar")  # noqa: S311 -- deterministic test seed
         formats = tuple(_fuzz_format(rng, f"F{k}") for k in range(2))
         # Deterministic format guaranteeing at least one finding, so the
@@ -1072,6 +1151,7 @@ class TestAuditFindingsJson(unittest.TestCase):
 
     @staticmethod
     def test_offset_fidelity():
+        """Test offset fidelity."""
         finding = fx.AuditFinding(
             fixture_id="c", field="user_1", literal="<|u|>", format_name="f", offset=7
         )
@@ -1088,20 +1168,24 @@ class TestAuditFindingsJson(unittest.TestCase):
 
     @staticmethod
     def test_empty_findings():
+        """Test empty findings."""
         text = fx.audit_findings_json((), source="x.json")
         assert json.loads(text)["findings"] == []
 
     def test_validation(self):
+        """Test validation."""
         with self.assertRaises(ValueError):
             fx.audit_findings_json(["not-a-finding"], source="x")  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
             fx.audit_findings_json((), source=123)  # type: ignore[arg-type]
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
@@ -1111,7 +1195,10 @@ class TestAuditFindingsJson(unittest.TestCase):
 
 
 class TestReadAuthoringFile(unittest.TestCase):
+    """Test read authoring file."""
+
     def test_roundtrip_small_file(self):
+        """Test roundtrip small file."""
         tmp_path = self.tmp_path
         target = tmp_path / "a.csv"
         target.write_text("id,group\n", encoding="utf-8")
@@ -1119,12 +1206,14 @@ class TestReadAuthoringFile(unittest.TestCase):
         assert fx.read_authoring_file(str(target)) == "id,group\n"
 
     def test_exactly_max_bytes_ok(self):
+        """Test exactly max bytes ok."""
         tmp_path = self.tmp_path
         target = tmp_path / "big.csv"
         target.write_bytes(b"x" * MAX_BYTES)
         assert len(fx.read_authoring_file(target)) == MAX_BYTES
 
     def test_over_max_bytes_refused(self):
+        """Test over max bytes refused."""
         tmp_path = self.tmp_path
         target = tmp_path / "big.csv"
         target.write_bytes(b"x" * (MAX_BYTES + 1))
@@ -1132,6 +1221,7 @@ class TestReadAuthoringFile(unittest.TestCase):
             fx.read_authoring_file(target)
 
     def test_fifo_refused(self):
+        """Test fifo refused."""
         tmp_path = self.tmp_path
         fifo = tmp_path / "pipe"
         os.mkfifo(fifo)
@@ -1139,16 +1229,19 @@ class TestReadAuthoringFile(unittest.TestCase):
             fx.read_authoring_file(fifo)
 
     def test_directory_refused(self):
+        """Test directory refused."""
         tmp_path = self.tmp_path
         with self.assertRaisesRegex(ValueError, "[Rr]egular"):
             fx.read_authoring_file(tmp_path)
 
     def test_missing_file(self):
+        """Test missing file."""
         tmp_path = self.tmp_path
         with self.assertRaisesRegex(ValueError, "[Uu]nreadable"):
             fx.read_authoring_file(tmp_path / "nope.csv")
 
     def test_invalid_utf8(self):
+        """Test invalid utf8."""
         tmp_path = self.tmp_path
         target = tmp_path / "bad.csv"
         target.write_bytes(b"\xff\xfe invalid")
@@ -1156,24 +1249,31 @@ class TestReadAuthoringFile(unittest.TestCase):
             fx.read_authoring_file(target)
 
     def test_non_path_rejected(self):
+        """Test non path rejected."""
         with self.assertRaises(ValueError):
             fx.read_authoring_file(123)  # type: ignore[arg-type]
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
 class TestWriteFixtureFile(unittest.TestCase):
+    """Test write fixture file."""
+
     @staticmethod
     def _built_text() -> str:
+        """Built text."""
         split, _ = fx.parse_fixture_csv(_two_row_csv())
         return fx.split_to_json_text(split)
 
     def test_write_and_reload(self):
+        """Test write and reload."""
         tmp_path = self.tmp_path
         target = tmp_path / "out.json"
         result = fx.write_fixture_file(self._built_text(), target)
@@ -1183,6 +1283,7 @@ class TestWriteFixtureFile(unittest.TestCase):
         assert mode == 0o600
 
     def test_refuses_overwrite(self):
+        """Test refuses overwrite."""
         tmp_path = self.tmp_path
         target = tmp_path / "out.json"
         target.write_text("old", encoding="utf-8")
@@ -1191,20 +1292,24 @@ class TestWriteFixtureFile(unittest.TestCase):
         assert target.read_text(encoding="utf-8") == "old"
 
     def test_missing_parent(self):
+        """Test missing parent."""
         tmp_path = self.tmp_path
         with self.assertRaisesRegex(ValueError, "[Pp]arent|[Dd]irectory"):
             fx.write_fixture_file(self._built_text(), tmp_path / "nodir" / "out.json")
 
     def test_non_string_text(self):
+        """Test non string text."""
         tmp_path = self.tmp_path
         with self.assertRaises(ValueError):
             fx.write_fixture_file(b"bytes", tmp_path / "o.json")  # type: ignore[arg-type]
 
     def test_non_path_rejected(self):
+        """Test non path rejected."""
         with self.assertRaises(ValueError):
             fx.write_fixture_file("{}", 123)  # type: ignore[arg-type]
 
     def test_partial_write_leaves_no_file(self):
+        """Test partial write leaves no file."""
         tmp_path = self.tmp_path
         target = tmp_path / "partial.json"
         with self.assertRaises(UnicodeEncodeError):
@@ -1212,6 +1317,7 @@ class TestWriteFixtureFile(unittest.TestCase):
         assert not target.exists()
 
     def test_relative_single_component_skips_parent_check(self):
+        """Test relative single component skips parent check."""
         tmp_path = self.tmp_path
         _old_cwd = os.getcwd()
         os.chdir(tmp_path)
@@ -1221,10 +1327,12 @@ class TestWriteFixtureFile(unittest.TestCase):
         assert target.exists()
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
@@ -1234,7 +1342,10 @@ class TestWriteFixtureFile(unittest.TestCase):
 
 
 class TestRedTeam(unittest.TestCase):
+    """Test red team."""
+
     def test_duplicate_header_columns(self):
+        """Test duplicate header columns."""
         text = _simple_csv(
             [["a1", "g1", "search", "", "hi", "", ""]],
             header=["id", "group", "partition", "expected", "user_1", "user_1"],
@@ -1243,6 +1354,7 @@ class TestRedTeam(unittest.TestCase):
             fx.parse_fixture_csv(text)
 
     def test_reordered_message_columns(self):
+        """Test reordered message columns."""
         text = _simple_csv(
             [["a1", "g1", "search", "", "hi", "", ""]],
             header=["id", "group", "partition", "expected", "assistant_1", "user_1"],
@@ -1251,6 +1363,7 @@ class TestRedTeam(unittest.TestCase):
             fx.parse_fixture_csv(text)
 
     def test_extra_cells_beyond_header(self):
+        """Test extra cells beyond header."""
         buf = io.StringIO()
         writer = csv.writer(buf, lineterminator="\n")
         writer.writerow(["id", "group", "partition", "expected", "user_1"])
@@ -1261,6 +1374,7 @@ class TestRedTeam(unittest.TestCase):
 
     @staticmethod
     def test_short_row_padded_with_empties():
+        """Test short row padded with empties."""
         buf = io.StringIO()
         writer = csv.writer(buf, lineterminator="\n")
         writer.writerow(["id", "group", "partition", "expected", "user_1", "assistant_1", "user_2"])
@@ -1270,26 +1384,31 @@ class TestRedTeam(unittest.TestCase):
         assert len(split.search[0].messages) == 1
 
     def test_whitespace_only_partition_rejected(self):
+        """Test whitespace only partition rejected."""
         text = _simple_csv([["a1", "g1", " search", "", "hi", "", ""]])
         with self.assertRaisesRegex(ValueError, "partition"):
             fx.parse_fixture_csv(text)
 
     def test_case_sensitive_partition(self):
+        """Test case sensitive partition."""
         text = _simple_csv([["a1", "g1", "Search", "", "hi", "", ""]])
         with self.assertRaisesRegex(ValueError, "partition"):
             fx.parse_fixture_csv(text)
 
     @staticmethod
     def test_crlf_line_endings():
+        """Test crlf line endings."""
         text = _two_row_csv().replace("\n", "\r\n")
         split, _ = fx.parse_fixture_csv(text)
         assert len(split.search) == 1 and len(split.held_out) == 1
 
     def test_bom_prefix_rejected_as_bad_header(self):
+        """Test bom prefix rejected as bad header."""
         with self.assertRaises(ValueError):
             fx.parse_fixture_csv("﻿" + _two_row_csv())
 
     def test_max_messages_boundary(self):
+        """Test max messages boundary."""
         header = ["id", "group", "partition", "expected"] + [
             f"user_{(i // 2) + 1}" if i % 2 == 0 else f"assistant_{(i // 2) + 1}"
             for i in range(MAX_MESSAGES)
@@ -1304,6 +1423,7 @@ class TestRedTeam(unittest.TestCase):
             fx.parse_fixture_csv(_simple_csv([row, row2], header=header + ["user_12"]))
 
     def test_max_fixtures_per_partition_boundary(self):
+        """Test max fixtures per partition boundary."""
         buf = io.StringIO()
         writer = csv.writer(buf, lineterminator="\n")
         writer.writerow(["id", "group", "partition", "expected", "user_1"])
@@ -1324,6 +1444,7 @@ class TestRedTeam(unittest.TestCase):
 
     @staticmethod
     def test_cell_exactly_max_text_ok():
+        """Test cell exactly max text ok."""
         cell = "x" * MAX_TEXT
         text = _simple_csv(
             [
@@ -1335,22 +1456,26 @@ class TestRedTeam(unittest.TestCase):
         assert split.search[0].expected == cell
 
     def test_cell_one_over_max_text_rejected(self):
+        """Test cell one over max text rejected."""
         cell = "x" * (MAX_TEXT + 1)
         text = _simple_csv([["a1", "g1", "search", "", cell, "", ""]])
         with self.assertRaises(ValueError):
             fx.parse_fixture_csv(text)
 
     def test_trailing_assistant_turn_rejected(self):
+        """Test trailing assistant turn rejected."""
         text = _simple_csv([["a1", "g1", "search", "", "hi", "hello", ""]])
         with self.assertRaisesRegex(ValueError, "[Uu]ser"):
             fx.parse_fixture_csv(text)
 
     def test_gap_then_content_rejected(self):
+        """Test gap then content rejected."""
         text = _simple_csv([["a1", "g1", "search", "", "hi", "", "more"]])
         with self.assertRaisesRegex(ValueError, "[Ee]mpty"):
             fx.parse_fixture_csv(text)
 
     def test_duplicate_ids_within_partition(self):
+        """Test duplicate ids within partition."""
         text = _simple_csv(
             [
                 ["a1", "g1", "search", "", "hi", "", ""],
@@ -1362,12 +1487,14 @@ class TestRedTeam(unittest.TestCase):
             fx.parse_fixture_csv(text)
 
     def test_empty_conversation_impossible(self):
+        """Test empty conversation impossible."""
         text = _simple_csv([["a1", "g1", "search", "", "", "x", ""]])
         with self.assertRaisesRegex(ValueError, "user_1"):
             fx.parse_fixture_csv(text)
 
     @staticmethod
     def test_many_messages_alternation_roles():
+        """Test many messages alternation roles."""
         text = _simple_csv([["a1", "g1", "search", "", "u1", "a1", "u2"]])
         text += _simple_csv([["b1", "g2", "held_out", "", "v1", "", ""]]).split("\n", 1)[1]
         split, _ = fx.parse_fixture_csv(text)
@@ -1375,6 +1502,7 @@ class TestRedTeam(unittest.TestCase):
 
     @staticmethod
     def test_json_keys_exact():
+        """Test json keys exact."""
         split, _ = fx.parse_fixture_csv(_two_row_csv())
         doc = json.loads(fx.split_to_json_text(split))
         assert set(doc) == {"search", "held_out"}
@@ -1383,6 +1511,7 @@ class TestRedTeam(unittest.TestCase):
 
     @staticmethod
     def test_split_order_preserved():
+        """Test split order preserved."""
         rows = [[f"s{i}", f"gs{i}", "search", "", f"q{i}", "", ""] for i in range(5)]
         rows += [[f"h{i}", f"gh{i}", "held_out", "", f"r{i}", "", ""] for i in range(3)]
         split, _ = fx.parse_fixture_csv(_simple_csv(rows))
@@ -1391,10 +1520,12 @@ class TestRedTeam(unittest.TestCase):
 
     @staticmethod
     def test_single_fixture_per_partition():
+        """Test single fixture per partition."""
         split, _ = fx.parse_fixture_csv(_two_row_csv())
         assert len(split.search) == 1 and len(split.held_out) == 1
 
     def test_missing_partition_rejected(self):
+        """Test missing partition rejected."""
         text = _simple_csv([["a1", "g1", "search", "", "hi", "", ""]])
         with self.assertRaisesRegex(ValueError, "held_out"):
             fx.parse_fixture_csv(text)
@@ -1403,10 +1534,12 @@ class TestRedTeam(unittest.TestCase):
             fx.parse_fixture_csv(text2)
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 

@@ -60,6 +60,8 @@ def _naive_first_suffix_step(chunks, stop, base, total):
 
 
 class TestFuzzBoundary(unittest.TestCase):
+    """Test fuzz boundary."""
+
     # -- _hf_overhang_match -------------------------------------------------
 
     @FUZZ

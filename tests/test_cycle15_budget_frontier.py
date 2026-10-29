@@ -79,6 +79,7 @@ def _passes_at(observation, entry_boundary, budget):
     return cut is not None and cut + len(entry_boundary) <= budget
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_budget_frontier(search, *, boundary, max_new_tokens, native_decision, native_winner):
     """Brute-force oracle: recompute the frontier from per-budget pass/fail."""
     names = []
@@ -92,6 +93,7 @@ def _oracle_budget_frontier(search, *, boundary, max_new_tokens, native_decision
     n_fixtures = len(observations[names[0]])
 
     def pass_count(name, budget):
+        """Pass count."""
         entry_boundary = entry_boundaries[name]
         return sum(
             1
@@ -100,6 +102,7 @@ def _oracle_budget_frontier(search, *, boundary, max_new_tokens, native_decision
         )
 
     def decision_at(budget):
+        """Decision at."""
         winners = [name for name in names if pass_count(name, budget) == n_fixtures]
         if len(winners) == 1:
             return ("selected", winners[0])
@@ -278,7 +281,10 @@ def _gen_case(seed):
 
 
 class BudgetFrontierFuzzTests(unittest.TestCase):
+    """Budget frontier fuzz tests."""
+
     def test_oracle_matches_implementation_on_fuzz(self):
+        """Test oracle matches implementation on fuzz."""
         for seed in range(N_FUZZ_SEEDS):
             with self.subTest(seed=seed):
                 search, boundary, max_new_tokens, native_decision, native_winner = _gen_case(
@@ -306,6 +312,7 @@ class BudgetFrontierFuzzCorpusTests(unittest.TestCase):
     """A fixed corpus of adversarial seeds exercising rare corners."""
 
     def test_adversarial_corpus(self):
+        """Test adversarial corpus."""
         # Seeds hand-picked for small alphabets (boundary collisions),
         # single fixtures, and tiny budgets.
         for seed in (1, 2, 3, 7, 11, 13, 42, 99, 1234, 99991):
@@ -336,6 +343,7 @@ class BudgetFrontierFuzzCorpusTests(unittest.TestCase):
 
 
 def _obs(fixture, output_ids, *, status="completed", exact_match=True, boundary_found=True):
+    """Obs."""
     return {
         "fixture": fixture,
         "status": status,
@@ -346,6 +354,7 @@ def _obs(fixture, output_ids, *, status="completed", exact_match=True, boundary_
 
 
 def _entry(name, observations, boundary_token_ids=None):
+    """Entry."""
     entry = {"format": {"name": name}, "observations": observations}
     if boundary_token_ids is not None:
         entry["boundary_token_ids"] = boundary_token_ids
@@ -353,6 +362,7 @@ def _entry(name, observations, boundary_token_ids=None):
 
 
 def _run(search, boundary, max_new_tokens, native_decision, native_winner):
+    """Run."""
     impl = budget_frontier(
         search,
         boundary=boundary,
@@ -371,14 +381,18 @@ def _run(search, boundary, max_new_tokens, native_decision, native_winner):
 
 
 class BudgetFrontierEdgeCaseTests(unittest.TestCase):
+    """Budget frontier edge case tests."""
+
     def assert_matches_oracle(
         self, search, boundary, max_new_tokens, native_decision, native_winner
     ):
+        """Assert matches oracle."""
         impl, oracle = _run(search, boundary, max_new_tokens, native_decision, native_winner)
         self.assertEqual(_compare(impl, oracle), [])
         return impl
 
     def test_boundary_at_offset_zero(self):
+        """Test boundary at offset zero."""
         search = [_entry("a", [_obs("f1", [5, 6, 1, 2])])]
         impl = self.assert_matches_oracle(search, (5, 6), 8, "no_candidate", None)
         candidate = impl["candidates"]["a"]
@@ -387,6 +401,7 @@ class BudgetFrontierEdgeCaseTests(unittest.TestCase):
         self.assertEqual(candidate["full_pass_budget"], 2)
 
     def test_output_shorter_than_boundary_never_passes(self):
+        """Test output shorter than boundary never passes."""
         search = [_entry("a", [_obs("f1", [1, 2])])]
         impl = self.assert_matches_oracle(search, (1, 2, 3), 8, "no_candidate", None)
         candidate = impl["candidates"]["a"]
@@ -395,11 +410,13 @@ class BudgetFrontierEdgeCaseTests(unittest.TestCase):
         self.assertIsNone(candidate["full_pass_budget"])
 
     def test_multiple_occurrences_first_counts(self):
+        """Test multiple occurrences first counts."""
         search = [_entry("a", [_obs("f1", [9, 1, 2, 1, 2])])]
         impl = self.assert_matches_oracle(search, (1, 2), 8, "no_candidate", None)
         self.assertEqual(impl["candidates"]["a"]["min_budget_per_fixture"], [3])
 
     def test_truncation_cutoff_is_exact(self):
+        """Test truncation cutoff is exact."""
         # Boundary completes at token index 6 (cut=5, len=2): passes at 7, fails at 6.
         search = [_entry("a", [_obs("f1", [0, 0, 0, 0, 0, 1, 2, 9])])]
         impl = self.assert_matches_oracle(search, (1, 2), 10, "no_candidate", None)
@@ -408,6 +425,7 @@ class BudgetFrontierEdgeCaseTests(unittest.TestCase):
         self.assertEqual(candidate["pass_steps"], [[1, 0], [7, 1]])
 
     def test_noncompleted_observation_never_passes(self):
+        """Test noncompleted observation never passes."""
         search = [
             _entry(
                 "a",
@@ -418,12 +436,14 @@ class BudgetFrontierEdgeCaseTests(unittest.TestCase):
         self.assertEqual(impl["candidates"]["a"]["min_budget_per_fixture"], [None])
 
     def test_flag_lie_boundary_found_without_boundary(self):
+        """Test flag lie boundary found without boundary."""
         # boundary_found claims True but no boundary is present: still cannot pass.
         search = [_entry("a", [_obs("f1", [7, 7, 7], boundary_found=True)])]
         impl = self.assert_matches_oracle(search, (1, 2), 8, "no_candidate", None)
         self.assertEqual(impl["candidates"]["a"]["min_budget_per_fixture"], [None])
 
     def test_single_candidate_flip_ranges(self):
+        """Test single candidate flip ranges."""
         # Candidate passes both fixtures from budget 3 on; native winner holds only there.
         search = [
             _entry("a", [_obs("f1", [9, 1, 2, 3]), _obs("f2", [8, 1, 2])]),
@@ -436,6 +456,7 @@ class BudgetFrontierEdgeCaseTests(unittest.TestCase):
         self.assertEqual(impl["candidates"]["b"]["full_pass_budget"], None)
 
     def test_fully_robust_winner(self):
+        """Test fully robust winner."""
         # Boundary at offset 0 with length 1: passes at every budget 1..max.
         search = [
             _entry("a", [_obs("f1", [4, 0, 0]), _obs("f2", [4, 1, 1])]),
@@ -447,6 +468,7 @@ class BudgetFrontierEdgeCaseTests(unittest.TestCase):
         self.assertTrue(impl["budget_robust"])
 
     def test_all_ambiguous_everywhere(self):
+        """Test all ambiguous everywhere."""
         search = [
             _entry("a", [_obs("f1", [4, 0])]),
             _entry("b", [_obs("f1", [4, 1])]),
@@ -457,6 +479,7 @@ class BudgetFrontierEdgeCaseTests(unittest.TestCase):
         self.assertTrue(impl["budget_robust"])
 
     def test_budgets_below_all_minima(self):
+        """Test budgets below all minima."""
         search = [
             _entry("a", [_obs("f1", [0, 0, 0, 0, 0, 1, 2])]),
             _entry("b", [_obs("f1", [0, 0, 0, 0, 0, 0, 0])]),
@@ -467,6 +490,7 @@ class BudgetFrontierEdgeCaseTests(unittest.TestCase):
         self.assertTrue(impl["budget_robust"])
 
     def test_min_budget_beyond_max_new_tokens_recorded(self):
+        """Test min budget beyond max new tokens recorded."""
         # Minimal budget 7 exceeds the cap 4: recorded, but never reached.
         search = [_entry("a", [_obs("f1", [0, 0, 0, 0, 0, 1, 2, 9])])]
         impl = self.assert_matches_oracle(search, (1, 2), 4, "no_candidate", None)
@@ -476,6 +500,7 @@ class BudgetFrontierEdgeCaseTests(unittest.TestCase):
         self.assertEqual(candidate["pass_steps"], [[1, 0]])
 
     def test_ambiguous_flip_ranges(self):
+        """Test ambiguous flip ranges."""
         # Both candidates pass everything from budget 4; native claims a unique winner.
         search = [
             _entry("a", [_obs("f1", [9, 9, 9, 1, 2])]),
@@ -490,6 +515,7 @@ class BudgetFrontierEdgeCaseTests(unittest.TestCase):
         self.assertFalse(impl["budget_robust"])
 
     def test_list_vs_tuple_entry_boundary_equivalence(self):
+        """Test list vs tuple entry boundary equivalence."""
         observations = [_obs("f1", [3, 1, 2, 7]), _obs("f2", [1, 2])]
         list_form = [_entry("a", observations, boundary_token_ids=[1, 2])]
         tuple_form = [_entry("a", observations, boundary_token_ids=(1, 2))]
@@ -507,6 +533,7 @@ class BudgetFrontierEdgeCaseTests(unittest.TestCase):
         self.assertEqual(impl_list["candidates"]["a"]["min_budget_per_fixture"], [3, 2])
 
     def test_entry_boundary_overrides_argument(self):
+        """Test entry boundary overrides argument."""
         # Entry boundary (7,) at offset 0 wins; argument boundary (9,) never occurs.
         search = [_entry("a", [_obs("f1", [7, 7, 7])], boundary_token_ids=(7,))]
         impl = self.assert_matches_oracle(search, (9,), 8, "no_candidate", None)
@@ -519,12 +546,16 @@ class BudgetFrontierEdgeCaseTests(unittest.TestCase):
 
 
 class BudgetFrontierValidationTests(unittest.TestCase):
+    """Budget frontier validation tests."""
+
     @staticmethod
     def _valid_search():
+        """Valid search."""
         return [_entry("a", [_obs("f1", [1, 2])])]
 
     @staticmethod
     def _valid_kwargs():
+        """Valid kwargs."""
         return {
             "boundary": (1, 2),
             "max_new_tokens": 8,
@@ -533,37 +564,47 @@ class BudgetFrontierValidationTests(unittest.TestCase):
         }
 
     def _raises(self, search, **overrides):
+        """Raises."""
         kwargs = self._valid_kwargs()
         kwargs.update(overrides)
         with self.assertRaises(ValueError):
             budget_frontier(search, **kwargs)
 
     def test_empty_search_rejected(self):
+        """Test empty search rejected."""
         self._raises([])
 
     def test_non_list_search_rejected(self):
+        """Test non list search rejected."""
         self._raises({"format": {"name": "a"}})
 
     def test_non_dict_entry_rejected(self):
+        """Test non dict entry rejected."""
         self._raises(["nope"])
 
     def test_missing_format_name_rejected(self):
+        """Test missing format name rejected."""
         self._raises([{"format": {}, "observations": [_obs("f1", [1, 2])]}])
 
     def test_duplicate_candidate_names_rejected(self):
+        """Test duplicate candidate names rejected."""
         search = [_entry("a", [_obs("f1", [1, 2])]), _entry("a", [_obs("f1", [1, 2])])]
         self._raises(search)
 
     def test_empty_observations_rejected(self):
+        """Test empty observations rejected."""
         self._raises([_entry("a", [])])
 
     def test_non_list_observations_rejected(self):
+        """Test non list observations rejected."""
         self._raises([{"format": {"name": "a"}, "observations": {}}])
 
     def test_non_dict_observation_rejected(self):
+        """Test non dict observation rejected."""
         self._raises([_entry("a", ["nope"])])
 
     def test_fixture_mismatch_across_entries_rejected(self):
+        """Test fixture mismatch across entries rejected."""
         search = [
             _entry("a", [_obs("f1", [1, 2])]),
             _entry("b", [_obs("f2", [1, 2])]),
@@ -571,24 +612,30 @@ class BudgetFrontierValidationTests(unittest.TestCase):
         self._raises(search)
 
     def test_empty_boundary_rejected(self):
+        """Test empty boundary rejected."""
         self._raises(self._valid_search(), boundary=())
 
     def test_non_integer_boundary_rejected(self):
+        """Test non integer boundary rejected."""
         self._raises(self._valid_search(), boundary=(1, "x"))
 
     def test_empty_entry_boundary_rejected(self):
+        """Test empty entry boundary rejected."""
         search = [_entry("a", [_obs("f1", [1, 2])], boundary_token_ids=[])]
         self._raises(search)
 
     def test_bad_max_new_tokens_rejected(self):
+        """Test bad max new tokens rejected."""
         for bad in (0, 4097, "8", 8.0):
             with self.subTest(bad=bad):
                 self._raises(self._valid_search(), max_new_tokens=bad)
 
     def test_invalid_native_decision_rejected(self):
+        """Test invalid native decision rejected."""
         self._raises(self._valid_search(), native_decision="selected")
 
     def test_native_winner_required_for_selected_decision(self):
+        """Test native winner required for selected decision."""
         self._raises(
             self._valid_search(),
             native_decision="compatible_on_fixture_set",
@@ -596,6 +643,7 @@ class BudgetFrontierValidationTests(unittest.TestCase):
         )
 
     def test_native_winner_must_name_a_candidate(self):
+        """Test native winner must name a candidate."""
         self._raises(
             self._valid_search(),
             native_decision="held_out_failed",
@@ -603,6 +651,7 @@ class BudgetFrontierValidationTests(unittest.TestCase):
         )
 
     def test_native_winner_forbidden_without_selection(self):
+        """Test native winner forbidden without selection."""
         self._raises(
             self._valid_search(),
             native_decision="ambiguous",
@@ -626,6 +675,7 @@ class BudgetFrontierSensitivityTests(unittest.TestCase):
 
     @staticmethod
     def _passing_case():
+        """Passing case."""
         search = [
             _entry("a", [_obs("f1", [7, 1, 2, 9]), _obs("f2", [1, 2, 0, 0])]),
             _entry("b", [_obs("f1", [7, 7, 7, 7]), _obs("f2", [0, 0, 0, 0])]),
@@ -639,6 +689,7 @@ class BudgetFrontierSensitivityTests(unittest.TestCase):
         return search, kwargs
 
     def test_unmutated_implementation_matches_oracle(self):
+        """Test unmutated implementation matches oracle."""
         # Sanity: the control case itself is clean before mutation.
         search, kwargs = self._passing_case()
         impl = budget_frontier(search, **kwargs)
@@ -646,10 +697,12 @@ class BudgetFrontierSensitivityTests(unittest.TestCase):
         self.assertEqual(_compare(impl, oracle), [])
 
     def test_min_budget_plus_one_shift_is_caught(self):
+        """Test min budget plus one shift is caught."""
         # Realistic bug: ``min_budget = cut + len(boundary) + 1``.
         real_first_boundary = experiments.first_boundary
 
         def shifted(tokens, stop):
+            """Shifted."""
             cut = real_first_boundary(tokens, stop)
             return None if cut is None else cut + 1
 
@@ -668,10 +721,12 @@ class BudgetFrontierSensitivityTests(unittest.TestCase):
         )
 
     def test_decision_count_off_by_one_is_caught(self):
+        """Test decision count off by one is caught."""
         # Realistic bug: pass counts undercount by one (decision flips).
         real_bisect_right = experiments.bisect_right
 
         def undercount(sorted_mins, budget):
+            """Undercount."""
             return max(0, real_bisect_right(sorted_mins, budget) - 1)
 
         search, kwargs = self._passing_case()

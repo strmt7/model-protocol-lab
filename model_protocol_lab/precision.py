@@ -200,6 +200,7 @@ def _expected_of(records: Sequence[dict[str, Any]], candidate: str, fixture: str
     raise KeyError((candidate, fixture))
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _candidate_block(
     records: Sequence[dict[str, Any]],
     candidate: str,
@@ -253,6 +254,7 @@ def _candidate_block(
     }
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def compute_derived(
     records: Sequence[dict[str, Any]],
     candidates: Sequence[str],

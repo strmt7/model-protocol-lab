@@ -33,11 +33,15 @@ from model_protocol_lab.backends import (
 
 
 def _write(path: Path, data: bytes) -> None:
+    """Write."""
     path.write_bytes(data)
 
 
 class TestManifestFingerprintEquivalence(unittest.TestCase):
+    """Test manifest fingerprint equivalence."""
+
     def test_records_match_plain_manifest(self) -> None:
+        """Test records match plain manifest."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _write(root / "a.safetensors", b"\x00" * 100)
@@ -50,6 +54,7 @@ class TestManifestFingerprintEquivalence(unittest.TestCase):
                 self.assertEqual(set(record), {"name", "bytes", "sha256"}, "record schema changed")
 
     def test_fingerprint_is_stat_triple(self) -> None:
+        """Test fingerprint is stat triple."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _write(root / "a.safetensors", b"data")
@@ -59,8 +64,11 @@ class TestManifestFingerprintEquivalence(unittest.TestCase):
 
 
 class TestVerifyManifestFingerprints(unittest.TestCase):
+    """Test verify manifest fingerprints."""
+
     @staticmethod
     def _root(tmp: str) -> tuple[Path, tuple[str, ...], dict[str, tuple[int, int, int]]]:
+        """Root."""
         root = Path(tmp)
         _write(root / "w.safetensors", b"\x02" * 64)
         names = ("w.safetensors",)
@@ -68,11 +76,13 @@ class TestVerifyManifestFingerprints(unittest.TestCase):
         return root, names, prints
 
     def test_unchanged_passes(self) -> None:
+        """Test unchanged passes."""
         with tempfile.TemporaryDirectory() as tmp:
             root, names, prints = self._root(tmp)
             _verify_manifest_fingerprints(root, names, prints)  # must not raise
 
     def test_in_place_modification_detected(self) -> None:
+        """Test in place modification detected."""
         with tempfile.TemporaryDirectory() as tmp:
             root, names, prints = self._root(tmp)
             _write(root / "w.safetensors", b"\x03" * 64)  # same size, new mtime/content
@@ -80,6 +90,7 @@ class TestVerifyManifestFingerprints(unittest.TestCase):
                 _verify_manifest_fingerprints(root, names, prints)
 
     def test_size_change_detected(self) -> None:
+        """Test size change detected."""
         with tempfile.TemporaryDirectory() as tmp:
             root, names, prints = self._root(tmp)
             _write(root / "w.safetensors", b"\x03" * 65)
@@ -87,6 +98,7 @@ class TestVerifyManifestFingerprints(unittest.TestCase):
                 _verify_manifest_fingerprints(root, names, prints)
 
     def test_replacement_detected(self) -> None:
+        """Test replacement detected."""
         with tempfile.TemporaryDirectory() as tmp:
             root, names, prints = self._root(tmp)
             # Replace via rename: new inode, then restore the original mtime
@@ -101,6 +113,7 @@ class TestVerifyManifestFingerprints(unittest.TestCase):
                 _verify_manifest_fingerprints(root, names, prints)
 
     def test_deletion_detected(self) -> None:
+        """Test deletion detected."""
         with tempfile.TemporaryDirectory() as tmp:
             root, names, prints = self._root(tmp)
             (root / "w.safetensors").unlink()
@@ -111,6 +124,8 @@ class TestVerifyManifestFingerprints(unittest.TestCase):
 
 
 class TestBackendSingleHash(unittest.TestCase):
+    """Test backend single hash."""
+
     def test_backend_does_not_call_full_manifest(self) -> None:
         """The backend must hash weights once; the old double-_manifest call
         is gone. Patch _manifest to explode if the backend touches it, and
@@ -130,13 +145,16 @@ class TestBackendSingleHash(unittest.TestCase):
             verify_calls: list[tuple[tuple[str, ...], dict[str, tuple[int, int, int]]]] = []
             real_verify = backends._verify_manifest_fingerprints
 
-            def exploding_manifest(root: Path, names: tuple[str, ...]):  # type: ignore[no-untyped-def]
+            def exploding_manifest(root: Path, names: tuple[str, ...]):
+                """Exploding manifest."""
+                # type: ignore[no-untyped-def]
                 manifest_calls.append((root, names))
                 return real_manifest(root, names)
 
             def recording_verify(  # type: ignore[no-untyped-def]
                 root: Path, names: tuple[str, ...], fingerprints: dict[str, tuple[int, int, int]]
             ) -> None:
+                """Recording verify."""
                 verify_calls.append((names, fingerprints))
                 real_verify(root, names, fingerprints)
 
@@ -174,6 +192,7 @@ class TestBackendSingleHash(unittest.TestCase):
             def failing_verify(  # type: ignore[no-untyped-def]
                 root: Path, names: tuple[str, ...], fingerprints: dict[str, tuple[int, int, int]]
             ) -> None:
+                """Failing verify."""
                 raise ValueError("assets_changed")
 
             with (

@@ -167,6 +167,7 @@ WITHHELD = "[withheld without --include-evidence]"
 
 
 def _no_ws(text: str) -> str:
+    """No ws."""
     return "".join(text.split())
 
 
@@ -264,6 +265,7 @@ def _hostile_document() -> dict:
 
 
 def _dataset_path(directory: Path, document: dict | None = None) -> Path:
+    """Dataset path."""
     path = directory / "dataset.json"
     path.write_text(json.dumps(document or _hostile_document()), encoding="utf-8")
     return path
@@ -276,21 +278,25 @@ class _CanaryBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(map(chr, token_ids))
 
     @staticmethod
     def generate(
         input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate."""
         text = (CANARY + "|").ljust(max_new_tokens)[:max_new_tokens]
         return Generation(tuple(map(ord, text)), "limit")
 
 
 def _canary_ids() -> list[int]:
+    """Canary ids."""
     return [ord(char) for char in CANARY]
 
 
@@ -443,6 +449,7 @@ def _hostile_result() -> dict:
 
 
 def _walk_keys(value: object, seen: set[str]) -> None:
+    """Walk keys."""
     if isinstance(value, dict):
         for key, item in value.items():
             seen.add(str(key))
@@ -456,6 +463,7 @@ class PublicViewBarrier(LeakAsserts):
     """The _public_view / _strip_raw_diagnostics barrier over every carrier."""
 
     def test_public_view_strips_every_carrier(self) -> None:
+        """Test public view strips every carrier."""
         result = _hostile_result()
         public = _public_view(result, include_evidence=False)
         text = json.dumps(public, ensure_ascii=True)
@@ -501,12 +509,14 @@ class PublicViewBarrier(LeakAsserts):
         self.assertIn("stop_texts", public["backend_divergences"])
 
     def test_public_view_does_not_mutate_caller_dict(self) -> None:
+        """Test public view does not mutate caller dict."""
         result = _hostile_result()
         _public_view(result, include_evidence=False)
         self.assertIn("observations", result["search"][0])
         self.assertIn("stop_texts", result["backend_divergences"])
 
     def test_save_report_json_and_html_false_path(self) -> None:
+        """Test save report json and html false path."""
         with tempfile.TemporaryDirectory() as tmp:
             json_path, html_path = save_report(
                 _hostile_result(), Path(tmp) / "report", include_evidence=False
@@ -529,6 +539,7 @@ class PublicViewBarrier(LeakAsserts):
         self.assertIn("canary-search-1", json_text)
 
     def test_save_report_true_path_keeps_canary(self) -> None:
+        """Test save report true path keeps canary."""
         with tempfile.TemporaryDirectory() as tmp:
             json_path, html_path = save_report(
                 _hostile_result(), Path(tmp) / "report", include_evidence=True
@@ -546,6 +557,7 @@ class EndToEndDivergencePipeline(LeakAsserts):
 
     @staticmethod
     def _result_with_real_divergence() -> tuple[dict, dict]:
+        """Result with real divergence."""
         split = parse_dataset(json.dumps(_hostile_document()))
         result = run_experiment(
             _CanaryBackend(),
@@ -573,6 +585,7 @@ class EndToEndDivergencePipeline(LeakAsserts):
         self.assertEqual(section["stop_texts"], [CANARY])
 
     def test_real_divergence_stripped_from_public_json(self) -> None:
+        """Test real divergence stripped from public json."""
         result, _ = self._result_with_real_divergence()
         with tempfile.TemporaryDirectory() as tmp:
             json_path, html_path = save_report(result, Path(tmp) / "report", include_evidence=False)
@@ -583,6 +596,7 @@ class EndToEndDivergencePipeline(LeakAsserts):
         self.assertNotIn("stop_texts", json.loads(json_text)["backend_divergences"])
 
     def test_real_divergence_kept_with_evidence(self) -> None:
+        """Test real divergence kept with evidence."""
         result, _ = self._result_with_real_divergence()
         with tempfile.TemporaryDirectory() as tmp:
             json_path, _ = save_report(result, Path(tmp) / "report", include_evidence=True)
@@ -591,6 +605,7 @@ class EndToEndDivergencePipeline(LeakAsserts):
 
 
 def _run_cli(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    """Run cli."""
     return subprocess.run(
         [sys.executable, "-m", "model_protocol_lab", *args],
         cwd=cwd or REPO_ROOT,
@@ -606,6 +621,7 @@ class _OrdBackend:
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(map(chr, token_ids))
 
 
@@ -613,6 +629,7 @@ class DiffBackendsSweep43(LeakAsserts):
     """diff-backends takes no dataset input; only operator args are echoed."""
 
     def test_diff_backends_clean_inputs_clean_output(self) -> None:
+        """Test diff backends clean inputs clean output."""
         result = diff_backends(
             prompt_ids=(1, 2, 3),
             output_ids=(4, 5),
@@ -649,6 +666,7 @@ class DiffBackendsSweep43(LeakAsserts):
         self.assertNoCanary(json.dumps(clean, ensure_ascii=True), "diff-backends (clean args)")
 
     def test_cli_diff_backends_clean_args(self) -> None:
+        """Test cli diff backends clean args."""
         with tempfile.TemporaryDirectory() as tmp:
             ckpt = _write_checkpoint(Path(tmp) / "ckpt")
             proc = _run_cli(
@@ -667,6 +685,7 @@ class DiffBackendsSweep43(LeakAsserts):
         self.assertNoCanary(proc.stderr, "mpl diff-backends stderr (clean args)")
 
     def test_cli_diff_backends_echoes_operator_args_by_design(self) -> None:
+        """Test cli diff backends echoes operator args by design."""
         with tempfile.TemporaryDirectory() as tmp:
             ckpt = _write_checkpoint(Path(tmp) / "ckpt")
             proc = _run_cli(
@@ -692,6 +711,7 @@ class DiffReportsSweep43(LeakAsserts):
 
     @staticmethod
     def _evidence_report(directory: Path, document: dict | None = None) -> dict:
+        """Evidence report."""
         split = parse_dataset(json.dumps(document or _hostile_document()))
         result = run_experiment(
             _CanaryBackend(),
@@ -706,6 +726,7 @@ class DiffReportsSweep43(LeakAsserts):
 
     @staticmethod
     def _decoded_text(report: dict) -> str:
+        """Decoded text."""
         decode = _CanaryBackend.decode
         chunks = []
         for entry in report["search"]:
@@ -715,6 +736,7 @@ class DiffReportsSweep43(LeakAsserts):
         return "\n".join(chunks)
 
     def test_self_diff_clean(self) -> None:
+        """Test self diff clean."""
         with tempfile.TemporaryDirectory() as tmp:
             report = self._evidence_report(Path(tmp) / "run")
         self.assertIn(CANARY, self._decoded_text(report), "vacuity guard")
@@ -755,6 +777,8 @@ class DiffReportsSweep43(LeakAsserts):
         self.assertNoCanary(render_summary(diff), "diff-reports summary (fixture-set drift)")
 
     def test_held_out_drift_carries_ids_only(self) -> None:
+        """Test held out drift carries ids only."""
+
         # The probe run selects no winner, so held_out evidence is absent
         # from the raw run_experiment output; fabricate it on both sides
         # (diff_reports only reads exact_match/boundary_found verdicts,
@@ -762,6 +786,7 @@ class DiffReportsSweep43(LeakAsserts):
         # observation's answer and input_ids -- the ultimate reduction
         # proof: even raw content in an observation must not reach the diff.
         def with_held_out(report: dict, extra: bool) -> dict:
+            """With held out."""
             observations = [
                 {
                     "fixture": "canary-held-1",
@@ -823,10 +848,12 @@ class _OrdTokenizer:
 
     @staticmethod
     def encode(text: str, add_special_tokens: bool = False) -> tuple[int, ...]:
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids: list[int] | tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(map(chr, token_ids))
 
 
@@ -837,6 +864,7 @@ class DebugReplSweep43(LeakAsserts):
 
     @staticmethod
     def _session(commands: list[str], tokenizer=None) -> str:
+        """Session."""
         split = parse_dataset(json.dumps(_hostile_document()))
         out = io.StringIO()
         shell = DebugShell(split, dataset_label="canary-fixtures", tokenizer=tokenizer, stdout=out)
@@ -845,6 +873,7 @@ class DebugReplSweep43(LeakAsserts):
         return out.getvalue()
 
     def test_render_shows_fixture_content_by_design(self) -> None:
+        """Test render shows fixture content by design."""
         out = self._session([".render", ".quit"])
         self.assertCanaryPresent(out, "debug .render (by design)")
 
@@ -860,6 +889,7 @@ class DebugReplSweep43(LeakAsserts):
         self.assertCanaryPresent(saved, "debug .save transcript (by design)")
 
     def test_read_script_runs_operator_script_by_design(self) -> None:
+        """Test read script runs operator script by design."""
         with tempfile.TemporaryDirectory() as tmp:
             script = Path(tmp) / "session.txt"
             script.write_text(".render\n.quit\n", encoding="utf-8")
@@ -884,11 +914,13 @@ class DebugReplSweep43(LeakAsserts):
         self.assertIn("overhang=", out)
 
     def test_fixture_select_echoes_sanitized_id(self) -> None:
+        """Test fixture select echoes sanitized id."""
         out = self._session([".fixture canary-search-1", ".quit"])
         self.assertIn("canary-search-1", out)
         self.assertNoCanary(out, "debug .fixture (ids carry no content)")
 
     def test_audit_findings_carry_no_message_text(self) -> None:
+        """Test audit findings carry no message text."""
         document = _hostile_document()
         document["search"][0]["messages"][0]["content"] += " <|im_start|> literal"
         split = parse_dataset(json.dumps(document))
@@ -901,15 +933,18 @@ class DebugReplSweep43(LeakAsserts):
         self.assertNoCanary(text, "debug .audit")
 
     def test_fixtures_lists_ids_only(self) -> None:
+        """Test fixtures lists ids only."""
         out = self._session([".fixtures", ".quit"])
         self.assertNoCanary(out, "debug .fixtures")
 
     def test_tokens_without_tokenizer_prints_reminder(self) -> None:
+        """Test tokens without tokenizer prints reminder."""
         out = self._session([".tokens", ".quit"])
         self.assertNoCanary(out, "debug .tokens (no tokenizer)")
         self.assertIn("no tokenizer attached", out)
 
     def test_cli_debug_script_by_design(self) -> None:
+        """Test cli debug script by design."""
         with tempfile.TemporaryDirectory() as tmp:
             dataset = _dataset_path(Path(tmp))
             script = Path(tmp) / "session.txt"
@@ -921,6 +956,7 @@ class DebugReplSweep43(LeakAsserts):
 
 
 def _hostile_csv() -> str:
+    """Hostile csv."""
     lines = [
         "id,group,partition,expected,user_1",
         f"csv-1,csvg,search,expected {CANARY},user says {CANARY} here",
@@ -936,6 +972,7 @@ class FixturesBuildSweep(LeakAsserts):
     """
 
     def test_fixtures_build_sidecar_carries_no_content(self) -> None:
+        """Test fixtures build sidecar carries no content."""
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "authoring.csv"
             source.write_text(_hostile_csv(), encoding="utf-8")
@@ -975,6 +1012,7 @@ class InspectSweep43(LeakAsserts):
     """`mpl inspect` prints counts only."""
 
     def test_inspect_emits_counts_only(self) -> None:
+        """Test inspect emits counts only."""
         with tempfile.TemporaryDirectory() as tmp:
             path = _dataset_path(Path(tmp))
             proc = _run_cli("inspect", str(path))
@@ -990,6 +1028,7 @@ class DoctorSweep43(LeakAsserts):
     """`mpl doctor`: checks and counts only, incl. the portability matrix."""
 
     def test_examine_dataset_clean(self) -> None:
+        """Test examine dataset clean."""
         with tempfile.TemporaryDirectory() as tmp:
             report = examine_dataset(_dataset_path(Path(tmp)))
         text = json.dumps(report, ensure_ascii=True)
@@ -1000,6 +1039,7 @@ class DoctorSweep43(LeakAsserts):
         )
 
     def test_doctor_function_clean(self) -> None:
+        """Test doctor function clean."""
         with tempfile.TemporaryDirectory() as tmp:
             report = doctor(
                 _write_checkpoint(Path(tmp) / "ckpt"),
@@ -1015,6 +1055,7 @@ class DoctorSweep43(LeakAsserts):
             self.assertNotIn(CANARY, str(detail))
 
     def test_cli_doctor_with_portability_matrix_clean(self) -> None:
+        """Test cli doctor with portability matrix clean."""
         with tempfile.TemporaryDirectory() as tmp:
             ckpt = _write_checkpoint(Path(tmp) / "ckpt")
             ref = _write_checkpoint(Path(tmp) / "ref")
@@ -1039,6 +1080,7 @@ class DoctorSweep43(LeakAsserts):
         self.assertNoCanary(proc.stderr, "mpl doctor stderr (portability table)")
 
     def test_portability_table_renders_no_fixture_text(self) -> None:
+        """Test portability table renders no fixture text."""
         with tempfile.TemporaryDirectory() as tmp:
             report = doctor(
                 _write_checkpoint(Path(tmp) / "ckpt"),
@@ -1059,6 +1101,7 @@ class ScoringSweep43(LeakAsserts):
 
     @staticmethod
     def _winner_observations() -> tuple[tuple, tuple[dict, ...]]:
+        """Winner observations."""
         split = parse_dataset(json.dumps(_hostile_document()))
         result = run_experiment(
             _CanaryBackend(),
@@ -1073,6 +1116,7 @@ class ScoringSweep43(LeakAsserts):
         return split.search, observations
 
     def test_stop_matrix_rows_carry_no_content(self) -> None:
+        """Test stop matrix rows carry no content."""
         fixtures, observations = self._winner_observations()
         rows = stop_matrix(
             _CanaryBackend(),
@@ -1111,6 +1155,7 @@ class ScoringSweep43(LeakAsserts):
                     )
 
     def test_budget_frontier_carries_no_content(self) -> None:
+        """Test budget frontier carries no content."""
         split = parse_dataset(json.dumps(_hostile_document()))
         result = run_experiment(
             _CanaryBackend(),
@@ -1130,6 +1175,7 @@ class ScoringSweep43(LeakAsserts):
         self.assertNoCanary(json.dumps(frontier, ensure_ascii=True), "budget_frontier")
 
     def test_logprob_interpretation_text_is_fixed_vocabulary(self) -> None:
+        """Test logprob interpretation text is fixed vocabulary."""
         hostile_scores = [
             {
                 "fixture": "canary-search-1",
@@ -1149,6 +1195,7 @@ class SampleReportHygiene43(LeakAsserts):
     """The committed examples/sample-report/ stays synthetic and evidence-free."""
 
     def test_committed_sample_report_clean(self) -> None:
+        """Test committed sample report clean."""
         raw = (REPO_ROOT / "examples" / "sample-report" / "results.json").read_bytes()
         report = json.loads(raw)
         self.assertFalse(report["raw_evidence_included"])

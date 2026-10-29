@@ -60,6 +60,7 @@ class _DensityBackend:
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -71,9 +72,11 @@ class _DensityBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.calls += 1
         if self.mode == "explode":
             raise RuntimeError("boom")
@@ -118,6 +121,7 @@ class _DensityBackend:
 
 
 def _payload(backend=None, formats=FORMATS, seed=0, **stage_kwargs):
+    """Payload."""
     backend = backend if backend is not None else _DensityBackend()
     stage_kwargs.setdefault("max_context", 8192)
     stage = experiments.density_stage(
@@ -131,6 +135,7 @@ def _payload(backend=None, formats=FORMATS, seed=0, **stage_kwargs):
 
 
 def _record(case_index, arm, hashes, **overrides):
+    """Record."""
     record = {
         "candidate": "x",
         "case_index": case_index,
@@ -150,7 +155,10 @@ def _record(case_index, arm, hashes, **overrides):
 
 
 class TestProtocol(unittest.TestCase):
+    """Test protocol."""
+
     def test_constants(self):
+        """Test constants."""
         self.assertEqual(density.CASE_COUNT, 20)
         self.assertEqual(density.CONSTRAINT_COUNT, 16)
         self.assertEqual(len(density.ARM_KEYS), 21)
@@ -170,6 +178,7 @@ class TestProtocol(unittest.TestCase):
         )
 
     def test_protocol_object_and_fingerprint(self):
+        """Test protocol object and fingerprint."""
         protocol = density.protocol_object(3, "sha256:x")
         self.assertEqual(protocol["backend_fingerprint"], "sha256:x")
         self.assertEqual(protocol["seed"], 3)
@@ -181,11 +190,15 @@ class TestProtocol(unittest.TestCase):
 
 
 class TestGeneration(unittest.TestCase):
+    """Test generation."""
+
     def test_determinism(self):
+        """Test determinism."""
         self.assertEqual(density.generate_cases(7), density.generate_cases(7))
         self.assertNotEqual(density.ground_sha256(7), density.ground_sha256(8))
 
     def test_pool_hygiene(self):
+        """Test pool hygiene."""
         topic_words: set[str] = set()
         for topic in density.TOPICS:
             topic_words.update(density.normalize_words(topic))
@@ -205,6 +218,7 @@ class TestGeneration(unittest.TestCase):
             self.assertFalse(set(density.normalize_words(statement)) & pool, statement)
 
     def test_kind_balance(self):
+        """Test kind balance."""
         # Each position carries each kind exactly CASE_COUNT/4
         # times across the case set (design section 3).
         for position in range(1, density.CONSTRAINT_COUNT + 1):
@@ -213,6 +227,7 @@ class TestGeneration(unittest.TestCase):
                 self.assertEqual(kinds.count(kind), density.CASE_COUNT // 4)
 
     def test_satisfiability_invariant(self):
+        """Test satisfiability invariant."""
         # Design section 3 / red-team F1: by construction a
         # perfect follower passes every constraint of every
         # case; pin it over a seed sweep, not one seed.
@@ -239,6 +254,7 @@ class TestGeneration(unittest.TestCase):
                 self.assertTrue(density.task_present(case, hashes))
 
     def test_position_one_target_not_in_neutrals(self):
+        """Test position one target not in neutrals."""
         # The sham-neutrality precondition (design section 3):
         # position 1's word target never occurs in the case's
         # neutral statements.
@@ -252,6 +268,7 @@ class TestGeneration(unittest.TestCase):
                     self.assertNotIn(first["target"], neutral_words)
 
     def test_sham_block_reaches_k16_length(self):
+        """Test sham block reaches k16 length."""
         for seed in range(20):
             for case in density.generate_cases(seed):
                 self.assertGreaterEqual(
@@ -260,6 +277,7 @@ class TestGeneration(unittest.TestCase):
                 )
 
     def test_arm_content_labels(self):
+        """Test arm content labels."""
         case = density.generate_cases(0)[0]
         solo = density.arm_content(case, "solo_7")
         self.assertIn("Instruction 7:", solo)
@@ -273,7 +291,10 @@ class TestGeneration(unittest.TestCase):
 
 
 class TestChecking(unittest.TestCase):
+    """Test checking."""
+
     def test_normalization_table(self):
+        """Test normalization table."""
         # B-F3: emphasis, brackets, and separators never hide
         # or invent words; digits are different words from
         # their spelled forms.
@@ -287,6 +308,7 @@ class TestChecking(unittest.TestCase):
         self.assertEqual(density.normalize_words(""), [])
 
     def test_satisfied_per_kind(self):
+        """Test satisfied per kind."""
         hashes = density.word_hashes("red blue green")
         self.assertTrue(density.satisfied({"kind": "include", "target": "blue"}, hashes))
         self.assertFalse(density.satisfied({"kind": "include", "target": "gold"}, hashes))
@@ -302,6 +324,7 @@ class TestChecking(unittest.TestCase):
         self.assertTrue(density.satisfied({"kind": "count", "limit": 8}, empty))
 
     def test_digit_is_not_the_number_word(self):
+        """Test digit is not the number word."""
         # The frozen rule counts "7" and "seven" as different
         # words (design section 4, stated measurement choice).
         hashes = density.word_hashes("answer 7")
@@ -309,6 +332,7 @@ class TestChecking(unittest.TestCase):
         self.assertTrue(density.satisfied({"kind": "include", "target": "7"}, hashes))
 
     def test_commitment_order_and_multiplicity(self):
+        """Test commitment order and multiplicity."""
         forward = density.word_hashes("red blue")
         reverse = density.word_hashes("blue red")
         self.assertNotEqual(density.commitment_digest(forward), density.commitment_digest(reverse))
@@ -327,7 +351,10 @@ class TestChecking(unittest.TestCase):
 
 
 class TestSignTest(unittest.TestCase):
+    """Test sign test."""
+
     def test_exact_values(self):
+        """Test exact values."""
         self.assertEqual(density.sign_test_p(0, 0), 1.0)
         self.assertEqual(density.sign_test_p(6, 0), 0.03125)
         self.assertEqual(density.sign_test_p(5, 1), 0.21875)
@@ -335,11 +362,13 @@ class TestSignTest(unittest.TestCase):
         self.assertAlmostEqual(density.sign_test_p(10, 2), 0.03857421875, places=12)
 
     def test_symmetry_and_monotonicity(self):
+        """Test symmetry and monotonicity."""
         self.assertEqual(density.sign_test_p(2, 9), density.sign_test_p(9, 2))
         self.assertLess(density.sign_test_p(9, 1), density.sign_test_p(6, 4))
 
 
 def _perfect_hashes(case):
+    """Perfect hashes."""
     starts = [c["target"] for c in case["constraints"] if c["kind"] == "start"][0]
     ends = [c["target"] for c in case["constraints"] if c["kind"] == "end"][0]
     includes = [c["target"] for c in case["constraints"] if c["kind"] == "include"]
@@ -347,6 +376,7 @@ def _perfect_hashes(case):
 
 
 def _first_only_hashes(case):
+    """First only hashes."""
     first = case["constraints"][0]
     words: list[str] = []
     if first["kind"] == "start":
@@ -360,6 +390,7 @@ def _first_only_hashes(case):
 
 
 def _synthetic_records(cases, k16_hashes, solo_hashes=None):
+    """Synthetic records."""
     records = []
     for ci, case in enumerate(cases):
         for arm in density.ARM_KEYS:
@@ -374,10 +405,14 @@ def _synthetic_records(cases, k16_hashes, solo_hashes=None):
 
 
 class TestAggregate(unittest.TestCase):
+    """Test aggregate."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.cases = density.generate_cases(4)
 
     def test_perfect_model(self):
+        """Test perfect model."""
         records = _synthetic_records(self.cases, _perfect_hashes)
         agg = density.aggregate_candidate(records, self.cases)
         self.assertTrue(agg["available"])
@@ -393,6 +428,7 @@ class TestAggregate(unittest.TestCase):
         self.assertEqual(agg["decision"]["discordant_cases"], 0)
 
     def test_first_only_model_is_falsified(self):
+        """Test first only model is falsified."""
         records = _synthetic_records(self.cases, _first_only_hashes)
         agg = density.aggregate_candidate(records, self.cases)
         self.assertEqual(agg["decision"]["verdict"], "falsified")
@@ -402,7 +438,10 @@ class TestAggregate(unittest.TestCase):
         self.assertLess(agg["joint_k16"]["rate"], 1.0)
 
     def test_insufficient_below_six_discordant_cases(self):
+        """Test insufficient below six discordant cases."""
+
         def k16(case):
+            """K16."""
             index = self.cases.index(case)
             return _first_only_hashes(case) if index < 3 else _perfect_hashes(case)
 
@@ -413,6 +452,7 @@ class TestAggregate(unittest.TestCase):
         self.assertIsNone(agg["decision"]["falsified"])
 
     def test_zero_word_records_excluded_from_count_denominators(self):
+        """Test zero word records excluded from count denominators."""
         records = _synthetic_records(self.cases, lambda case: [])
         agg = density.aggregate_candidate(records, self.cases)
         self.assertEqual(agg["n_zero_word"], 20)
@@ -425,6 +465,7 @@ class TestAggregate(unittest.TestCase):
         self.assertEqual(include_row["k16_checked"], 80)
 
     def test_screen_accounting_is_disjoint(self):
+        """Test screen accounting is disjoint."""
         records = _synthetic_records(self.cases, _perfect_hashes)
         for record in records[:21]:
             record["case_screened"] = True
@@ -448,6 +489,7 @@ class TestAggregate(unittest.TestCase):
         )
 
     def test_no_live_records_unavailable(self):
+        """Test no live records unavailable."""
         agg = density.aggregate_candidate([], self.cases)
         self.assertFalse(agg["available"])
         self.assertEqual(agg["detail"], "density_unavailable")
@@ -456,7 +498,10 @@ class TestAggregate(unittest.TestCase):
 
 
 class TestStage(unittest.TestCase):
+    """Test stage."""
+
     def test_perfect_backend_payload(self):
+        """Test perfect backend payload."""
         payload = _payload()
         self.assertTrue(payload["available"])
         self.assertTrue(_valid_density(payload))
@@ -468,6 +513,7 @@ class TestStage(unittest.TestCase):
                 self.assertEqual(row["rate"], 1.0)
 
     def test_first_only_backend_is_falsified(self):
+        """Test first only backend is falsified."""
         payload = _payload(_DensityBackend("first_only"))
         self.assertTrue(_valid_density(payload))
         for entry in payload["candidates"].values():
@@ -475,6 +521,7 @@ class TestStage(unittest.TestCase):
             self.assertIs(entry["decision"]["falsified"], True)
 
     def test_wrong_backend(self):
+        """Test wrong backend."""
         payload = _payload(_DensityBackend("wrong"))
         self.assertTrue(_valid_density(payload))
         for entry in payload["candidates"].values():
@@ -483,6 +530,7 @@ class TestStage(unittest.TestCase):
             self.assertEqual(presence["k16"], 0.0)
 
     def test_explode_backend_degrades_records(self):
+        """Test explode backend degrades records."""
         payload = _payload(_DensityBackend("explode"))
         self.assertTrue(_valid_density(payload))
         for entry in payload["candidates"].values():
@@ -492,6 +540,7 @@ class TestStage(unittest.TestCase):
             self.assertEqual(entry["n_live"], 0)
 
     def test_cancel_unwinds_stage(self):
+        """Test cancel unwinds stage."""
         backend = _DensityBackend(cancel_after=5)
         event = threading.Event()
         backend.cancel_event = event
@@ -500,6 +549,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(payload["detail"], "cancelled")
 
     def test_record_budget(self):
+        """Test record budget."""
         formats = tuple(
             Format(name=f"dn-{i}", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>")
             for i in range(25)
@@ -516,8 +566,13 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "density_record_budget_exceeded")
 
     def test_boundary_screen_fails_stage_closed(self):
+        """Test boundary screen fails stage closed."""
+
         class _ScreenedBackend(_DensityBackend):
+            """Screened backend."""
+
             def decode(self, ids):
+                """Decode."""
                 if tuple(ids) == self.boundary_ids:
                     return "signal word"
                 return super().decode(ids)
@@ -535,6 +590,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "density_screen_failed")
 
     def test_duplicate_format_names_rejected(self):
+        """Test duplicate format names rejected."""
         backend = _DensityBackend()
         formats = (FORMATS[0], FORMATS[0])
         with self.assertRaises(ValueError):
@@ -548,7 +604,10 @@ class TestStage(unittest.TestCase):
 
 
 class TestDiff(unittest.TestCase):
+    """Test diff."""
+
     def test_self_diff_unchanged(self):
+        """Test self diff unchanged."""
         payload = _payload()
         result = diff_density(payload, payload)
         self.assertEqual(result["available"], "both")
@@ -556,6 +615,7 @@ class TestDiff(unittest.TestCase):
         self.assertTrue(result["comparable"])
 
     def test_verdict_drift_detected(self):
+        """Test verdict drift detected."""
         old = _payload()
         new = _payload(_DensityBackend("first_only"))
         result = diff_density(old, new)
@@ -566,6 +626,7 @@ class TestDiff(unittest.TestCase):
         self.assertIn("falsified", metrics)
 
     def test_one_sided(self):
+        """Test one sided."""
         payload = _payload()
         self.assertEqual(diff_density(payload, None)["available"], "old")
         self.assertEqual(diff_density(None, payload)["available"], "new")
@@ -573,6 +634,7 @@ class TestDiff(unittest.TestCase):
         self.assertFalse(diff_density(payload, None)["changed"])
 
     def test_seed_drift_not_comparable(self):
+        """Test seed drift not comparable."""
         old = _payload(seed=0)
         new = _payload(seed=1)
         result = diff_density(old, new)
@@ -581,9 +643,11 @@ class TestDiff(unittest.TestCase):
         self.assertTrue(result["changed"])
 
     def test_tamper_battery(self):
+        """Test tamper battery."""
         payload = _payload()
 
         def forged(mutate):
+            """Forged."""
             candidate = copy.deepcopy(payload)
             mutate(candidate)
             return candidate
@@ -617,7 +681,10 @@ class TestDiff(unittest.TestCase):
 
 
 class TestReportingAndCli(unittest.TestCase):
+    """Test reporting and cli."""
+
     def test_section_renders(self):
+        """Test section renders."""
         payload = _payload(_DensityBackend("first_only"))
         html = render_html({"density": payload})
         self.assertIn("Instruction density", html)
@@ -626,10 +693,12 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertIn("Sham (first constraint plus length-matched", html)
 
     def test_section_absent_without_payload(self):
+        """Test section absent without payload."""
         self.assertNotIn('id="density"', render_html({}))
         self.assertNotIn('id="density"', render_html({"density": {"available": False}}))
 
     def test_section_hostile_payload(self):
+        """Test section hostile payload."""
         payload = _payload()
         hostile = {"density": copy.deepcopy(payload)}
         hostile["density"]["candidates"] = {
@@ -639,6 +708,7 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertNotIn("<script>alert(1)</script>", html)
 
     def test_section_na_rates(self):
+        """Test section na rates."""
         payload = _payload()
         sparse = copy.deepcopy(payload)
         entry = sparse["candidates"]["dn-a"]
@@ -653,6 +723,7 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertIn("Instruction density", html)
 
     def test_cli_helper_attaches_payload(self):
+        """Test cli helper attaches payload."""
         backend = _DensityBackend()
         result: dict = {}
         cli._run_density_probe(
@@ -670,9 +741,14 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertTrue(_valid_density(result["density"]))
 
     def test_cli_helper_never_raises(self):
+        """Test cli helper never raises."""
+
         class _ExplodingEncode(_DensityBackend):
+            """Exploding encode."""
+
             @staticmethod
             def encode(text):
+                """Encode."""
                 raise RuntimeError("no encode")
 
         result: dict = {}
@@ -692,6 +768,8 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertFalse(result["density"]["available"])
 
         class _ExplodingFingerprint(_DensityBackend):
+            """Exploding fingerprint."""
+
             @property
             def fingerprint(self):  # noqa: ANN202 -- test fake
                 raise RuntimeError("no fingerprint")
@@ -727,11 +805,15 @@ _PATCHED_NEUTRALS = tuple(f"candle mirror bridge item{i} rests quietly today" fo
 
 
 class TestGapCoverage(unittest.TestCase):
+    """Test gap coverage."""
+
     def test_generator_rejects_non_int_seed(self):
+        """Test generator rejects non int seed."""
         with self.assertRaises(ValueError):
             density.generate_cases("0")  # type: ignore[arg-type]
 
     def test_unknown_arm_and_kind_raise(self):
+        """Test unknown arm and kind raise."""
         case = density.generate_cases(0)[0]
         with self.assertRaises(ValueError):
             density.arm_content(case, "bogus")
@@ -739,6 +821,7 @@ class TestGapCoverage(unittest.TestCase):
             density.satisfied({"kind": "bogus", "target": "x"}, [])
 
     def test_position_one_redraw_with_patched_pool(self):
+        """Test position one redraw with patched pool."""
         # Seeds/cases found by executing the draw sequence with
         # the patched pool: at each, the naive position-1 target
         # is "mirror" (inside the case's neutrals), and the
@@ -759,6 +842,7 @@ class TestGapCoverage(unittest.TestCase):
                     self.assertEqual(diffreports._density_generate(seed), cases)
 
     def test_zero_word_solo_records_leave_count_denominators(self):
+        """Test zero word solo records leave count denominators."""
         cases = density.generate_cases(4)
         records = _synthetic_records(cases, _perfect_hashes, solo_hashes=lambda case, j: [])
         agg = density.aggregate_candidate(records, cases)
@@ -775,6 +859,7 @@ class TestGapCoverage(unittest.TestCase):
         self.assertEqual(k16_row["solo_checked"], 240)
 
     def test_reverse_discordance_is_not_falsified(self):
+        """Test reverse discordance is not falsified."""
         cases = density.generate_cases(4)
         records = _synthetic_records(
             cases,
@@ -790,7 +875,10 @@ class TestGapCoverage(unittest.TestCase):
 
 
 class TestStageGaps(unittest.TestCase):
+    """Test stage gaps."""
+
     def test_formats_must_be_a_nonempty_tuple(self):
+        """Test formats must be a nonempty tuple."""
         backend = _DensityBackend()
         with self.assertRaises(ValueError):
             experiments.density_stage(
@@ -802,6 +890,7 @@ class TestStageGaps(unittest.TestCase):
             )
 
     def test_context_exceeded_records(self):
+        """Test context exceeded records."""
         payload = _payload(max_context=1)
         self.assertTrue(_valid_density(payload))
         for entry in payload["candidates"].values():
@@ -812,8 +901,13 @@ class TestStageGaps(unittest.TestCase):
             self.assertEqual(details, {"arm_context_exceeded"})
 
     def test_undecodable_boundary_proceeds(self):
+        """Test undecodable boundary proceeds."""
+
         class _Undecodable(_DensityBackend):
+            """Undecodable."""
+
             def decode(self, ids):
+                """Decode."""
                 if tuple(ids) == self.boundary_ids:
                     raise RuntimeError("no decode")
                 return super().decode(ids)
@@ -827,8 +921,13 @@ class TestStageGaps(unittest.TestCase):
             self.assertEqual(entry["joint_k16"]["rate"], 1.0)
 
     def test_per_case_boundary_screen(self):
+        """Test per case boundary screen."""
+
         class _CaseScreened(_DensityBackend):
+            """Case screened."""
+
             def decode(self, ids):
+                """Decode."""
                 if tuple(ids) == self.boundary_ids:
                     return "Instruction 7:"
                 return super().decode(ids)
@@ -844,6 +943,7 @@ class TestStageGaps(unittest.TestCase):
             self.assertTrue(all(r["case_screened"] for r in entry["records"]))
 
     def test_cell_context_and_cancel_directly(self):
+        """Test cell context and cancel directly."""
         from model_protocol_lab.core import Fixture, Message
 
         backend = _DensityBackend()
@@ -882,8 +982,13 @@ class TestStageGaps(unittest.TestCase):
             )
 
     def _event_backend(self, fire_on_call: int):
+        """Event backend."""
+
         class _EventOnEncode(_DensityBackend):
+            """Event on encode."""
+
             def encode(self, text):
+                """Encode."""
                 ids = super().encode(text)
                 if self.calls_encode == fire_on_call:
                     self.event.set()
@@ -896,6 +1001,7 @@ class TestStageGaps(unittest.TestCase):
         return backend
 
     def test_encode_event_cancels_at_arm_check(self):
+        """Test encode event cancels at arm check."""
         # The boundary encode in this test is call 0; stage arm
         # encodes are calls 1..21 per case. Firing on call 3
         # (arm 3 of case 0, whose cell then returns
@@ -915,6 +1021,7 @@ class TestStageGaps(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_encode_event_cancels_at_case_boundary(self):
+        """Test encode event cancels at case boundary."""
         # Firing on call 21 (the last arm encode of case 0)
         # leaves the event for the stage's per-case check.
         backend = self._event_backend(21)
@@ -931,6 +1038,7 @@ class TestStageGaps(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_analysis_unavailable_candidate(self):
+        """Test analysis unavailable candidate."""
         backend = _DensityBackend()
         stage = experiments.density_stage(
             backend,
@@ -953,10 +1061,14 @@ class TestStageGaps(unittest.TestCase):
 
 
 class TestDiffTamperRoundTwo(unittest.TestCase):
+    """Test diff tamper round two."""
+
     def test_tamper_battery_round_two(self):
+        """Test tamper battery round two."""
         payload = _payload()
 
         def forged(mutate):
+            """Forged."""
             candidate = copy.deepcopy(payload)
             mutate(candidate)
             return candidate
@@ -1001,11 +1113,15 @@ class TestDiffTamperRoundTwo(unittest.TestCase):
 
 
 class TestReportingGaps(unittest.TestCase):
+    """Test reporting gaps."""
+
     def test_section_candidates_not_a_dict(self):
+        """Test section candidates not a dict."""
         html = render_html({"density": {"available": True, "candidates": []}})
         self.assertNotIn('id="density"', html)
 
     def test_section_junk_entries(self):
+        """Test section junk entries."""
         payload = _payload()
         mixed = copy.deepcopy(payload)
         mixed["candidates"] = {
@@ -1018,6 +1134,7 @@ class TestReportingGaps(unittest.TestCase):
         self.assertIn("unavailable", html)
 
     def test_section_non_dict_rows(self):
+        """Test section non dict rows."""
         payload = _payload()
         sparse = copy.deepcopy(payload)
         entry = sparse["candidates"]["dn-a"]
@@ -1030,7 +1147,10 @@ class TestReportingGaps(unittest.TestCase):
 
 
 class TestFinalGaps(unittest.TestCase):
+    """Test final gaps."""
+
     def test_screen_audit_findings_fail_closed(self):
+        """Test screen audit findings fail closed."""
         backend = _DensityBackend()
         with mock.patch(
             "model_protocol_lab.fixtures.audit_special_token_literals",
@@ -1043,6 +1163,7 @@ class TestFinalGaps(unittest.TestCase):
         self.assertEqual(stage["detail"], "density_screen_failed")
 
     def test_mirror_raises_on_unknown_arm_and_kind(self):
+        """Test mirror raises on unknown arm and kind."""
         case = diffreports._density_generate(0)[0]
         with self.assertRaises(ValueError):
             diffreports._density_arm_block(case, "bogus")
@@ -1050,6 +1171,7 @@ class TestFinalGaps(unittest.TestCase):
             diffreports._density_satisfied({"kind": "bogus", "target": "x"}, [])
 
     def test_mixed_population_payload_validates(self):
+        """Test mixed population payload validates."""
         # One payload exercising every record category at once
         # (perfect, value-only, zero-word, no-boundary,
         # detail-failed, case-screened), so the validator's
@@ -1165,6 +1287,7 @@ class TestFinalGaps(unittest.TestCase):
         )
 
     def test_diff_status_and_membership_drift(self):
+        """Test diff status and membership drift."""
         two = _payload()
         one = _payload(formats=FORMATS[:1])
         result = diff_density(two, one)
@@ -1194,8 +1317,13 @@ class TestFinalGaps(unittest.TestCase):
         self.assertTrue(result["changed"])
 
     def test_diff_zero_word_drift(self):
+        """Test diff zero word drift."""
+
         class _EmptyBackend(_DensityBackend):
+            """Empty backend."""
+
             def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+                """Generate."""
                 self.calls += 1
                 boundary = self.encode("endmark")[0]
                 return Generation(token_ids=(boundary,) * max_new_tokens, reason="limit")
@@ -1210,6 +1338,7 @@ class TestFinalGaps(unittest.TestCase):
         self.assertTrue(result["changed"])
 
     def test_validator_structural_rejections(self):
+        """Test validator structural rejections."""
         payload = _payload()
         self.assertFalse(_valid_density(None))
         self.assertFalse(_valid_density({}))
@@ -1233,6 +1362,7 @@ class TestFinalGaps(unittest.TestCase):
         self.assertFalse(_valid_density(no_answer))
 
     def test_validator_record_and_byte_caps(self):
+        """Test validator record and byte caps."""
         one = _payload(formats=FORMATS[:1])
         entry = one["candidates"]["dn-a"]
         clones: dict = {}

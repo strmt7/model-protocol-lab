@@ -39,6 +39,7 @@ def write_model_dir(
     adapter: bool = False,
     weights: bool = True,
 ) -> Path:
+    """Write model dir."""
     config = {"model_type": model_type}
     config.update(extra_config or {})
     (root / "config.json").write_text(json.dumps(config), encoding="utf-8")
@@ -75,11 +76,15 @@ def write_loadable_tokenizer(root: Path, vocab_size: int = 16) -> None:
 
 
 class DirectoryTests(unittest.TestCase):
+    """Directory tests."""
+
     def test_missing_path_raises_value_error_not_os_error(self):
+        """Test missing path raises value error not os error."""
         with TemporaryDirectory() as tmp, self.assertRaises(ValueError):
             _directory(Path(tmp) / "no-such-dir")
 
     def test_empty_and_file_paths_rejected(self):
+        """Test empty and file paths rejected."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "file").write_text("x", encoding="utf-8")
@@ -88,12 +93,16 @@ class DirectoryTests(unittest.TestCase):
                     _directory(bad)
 
     def test_valid_directory_resolves(self):
+        """Test valid directory resolves."""
         with TemporaryDirectory() as tmp:
             self.assertEqual(_directory(tmp), Path(tmp).resolve())
 
 
 class DoctorTests(unittest.TestCase):
+    """Doctor tests."""
+
     def test_healthy_directory_passes(self):
+        """Test healthy directory passes."""
         with TemporaryDirectory() as tmp:
             root = write_model_dir(Path(tmp))
             report = examine_model(root)
@@ -104,11 +113,13 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(len(report["model"]["assets"]), 2)
 
     def test_missing_directory_fails(self):
+        """Test missing directory fails."""
         report = examine_model("/definitely/not/here-12345")
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(report["model"]["checks"]["directory"]["status"], "failed")
 
     def test_adapter_directory_fails(self):
+        """Test adapter directory fails."""
         with TemporaryDirectory() as tmp:
             root = write_model_dir(Path(tmp), adapter=True)
             report = examine_model(root)
@@ -116,11 +127,13 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(report["model"]["checks"]["asset_layout"]["status"], "failed")
 
     def test_missing_weights_fails(self):
+        """Test missing weights fails."""
         with TemporaryDirectory() as tmp:
             root = write_model_dir(Path(tmp), weights=False)
             self.assertEqual(examine_model(root)["verdict"], "failed")
 
     def test_unsupported_model_type_fails(self):
+        """Test unsupported model type fails."""
         with TemporaryDirectory() as tmp:
             root = write_model_dir(Path(tmp), model_type="bert")
             report = examine_model(root)
@@ -128,6 +141,7 @@ class DoctorTests(unittest.TestCase):
             self.assertIn("unsupported", report["model"]["checks"]["config"]["detail"])
 
     def test_rejected_config_keys_fail(self):
+        """Test rejected config keys fail."""
         for key in ("auto_map", "quantization_config", "is_encoder_decoder"):
             with self.subTest(key=key), TemporaryDirectory() as tmp:
                 root = write_model_dir(Path(tmp), extra_config={key: {"x": 1}})
@@ -135,6 +149,7 @@ class DoctorTests(unittest.TestCase):
                 self.assertEqual(report["verdict"], "failed")
 
     def test_stochastic_tokenizer_fails(self):
+        """Test stochastic tokenizer fails."""
         with TemporaryDirectory() as tmp:
             root = write_model_dir(Path(tmp), tokenizer_model={"type": "BPE", "dropout": 0.5})
             report = examine_model(root)
@@ -142,6 +157,7 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(report["model"]["checks"]["tokenizer_file"]["status"], "failed")
 
     def test_manifest_records_hashes(self):
+        """Test manifest records hashes."""
         with TemporaryDirectory() as tmp:
             root = write_model_dir(Path(tmp))
             report = examine_model(root)
@@ -151,6 +167,7 @@ class DoctorTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TRANSFORMERS and HAS_TOKENIZERS, "hf extra not installed")
     def test_deep_tokenizer_check_reports_vocab_and_specials(self):
+        """Test deep tokenizer check reports vocab and specials."""
         with TemporaryDirectory() as tmp:
             root = write_model_dir(Path(tmp))
             write_loadable_tokenizer(root, vocab_size=16)
@@ -167,6 +184,7 @@ class DoctorTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TRANSFORMERS and HAS_TOKENIZERS, "hf extra not installed")
     def test_out_of_vocabulary_boundary_ids_fail(self):
+        """Test out of vocabulary boundary ids fail."""
         with TemporaryDirectory() as tmp:
             root = write_model_dir(Path(tmp))
             write_loadable_tokenizer(root, vocab_size=16)  # 18 ids after specials
@@ -175,6 +193,7 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(report["model"]["checks"]["boundary_ids"]["status"], "failed")
 
     def test_doctor_cli_exit_codes(self):
+        """Test doctor cli exit codes."""
         import io
         from contextlib import redirect_stdout
 
@@ -191,6 +210,7 @@ class DoctorTests(unittest.TestCase):
                 self.assertEqual(main(["doctor", "--model", str(root / "missing")]), 1)
 
     def test_doctor_cli_checks_dataset(self):
+        """Test doctor cli checks dataset."""
         import io
         from contextlib import redirect_stdout
 
@@ -214,7 +234,10 @@ class DoctorTests(unittest.TestCase):
 
 
 class FingerprintTests(unittest.TestCase):
+    """Fingerprint tests."""
+
     def test_fingerprint_is_stable_and_discriminating(self):
+        """Test fingerprint is stable and discriminating."""
         first, second = candidate_fingerprint(BASE), candidate_fingerprint(BASE)
         self.assertEqual(first, second)
         self.assertTrue(first.startswith("sha256:"))
@@ -223,6 +246,7 @@ class FingerprintTests(unittest.TestCase):
         self.assertNotEqual(first, other)
 
     def test_fingerprint_matches_manual_computation(self):
+        """Test fingerprint matches manual computation."""
         import hashlib
 
         payload = json.dumps(
@@ -249,7 +273,10 @@ if __name__ == "__main__":
 
 
 class DoctorBranchTests(unittest.TestCase):
+    """Doctor branch tests."""
+
     def test_manifest_failure_fails_closed(self):
+        """Test manifest failure fails closed."""
         from unittest.mock import patch
 
         with TemporaryDirectory() as tmp:
@@ -260,6 +287,7 @@ class DoctorBranchTests(unittest.TestCase):
         self.assertEqual(report["model"]["checks"]["asset_manifest"]["status"], "failed")
 
     def test_invalid_config_json_fails(self):
+        """Test invalid config json fails."""
         with TemporaryDirectory() as tmp:
             root = write_model_dir(Path(tmp))
             (root / "config.json").write_text("not json", encoding="utf-8")
@@ -268,6 +296,7 @@ class DoctorBranchTests(unittest.TestCase):
         self.assertEqual(report["model"]["checks"]["config"]["status"], "failed")
 
     def test_invalid_tokenizer_json_fails(self):
+        """Test invalid tokenizer json fails."""
         with TemporaryDirectory() as tmp:
             root = write_model_dir(Path(tmp))
             (root / "tokenizer.json").write_text("not json", encoding="utf-8")
@@ -276,6 +305,7 @@ class DoctorBranchTests(unittest.TestCase):
         self.assertEqual(report["model"]["checks"]["tokenizer_file"]["status"], "failed")
 
     def test_missing_tokenizer_model_section_fails(self):
+        """Test missing tokenizer model section fails."""
         with TemporaryDirectory() as tmp:
             root = write_model_dir(Path(tmp))
             (root / "tokenizer.json").write_text("{}", encoding="utf-8")
@@ -284,6 +314,7 @@ class DoctorBranchTests(unittest.TestCase):
         self.assertIn("missing", report["model"]["checks"]["tokenizer_file"]["detail"])
 
     def test_missing_transformers_skips_deep_checks(self):
+        """Test missing transformers skips deep checks."""
         import sys
         from unittest.mock import patch
 
@@ -299,6 +330,7 @@ class DoctorBranchTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_TRANSFORMERS, "hf extra not installed")
     def test_unloadable_tokenizer_fails_deep_check(self):
+        """Test unloadable tokenizer fails deep check."""
         with TemporaryDirectory() as tmp:
             root = write_model_dir(Path(tmp), tokenizer_model={"type": "BPE"})
             report = examine_model(root)
@@ -306,6 +338,7 @@ class DoctorBranchTests(unittest.TestCase):
         self.assertEqual(report["model"]["checks"]["tokenizer_deep"]["status"], "failed")
 
     def test_dataset_examination_reports_counts(self):
+        """Test dataset examination reports counts."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
@@ -323,7 +356,10 @@ class DoctorBranchTests(unittest.TestCase):
 
 
 class AddedTokensTests(unittest.TestCase):
+    """Added tokens tests."""
+
     def test_malformed_added_tokens_entries_ignored(self):
+        """Test malformed added tokens entries ignored."""
         with TemporaryDirectory() as tmp:
             root = write_model_dir(Path(tmp))
             doc = json.loads((root / "tokenizer.json").read_text(encoding="utf-8"))

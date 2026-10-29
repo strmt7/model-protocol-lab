@@ -50,6 +50,7 @@ class ScriptTokenizer:
         self._by_id = {v: k for k, v in pieces.items()}
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode."""
         ids: list[int] = []
         pos = 0
         ordered = sorted(self._pieces, key=len, reverse=True)
@@ -64,6 +65,7 @@ class ScriptTokenizer:
         return tuple(ids)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(self._by_id[token_id] for token_id in token_ids)
 
 
@@ -88,13 +90,16 @@ class LogitStubBackend:
             self.forward_logits = None  # type: ignore[assignment]
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode."""
         return self._tokenizer.encode(text)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return self._tokenizer.decode(token_ids)
 
     # skipcq: PYL-E0202 - the attribute deliberately shadows the method to fake a missing primitive
     def forward_logits(self, input_ids: tuple[int, ...]):
+        """Forward logits."""
         self.forward_calls.append(tuple(input_ids))
         if self._logit_fn is None:
             raise RuntimeError("no_logits_scripted")
@@ -109,6 +114,7 @@ def peaked_fn(vocab_size: int, peak_on_target: bool):
     """
 
     def fn(input_ids: tuple[int, ...]) -> torch.Tensor:
+        """Fn."""
         rows = []
         for pos in range(len(input_ids)):
             row = [-50.0] * vocab_size
@@ -129,6 +135,7 @@ MERGE_PIECES = {"a": 0, "b": 1, "ab": 2, "c": 3, "d": 4}
 
 
 def make_fixture(fixture_id: str, expected: str) -> Fixture:
+    """Make fixture."""
     return Fixture(
         id=fixture_id,
         messages=(Message(role="user", content="q"),),
@@ -145,6 +152,7 @@ def make_obs(
     exact_match: bool = False,
     boundary_found: bool = False,
 ) -> dict:
+    """Make obs."""
     return {
         "candidate": "cand",
         "fixture": fixture_id,
@@ -158,6 +166,7 @@ def make_obs(
 
 
 def make_result(name: str, observations: list[dict]) -> dict:
+    """Make result."""
     return {
         "decision": "ambiguous",
         "search": [
@@ -170,13 +179,17 @@ def make_result(name: str, observations: list[dict]) -> dict:
 
 
 def two_token_expected_case(backend, fixture_id="f1", expected="cd", prompt="ab"):
+    """Two token expected case."""
     prompt_ids = backend.encode(prompt)
     fixture = make_fixture(fixture_id, expected)
     return fixture, prompt_ids
 
 
 class DiagnosticEngineTests(unittest.TestCase):
+    """Diagnostic engine tests."""
+
     def test_ok_score_reports_total_mean_counts(self):
+        """Test ok score reports total mean counts."""
         backend = LogitStubBackend(PLAIN_PIECES, peaked_fn(4, True))
         fixture, prompt_ids = two_token_expected_case(backend)
         diag = logprob_diagnostic(
@@ -199,6 +212,7 @@ class DiagnosticEngineTests(unittest.TestCase):
         self.assertAlmostEqual(agg["mean_logprob"], score["mean_logprob"], places=9)
 
     def test_alignment_refusal_surfaces_as_unavailable(self):
+        """Test alignment refusal surfaces as unavailable."""
         # "a" + "b" re-tokenizes as the single piece "ab": a token straddles
         # the prompt/answer boundary, so the engine must refuse.
         backend = LogitStubBackend(MERGE_PIECES, peaked_fn(5, True), vocab_size=5)
@@ -217,7 +231,10 @@ class DiagnosticEngineTests(unittest.TestCase):
         self.assertTrue(diag["available"])
 
     def test_nan_inf_logits_rejected_before_aggregation(self):
+        """Test nan inf logits rejected before aggregation."""
+
         def bad_fn(input_ids: tuple[int, ...]) -> torch.Tensor:
+            """Bad fn."""
             rows = [[0.0] * 4 for _ in input_ids]
             rows[-1][2] = float("inf")
             return torch.tensor(rows)
@@ -235,6 +252,7 @@ class DiagnosticEngineTests(unittest.TestCase):
         json.dumps(diag, ensure_ascii=True, allow_nan=False)
 
     def test_backend_without_forward_logits_is_unavailable(self):
+        """Test backend without forward logits is unavailable."""
         backend = LogitStubBackend(PLAIN_PIECES, with_forward_logits=False)
         fixture, prompt_ids = two_token_expected_case(backend)
         diag = logprob_diagnostic(
@@ -245,6 +263,7 @@ class DiagnosticEngineTests(unittest.TestCase):
         self.assertEqual(diag["candidates"], [])
 
     def test_incomplete_observation_not_scored(self):
+        """Test incomplete observation not scored."""
         backend = LogitStubBackend(PLAIN_PIECES, peaked_fn(4, True))
         fixture, _prompt_ids = two_token_expected_case(backend)
         obs = make_obs("f1", (), status="failed")
@@ -254,6 +273,7 @@ class DiagnosticEngineTests(unittest.TestCase):
         self.assertEqual(score["reason"], "observation_incomplete")
 
     def test_empty_expected_is_ok_empty_not_error(self):
+        """Test empty expected is ok empty not error."""
         backend = LogitStubBackend(PLAIN_PIECES, peaked_fn(4, True))
         fixture = make_fixture("f1", "")
         prompt_ids = backend.encode("ab")
@@ -265,6 +285,7 @@ class DiagnosticEngineTests(unittest.TestCase):
         self.assertEqual(score["total_logprob"], 0.0)
 
     def test_deterministic_across_runs(self):
+        """Test deterministic across runs."""
         backend = LogitStubBackend(PLAIN_PIECES, peaked_fn(4, True))
         fixtures = (make_fixture("f1", "cd"), make_fixture("f2", "dc"))
         prompt_ids = backend.encode("ab")
@@ -274,6 +295,7 @@ class DiagnosticEngineTests(unittest.TestCase):
         self.assertEqual(json.dumps(first, sort_keys=True), json.dumps(second, sort_keys=True))
 
     def test_input_result_not_mutated_selection_untouched(self):
+        """Test input result not mutated selection untouched."""
         backend = LogitStubBackend(PLAIN_PIECES, peaked_fn(4, True))
         fixture, prompt_ids = two_token_expected_case(backend)
         result = make_result("cand", [make_obs("f1", prompt_ids)])
@@ -284,6 +306,7 @@ class DiagnosticEngineTests(unittest.TestCase):
         self.assertIsNot(result, diag)
 
     def test_thresholds_declared_and_pinned(self):
+        """Test thresholds declared and pinned."""
         self.assertEqual(LOGPROB_DERAILED_MEAN_THRESHOLD, -2.0)
         self.assertEqual(LOGPROB_UNKNOWN_MEAN_THRESHOLD, -5.0)
         backend = LogitStubBackend(PLAIN_PIECES, peaked_fn(4, True))
@@ -301,31 +324,38 @@ class DiagnosticEngineTests(unittest.TestCase):
 
 
 class InterpretationTests(unittest.TestCase):
+    """Interpretation tests."""
+
     @staticmethod
     def _diag(peak_on_target: bool, exact_match: bool):
+        """Diag."""
         backend = LogitStubBackend(PLAIN_PIECES, peaked_fn(4, peak_on_target))
         fixture, prompt_ids = two_token_expected_case(backend)
         obs = make_obs("f1", prompt_ids, exact_match=exact_match, boundary_found=exact_match)
         return logprob_diagnostic(backend, make_result("cand", [obs]), (fixture,))
 
     def test_high_logprob_failed_fixture_reads_greedy_derailed(self):
+        """Test high logprob failed fixture reads greedy derailed."""
         diag = self._diag(peak_on_target=True, exact_match=False)
         interp = diag["candidates"][0]["interpretation"]
         self.assertEqual(interp["kind"], "greedy_derailed")
         self.assertIn("derail", interp["text"].lower())
 
     def test_low_logprob_failed_fixture_reads_weights_dont_know(self):
+        """Test low logprob failed fixture reads weights dont know."""
         diag = self._diag(peak_on_target=False, exact_match=False)
         interp = diag["candidates"][0]["interpretation"]
         self.assertEqual(interp["kind"], "weights_dont_know")
         self.assertIn("likelihood", interp["text"].lower())
 
     def test_no_failures_kind(self):
+        """Test no failures kind."""
         diag = self._diag(peak_on_target=True, exact_match=True)
         interp = diag["candidates"][0]["interpretation"]
         self.assertEqual(interp["kind"], "no_failures")
 
     def test_all_unavailable_kind(self):
+        """Test all unavailable kind."""
         backend = LogitStubBackend(MERGE_PIECES, peaked_fn(5, True), vocab_size=5)
         fixture, prompt_ids = two_token_expected_case(backend, expected="b", prompt="a")
         diag = logprob_diagnostic(
@@ -335,10 +365,12 @@ class InterpretationTests(unittest.TestCase):
         self.assertEqual(interp["kind"], "unavailable")
 
     def test_mixed_bands_kind(self):
+        """Test mixed bands kind."""
         # One fixture high, one fixture low: the failures have two causes.
         backend = LogitStubBackend(PLAIN_PIECES, None)
 
         def mixed_fn(input_ids: tuple[int, ...]) -> torch.Tensor:
+            """Mixed fn."""
             # First call peaks on target, second peaks on the wrong token.
             calls = len(backend.forward_calls)
             return peaked_fn(4, peak_on_target=(calls == 1))(input_ids)
@@ -353,7 +385,10 @@ class InterpretationTests(unittest.TestCase):
 
 
 class AggregateGuardTests(unittest.TestCase):
+    """Aggregate guard tests."""
+
     def test_nonfinite_engine_values_degrade_aggregate_not_json(self):
+        """Test nonfinite engine values degrade aggregate not json."""
         # Defense in depth: even a hostile TargetScore with inf values must
         # not poison results.json (written with allow_nan=False).
         from model_protocol_lab.experiments import _aggregate_fixture_scores
@@ -375,8 +410,11 @@ class AggregateGuardTests(unittest.TestCase):
 
 
 class CliFlagTests(unittest.TestCase):
+    """Cli flag tests."""
+
     @staticmethod
     def _parse(extra=()):
+        """Parse."""
         return build_parser().parse_args(
             [
                 "run",
@@ -395,12 +433,15 @@ class CliFlagTests(unittest.TestCase):
         )
 
     def test_flag_defaults_off(self):
+        """Test flag defaults off."""
         self.assertFalse(self._parse().logprob_diagnostic)
 
     def test_flag_opt_in(self):
+        """Test flag opt in."""
         self.assertTrue(self._parse(("--logprob-diagnostic",)).logprob_diagnostic)
 
     def test_flag_in_run_help(self):
+        """Test flag in run help."""
         buf = io.StringIO()
         with redirect_stdout(buf), self.assertRaises(SystemExit) as ctx:
             build_parser().parse_args(["run", "--help"])
@@ -409,8 +450,11 @@ class CliFlagTests(unittest.TestCase):
 
 
 class ReportSectionTests(unittest.TestCase):
+    """Report section tests."""
+
     @staticmethod
     def _render(diag):
+        """Render."""
         result = {
             "decision": "ambiguous",
             "search": [],
@@ -420,6 +464,7 @@ class ReportSectionTests(unittest.TestCase):
 
     @staticmethod
     def _ok_diag():
+        """Ok diag."""
         backend = LogitStubBackend(PLAIN_PIECES, peaked_fn(4, True))
         fixture, prompt_ids = two_token_expected_case(backend)
         return logprob_diagnostic(
@@ -427,6 +472,7 @@ class ReportSectionTests(unittest.TestCase):
         )
 
     def test_section_renders_with_totals_and_reading(self):
+        """Test section renders with totals and reading."""
         html = self._render(self._ok_diag())
         self.assertIn("Log-likelihood diagnostic", html)
         self.assertIn('id="logprob-diagnostic"', html)
@@ -438,6 +484,7 @@ class ReportSectionTests(unittest.TestCase):
         self.assertIn('href="#logprob-diagnostic"', html)
 
     def test_unavailable_state_degrades_gracefully(self):
+        """Test unavailable state degrades gracefully."""
         html = self._render(
             {
                 "available": False,
@@ -452,11 +499,13 @@ class ReportSectionTests(unittest.TestCase):
         self.assertIn("logits_not_supported", html)
 
     def test_missing_key_renders_nothing(self):
+        """Test missing key renders nothing."""
         html = render_html({"decision": "ambiguous", "search": []})
         self.assertNotIn("logprob-diagnostic", html)
         self.assertNotIn("Log-likelihood diagnostic", html)
 
     def test_save_report_round_trip_keeps_diagnostic(self):
+        """Test save report round trip keeps diagnostic."""
         # results.json must carry the diagnostic (with unavailable refusals
         # intact) through the real save path, which serializes with
         # allow_nan=False.
@@ -487,6 +536,7 @@ class ReportSectionTests(unittest.TestCase):
             self.assertIn("boundary_merge_mismatch", html)
 
     def test_hostile_text_is_escaped(self):
+        """Test hostile text is escaped."""
         backend = LogitStubBackend(PLAIN_PIECES, peaked_fn(4, True))
         fixture = make_fixture('<script>alert("x")</script>', "cd")
         prompt_ids = backend.encode("ab")

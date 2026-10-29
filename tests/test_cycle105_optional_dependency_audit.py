@@ -47,6 +47,7 @@ _HF_TOP_LEVELS = {"torch", "transformers", "safetensors"}
 
 
 def _stdlib_names() -> set[str]:
+    """Stdlib names."""
     # sys.stdlib_module_names exists on 3.10+; the package targets 3.11+.
     return set(sys.stdlib_module_names)
 
@@ -63,7 +64,9 @@ def _block_hf_imports():
 
     # skipcq: PYL-W0622 - the fake mirrors the dunder signature parameter-for-parameter
     # skipcq: PYL-W0622 - the fake mirrors the dunder signature parameter-for-parameter
-    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):  # noqa: ANN001, ANN202
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        """Fake import."""
+        # noqa: ANN001, ANN202
         if name.split(".")[0] in _HF_TOP_LEVELS:
             raise ImportError(f"No module named {name!r} (simulated)")
         return real_import(name, globals, locals, fromlist, level)
@@ -74,7 +77,9 @@ def _block_hf_imports():
 class TestNoModuleLevelThirdPartyImports(unittest.TestCase):
     """AST guard: third-party imports must be deferred or TYPE_CHECKING-only."""
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_package_has_no_top_level_third_party_imports(self) -> None:
+        """Test package has no top level third party imports."""
         stdlib = _stdlib_names()
         violations: list[str] = []
         for path in sorted(PKG_ROOT.glob("*.py")):
@@ -118,6 +123,7 @@ class TestNoModuleLevelThirdPartyImports(unittest.TestCase):
         self.assertEqual(violations, [], f"module-level third-party imports: {violations}")
 
     def test_hf_imports_are_present_but_deferred(self) -> None:
+        """Test hf imports are present but deferred."""
         # Negative control: the scan above must actually see the hf imports
         # somewhere (deferred), otherwise it proves nothing. Only torch and
         # transformers are imported directly; safetensors is a transitive
@@ -139,6 +145,7 @@ class TestMissingHfExtraFailsActionable(unittest.TestCase):
 
     @staticmethod
     def _healthy_root() -> Path:
+        """Healthy root."""
         root = Path(tempfile.mkdtemp(prefix="mpl_cycle105_"))
         (root / "config.json").write_text(json.dumps({"model_type": "gpt2", "n_positions": 1024}))
         (root / "tokenizer.json").write_text(json.dumps({"model": {}}))
@@ -146,6 +153,7 @@ class TestMissingHfExtraFailsActionable(unittest.TestCase):
         return root
 
     def test_missing_extra_raises_distinct_code(self) -> None:
+        """Test missing extra raises distinct code."""
         from model_protocol_lab.backends import LocalHFBackend
 
         with _block_hf_imports(), self.assertRaises(RuntimeError) as ctx:
@@ -153,11 +161,13 @@ class TestMissingHfExtraFailsActionable(unittest.TestCase):
         self.assertEqual(str(ctx.exception), "local_hf_extra_not_installed")
 
     def test_blocked_import_actually_blocks(self) -> None:
+        """Test blocked import actually blocks."""
         # Negative control: the simulation must really block the import.
         with _block_hf_imports(), self.assertRaises(ImportError):
             import torch  # noqa: F401
 
     def test_distinct_code_is_not_the_generic_one(self) -> None:
+        """Test distinct code is not the generic one."""
         # Guards against a future refactor collapsing the codes again.
         from model_protocol_lab import backends
 
@@ -169,6 +179,7 @@ class TestCliHint(unittest.TestCase):
     """The CLI must render the missing-extra code with an install hint."""
 
     def test_hint_names_the_extra(self) -> None:
+        """Test hint names the extra."""
         from model_protocol_lab.cli import _backend_failure_message
 
         msg = _backend_failure_message("local_hf_extra_not_installed")
@@ -176,6 +187,7 @@ class TestCliHint(unittest.TestCase):
         self.assertIn('pip install "model-protocol-lab[hf]"', msg)
 
     def test_other_local_codes_stay_terse(self) -> None:
+        """Test other local codes stay terse."""
         from model_protocol_lab.cli import _backend_failure_message
 
         msg = _backend_failure_message("local_backend_initialization_failed")
@@ -183,6 +195,7 @@ class TestCliHint(unittest.TestCase):
         self.assertNotIn("pip install", msg)
 
     def test_arbitrary_text_never_leaks(self) -> None:
+        """Test arbitrary text never leaks."""
         from model_protocol_lab.cli import _backend_failure_message
 
         evil = "oops'; rm -rf / #"

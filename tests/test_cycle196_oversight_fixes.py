@@ -39,6 +39,7 @@ SERVER_CMD = [PYTHON, "-m", "model_protocol_lab.mcp_server"]
 
 
 def _sealed_files():
+    """Sealed files."""
     data, _manifest, _comment = pack_bundle(ROOT / "examples" / "sample-report", [])
     archive = zipfile.ZipFile(io.BytesIO(data))
     files = [(name, archive.read(name)) for name in archive.namelist() if name != "manifest.json"]
@@ -47,6 +48,7 @@ def _sealed_files():
 
 
 def _schema_detail(report):
+    """Schema detail."""
     for check in report["checks"]:
         if check["id"] == "seal_manifest_schema":
             return check["detail"]
@@ -54,6 +56,7 @@ def _schema_detail(report):
 
 
 def _container_detail(report):
+    """Container detail."""
     for check in report["checks"]:
         if check["id"] == "seal_container":
             return check["detail"]
@@ -68,10 +71,12 @@ class PackExceptionNormalisationTests(unittest.TestCase):
     """
 
     def test_control_bundle_still_ok(self):
+        """Test control bundle still ok."""
         data, _text, _files = _sealed_files()
         self.assertEqual(verify_bundle_bytes(data)["verdict"], "ok")
 
     def test_deeply_nested_manifest_is_unparseable_not_recursion(self):
+        """Test deeply nested manifest is unparseable not recursion."""
         _data, text, files = _sealed_files()
         deep = "[" * 20000 + "]" * 20000
         tampered = (text.rstrip()[:-1] + ', "extra": ' + deep + "}").encode("utf-8")
@@ -80,18 +85,21 @@ class PackExceptionNormalisationTests(unittest.TestCase):
         self.assertEqual(_schema_detail(report), "manifest_unparseable")
 
     def test_over_limit_integer_is_unparseable(self):
+        """Test over limit integer is unparseable."""
         _data, text, files = _sealed_files()
         tampered = (text.rstrip()[:-1] + ', "bignum": ' + "9" * 5000 + "}").encode("utf-8")
         report = verify_bundle_bytes(build_bundle_bytes(tampered, files))
         self.assertEqual(_schema_detail(report), "manifest_unparseable")
 
     def test_nonfinite_constant_is_unparseable(self):
+        """Test nonfinite constant is unparseable."""
         _data, text, files = _sealed_files()
         tampered = (text.rstrip()[:-1] + ', "extra": NaN}').encode("utf-8")
         report = verify_bundle_bytes(build_bundle_bytes(tampered, files))
         self.assertEqual(_schema_detail(report), "manifest_unparseable")
 
     def test_invalid_utf8_entry_name_is_container_invalid(self):
+        """Test invalid utf8 entry name is container invalid."""
         name = b"\xff\xfe"
         payload = b"x"
         crc = zlib.crc32(payload)
@@ -150,6 +158,7 @@ class PackEntryTypeTests(unittest.TestCase):
 
     @staticmethod
     def _retyped(target, mode_bits):
+        """Retyped."""
         data, _text, _files = _sealed_files()
         source = zipfile.ZipFile(io.BytesIO(data))
         out = io.BytesIO()
@@ -166,15 +175,18 @@ class PackEntryTypeTests(unittest.TestCase):
         return out.getvalue()
 
     def test_symlink_typed_entry_fails_container(self):
+        """Test symlink typed entry fails container."""
         report = verify_bundle_bytes(self._retyped("report.html", 0o120000))
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(_container_detail(report), "entry_type_not_regular")
 
     def test_fifo_typed_entry_fails_container(self):
+        """Test fifo typed entry fails container."""
         report = verify_bundle_bytes(self._retyped("report.html", 0o010000))
         self.assertEqual(_container_detail(report), "entry_type_not_regular")
 
     def test_regular_typed_entry_passes(self):
+        """Test regular typed entry passes."""
         report = verify_bundle_bytes(self._retyped("report.html", 0o100000))
         self.assertEqual(report["verdict"], "ok")
 
@@ -186,6 +198,7 @@ class PackSurrogateNameTests(unittest.TestCase):
     """
 
     def test_surrogateescape_filename_rejected_in_vocabulary(self):
+        """Test surrogateescape filename rejected in vocabulary."""
         with tempfile.TemporaryDirectory() as tmp:
             fd = os.open(os.fsencode(tmp) + b"/bad\xffname.json", os.O_CREAT | os.O_WRONLY)
             os.close(fd)
@@ -202,6 +215,7 @@ class DisplayCapTests(unittest.TestCase):
     """
 
     def test_caps(self):
+        """Test caps."""
         long_value = "x" * 300
         for helper in (
             verify._display_id,
@@ -216,6 +230,7 @@ class DisplayCapTests(unittest.TestCase):
 
 
 def _run_server(raw_input, timeout=60):
+    """Run server."""
     proc = subprocess.run(
         SERVER_CMD, input=raw_input, capture_output=True, timeout=timeout, check=False
     )
@@ -237,6 +252,7 @@ _FIXTURES = [
 
 
 def _tool_call(arguments):
+    """Tool call."""
     return json.dumps(
         {
             "jsonrpc": "2.0",
@@ -254,12 +270,14 @@ class MCPFrameHardeningTests(unittest.TestCase):
     """
 
     def test_nested_bomb_is_parse_error_and_server_survives(self):
+        """Test nested bomb is parse error and server survives."""
         rc, out = _run_server(("[" * 10000 + "]" * 10000 + "\n" + _PING + "\n").encode())
         self.assertEqual(rc, 0)
         self.assertEqual(out[0]["error"]["code"], -32700)
         self.assertTrue(any(entry.get("id") == 99 for entry in out))
 
     def test_overlong_line_is_parse_error_and_framing_resyncs(self):
+        """Test overlong line is parse error and framing resyncs."""
         big = "x" * (16 * 1024 * 1024 + 100)
         rc, out = _run_server((big + "\n" + _PING + "\n").encode())
         self.assertEqual(rc, 0)
@@ -267,11 +285,13 @@ class MCPFrameHardeningTests(unittest.TestCase):
         self.assertTrue(any(entry.get("id") == 99 for entry in out))
 
     def test_duplicate_keys_are_parse_error(self):
+        """Test duplicate keys are parse error."""
         rc, out = _run_server(b'{"jsonrpc":"2.0","id":1,"id":2,"method":"ping"}\n')
         self.assertEqual(rc, 0)
         self.assertEqual(out[0]["error"]["code"], -32700)
 
     def test_notification_never_answered(self):
+        """Test notification never answered."""
         notification = json.dumps(
             {
                 "jsonrpc": "2.0",
@@ -284,6 +304,7 @@ class MCPFrameHardeningTests(unittest.TestCase):
         self.assertEqual([entry.get("id") for entry in out], [99])
 
     def test_null_id_errors_are_reported(self):
+        """Test null id errors are reported."""
         frame = json.dumps(
             {
                 "jsonrpc": "2.0",
@@ -296,11 +317,13 @@ class MCPFrameHardeningTests(unittest.TestCase):
         self.assertEqual(out[0]["error"]["code"], -32602)
 
     def test_params_as_list_is_invalid_params(self):
+        """Test params as list is invalid params."""
         frame = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": [1, 2]})
         _rc, out = _run_server((frame + "\n").encode())
         self.assertEqual(out[0]["error"]["code"], -32602)
 
     def test_boundary_parity_with_cli(self):
+        """Test boundary parity with cli."""
         for boundary in ([7] * 17, [2**100], [7] * 200000):
             frame = _tool_call({"prompt": "x", "fixtures": _FIXTURES, "boundary": boundary})
             _rc, out = _run_server((frame + "\n").encode())
@@ -308,6 +331,7 @@ class MCPFrameHardeningTests(unittest.TestCase):
             self.assertIn("boundary", out[0]["error"]["message"])
 
     def test_tool_failure_is_fixed_internal_error(self):
+        """Test tool failure is fixed internal error."""
         frame = _tool_call({"prompt": "x\udcff", "fixtures": _FIXTURES, "boundary": [7]})
         _rc, out = _run_server((frame + "\n").encode())
         self.assertEqual(out[0]["error"]["code"], -32603)
@@ -321,6 +345,7 @@ class ProbeOutputPermissionTests(unittest.TestCase):
     """
 
     def test_probe_output_permissions(self):
+        """Test probe output permissions."""
         with tempfile.TemporaryDirectory() as tmp:
             prompt = Path(tmp, "prompt.txt")
             prompt.write_text("MAGICWORD please", encoding="utf-8")
@@ -364,6 +389,7 @@ class ReportControlStripTests(unittest.TestCase):
     """
 
     def test_main_paths_strip_controls(self):
+        """Test main paths strip controls."""
         result = json.loads(
             (ROOT / "examples" / "sample-report" / "results.json").read_text(encoding="utf-8")
         )
@@ -371,6 +397,7 @@ class ReportControlStripTests(unittest.TestCase):
         evil_fid = "fix\x00\x07Y"
 
         def plant(obj):
+            """Plant."""
             if isinstance(obj, dict):
                 return {
                     (
@@ -401,23 +428,27 @@ class BoolForIntGuardTests(unittest.TestCase):
     """
 
     def test_needle_protocol_version_bool_rejected(self):
+        """Test needle protocol version bool rejected."""
         payload = _needle_payload()
         self.assertTrue(diffreports._valid_needle(payload))
         payload["protocol"]["version"] = True
         self.assertFalse(diffreports._valid_needle(payload))
 
     def test_needle_n_cases_bool_rejected(self):
+        """Test needle n cases bool rejected."""
         payload = _needle_payload()
         payload["n_cases"] = True
         self.assertFalse(diffreports._valid_needle(payload))
 
     def test_placement_protocol_version_bool_rejected(self):
+        """Test placement protocol version bool rejected."""
         payload = _placement_payload()
         self.assertTrue(diffreports._valid_placement(payload))
         payload["protocol"]["version"] = True
         self.assertFalse(diffreports._valid_placement(payload))
 
     def test_dateline_n_multi_turn_bool_rejected(self):
+        """Test dateline n multi turn bool rejected."""
         payload = _dateline_payload()
         self.assertTrue(diffreports._valid_dateline(payload))
         payload["n_multi_turn_fixtures"] = True
@@ -430,29 +461,35 @@ class PrimaryPairBindingTests(unittest.TestCase):
     """
 
     def test_genuine_payload_valid(self):
+        """Test genuine payload valid."""
         self.assertTrue(diffreports._valid_dateline(_dateline_payload()))
 
     def test_garbage_decision_rejected(self):
+        """Test garbage decision rejected."""
         payload = _dateline_payload()
         payload["primary_decision"] = "selected"
         self.assertFalse(diffreports._valid_dateline(payload))
 
     def test_surrogate_suffixed_decision_rejected(self):
+        """Test surrogate suffixed decision rejected."""
         payload = _dateline_payload()
         payload["primary_decision"] = "compatible_on_fixture_set\ud800"
         self.assertFalse(diffreports._valid_dateline(payload))
 
     def test_abstention_with_winner_rejected(self):
+        """Test abstention with winner rejected."""
         payload = _dateline_payload()
         payload["primary_decision"] = "ambiguous"
         self.assertFalse(diffreports._valid_dateline(payload))
 
     def test_unknown_winner_rejected(self):
+        """Test unknown winner rejected."""
         payload = _dateline_payload()
         payload["primary_winner"] = "not-a-candidate"
         self.assertFalse(diffreports._valid_dateline(payload))
 
     def test_winner_class_without_winner_rejected(self):
+        """Test winner class without winner rejected."""
         payload = _dateline_payload()
         payload["primary_winner"] = None
         self.assertFalse(diffreports._valid_dateline(payload))
@@ -468,6 +505,7 @@ class NeedleHtmlLeakTests(unittest.TestCase):
     MARKER = "XYZZY-NEEDLE-VALUE-7749"
 
     def test_planted_needle_value_never_rendered(self):
+        """Test planted needle value never rendered."""
         payload = _needle_full_payload()
         html = render_html({"needle": payload})
         self.assertIn("Dose-0", html)  # the section actually rendered
@@ -480,6 +518,7 @@ class NeedleHtmlLeakTests(unittest.TestCase):
         self.assertNotIn(self.MARKER, render_html({"needle": planted}))
 
     def test_hostile_candidate_name_only_escaped(self):
+        """Test hostile candidate name only escaped."""
         payload = _needle_full_payload()
         name = next(iter(payload["candidates"]))
         payload["candidates"]["evil<script>" + self.MARKER] = payload["candidates"].pop(name)

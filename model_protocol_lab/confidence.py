@@ -416,6 +416,7 @@ def _mean(values: list[int]) -> float | None:
     return (sum(values) / len(values)) if values else None
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _population_block(cells: Sequence[dict[str, Any]], n_population: int) -> dict[str, Any]:
     """Every readout over one population of completed cells.
 
@@ -472,6 +473,7 @@ def _population_block(cells: Sequence[dict[str, Any]], n_population: int) -> dic
     }
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _candidate_block(
     records: Sequence[dict[str, Any]],
     control_records: Sequence[dict[str, Any]],

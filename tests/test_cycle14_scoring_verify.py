@@ -112,6 +112,7 @@ def assert_close(
     abs_tol: float = 1e-9,
     label: str = "value",
 ) -> None:
+    """Assert close."""
     if not math.isfinite(got) or not math.isfinite(want):
         case.fail(f"{label}: non-finite comparison {got!r} vs {want!r}")
     if not math.isclose(got, want, rel_tol=rel, abs_tol=abs_tol):
@@ -136,6 +137,7 @@ class FuzzTokenizer:
         return len(self._pieces)
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode."""
         out: list[int] = []
         pos = 0
         while pos < len(text):
@@ -149,6 +151,7 @@ class FuzzTokenizer:
         return tuple(out)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         try:
             return "".join(self._by_id[i] for i in token_ids)
         except KeyError as exc:
@@ -225,12 +228,15 @@ class FuzzBackend:
         self.forward_calls: list[tuple[int, ...]] = []
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode."""
         return self._tok.encode(text)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return self._tok.decode(token_ids)
 
     def forward_logits(self, input_ids: tuple[int, ...]) -> torch.Tensor:
+        """Forward logits."""
         self.forward_calls.append(tuple(input_ids))
         if self._error is not None:
             raise self._error
@@ -259,6 +265,7 @@ def make_piece_table(rng: random.Random) -> dict[str, int]:
 
 
 def random_text(rng: random.Random, tok: FuzzTokenizer, pieces: int) -> str:
+    """Random text."""
     names = list(tok._pieces)  # noqa: SLF001 -- test-local access to the table
     return "".join(rng.choice(names) for _ in range(pieces))
 
@@ -275,6 +282,7 @@ class ScoreSpanDifferentialTests(unittest.TestCase):
 
     @staticmethod
     def _trial_tensors(seed: int) -> tuple[torch.Tensor, int, tuple[int, ...]]:
+        """Trial tensors."""
         rng = random.Random(10_000 + seed)  # noqa: S311 -- deterministic test seed
         vocab = rng.choice([1, 2, 3, 5, 8, 13])
         total_len = rng.randint(2, 40)
@@ -290,6 +298,7 @@ class ScoreSpanDifferentialTests(unittest.TestCase):
         return logits, prompt_len, target_ids
 
     def test_seeded_differential_fuzz(self):
+        """Test seeded differential fuzz."""
         for seed in range(self.N_SEEDS):
             logits, prompt_len, target_ids = self._trial_tensors(seed)
             with self.subTest(seed=seed):
@@ -315,6 +324,7 @@ class ScoreSpanDifferentialTests(unittest.TestCase):
                     assert_close(self, mean, exp_mean, label=f"seed={seed} mean")
 
     def test_non_predicting_rows_are_masked_fuzz(self):
+        """Test non predicting rows are masked fuzz."""
         # Randomizing every row that never predicts a target token (prompt
         # rows 0..prompt_len-2 and the trailing row T-1) must not move the
         # score; the predicting rows prompt_len-1..T-2 are gathered.
@@ -339,6 +349,7 @@ class ScoreSpanDifferentialTests(unittest.TestCase):
                 )
 
     def test_off_by_one_would_fail(self):
+        """Test off by one would fail."""
         # Sensitivity control: scoring from the WRONG row (shifted by one)
         # must disagree with the reference on random logits, proving the
         # fuzz above is actually sensitive to the causal-shift index.
@@ -351,6 +362,7 @@ class ScoreSpanDifferentialTests(unittest.TestCase):
         self.assertFalse(math.isclose(total, wrong[1], rel_tol=1e-6, abs_tol=1e-9))
 
     def test_deterministic_bit_identical(self):
+        """Test deterministic bit identical."""
         gen = torch.Generator().manual_seed(99)
         logits = torch.randn(7, 6, generator=gen) * 5.0
         first = score_span_from_logits(logits, prompt_len=4, target_ids=(5, 0, 2))
@@ -362,6 +374,7 @@ class ExtremeLogitTests(unittest.TestCase):
     """Hand-derived closed forms where the naive reference would overflow."""
 
     def test_single_token_vocab_is_exact_zero(self):
+        """Test single token vocab is exact zero."""
         per_token, total, mean = score_span_from_logits(
             torch.tensor([[123.456], [-987.0]]), prompt_len=1, target_ids=(0,)
         )
@@ -370,6 +383,7 @@ class ExtremeLogitTests(unittest.TestCase):
         self.assertEqual(mean, 0.0)
 
     def test_uniform_row_is_minus_log_vocab(self):
+        """Test uniform row is minus log vocab."""
         # Uniform row: peak-shifted exps are exactly 1, the sum is exactly V,
         # and torch's float64 log matches math.log bit-for-bit -- so the
         # float32-reported value is exactly f32(-log(V)).
@@ -384,6 +398,7 @@ class ExtremeLogitTests(unittest.TestCase):
             self.assertEqual(mean, want)
 
     def test_dominant_logit_exact(self):
+        """Test dominant logit exact."""
         # peak=1000: exp(0)=1, exp(-2000)=0 exactly in float64 -> exact 0/-2000.
         logits = torch.tensor([[1000.0, -1000.0, -1000.0], [0.0, 0.0, 0.0]])
         per_token, _, _ = score_span_from_logits(logits, prompt_len=1, target_ids=(0,))
@@ -392,6 +407,7 @@ class ExtremeLogitTests(unittest.TestCase):
         self.assertEqual(per_token, (-2000.0,))
 
     def test_extreme_1e30_exact(self):
+        """Test extreme 1e30 exact."""
         # NOTE: torch.tensor defaults to float32, and 1e30 is not exactly
         # representable there -- the engine faithfully computes on the
         # float32-quantized inputs. Use float64 inputs for the exactness
@@ -406,6 +422,7 @@ class ExtremeLogitTests(unittest.TestCase):
         self.assertEqual(per_token, (want,))
 
     def test_large_but_finite_logits_stable(self):
+        """Test large but finite logits stable."""
         # |logits| ~ 100: float32 exp would overflow; the engine upcasts to
         # float64 first, so this must stay finite and near the closed form.
         logits = torch.tensor([[100.0, 0.0, -100.0], [1.0, 2.0, 3.0]])
@@ -417,6 +434,7 @@ class ExtremeLogitTests(unittest.TestCase):
         self.assertEqual(mean, per_token[0])
 
     def test_mixed_sign_large_gap(self):
+        """Test mixed sign large gap."""
         logits = torch.tensor([[-500.0, 500.0], [0.0, 0.0]])
         per_token, _, _ = score_span_from_logits(logits, prompt_len=1, target_ids=(1,))
         self.assertEqual(per_token, (0.0,))
@@ -437,6 +455,7 @@ class AccumulationPolicyTests(unittest.TestCase):
     """
 
     def test_total_accumulates_in_float64(self):
+        """Test total accumulates in float64."""
         n = 20_000
         gen = torch.Generator().manual_seed(1234)
         logits = torch.randn(n + 1, 8, generator=gen) * 2.0
@@ -453,6 +472,7 @@ class AccumulationPolicyTests(unittest.TestCase):
         assert_close(self, mean, want_mean, rel=1e-9, abs_tol=1e-12, label="mean")
 
     def test_total_accumulates_unrounded_values(self):
+        """Test total accumulates unrounded values."""
         # The per-term float32 rounding error is systematic for identical
         # rows, so a large enough n amplifies it past the final reporting
         # ulp -- but only for favorable bit patterns. Search a fixed
@@ -500,15 +520,19 @@ class AccumulationPolicyTests(unittest.TestCase):
 
 
 class AlignmentDifferentialTests(unittest.TestCase):
+    """Alignment differential tests."""
+
     N_TABLES = 12
 
     def _tables(self):
+        """Tables."""
         for s in range(self.N_TABLES):
             rng = random.Random(50_000 + s)  # noqa: S311 -- deterministic test seed
             pieces = make_piece_table(rng)
             yield s, FuzzTokenizer(pieces), rng
 
     def _assert_matches_oracle(self, tok, backend, prompt_ids, target_ids):
+        """Assert matches oracle."""
         check = check_alignment(backend, prompt_ids, target_ids)
         want_ok, want_reason = oracle_alignment(tok, prompt_ids, target_ids)
         self.assertEqual(check.ok, want_ok, f"ok mismatch for {prompt_ids} / {target_ids}")
@@ -518,6 +542,7 @@ class AlignmentDifferentialTests(unittest.TestCase):
         return check
 
     def test_genuine_splits_always_verify(self):
+        """Test genuine splits always verify."""
         # Liveness theorem for greedy codecs: any split of a genuine
         # encoding at a token boundary MUST verify (per-span roundtrips and
         # the concatenation property hold by construction).
@@ -541,6 +566,7 @@ class AlignmentDifferentialTests(unittest.TestCase):
                     )
 
     def test_adversarial_sequences_match_oracle(self):
+        """Test adversarial sequences match oracle."""
         # Arbitrary id tuples (unknown ids, unencodable decodes, broken
         # roundtrips, boundary merges): implementation and oracle must agree
         # exactly, on both the verdict and the fixed reason code.
@@ -560,6 +586,7 @@ class AlignmentDifferentialTests(unittest.TestCase):
                         )
 
     def test_straddling_token_must_refuse(self):
+        """Test straddling token must refuse."""
         # Construct splits where a vocabulary piece's characters straddle
         # the prompt/answer boundary; whenever the re-parse uses a piece
         # strictly containing the character boundary, refusal is mandatory.
@@ -586,6 +613,7 @@ class AlignmentDifferentialTests(unittest.TestCase):
                         self.assertEqual(check.reason, "boundary_merge_mismatch")
 
     def test_codec_failures_become_fixed_reasons(self):
+        """Test codec failures become fixed reasons."""
         tok = FuzzTokenizer({"a": 0, "b": 1})
         backend = FuzzBackend(tok)
         # Unknown id in prompt / target -> decode_failed.
@@ -598,8 +626,12 @@ class AlignmentDifferentialTests(unittest.TestCase):
 
         # decode() returning a non-str -> decode_failed, never an exception.
         class BadDecode(FuzzBackend):
+            """Bad decode."""
+
             @staticmethod
-            def decode(token_ids: tuple[int, ...]) -> str:  # type: ignore[override]
+            def decode(token_ids: tuple[int, ...]) -> str:
+                """Decode."""
+                # type: ignore[override]
                 return ["not", "a", "str"]  # type: ignore[return-value]
 
         check = check_alignment(BadDecode(tok), (0,), (1,))
@@ -607,8 +639,11 @@ class AlignmentDifferentialTests(unittest.TestCase):
 
         # decode() raising -> decode_failed.
         class RaisingDecode(FuzzBackend):
+            """Raising decode."""
+
             @staticmethod
             def decode(token_ids: tuple[int, ...]) -> str:
+                """Decode."""
                 raise RuntimeError("tokenizer exploded")
 
         check = check_alignment(RaisingDecode(tok), (0,), (1,))
@@ -621,8 +656,12 @@ class AlignmentDifferentialTests(unittest.TestCase):
 
         # encode() returning a non-tuple -> encode_failed.
         class BadEncode(FuzzBackend):
+            """Bad encode."""
+
             @staticmethod
-            def encode(text: str) -> tuple[int, ...]:  # type: ignore[override]
+            def encode(text: str) -> tuple[int, ...]:
+                """Encode."""
+                # type: ignore[override]
                 return [0]  # type: ignore[return-value]
 
         check = check_alignment(BadEncode(tok), (0,), (1,))
@@ -645,10 +684,13 @@ class AlignmentDifferentialTests(unittest.TestCase):
 
 
 class EndToEndDifferentialTests(unittest.TestCase):
+    """End to end differential tests."""
+
     N_SEEDS = 40
 
     @staticmethod
     def _trial(seed: int):
+        """Trial."""
         rng = random.Random(60_000 + seed)  # noqa: S311 -- deterministic test seed
         tok = FuzzTokenizer(make_piece_table(rng))
         # Genuine split of one encoding at a token boundary: alignment is
@@ -669,6 +711,7 @@ class EndToEndDifferentialTests(unittest.TestCase):
         return tok, prompt_ids, target_ids, logits, target_text
 
     def test_end_to_end_matches_reference(self):
+        """Test end to end matches reference."""
         for seed in range(self.N_SEEDS):
             tok, prompt_ids, target_ids, logits, target_text = self._trial(seed)
             backend = FuzzBackend(tok, logits)
@@ -695,6 +738,7 @@ class EndToEndDifferentialTests(unittest.TestCase):
                 self.assertEqual(backend.forward_calls, [tuple(prompt_ids) + tuple(target_ids)])
 
     def test_empty_target_is_defined(self):
+        """Test empty target is defined."""
         tok = FuzzTokenizer(make_piece_table(random.Random(1)))  # noqa: S311 -- deterministic test seed
         backend = FuzzBackend(tok, torch.zeros(2, tok.vocab_size))
         score = score_target_logprobs(backend, (0, 1), ())
@@ -709,6 +753,7 @@ class EndToEndDifferentialTests(unittest.TestCase):
         self.assertEqual(backend.forward_calls, [])
 
     def test_single_token_target_at_sequence_start(self):
+        """Test single token target at sequence start."""
         # prompt_len=1: the single target token is predicted by row 0, the
         # sharpest off-by-one probe (row -1 would be out of bounds).
         tok = FuzzTokenizer({"a": 0, "b": 1, "c": 2})
@@ -725,6 +770,7 @@ class EndToEndDifferentialTests(unittest.TestCase):
         assert_close(self, score.mean_logprob, exp_mean, label="mean")
 
     def test_very_long_prompt(self):
+        """Test very long prompt."""
         tok = FuzzTokenizer({"a": 0, "b": 1})
         prompt_ids = tuple([0, 1] * 1000)  # 2000 prompt tokens
         target_ids = (0, 1, 0)
@@ -746,6 +792,7 @@ class EndToEndDifferentialTests(unittest.TestCase):
         assert_close(self, score.mean_logprob, exp_mean, label="mean")
 
     def test_single_token_vocab_end_to_end(self):
+        """Test single token vocab end to end."""
         tok = FuzzTokenizer({"a": 0})
         logits = torch.tensor([[4.0], [-2.0], [0.5]])
         backend = FuzzBackend(tok, logits)
@@ -756,6 +803,7 @@ class EndToEndDifferentialTests(unittest.TestCase):
         self.assertEqual(score.mean_logprob, 0.0)
 
     def test_refusal_paths_make_no_forward_call(self):
+        """Test refusal paths make no forward call."""
         tok = FuzzTokenizer({"a": 0, "b": 1, "ab": 2})
         backend = FuzzBackend(tok, torch.zeros(3, 3))
         # Boundary straddle: "a"(0) prompt, "b"(1) target, "ab" re-merges.
@@ -773,6 +821,7 @@ class EndToEndDifferentialTests(unittest.TestCase):
         self.assertEqual(backend.forward_calls, [])
 
     def test_provider_math_rejections_become_fixed_reasons(self):
+        """Test provider math rejections become fixed reasons."""
         tok = FuzzTokenizer({"a": 0, "b": 1})
         # Wrong row count -> logits_length_mismatch.
         backend = FuzzBackend(tok, torch.zeros(5, 2))
@@ -798,6 +847,7 @@ class EndToEndDifferentialTests(unittest.TestCase):
         self.assertEqual(score.reason, "forward_failed")
 
     def test_end_to_end_deterministic(self):
+        """Test end to end deterministic."""
         tok, prompt_ids, target_ids, logits, _ = self._trial(3)
         backend = FuzzBackend(tok, logits)
         first = score_target_logprobs(backend, prompt_ids, target_ids)

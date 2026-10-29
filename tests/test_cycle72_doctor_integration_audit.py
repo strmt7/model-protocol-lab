@@ -69,10 +69,12 @@ def _write_loadable_tokenizer(root: Path, vocab_size: int = 16) -> int:
 
 
 def _write_tokenizer_doc(root: Path, doc: dict) -> None:
+    """Write tokenizer doc."""
     (root / "tokenizer.json").write_text(json.dumps(doc), encoding="utf-8")
 
 
 def _write_config(root: Path, obj: object) -> None:
+    """Write config."""
     (root / "config.json").write_text(json.dumps(obj), encoding="utf-8")
 
 
@@ -108,7 +110,10 @@ def _write_sharded_layout(root: Path, shards: dict[str, bytes]) -> None:
 
 
 def _write_dataset(path: Path, *, special_literal: bool = False) -> None:
+    """Write dataset."""
+
     def item(name: str) -> dict:
+        """Item."""
         # Content is unique per fixture: identical inputs may not cross the
         # search/held_out split (anti-contamination rule in datasets).
         content = f"say <|im_start|> {name} out loud" if special_literal else f"question:{name}"
@@ -128,16 +133,21 @@ def _write_dataset(path: Path, *, special_literal: bool = False) -> None:
 
 # skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class _Base(unittest.TestCase):
+    """Base."""
+
     def mkroot(self) -> Path:
+        """Mkroot."""
         tmp = Path(tempfile.mkdtemp(prefix=f"mpl-c72-{os.getpid()}-"))
         self.addCleanup(shutil.rmtree, tmp, True)
         return tmp
 
     def healthy(self, **kwargs) -> Path:
+        """Healthy."""
         return _healthy(self.mkroot(), **kwargs)
 
     @staticmethod
     def checks(report: dict) -> dict:
+        """Checks."""
         return report["model"]["checks"]
 
 
@@ -146,6 +156,7 @@ class ReportAssemblyTests(_Base):
 
     @NEEDS_HF
     def test_full_pass_check_order_is_stable(self):
+        """Test full pass check order is stable."""
         root = self.healthy()
         report = examine_model(
             root,
@@ -201,6 +212,7 @@ class ReportAssemblyTests(_Base):
                 self.assertIs(type(model["added_tokens"]), dict)
 
     def test_report_is_deterministic_and_json_serializable(self):
+        """Test report is deterministic and json serializable."""
         root = self.healthy()
         first = json.dumps(examine_model(root, boundary_ids=(0,)), sort_keys=True)
         second = json.dumps(examine_model(root, boundary_ids=(0,)), sort_keys=True)
@@ -272,6 +284,7 @@ class VerdictPrecedenceTests(_Base):
     """Minimal pairs: which failure wins, and with what detail vocabulary."""
 
     def _shard_pair(self, corrupt_a: bool, corrupt_b: bool) -> Path:
+        """Shard pair."""
         root = self.mkroot()
         _write_sharded_layout(
             root,
@@ -301,6 +314,7 @@ class VerdictPrecedenceTests(_Base):
         self.assertEqual(self.checks(neither)["weight_headers"]["status"], "ok")
 
     def test_sharded_layout_full_pass_reports_sorted_assets(self):
+        """Test sharded layout full pass reports sorted assets."""
         root = self.mkroot()
         _write_sharded_layout(
             root,
@@ -356,12 +370,14 @@ class VerdictPrecedenceTests(_Base):
         )
 
     def test_unsupported_model_type_takes_precedence_over_rejected_keys(self):
+        """Test unsupported model type takes precedence over rejected keys."""
         root = self.healthy(model_type="bert", config_extra={"quantization_config": {"bits": 4}})
         report = examine_model(root)
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(self.checks(report)["config"]["detail"], "unsupported model_type: 'bert'")
 
     def test_rejected_keys_listed_in_fixed_order(self):
+        """Test rejected keys listed in fixed order."""
         root = self.healthy(
             config_extra={"is_encoder_decoder": True, "quantization_config": {"bits": 4}}
         )
@@ -379,6 +395,7 @@ class VerdictPrecedenceTests(_Base):
         self.assertEqual(self.checks(report)["config"]["status"], "ok")
 
     def test_missing_model_type_is_unsupported(self):
+        """Test missing model type is unsupported."""
         root = self.mkroot()
         _write_config(root, {})
         (root / "model.safetensors").write_bytes(_valid_safetensors_bytes())
@@ -409,19 +426,23 @@ class ContextWindowTests(_Base):
     """The declared window is informational: malformed values degrade to None."""
 
     def _ctx(self, **kwargs) -> object:
+        """Ctx."""
         root = self.healthy(tokenizer=False, **kwargs)
         return examine_model(root)["model"]["context_window"]
 
     def test_gpt2_uses_n_positions(self):
+        """Test gpt2 uses n positions."""
         self.assertEqual(self._ctx(config_extra={"n_positions": 1024}), 1024)
 
     def test_llama_uses_max_position_embeddings(self):
+        """Test llama uses max position embeddings."""
         self.assertEqual(
             self._ctx(model_type="llama", config_extra={"max_position_embeddings": 2048}),
             2048,
         )
 
     def test_malformed_window_degrades_to_none_without_failing(self):
+        """Test malformed window degrades to none without failing."""
         for extra in (
             {"n_positions": "1024"},
             {"n_positions": 0},
@@ -447,12 +468,14 @@ class BoundaryIntegrationTests(_Base):
 
     @NEEDS_HF
     def test_boundary_ids_valid_ok(self):
+        """Test boundary ids valid ok."""
         root = self.healthy()
         report = examine_model(root, boundary_ids=(0, 1))
         self.assertEqual(self.checks(report)["boundary_ids"]["status"], "ok")
 
     @NEEDS_HF
     def test_boundary_ids_invalid_variants(self):
+        """Test boundary ids invalid variants."""
         root = self.healthy()
         for label, ids in (
             ("empty tuple", ()),
@@ -470,6 +493,7 @@ class BoundaryIntegrationTests(_Base):
 
     @NEEDS_HF
     def test_boundary_map_per_name_reporting(self):
+        """Test boundary map per name reporting."""
         root = self.healthy()
         report = examine_model(
             root,
@@ -485,18 +509,21 @@ class BoundaryIntegrationTests(_Base):
         self.assertNotIn("boundary_ids", checks)
 
     def test_boundary_map_non_dict_fails(self):
+        """Test boundary map non dict fails."""
         root = self.healthy()
         report = examine_model(root, boundary_map="not-a-map")  # type: ignore[arg-type]
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(self.checks(report)["boundary_map"]["detail"], "invalid boundary map")
 
     def test_boundary_map_empty_dict_adds_no_checks(self):
+        """Test boundary map empty dict adds no checks."""
         root = self.healthy()
         report = examine_model(root, boundary_map={})
         self.assertNotIn("boundary_map", self.checks(report))
         self.assertFalse([k for k in self.checks(report) if k.startswith("boundary_ids:")])
 
     def test_boundary_map_skipped_without_transformers(self):
+        """Test boundary map skipped without transformers."""
         root = self.healthy()
         with patch.dict(sys.modules, {"transformers": None}):
             report = examine_model(root, boundary_map={"a": (0,), "b": (1,)})
@@ -533,6 +560,7 @@ class AdversarialEdgeTests(_Base):
     """Empty dirs, 0-byte files, garbage, oversized configs, odd paths."""
 
     def test_empty_directory(self):
+        """Test empty directory."""
         root = self.mkroot()
         report = examine_model(root)
         self.assertEqual(report["verdict"], "failed")
@@ -543,6 +571,7 @@ class AdversarialEdgeTests(_Base):
         self.assertEqual(report["model"]["assets"], [])
 
     def test_zero_byte_files(self):
+        """Test zero byte files."""
         expectations = {
             "model.safetensors": ("weight_headers", "invalid_safetensors_header"),
             "config.json": ("config", "invalid_asset_json"),
@@ -560,6 +589,7 @@ class AdversarialEdgeTests(_Base):
                 )
 
     def test_garbage_everywhere_fails_at_weights_first(self):
+        """Test garbage everywhere fails at weights first."""
         root = self.healthy()
         for name in ("model.safetensors", "config.json", "tokenizer.json"):
             (root / name).write_bytes(os.urandom(64))
@@ -569,6 +599,7 @@ class AdversarialEdgeTests(_Base):
         self.assertNotIn("config", checks)  # fail-fast: later stages never ran
 
     def test_header_variants(self):
+        """Test header variants."""
         cases = {
             "json list header": struct.pack("<Q", 7) + b"[1,2,3]",
             "declared size exceeds file": struct.pack("<Q", 100) + b"short",
@@ -587,6 +618,7 @@ class AdversarialEdgeTests(_Base):
                 )
 
     def test_oversized_config_rejected(self):
+        """Test oversized config rejected."""
         root = self.healthy()
         # Sparse file: _read_json reads byte content (holes read as zeros),
         # so the oversized path triggers while consuming ~0 tmpfs blocks.
@@ -598,6 +630,7 @@ class AdversarialEdgeTests(_Base):
         self.assertEqual(self.checks(report)["config"]["detail"], "oversized_asset_json")
 
     def test_unicode_model_path(self):
+        """Test unicode model path."""
         root = self.mkroot() / "μοντέλο-🚀"
         root.mkdir()
         _healthy(root)
@@ -606,6 +639,7 @@ class AdversarialEdgeTests(_Base):
         self.assertEqual(self.checks(report)["directory"]["detail"], str(root.resolve()))
 
     def test_symlinked_model_dir_resolves(self):
+        """Test symlinked model dir resolves."""
         real = self.healthy()
         link = self.mkroot() / "link-to-model"
         link.symlink_to(real, target_is_directory=True)
@@ -614,6 +648,7 @@ class AdversarialEdgeTests(_Base):
         self.assertEqual(self.checks(report)["directory"]["detail"], str(real.resolve()))
 
     def test_symlink_loop_fails_closed(self):
+        """Test symlink loop fails closed."""
         root = self.mkroot()
         (root / "a").symlink_to(root / "b")
         (root / "b").symlink_to(root / "a")
@@ -624,6 +659,7 @@ class AdversarialEdgeTests(_Base):
         )
 
     def test_model_path_being_a_file_fails(self):
+        """Test model path being a file fails."""
         root = self.mkroot()
         target = root / "file"
         target.write_text("x", encoding="utf-8")
@@ -634,6 +670,7 @@ class AdversarialEdgeTests(_Base):
         )
 
     def test_single_and_index_layouts_together_rejected(self):
+        """Test single and index layouts together rejected."""
         root = self.healthy()
         (root / "model.safetensors.index.json").write_text("{}", encoding="utf-8")
         report = examine_model(root)
@@ -644,6 +681,7 @@ class AdversarialEdgeTests(_Base):
         )
 
     def test_invalid_weight_index_variants(self):
+        """Test invalid weight index variants."""
         for label, weight_map in (
             ("missing weight_map", None),
             ("empty weight_map", {}),
@@ -666,6 +704,7 @@ class AdversarialEdgeTests(_Base):
                 )
 
     def test_adapter_layout_rejected(self):
+        """Test adapter layout rejected."""
         root = self.healthy()
         (root / "adapter_config.json").write_text("{}", encoding="utf-8")
         report = examine_model(root)
@@ -674,6 +713,7 @@ class AdversarialEdgeTests(_Base):
 
     @unittest.skipIf(os.geteuid() == 0, "root bypasses file permission checks; nothing to deny")
     def test_unreadable_config_fails_closed(self):
+        """Test unreadable config fails closed."""
         root = self.healthy()
         (root / "config.json").chmod(0o000)
         try:
@@ -702,7 +742,9 @@ class AdversarialEdgeTests(_Base):
         real_os_open = os.open
         calls = 0
 
-        def fake_os_open(path: object, flags: int, *args: object, **kwargs: object):  # noqa: ANN003
+        def fake_os_open(path: object, flags: int, *args: object, **kwargs: object):
+            """Fake os open."""
+            # noqa: ANN003
             nonlocal calls
             try:
                 base = os.path.basename(os.fspath(path))  # type: ignore[arg-type]
@@ -783,11 +825,13 @@ class DoctorOrchestrationTests(_Base):
     """How doctor() combines model, dataset, matrix and suggestion sections."""
 
     def _dataset(self, **kwargs) -> Path:
+        """Dataset."""
         path = self.mkroot() / "ds.json"
         _write_dataset(path, **kwargs)
         return path
 
     def test_doctor_without_dataset_has_no_dataset_section(self):
+        """Test doctor without dataset has no dataset section."""
         root = self.healthy()
         report = doctor(root)
         self.assertEqual(report["verdict"], "ok")
@@ -796,6 +840,7 @@ class DoctorOrchestrationTests(_Base):
         self.assertIsNone(report["suggestion"])
 
     def test_doctor_dataset_failure_forces_overall_failure(self):
+        """Test doctor dataset failure forces overall failure."""
         root = self.healthy(config_extra={"n_positions": 1024})
         bad = self.mkroot() / "bad.json"
         bad.write_text("{}", encoding="utf-8")
@@ -806,6 +851,7 @@ class DoctorOrchestrationTests(_Base):
         self.assertIsNone(report["suggestion"])
 
     def test_doctor_dataset_ok_reports_counts(self):
+        """Test doctor dataset ok reports counts."""
         root = self.healthy()
         report = doctor(root, self._dataset())
         self.assertEqual(report["verdict"], "ok")
@@ -826,6 +872,7 @@ class DoctorOrchestrationTests(_Base):
         self.assertIn("<|im_start|>", {f["literal"] for f in audit["findings"]})
 
     def test_doctor_model_failure_with_good_dataset_stays_failed(self):
+        """Test doctor model failure with good dataset stays failed."""
         root = self.healthy()
         (root / "model.safetensors").write_bytes(b"corrupt")
         report = doctor(root, self._dataset(), boundary_ids=(0, 1))
@@ -835,6 +882,7 @@ class DoctorOrchestrationTests(_Base):
 
     @NEEDS_HF
     def test_doctor_suggestion_when_preflight_clean(self):
+        """Test doctor suggestion when preflight clean."""
         root = self.healthy(config_extra={"n_positions": 1024})
         report = doctor(root, self._dataset(), boundary_ids=(0, 1))
         self.assertEqual(report["verdict"], "ok")
@@ -849,6 +897,7 @@ class DoctorOrchestrationTests(_Base):
 
     @NEEDS_HF
     def test_doctor_suggestion_absent_unless_everything_known(self):
+        """Test doctor suggestion absent unless everything known."""
         good = self.healthy(config_extra={"n_positions": 1024})
         no_window = self.healthy()
         dataset = self._dataset()

@@ -50,6 +50,7 @@ BOUNDARY = (7,)
 
 
 def _format(name: str, **kwargs) -> Format:
+    """Format."""
     return Format(
         name=name,
         bos="",
@@ -61,6 +62,7 @@ def _format(name: str, **kwargs) -> Format:
 
 
 def _case(fixture_id: str, expected: str) -> core.Fixture:
+    """Case."""
     return core.Fixture(
         id=fixture_id,
         messages=(Message("user", f"say expect:{expected}"),),
@@ -87,13 +89,16 @@ class ScriptedPrefillBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(ids):
+        """Decode."""
         return "".join(map(chr, ids))
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         prompt = self.decode(input_ids)
         candidate = next((n for n in CANDIDATES if f"[{n}]" in prompt), None)
         if candidate is None:
@@ -115,6 +120,7 @@ class ScriptedPrefillBackend:
 
 
 def _run_stage(policy, prefill_id="answer-colon", cases=None, backend=None):
+    """Run stage."""
     # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
     spec = next(s for s in validate_prefill_specs(PREFILL_SPECS) if s["id"] == prefill_id)
     return prefill_stage(
@@ -129,6 +135,7 @@ def _run_stage(policy, prefill_id="answer-colon", cases=None, backend=None):
 
 
 def _prefill_payload(**overrides):
+    """Prefill payload."""
     payload = {
         "available": True,
         "primary_winner": "alpha",
@@ -195,7 +202,10 @@ def _prefill_payload(**overrides):
 
 
 class PrefillSpecValidationTests(unittest.TestCase):
+    """Prefill spec validation tests."""
+
     def test_valid_specs_round_trip(self):
+        """Test valid specs round trip."""
         specs = validate_prefill_specs(PREFILL_SPECS)
         self.assertEqual([s["id"] for s in specs], ["answer-colon", "final-answer", "result-colon"])
         # Returned copies: mutating them must not affect the module constant.
@@ -203,12 +213,14 @@ class PrefillSpecValidationTests(unittest.TestCase):
         self.assertEqual(PREFILL_SPECS[0]["text"], "Answer: ")
 
     def test_rejects_non_tuple(self):
+        """Test rejects non tuple."""
         with self.assertRaises(ValueError):
             validate_prefill_specs(list(PREFILL_SPECS))
         with self.assertRaises(ValueError):
             validate_prefill_specs(())
 
     def test_rejects_bad_entries(self):
+        """Test rejects bad entries."""
         with self.assertRaises(ValueError):
             validate_prefill_specs(({"id": "x"},))
         with self.assertRaises(ValueError):
@@ -219,30 +231,38 @@ class PrefillSpecValidationTests(unittest.TestCase):
             validate_prefill_specs(("nope",))
 
     def test_rejects_duplicate_ids(self):
+        """Test rejects duplicate ids."""
         with self.assertRaises(ValueError):
             validate_prefill_specs(({"id": "x", "text": "A: "}, {"id": "x", "text": "B: "}))
 
     def test_rejects_non_ascii(self):
+        """Test rejects non ascii."""
         with self.assertRaises(ValueError):
             validate_prefill_specs(({"id": "x", "text": "Antwort: \u00e4"},))
 
 
 class HonorsPrefillTests(unittest.TestCase):
+    """Honors prefill tests."""
+
     def test_honored_continuation(self):
+        """Test honored continuation."""
         self.assertTrue(honors_prefill("42", "Answer: "))
         self.assertTrue(honors_prefill("  42", "Answer: "))
         self.assertTrue(honors_prefill("Sure, the answer is 42", "Answer: "))
 
     def test_restarted_continuation(self):
+        """Test restarted continuation."""
         self.assertFalse(honors_prefill("Answer: 42", "Answer: "))
         self.assertFalse(honors_prefill("  Answer: 42", "Answer: "))
         # The colon guards against near-miss prefixes.
         self.assertTrue(honors_prefill("Answering your question: 42", "Answer: "))
 
     def test_empty_generation_has_no_duplication(self):
+        """Test empty generation has no duplication."""
         self.assertTrue(honors_prefill("", "Answer: "))
 
     def test_rejects_bad_input(self):
+        """Test rejects bad input."""
         with self.assertRaises(ValueError):
             honors_prefill(42, "Answer: ")
         with self.assertRaises(ValueError):
@@ -252,6 +272,8 @@ class HonorsPrefillTests(unittest.TestCase):
 
 
 class ThinkChannelTests(unittest.TestCase):
+    """Think channel tests."""
+
     # Pinned per catalog family (catalog.py line references are from the
     # cycle-148 tree): the predicate is computed from each family's own
     # generation-prompt tail, so thinking on/off variants are labeled
@@ -270,6 +292,7 @@ class ThinkChannelTests(unittest.TestCase):
     }
 
     def test_all_catalog_families_pinned(self):
+        """Test all catalog families pinned."""
         for name, fmt in CATALOG.items():
             with self.subTest(family=name):
                 self.assertEqual(
@@ -279,6 +302,7 @@ class ThinkChannelTests(unittest.TestCase):
                 )
 
     def test_thinking_off_variants_are_plain(self):
+        """Test thinking off variants are plain."""
         from model_protocol_lab.catalog import candidates as catalog_candidates
 
         for name in (
@@ -296,16 +320,19 @@ class ThinkChannelTests(unittest.TestCase):
             self.assertFalse(opens_think_channel(variants[name]), f"{name} should be plain")
 
     def test_thinking_enabled_variant_is_think(self):
+        """Test thinking enabled variant is think."""
         from model_protocol_lab.catalog import candidates as catalog_candidates
 
         variants = {fmt.name: fmt for fmt in catalog_candidates("minimax3", mutate=True)}
         self.assertTrue(opens_think_channel(variants["minimax3/thinking-enabled"]))
 
     def test_closer_only_tail_is_plain(self):
+        """Test closer only tail is plain."""
         # laguna's tail closes a think block: no open channel.
         self.assertFalse(opens_think_channel(CATALOG["laguna"]))
 
     def test_rejects_non_format(self):
+        """Test rejects non format."""
         with self.assertRaises(ValueError):
             opens_think_channel("qwen38")
         with self.assertRaises(ValueError):
@@ -313,7 +340,10 @@ class ThinkChannelTests(unittest.TestCase):
 
 
 class BuildPrefillFixturesTests(unittest.TestCase):
+    """Build prefill fixtures tests."""
+
     def test_fixture_ids_and_groups(self):
+        """Test fixture ids and groups."""
         spec = {"id": "answer-colon", "text": "Answer: "}
         fixtures = build_prefill_fixtures((_case("f1", "GREEN"),), prefill=spec)
         self.assertEqual(fixtures[0].id, "prefill/answer-colon/f1")
@@ -324,6 +354,7 @@ class BuildPrefillFixturesTests(unittest.TestCase):
         self.assertEqual(fixtures[0].messages[0].content, "say expect:GREEN")
 
     def test_rejects_bad_input(self):
+        """Test rejects bad input."""
         spec = {"id": "answer-colon", "text": "Answer: "}
         with self.assertRaises(ValueError):
             build_prefill_fixtures((), prefill=spec)
@@ -336,13 +367,17 @@ class BuildPrefillFixturesTests(unittest.TestCase):
 
 
 class PrefillBackendTests(unittest.TestCase):
+    """Prefill backend tests."""
+
     def test_encode_appends_prefill_ids(self):
+        """Test encode appends prefill ids."""
         inner = ScriptedPrefillBackend({})
         wrapped = PrefillBackend(inner, (1, 2, 3), "answer-colon")
         self.assertEqual(wrapped.encode("hi"), inner.encode("hi") + (1, 2, 3))
         self.assertEqual(wrapped.prefill_ids, (1, 2, 3))
 
     def test_decode_and_generate_forward(self):
+        """Test decode and generate forward."""
         inner = ScriptedPrefillBackend({})
         wrapped = PrefillBackend(inner, (9,), "x")
         self.assertEqual(wrapped.decode((65,)), "A")
@@ -350,12 +385,14 @@ class PrefillBackendTests(unittest.TestCase):
         self.assertIsInstance(gen, core.Generation)
 
     def test_fingerprint_marks_prefill(self):
+        """Test fingerprint marks prefill."""
         inner = ScriptedPrefillBackend({})
         wrapped = PrefillBackend(inner, (9,), "answer-colon")
         self.assertIn("+prefill:answer-colon", wrapped.fingerprint)
         self.assertTrue(wrapped.fingerprint.startswith(inner.fingerprint))
 
     def test_rejects_bad_construction(self):
+        """Test rejects bad construction."""
         inner = ScriptedPrefillBackend({})
         with self.assertRaises(ValueError):
             PrefillBackend(None, (1,), "x")
@@ -367,11 +404,16 @@ class PrefillBackendTests(unittest.TestCase):
             PrefillBackend(inner, (1,), "  ")
 
     def test_rejects_inner_without_string_fingerprint(self):
+        """Test rejects inner without string fingerprint."""
+
         class BadFingerprint:
+            """Bad fingerprint."""
+
             fingerprint = 42
 
             @staticmethod
             def generate(input_ids, *, max_new_tokens, seed, cancel):
+                """Generate."""
                 raise AssertionError("must not be called")
 
         with self.assertRaises(ValueError):
@@ -379,7 +421,10 @@ class PrefillBackendTests(unittest.TestCase):
 
 
 class PrefillStageTests(unittest.TestCase):
+    """Prefill stage tests."""
+
     def test_honor_restart_counts(self):
+        """Test honor restart counts."""
         stage = _run_stage({"alpha": "honor", "beta": "restart"})
         alpha = stage["per_candidate"]["alpha"]
         beta = stage["per_candidate"]["beta"]
@@ -393,11 +438,13 @@ class PrefillStageTests(unittest.TestCase):
         self.assertFalse(alpha["think_channel"])
 
     def test_generate_failure_degrades_cell(self):
+        """Test generate failure degrades cell."""
         stage = _run_stage({"alpha": "raise", "beta": "honor"})
         self.assertIsNone(stage["per_candidate"]["alpha"])
         self.assertIsNotNone(stage["per_candidate"]["beta"])
 
     def test_wrong_answer_honored_but_fails(self):
+        """Test wrong answer honored but fails."""
         # Honoring and passing are separate metrics: a model can honor
         # the prefill yet fail the fixture.
         stage = _run_stage({"alpha": "wrong", "beta": "honor"})
@@ -406,6 +453,7 @@ class PrefillStageTests(unittest.TestCase):
         self.assertFalse(alpha["pass"])
 
     def test_boundary_inside_prefill_fails_closed(self):
+        """Test boundary inside prefill fails closed."""
         evil_spec = {"id": "pipe", "text": "A|B "}
         stage = prefill_stage(
             ScriptedPrefillBackend({"alpha": "honor", "beta": "honor"}, "A|B "),
@@ -420,9 +468,14 @@ class PrefillStageTests(unittest.TestCase):
         self.assertIsNone(stage["per_candidate"]["beta"])
 
     def test_prefill_encode_failure_raises(self):
+        """Test prefill encode failure raises."""
+
         class BadEncode(ScriptedPrefillBackend):
+            """Bad encode."""
+
             @staticmethod
             def encode(text):
+                """Encode."""
                 raise RuntimeError("boom")
 
         with self.assertRaises(ValueError):
@@ -435,9 +488,14 @@ class PrefillStageTests(unittest.TestCase):
             )
 
     def test_prefill_decode_mismatch_raises(self):
+        """Test prefill decode mismatch raises."""
+
         class BadDecode(ScriptedPrefillBackend):
+            """Bad decode."""
+
             @staticmethod
             def decode(ids):
+                """Decode."""
                 return "MISMATCH"
 
         with self.assertRaises(ValueError):
@@ -450,6 +508,7 @@ class PrefillStageTests(unittest.TestCase):
             )
 
     def test_rejects_bad_inputs(self):
+        """Test rejects bad inputs."""
         backend = ScriptedPrefillBackend({})
         fmts = tuple(_format(c) for c in CANDIDATES)
         cases = (_case("f1", "GREEN"),)
@@ -471,8 +530,11 @@ class PrefillStageTests(unittest.TestCase):
 
 
 class PrefillAdherenceTests(unittest.TestCase):
+    """Prefill adherence tests."""
+
     @staticmethod
     def _stages():
+        """Stages."""
         return {
             "answer-colon": _run_stage({"alpha": "honor", "beta": "restart"}),
             "final-answer": _run_stage(
@@ -481,6 +543,7 @@ class PrefillAdherenceTests(unittest.TestCase):
         }
 
     def test_selection_reapplied_per_prefill(self):
+        """Test selection reapplied per prefill."""
         result = prefill_adherence("alpha", "selected", CANDIDATES, self._stages())
         self.assertTrue(result["available"])
         self.assertEqual(result["prefills"], ["answer-colon", "final-answer"])
@@ -490,6 +553,7 @@ class PrefillAdherenceTests(unittest.TestCase):
         self.assertEqual(cond["per_candidate"]["beta"]["restart_rate"], 1.0)
 
     def test_flips_against_primary(self):
+        """Test flips against primary."""
         result = prefill_adherence("beta", "selected", CANDIDATES, self._stages())
         flips = result["flips"]
         self.assertEqual(len(flips), 2)
@@ -497,6 +561,7 @@ class PrefillAdherenceTests(unittest.TestCase):
         self.assertEqual(by_prefill["answer-colon"]["winner_to"], "alpha")
 
     def test_unavailable_condition_skipped_in_flips(self):
+        """Test unavailable condition skipped in flips."""
         stages = self._stages()
         stages["answer-colon"]["per_candidate"] = {
             "alpha": None,
@@ -509,6 +574,7 @@ class PrefillAdherenceTests(unittest.TestCase):
         self.assertEqual([f["prefill"] for f in result["flips"]], ["final-answer"])
 
     def test_ambiguous_and_no_candidate(self):
+        """Test ambiguous and no candidate."""
         stages = {
             "answer-colon": _run_stage({"alpha": "honor", "beta": "honor"}),
         }
@@ -518,6 +584,7 @@ class PrefillAdherenceTests(unittest.TestCase):
         self.assertIsNone(cond["winner"])
 
     def test_think_effect_grouping(self):
+        """Test think effect grouping."""
         fmts = (
             _format("alpha"),
             _format("beta", open_suffix="<|im_start|>assistant\n<think>\n"),
@@ -539,6 +606,7 @@ class PrefillAdherenceTests(unittest.TestCase):
         self.assertEqual(effect["delta"], -1.0)
 
     def test_malformed_inputs_degrade(self):
+        """Test malformed inputs degrade."""
         good = self._stages()
         self.assertEqual(
             prefill_adherence("alpha", "selected", (), good)["detail"], "invalid_candidates"
@@ -585,12 +653,16 @@ class PrefillAdherenceTests(unittest.TestCase):
 
 
 class DiffPrefillTests(unittest.TestCase):
+    """Diff prefill tests."""
+
     def test_identical_payloads_unchanged(self):
+        """Test identical payloads unchanged."""
         diff = diff_prefill(_prefill_payload(), _prefill_payload())
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
 
     def test_nondict_flip_entries_skipped(self):
+        """Test nondict flip entries skipped."""
         # _valid_prefill accepts any list for flips; the key builder
         # skips non-dict entries instead of crashing.
         old = _prefill_payload()
@@ -602,6 +674,7 @@ class DiffPrefillTests(unittest.TestCase):
         self.assertFalse(diff["changed"])
 
     def test_condition_triplet_changed(self):
+        """Test condition triplet changed."""
         new = _prefill_payload()
         new["per_condition"]["answer-colon"]["winner"] = "beta"
         diff = diff_prefill(_prefill_payload(), new)
@@ -611,6 +684,7 @@ class DiffPrefillTests(unittest.TestCase):
         self.assertEqual(cond["new_winner"], "beta")
 
     def test_single_cause_prefills_added(self):
+        """Test single cause prefills added."""
         new = _prefill_payload()
         new["prefills"] = ["answer-colon", "final-answer", "result-colon"]
         new["per_condition"]["result-colon"] = {
@@ -628,6 +702,7 @@ class DiffPrefillTests(unittest.TestCase):
         self.assertFalse(diff["think_rates"]["changed"])
 
     def test_single_cause_prefills_removed(self):
+        """Test single cause prefills removed."""
         new = _prefill_payload()
         new["prefills"] = ["answer-colon"]
         del new["per_condition"]["final-answer"]
@@ -636,6 +711,7 @@ class DiffPrefillTests(unittest.TestCase):
         self.assertEqual(diff["prefills_removed"], ["final-answer"])
 
     def test_single_cause_flips_only(self):
+        """Test single cause flips only."""
         new = _prefill_payload()
         new["flips"] = []
         diff = diff_prefill(_prefill_payload(), new)
@@ -646,6 +722,7 @@ class DiffPrefillTests(unittest.TestCase):
         self.assertFalse(any(c["changed"] for c in diff["condition_changed"].values()))
 
     def test_single_cause_candidate_drift_only(self):
+        """Test single cause candidate drift only."""
         new = _prefill_payload()
         new["per_condition"]["answer-colon"]["per_candidate"]["alpha"]["honor_rate"] = 0.5
         diff = diff_prefill(_prefill_payload(), new)
@@ -657,6 +734,7 @@ class DiffPrefillTests(unittest.TestCase):
         self.assertFalse(diff["think_rates"]["changed"])
 
     def test_single_cause_candidates_added_only(self):
+        """Test single cause candidates added only."""
         new = _prefill_payload()
         new["per_condition"]["answer-colon"]["per_candidate"]["gamma"] = {
             "honor_rate": 1.0,
@@ -669,6 +747,7 @@ class DiffPrefillTests(unittest.TestCase):
         self.assertEqual(diff["candidates_added"], ["gamma"])
 
     def test_single_cause_candidates_removed_only(self):
+        """Test single cause candidates removed only."""
         new = _prefill_payload()
         for condition in new["per_condition"].values():
             del condition["per_candidate"]["beta"]
@@ -677,6 +756,7 @@ class DiffPrefillTests(unittest.TestCase):
         self.assertEqual(diff["candidates_removed"], ["beta"])
 
     def test_single_cause_think_rates_only(self):
+        """Test single cause think rates only."""
         new = _prefill_payload()
         new["think_effect"]["think_channel"]["mean_honor_rate"] = 0.9
         diff = diff_prefill(_prefill_payload(), new)
@@ -686,6 +766,7 @@ class DiffPrefillTests(unittest.TestCase):
         self.assertFalse(diff["candidate_drift"])
 
     def test_single_cause_condition_changed_only(self):
+        """Test single cause condition changed only."""
         new = _prefill_payload()
         new["per_condition"]["answer-colon"]["decision"] = "ambiguous"
         new["per_condition"]["answer-colon"]["winner"] = None
@@ -695,11 +776,13 @@ class DiffPrefillTests(unittest.TestCase):
         self.assertFalse(diff["flips_changed"])
 
     def test_availability(self):
+        """Test availability."""
         self.assertEqual(diff_prefill(_prefill_payload(), {"available": False})["available"], "old")
         self.assertEqual(diff_prefill({"available": False}, _prefill_payload())["available"], "new")
         self.assertEqual(diff_prefill(None, None)["available"], "neither")
 
     def test_hostile_payloads_invalid(self):
+        """Test hostile payloads invalid."""
         # Non-string map keys must fail validation (wave-2 C3 lesson).
         evil = _prefill_payload()
         evil["per_condition"]["answer-colon"]["per_candidate"][7] = {"honor_rate": 1.0}
@@ -719,8 +802,11 @@ class DiffPrefillTests(unittest.TestCase):
 
 
 class PrefillDiffIntegrationTests(unittest.TestCase):
+    """Prefill diff integration tests."""
+
     @staticmethod
     def _reports(prefill_old, prefill_new):
+        """Reports."""
         base = {
             "decision": "select_best",
             "selected_candidate": "alpha",
@@ -732,6 +818,7 @@ class PrefillDiffIntegrationTests(unittest.TestCase):
         return old, new
 
     def test_summary_flags_and_identical(self):
+        """Test summary flags and identical."""
         old, new = self._reports(_prefill_payload(), _prefill_payload())
         diff = diff_reports(old, new)
         self.assertFalse(diff["summary"]["prefill_changed"])
@@ -739,6 +826,7 @@ class PrefillDiffIntegrationTests(unittest.TestCase):
         self.assertTrue(diff["summary"]["identical"])
 
     def test_changed_feeds_identical(self):
+        """Test changed feeds identical."""
         changed = _prefill_payload()
         changed["per_condition"]["answer-colon"]["winner"] = "beta"
         old, new = self._reports(_prefill_payload(), changed)
@@ -747,12 +835,14 @@ class PrefillDiffIntegrationTests(unittest.TestCase):
         self.assertFalse(diff["summary"]["identical"])
 
     def test_asymmetric_feeds_identical(self):
+        """Test asymmetric feeds identical."""
         old, new = self._reports(_prefill_payload(), {"available": False})
         diff = diff_reports(old, new)
         self.assertTrue(diff["summary"]["prefill_asymmetric"])
         self.assertFalse(diff["summary"]["identical"])
 
     def test_stderr_summary_lines(self):
+        """Test stderr summary lines."""
         changed = _prefill_payload()
         changed["per_condition"]["answer-colon"]["winner"] = "beta"
         old, new = self._reports(_prefill_payload(), changed)
@@ -761,17 +851,22 @@ class PrefillDiffIntegrationTests(unittest.TestCase):
         self.assertIn("selected/alpha -> selected/beta", summary)
 
     def test_identical_axes_names_prefill(self):
+        """Test identical axes names prefill."""
         old, new = self._reports(_prefill_payload(), _prefill_payload())
         summary = render_summary(diff_reports(old, new))
         self.assertIn("assistant-prefill sensitivity", summary)
 
 
 class PrefillSectionTests(unittest.TestCase):
+    """Prefill section tests."""
+
     @staticmethod
     def _result():
+        """Result."""
         return {"prefill": _prefill_payload()}
 
     def test_renders_tables(self):
+        """Test renders tables."""
         section_html = _prefill_section(self._result())
         self.assertIn("Assistant-prefill sensitivity", section_html)
         self.assertIn("answer-colon", section_html)
@@ -779,10 +874,12 @@ class PrefillSectionTests(unittest.TestCase):
         self.assertIn("think_channel", section_html)
 
     def test_empty_when_absent(self):
+        """Test empty when absent."""
         self.assertEqual(_prefill_section({}), "")
         self.assertEqual(_prefill_section({"prefill": {"available": False}}), "")
 
     def test_hostile_non_string_keys_do_not_crash(self):
+        """Test hostile non string keys do not crash."""
         result = self._result()
         prefill = result["prefill"]
         prefill["per_condition"][7] = {
@@ -795,6 +892,7 @@ class PrefillSectionTests(unittest.TestCase):
         self.assertIn("7", section_html)
 
     def test_escapes_hostile_candidate_names(self):
+        """Test escapes hostile candidate names."""
         import html as html_module
 
         result = self._result()
@@ -815,6 +913,7 @@ class PrefillMutationGateTests(unittest.TestCase):
     """Tempdir-module mutation gates (the real tree is never rewritten)."""
 
     def _run_gate(self, module_name, name, old_text, new_text, scenario):
+        """Run gate."""
         mod = __import__(f"model_protocol_lab.{module_name}", fromlist=["x"])
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
@@ -834,6 +933,7 @@ class PrefillMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _flip_scenario(mod):
+        """Flip scenario."""
         stages = {
             "answer-colon": {
                 "prefill_id": "answer-colon",
@@ -865,6 +965,7 @@ class PrefillMutationGateTests(unittest.TestCase):
         assert len(result["flips"]) == 1, f"expected 1 flip, got {result['flips']}"
 
     def test_mutant_inverted_flip_detection_caught(self):
+        """Test mutant inverted flip detection caught."""
         self._run_gate(
             "experiments",
             "inverted_flip",
@@ -883,6 +984,7 @@ class PrefillMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _honor_scenario(mod):
+        """Honor scenario."""
         stage = mod.prefill_stage(
             ScriptedPrefillBackend({"alpha": "honor", "beta": "restart"}),
             tuple(_format(c) for c in CANDIDATES),
@@ -898,6 +1000,7 @@ class PrefillMutationGateTests(unittest.TestCase):
         assert (beta["honored"], beta["restarted"]) == (0, 1), beta
 
     def test_mutant_swapped_honor_branches_caught(self):
+        """Test mutant swapped honor branches caught."""
         self._run_gate(
             "experiments",
             "swapped_honor",
@@ -914,6 +1017,7 @@ class PrefillMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _diff_scenario(mod):
+        """Diff scenario."""
         old = _prefill_payload()
         new = _prefill_payload()
         new["flips"] = []
@@ -922,6 +1026,7 @@ class PrefillMutationGateTests(unittest.TestCase):
         assert diff["flips_changed"] is True
 
     def test_mutant_dropped_flips_disjunct_caught(self):
+        """Test mutant dropped flips disjunct caught."""
         self._run_gate(
             "diffreports",
             "dropped_flips_disjunct",
@@ -946,6 +1051,7 @@ class PrefillMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _think_scenario(mod):
+        """Think scenario."""
         old = _prefill_payload()
         new = _prefill_payload()
         new["think_effect"]["think_channel"]["mean_honor_rate"] = 0.9
@@ -954,6 +1060,7 @@ class PrefillMutationGateTests(unittest.TestCase):
         assert diff["think_rates"]["changed"] is True
 
     def test_mutant_dropped_think_disjunct_caught(self):
+        """Test mutant dropped think disjunct caught."""
         self._run_gate(
             "diffreports",
             "dropped_think_disjunct",
@@ -963,6 +1070,7 @@ class PrefillMutationGateTests(unittest.TestCase):
         )
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_prefill_adherence(primary_winner, primary_decision, candidates, stages):
     """Independent brute-force reimplementation of prefill_adherence.
 
@@ -1054,8 +1162,11 @@ def _oracle_prefill_adherence(primary_winner, primary_decision, candidates, stag
 
 
 class PrefillOracleTests(unittest.TestCase):
+    """Prefill oracle tests."""
+
     @staticmethod
     def _random_stages(rng):
+        """Random stages."""
         prefill_ids = rng.sample(
             ["answer-colon", "final-answer", "result-colon"], rng.randint(1, 3)
         )
@@ -1094,6 +1205,7 @@ class PrefillOracleTests(unittest.TestCase):
         return stages
 
     def test_oracle_agrees_on_random_inputs(self):
+        """Test oracle agrees on random inputs."""
         rng = random.Random(20261018)  # noqa: S311 -- deterministic test seed
         for trial in range(200):
             stages = self._random_stages(rng)
@@ -1108,7 +1220,10 @@ class PrefillOracleTests(unittest.TestCase):
 
 
 class PrefillBranchCoverageTests(unittest.TestCase):
+    """Prefill branch coverage tests."""
+
     def test_stage_records_think_channel_per_candidate(self):
+        """Test stage records think channel per candidate."""
         fmts = (
             _format("alpha"),
             _format("beta", open_suffix="<think>\n"),
@@ -1126,9 +1241,14 @@ class PrefillBranchCoverageTests(unittest.TestCase):
         self.assertTrue(stage["per_candidate"]["beta"]["think_channel"])
 
     def test_ineligible_report_degrades_cell(self):
+        """Test ineligible report degrades cell."""
+
         class Ineligible(ScriptedPrefillBackend):
+            """Ineligible."""
+
             @staticmethod
             def generate(input_ids, *, max_new_tokens, seed, cancel):
+                """Generate."""
                 # Empty generation with reason "limit": _valid_generation
                 # rejects it (limit requires exactly cap tokens), so the
                 # observation fails, the report is not aggregate-eligible,
@@ -1147,6 +1267,7 @@ class PrefillBranchCoverageTests(unittest.TestCase):
         self.assertIsNone(stage["per_candidate"]["alpha"])
 
     def test_adherence_zero_completed_rates_none(self):
+        """Test adherence zero completed rates none."""
         stages = {
             "answer-colon": {
                 "prefill_id": "answer-colon",
@@ -1170,6 +1291,7 @@ class PrefillBranchCoverageTests(unittest.TestCase):
         self.assertIsNone(rates["restart_rate"])
 
     def test_adherence_empty_think_group_means_none(self):
+        """Test adherence empty think group means none."""
         stages = {
             "answer-colon": {
                 "prefill_id": "answer-colon",
@@ -1193,6 +1315,7 @@ class PrefillBranchCoverageTests(unittest.TestCase):
         self.assertIsNone(effect["delta"])
 
     def test_entry_validation_rejects_inconsistent_counts(self):
+        """Test entry validation rejects inconsistent counts."""
         stages = {
             "answer-colon": {
                 "prefill_id": "answer-colon",
@@ -1215,12 +1338,16 @@ class PrefillBranchCoverageTests(unittest.TestCase):
 
 
 class PrefillCliProbeTests(unittest.TestCase):
+    """Prefill cli probe tests."""
+
     @staticmethod
     def _result():
+        """Result."""
         return {"decision": "selected", "selected_candidate": "alpha"}
 
     @staticmethod
     def _call(result, backend, cases):
+        """Call."""
         from model_protocol_lab.cli import _run_prefill_probe
 
         _run_prefill_probe(
@@ -1235,6 +1362,7 @@ class PrefillCliProbeTests(unittest.TestCase):
         )
 
     def test_probe_helper_happy_path(self):
+        """Test probe helper happy path."""
         result = self._result()
         self._call(
             result,
@@ -1254,6 +1382,7 @@ class PrefillCliProbeTests(unittest.TestCase):
         )
 
     def test_probe_helper_fail_closed(self):
+        """Test probe helper fail closed."""
         result = self._result()
         with mock.patch(
             "model_protocol_lab.prefill.validate_prefill_specs",
@@ -1276,6 +1405,7 @@ class PrefillGroupLabelSanitizationTests(unittest.TestCase):
     """
 
     def test_group_label_terminal_escapes_stripped(self):
+        """Test group label terminal escapes stripped."""
         base = {
             "decision": "select_best",
             "selected_candidate": "alpha",

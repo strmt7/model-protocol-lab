@@ -65,6 +65,7 @@ class _WordBackend:
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -76,9 +77,11 @@ class _WordBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.calls += 1
         if self.mode == "explode":
             raise RuntimeError("boom")
@@ -119,6 +122,7 @@ class _WordBackend:
 
 
 def _payload(backend=None, formats=(_CHATML,), seed=0, **stage_kwargs):
+    """Payload."""
     backend = backend if backend is not None else _WordBackend()
     stage_kwargs.setdefault("max_context", 4096)
     stage = experiments.negation_stage(
@@ -132,6 +136,7 @@ def _payload(backend=None, formats=(_CHATML,), seed=0, **stage_kwargs):
 
 
 def _cell(verdict, answer, boundary=True):
+    """Cell."""
     return {
         "verdict": verdict,
         "boundary_found": boundary,
@@ -142,6 +147,7 @@ def _cell(verdict, answer, boundary=True):
 
 
 def _record(larger_first, stratum, cells, details=None, ids_identical=False, delta=2):
+    """Record."""
     return {
         "fixture": "nf-compare-00",
         "operands": [100, 47] if larger_first else [47, 100],
@@ -156,6 +162,7 @@ def _record(larger_first, stratum, cells, details=None, ids_identical=False, del
 
 
 def _triple_record(larger_first, stratum, direct, negated, flipped, alt="first"):
+    """Triple record."""
     # direct/negated/flipped/alt are answer strings; the
     # verdict follows from the arm's expected label.
     larger = "first" if larger_first else "second"
@@ -167,7 +174,10 @@ def _triple_record(larger_first, stratum, direct, negated, flipped, alt="first")
 
 
 class FrozenMaterialTests(unittest.TestCase):
+    """Frozen material tests."""
+
     def test_instructions_byte_exact(self):
+        """Test instructions byte exact."""
         self.assertEqual(
             ng.INSTRUCTIONS["direct"],
             "Which of these two numbers is larger? Reply with only the word first or second.",
@@ -188,6 +198,7 @@ class FrozenMaterialTests(unittest.TestCase):
         )
 
     def test_counts_and_floors(self):
+        """Test counts and floors."""
         self.assertEqual(ng.CASE_COUNT, 16)
         self.assertEqual(ng.MAX_GROUND_RECORDS, 384)
         self.assertEqual(ng.HEADLINE_GENERATIONS, 1152)
@@ -198,6 +209,7 @@ class FrozenMaterialTests(unittest.TestCase):
         self.assertEqual(ng.DESCRIPTIVE_ARM, "negated_alt")
 
     def test_expected_labels(self):
+        """Test expected labels."""
         self.assertEqual(ng.expected_label("direct", True), "first")
         self.assertEqual(ng.expected_label("negated", True), "first")
         self.assertEqual(ng.expected_label("negated_alt", True), "first")
@@ -208,6 +220,7 @@ class FrozenMaterialTests(unittest.TestCase):
             ng.expected_label("negated_flipped", True)
 
     def test_echo_set_exact_and_frozen(self):
+        """Test echo set exact and frozen."""
         self.assertEqual(ng.echo_answers("first"), ("not second", "not the second"))
         self.assertEqual(ng.echo_answers("second"), ("not first", "not the first"))
         # Near-miss negated forms are non-label (other), never echo.
@@ -217,7 +230,10 @@ class FrozenMaterialTests(unittest.TestCase):
 
 
 class ClassifyTests(unittest.TestCase):
+    """Classify tests."""
+
     def test_decision_boundaries(self):
+        """Test decision boundaries."""
         self.assertEqual(ng.classify_negation(0, 0), "insufficient")
         self.assertEqual(ng.classify_negation(7, 7), "insufficient")
         self.assertEqual(ng.classify_negation(8, 0), "below_threshold")
@@ -228,7 +244,10 @@ class ClassifyTests(unittest.TestCase):
 
 
 class DecomposeTests(unittest.TestCase):
+    """Decompose tests."""
+
     def test_all_classes(self):
+        """Test all classes."""
         self.assertEqual(ng.decompose_cell(_cell(True, "first"), "first"), "exact_pass")
         self.assertEqual(ng.decompose_cell(_cell(False, "second"), "first"), "wrong_label")
         self.assertEqual(ng.decompose_cell(_cell(False, "not second"), "first"), "negation_echo")
@@ -248,7 +267,10 @@ class DecomposeTests(unittest.TestCase):
 
 
 class CasesTests(unittest.TestCase):
+    """Cases tests."""
+
     def test_seed_zero_matches_design_worked_examples(self):
+        """Test seed zero matches design worked examples."""
         cases = ng.cases_for(0)
         self.assertEqual(len(cases), 16)
         first, second = cases[0], cases[1]
@@ -264,6 +286,7 @@ class CasesTests(unittest.TestCase):
         self.assertEqual(second["expected"]["flipped"], "first")
 
     def test_population_shape(self):
+        """Test population shape."""
         cases = ng.cases_for(0)
         self.assertEqual(cases, ng.cases_for(0))
         for case in cases:
@@ -278,6 +301,7 @@ class CasesTests(unittest.TestCase):
         self.assertEqual(Counter(c["larger_first"] for c in cases), {True: 8, False: 8})
 
     def test_ground_digest_binds_treatment(self):
+        """Test ground digest binds treatment."""
         self.assertEqual(ng.ground_sha256(0), ng.ground_sha256(0))
         self.assertNotEqual(ng.ground_sha256(0), ng.ground_sha256(1))
         self.assertNotEqual(ng.case_material_sha256(), ng.ground_sha256(0))
@@ -288,8 +312,11 @@ class CasesTests(unittest.TestCase):
 
 
 class AggregateTests(unittest.TestCase):
+    """Aggregate tests."""
+
     @staticmethod
     def _joint_records(n_direct_pass, n_joint, larger_first_flags):
+        """Joint records."""
         records = []
         joint_left = n_joint
         for index in range(16):
@@ -322,6 +349,7 @@ class AggregateTests(unittest.TestCase):
         return records
 
     def test_negation_drop_observed(self):
+        """Test negation drop observed."""
         agg = ng.aggregate_candidate(self._joint_records(16, 16, [True, False]))
         headline = agg["headline"]
         self.assertEqual(headline["direct_passes"], 16)
@@ -334,14 +362,17 @@ class AggregateTests(unittest.TestCase):
         self.assertFalse(headline["order_concentrated"])
 
     def test_insufficient_withholds(self):
+        """Test insufficient withholds."""
         agg = ng.aggregate_candidate(self._joint_records(7, 7, [True]))
         self.assertEqual(agg["headline"]["decision"], "insufficient")
 
     def test_below_threshold(self):
+        """Test below threshold."""
         agg = ng.aggregate_candidate(self._joint_records(10, 4, [True, False]))
         self.assertEqual(agg["headline"]["decision"], "below_threshold")
 
     def test_larger_default_is_gate_weak_not_acquittal(self):
+        """Test larger default is gate weak not acquittal."""
         records = [
             _triple_record(True, "different_length", "first", "first", "first") for _ in range(16)
         ]
@@ -354,6 +385,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(headline["decision"], "below_threshold")
 
     def test_echo_dominant_not_drop(self):
+        """Test echo dominant not drop."""
         records = [
             _triple_record(True, "different_length", "first", "not second", "second")
             for _ in range(16)
@@ -366,12 +398,14 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(agg["arms"]["negated"]["decomposition"]["wrong_label"], 0)
 
     def test_order_concentrated_flag(self):
+        """Test order concentrated flag."""
         records = self._joint_records(8, 8, [True])
         agg = ng.aggregate_candidate(records)
         self.assertTrue(agg["headline"]["order_concentrated"])
         self.assertEqual(agg["headline"]["j_by_order"]["larger_second"], 0)
 
     def test_same_ids_excluded_and_counted(self):
+        """Test same ids excluded and counted."""
         records = self._joint_records(16, 16, [True, False])
         records.append(_triple_record(True, "different_length", "first", "second", "second"))
         records[-1]["ids_identical"] = True
@@ -392,6 +426,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(agg2["headline"]["direct_passes"], 0)
 
     def test_discordance_decomposition(self):
+        """Test discordance decomposition."""
         direct_boundary = _cell(False, "first", boundary=False)
         negated_pass = _cell(True, "first")
         record = _record(
@@ -422,6 +457,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(agg["discordance"]["mixed"], 0)
 
     def test_descriptive_alt_never_decides(self):
+        """Test descriptive alt never decides."""
         records = self._joint_records(16, 0, [True, False])
         for record in records:
             smaller = "second" if record["larger_first"] else "first"
@@ -432,6 +468,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(agg["descriptive"]["negated_alt_joint"], 16)
 
     def test_attrition_and_incomplete(self):
+        """Test attrition and incomplete."""
         record = _record(
             True,
             "different_length",
@@ -456,7 +493,10 @@ class AggregateTests(unittest.TestCase):
 
 
 class StageTests(unittest.TestCase):
+    """Stage tests."""
+
     def test_perfect_backend_below_threshold(self):
+        """Test perfect backend below threshold."""
         payload = _payload()
         self.assertTrue(payload["available"])
         self.assertEqual(payload["n_cases"], 16)
@@ -476,24 +516,28 @@ class StageTests(unittest.TestCase):
         )
 
     def test_negation_drop_backend_observed(self):
+        """Test negation drop backend observed."""
         payload = _payload(_WordBackend("negation_drop"))
         entry = payload["candidates"]["chatml"]
         self.assertEqual(entry["headline"]["joint"], 16)
         self.assertEqual(entry["headline"]["decision"], "negation_drop_observed")
 
     def test_larger_default_backend_gate_weak(self):
+        """Test larger default backend gate weak."""
         payload = _payload(_WordBackend("larger_default"))
         entry = payload["candidates"]["chatml"]
         self.assertTrue(entry["headline"]["gate_weak"])
         self.assertEqual(entry["headline"]["decision"], "below_threshold")
 
     def test_echo_backend_echo_dominant(self):
+        """Test echo backend echo dominant."""
         payload = _payload(_WordBackend("echo"))
         entry = payload["candidates"]["chatml"]
         self.assertTrue(entry["headline"]["echo_dominant"])
         self.assertEqual(entry["headline"]["joint"], 0)
 
     def test_explode_backend_scores_wrong_never_a_detail(self):
+        """Test explode backend scores wrong never a detail."""
         payload = _payload(_WordBackend("explode"))
         entry = payload["candidates"]["chatml"]
         self.assertEqual(entry["arms"]["direct"]["n_evaluation_failed"], 16)
@@ -503,6 +547,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(details, {"arm_evaluation_failed"})
 
     def test_cancel_unwinds_to_fail_closed_payload(self):
+        """Test cancel unwinds to fail closed payload."""
         event = threading.Event()
         event.set()
         backend = _WordBackend()
@@ -521,6 +566,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(analysis["detail"], "cancelled")
 
     def test_duplicate_format_names_rejected(self):
+        """Test duplicate format names rejected."""
         backend = _WordBackend()
         with self.assertRaises(ValueError):
             experiments.negation_stage(
@@ -532,6 +578,7 @@ class StageTests(unittest.TestCase):
             )
 
     def test_record_budget_exceeded(self):
+        """Test record budget exceeded."""
         backend = _WordBackend()
         formats = tuple(
             Format(
@@ -554,6 +601,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(stage["detail"], "negation_record_budget_exceeded")
 
     def test_special_token_screen_wiring_proven_by_stub(self):
+        """Test special token screen wiring proven by stub."""
         from model_protocol_lab import fixtures as fixtures_mod
         from model_protocol_lab.fixtures import AuditFinding
 
@@ -581,6 +629,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(stage["detail"], "negation_screen_failed")
 
     def test_boundary_text_screen(self):
+        """Test boundary text screen."""
         backend = _WordBackend()
         stage = experiments.negation_stage(
             backend,
@@ -593,12 +642,14 @@ class StageTests(unittest.TestCase):
         self.assertEqual(stage["detail"], "negation_screen_failed")
 
     def test_context_exceeded_cells(self):
+        """Test context exceeded cells."""
         payload = _payload(max_context=1, max_new_tokens=64)
         entry = payload["candidates"]["chatml"]
         self.assertEqual(entry["arms"]["direct"]["n_context_exceeded"], 16)
         self.assertEqual(entry["headline"]["decision"], "insufficient")
 
     def test_unavailable_analysis_passthrough(self):
+        """Test unavailable analysis passthrough."""
         stage = {
             "available": False,
             "detail": "negation_screen_failed",
@@ -611,7 +662,10 @@ class StageTests(unittest.TestCase):
 
 
 class ReportingTests(unittest.TestCase):
+    """Reporting tests."""
+
     def test_section_renders_decision_and_bundle(self):
+        """Test section renders decision and bundle."""
         payload = _payload(_WordBackend("negation_drop"))
         html = reporting_mod._negation_section({"negation": payload})
         self.assertIn('id="negation"', html)
@@ -624,6 +678,7 @@ class ReportingTests(unittest.TestCase):
         self.assertNotIn("negation sensitivity", html)
 
     def test_section_echo_share_and_gate_weak(self):
+        """Test section echo share and gate weak."""
         echo_html = reporting_mod._negation_section({"negation": _payload(_WordBackend("echo"))})
         self.assertIn("Echo-dominant", echo_html)
         self.assertIn("Echo share among non-pass", echo_html)
@@ -634,6 +689,7 @@ class ReportingTests(unittest.TestCase):
         self.assertIn("negation-drop undiagnosed, not absent", weak_html)
 
     def test_section_in_render_html_toc_and_body(self):
+        """Test section in render html toc and body."""
         payload = _payload(_WordBackend("negation_drop"))
         html = reporting_mod.render_html(
             {"decision": "compatible_on_fixture_set", "negation": payload}
@@ -642,6 +698,7 @@ class ReportingTests(unittest.TestCase):
         self.assertIn('id="negation"', html)
 
     def test_section_empty_when_unavailable(self):
+        """Test section empty when unavailable."""
         self.assertEqual(reporting_mod._negation_section({}), "")
         self.assertEqual(
             reporting_mod._negation_section(
@@ -652,7 +709,10 @@ class ReportingTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    """Cli tests."""
+
     def test_negation_flag_parses(self):
+        """Test negation flag parses."""
         from model_protocol_lab.cli import build_parser
 
         # The run subcommand's required args (cycle 179's
@@ -676,15 +736,20 @@ class CliTests(unittest.TestCase):
         self.assertFalse(args.negation)
 
     def test_probe_wrapper_never_raises(self):
+        """Test probe wrapper never raises."""
         from model_protocol_lab import cli as cli_module
 
         class _EncodeExplodeBackend(_WordBackend):
+            """Encode explode backend."""
+
             @staticmethod
             def encode(text):
+                """Encode."""
                 raise RuntimeError("no encode")
 
             @staticmethod
             def decode(ids):
+                """Decode."""
                 # A decode of "?" would trip the boundary-text
                 # screen (every instruction ends in "?"); the
                 # contract here is a terminator outside the

@@ -66,6 +66,7 @@ audit-held-number,audit-integer,held_out,7,Return only the numeral 7.,,
 
 
 def run_cli(*args: str, timeout: int = 300) -> subprocess.CompletedProcess:
+    """Run cli."""
     return subprocess.run(
         [sys.executable, "-m", "model_protocol_lab", *args],
         cwd=REPO_ROOT,
@@ -82,6 +83,7 @@ class PipelineEndToEndTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        """Set up the test fixture."""
         cls._tmp = TemporaryDirectory()
         cls.addClassCleanup(cls._tmp.cleanup)
         cls.root = Path(cls._tmp.name)
@@ -96,6 +98,7 @@ class PipelineEndToEndTests(unittest.TestCase):
         cls._report: Path | None = None
 
     def _fixture_json(self) -> Path:
+        """Fixture json."""
         # The class-level tmp root is shared across tests in this class, so
         # reuse the fixture if an earlier test already built it.
         out = self.root / "audit_fixtures.json"
@@ -112,6 +115,7 @@ class PipelineEndToEndTests(unittest.TestCase):
         return out
 
     def _run_report(self) -> Path:
+        """Run report."""
         if self._report is None:
             output = self.root / "report"
             proc = run_cli(
@@ -141,6 +145,7 @@ class PipelineEndToEndTests(unittest.TestCase):
         return self._report
 
     def test_01_fixtures_build_compiles_authoring_csv(self) -> None:
+        """Test 01 fixtures build compiles authoring csv."""
         csv_path = self.root / "audit.csv"
         csv_path.write_text(AUDIT_CSV, encoding="utf-8")
         out = self.root / "audit_fixtures.json"
@@ -165,6 +170,7 @@ class PipelineEndToEndTests(unittest.TestCase):
         self.assertEqual(split.search[0].expected, "BLUE")
 
     def test_02_run_writes_results_and_html_report(self) -> None:
+        """Test 02 run writes results and html report."""
         report = self._run_report()
         results_path = report / "results.json"
         self.assertTrue(results_path.exists())
@@ -193,6 +199,7 @@ class PipelineEndToEndTests(unittest.TestCase):
             self.assertNotIn(banned, html)
 
     def test_03_diff_reports_self_is_identical(self) -> None:
+        """Test 03 diff reports self is identical."""
         report = self._run_report()
         # Mix the two accepted input forms: directory and results.json path.
         proc = run_cli("diff-reports", str(report), str(report / "results.json"))
@@ -209,7 +216,9 @@ class PipelineEndToEndTests(unittest.TestCase):
         self.assertEqual(diff["candidate_verdicts"], [])
         self.assertIn("No differences", proc.stderr)
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_04_diff_reports_perturbed_observation_flips_one_cell(self) -> None:
+        """Test 04 diff reports perturbed observation flips one cell."""
         report = self._run_report()
         original = json.loads((report / "results.json").read_text(encoding="utf-8"))
         perturbed = json.loads(json.dumps(original))  # deep copy
@@ -270,11 +279,13 @@ class PipelineAdversarialTests(unittest.TestCase):
     """Failure-mode contracts, all via subprocess: fixed error codes, no tracebacks."""
 
     def setUp(self) -> None:
+        """Set up the test fixture."""
         self._tmp = TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.root = Path(self._tmp.name)
 
     def test_oversize_csv_field_yields_fixed_valueerror(self) -> None:
+        """Test oversize csv field yields fixed valueerror."""
         # One field far beyond csv.field_size_limit: the cycle-66 contract is
         # a fixed ValueError surfaced by the CLI, not a bare _csv.Error.
         big = "x" * (2 * 1024 * 1024 // 8)  # 256 KiB, one field
@@ -292,6 +303,7 @@ class PipelineAdversarialTests(unittest.TestCase):
         self.assertFalse(out.exists(), "failed build must not leave a fixture behind")
 
     def test_run_with_missing_backend_deps_is_clean_error(self) -> None:
+        """Test run with missing backend deps is clean error."""
         # A minimal asset directory that passes backend asset validation, so
         # the ONLY failure is `import torch` inside LocalHFBackend. The heavy
         # deps are stubbed out of sys.modules in a subprocess, exercising the
@@ -371,6 +383,7 @@ class PipelineAdversarialTests(unittest.TestCase):
         self.assertFalse(outdir.exists())
 
     def test_diff_reports_accepts_report_directory(self) -> None:
+        """Test diff reports accepts report directory."""
         # Cycle-64 behavior: a directory input resolves to results.json inside.
         report_dir = self.root / "report"
         report_dir.mkdir()
@@ -388,6 +401,7 @@ class PipelineAdversarialTests(unittest.TestCase):
         self.assertTrue(json.loads(proc.stdout)["summary"]["identical"])
 
     def test_diff_reports_bare_directory_is_clean_error(self) -> None:
+        """Test diff reports bare directory is clean error."""
         # A directory with no results.json inside: fixed code, no traceback.
         empty = self.root / "empty_report"
         empty.mkdir()

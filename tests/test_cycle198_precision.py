@@ -33,6 +33,7 @@ _FORMATS = (
 
 
 def _fx(fid, expected, group):
+    """Fx."""
     return Fixture(
         id=fid,
         messages=(Message(role="user", content=f"question {fid}?"),),
@@ -42,6 +43,7 @@ def _fx(fid, expected, group):
 
 
 def _cases():
+    """Cases."""
     return (
         _fx("s0", "42", "numbers"),
         _fx("s1", "Paris", "geo"),
@@ -68,13 +70,16 @@ class _ScriptedBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(text.encode("utf-8"))
 
     @staticmethod
     def decode(ids):
+        """Decode."""
         return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         prompt = self.decode(input_ids)
         fmt = "alpha" if prompt.startswith("u:") else "beta"
         answer = ""
@@ -88,6 +93,7 @@ class _ScriptedBackend:
 
     @staticmethod
     def forward_logits(input_ids):
+        """Forward logits."""
         import torch
 
         seq = list(input_ids)
@@ -98,6 +104,7 @@ class _ScriptedBackend:
 
 
 def _full_table(fail=()):
+    """Full table."""
     # Base shape: alpha passes everything, beta fails s3 -- the
     # native run's unique winner is alpha (a both-pass table
     # would make the primary decision ambiguous, and the
@@ -113,6 +120,7 @@ def _full_table(fail=()):
 
 
 def _native_result(native, cases):
+    """Native result."""
     return experiments.run_experiment(
         native,
         _FORMATS,
@@ -124,6 +132,7 @@ def _native_result(native, cases):
 
 
 def _run_stage(native=None, bf16=None, *, cases=None, result=None):
+    """Run stage."""
     cases = _cases() if cases is None else cases
     native = _ScriptedBackend(_full_table()) if native is None else native
     bf16 = (
@@ -139,6 +148,7 @@ def _run_stage(native=None, bf16=None, *, cases=None, result=None):
 
 
 def _valid_payload():
+    """Valid payload."""
     _result, payload = _run_stage(
         bf16=_ScriptedBackend(
             _full_table(fail={("alpha", "s2")}), dtype="bfloat16", fingerprint="sha256:bf16-fp"
@@ -149,7 +159,10 @@ def _valid_payload():
 
 
 class TestPrecisionStage(unittest.TestCase):
+    """Test precision stage."""
+
     def test_identical_arms_survive_and_falsify(self):
+        """Test identical arms survive and falsify."""
         _result, payload = _run_stage()
         self.assertTrue(payload["available"])
         self.assertIsNone(payload["detail"])
@@ -175,6 +188,7 @@ class TestPrecisionStage(unittest.TestCase):
         self.assertEqual(block["logprob"]["mean_delta"], 0.0)
 
     def test_flip_breaks_survival(self):
+        """Test flip breaks survival."""
         _result, payload = _run_stage(
             bf16=_ScriptedBackend(
                 _full_table(fail={("alpha", "s2")}),
@@ -197,6 +211,7 @@ class TestPrecisionStage(unittest.TestCase):
         self.assertEqual(payload["totals"]["n_flips"], 1)
 
     def test_bf16_only_pass_flips_without_changing_selection(self):
+        """Test bf16 only pass flips without changing selection."""
         native = _ScriptedBackend(_full_table(fail={("beta", "s1")}))
         result = _native_result(native, _cases())
         _r, payload = _run_stage(native=native, result=result)
@@ -212,6 +227,7 @@ class TestPrecisionStage(unittest.TestCase):
         self.assertIs(payload["precision_effect_falsified"], False)
 
     def test_withheld_when_primary_not_winner_bearing(self):
+        """Test withheld when primary not winner bearing."""
         native = _ScriptedBackend(_full_table(fail={("alpha", "s0"), ("beta", "s1")}))
         result = _native_result(native, _cases())
         self.assertIn(result["decision"], ("ambiguous", "no_candidate"))
@@ -224,8 +240,13 @@ class TestPrecisionStage(unittest.TestCase):
         self.assertEqual(selection["paired_population"], ["s0", "s1", "s2", "s3"])
 
     def test_withheld_on_mismatched_sets(self):
+        """Test withheld on mismatched sets."""
+
         class _DropBackend(_ScriptedBackend):
+            """Drop backend."""
+
             def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+                """Generate."""
                 if "question s3?" in self.decode(input_ids):
                     raise RuntimeError("boom")
                 return super().generate(
@@ -248,6 +269,7 @@ class TestPrecisionStage(unittest.TestCase):
         self.assertEqual(payload["candidates"]["alpha"]["n_fp32_only"], 1)
 
     def test_stage_native_search_not_a_list(self):
+        """Test stage native search not a list."""
         result = self._result()
         result["search"] = "nope"
         payload = experiments.precision_stage(
@@ -264,9 +286,11 @@ class TestPrecisionStage(unittest.TestCase):
 
     @staticmethod
     def _result():
+        """Result."""
         return _native_result(_ScriptedBackend(_full_table()), _cases())
 
     def test_native_dtype_gate(self):
+        """Test native dtype gate."""
         native = _ScriptedBackend(_full_table(), dtype="bfloat16")
         result = _native_result(native, _cases())
         payload = experiments.precision_stage(
@@ -281,6 +305,7 @@ class TestPrecisionStage(unittest.TestCase):
         self.assertEqual(payload["detail"], "native_dtype_not_float32")
 
     def test_arm_dtype_gate(self):
+        """Test arm dtype gate."""
         payload = experiments.precision_stage(
             _ScriptedBackend(_full_table()),
             _ScriptedBackend(_full_table(), dtype="float32", fingerprint="sha256:x"),
@@ -293,6 +318,7 @@ class TestPrecisionStage(unittest.TestCase):
         self.assertEqual(payload["detail"], "arm_dtype_not_bfloat16")
 
     def test_cancelled(self):
+        """Test cancelled."""
         event = Event()
         event.set()
         payload = experiments.precision_stage(
@@ -308,6 +334,7 @@ class TestPrecisionStage(unittest.TestCase):
         self.assertEqual(payload["detail"], "cancelled")
 
     def test_records_carry_no_answer_text(self):
+        """Test records carry no answer text."""
         _r, payload = _run_stage()
         blob = json.dumps(payload)
         self.assertNotIn('"answer":', blob)
@@ -318,6 +345,7 @@ class TestPrecisionStage(unittest.TestCase):
         self.assertIn("verdict", record["fp32"])
 
     def test_protocol_binds_both_fingerprints(self):
+        """Test protocol binds both fingerprints."""
         _r, payload = _run_stage()
         protocol = payload["protocol"]
         self.assertEqual(protocol["fp32_fingerprint"], "sha256:native-fp")
@@ -328,6 +356,7 @@ class TestPrecisionStage(unittest.TestCase):
         self.assertEqual(protocol["candidates"], ["alpha", "beta"])
 
     def test_primary_result_not_mutated(self):
+        """Test primary result not mutated."""
         result, payload = _run_stage()
         self.assertNotIn("precision", result)
         self.assertEqual(result["decision"], "compatible_on_fixture_set")
@@ -335,28 +364,36 @@ class TestPrecisionStage(unittest.TestCase):
 
 
 class TestPrecisionValidator(unittest.TestCase):
+    """Test precision validator."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.payload = _valid_payload()
 
     @staticmethod
     def _result():
+        """Result."""
         return _native_result(_ScriptedBackend(_full_table()), _cases())
 
     def _tampered(self, mutate):
+        """Tampered."""
         payload = copy.deepcopy(self.payload)
         mutate(payload)
         return payload
 
     def test_valid_payload_accepted(self):
+        """Test valid payload accepted."""
         self.assertTrue(diffreports._valid_precision(self.payload))
 
     def test_self_diff_unchanged(self):
+        """Test self diff unchanged."""
         diff = diffreports.diff_precision(self.payload, copy.deepcopy(self.payload))
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
         self.assertTrue(diff["comparable"])
 
     def test_tamper_battery(self):
+        """Test tamper battery."""
         tampers = {
             "extra_top_key": lambda p: p.update({"zzz": 1}),
             "detail_set": lambda p: p.update({"detail": "x"}),
@@ -404,12 +441,14 @@ class TestPrecisionValidator(unittest.TestCase):
                 )
 
     def test_arm_passed_none_with_complete_cells_rejected(self):
+        """Test arm passed none with complete cells rejected."""
         _r, payload = _run_stage()
         payload = json.loads(json.dumps(payload))
         payload["candidates"]["alpha"]["fp32_passed"] = None
         self.assertFalse(diffreports._valid_precision(payload))
 
     def test_diff_backend_drift(self):
+        """Test diff backend drift."""
         other = copy.deepcopy(self.payload)
         other["protocol"]["bf16_fingerprint"] = "sha256:foreign"
         other["protocol"]["fingerprint"] = precision.protocol_fingerprint(other["protocol"])
@@ -419,6 +458,7 @@ class TestPrecisionValidator(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_diff_one_sided(self):
+        """Test diff one sided."""
         diff = diffreports.diff_precision(self.payload, None)
         self.assertEqual(diff["available"], "old")
         self.assertFalse(diff["changed"])
@@ -432,7 +472,10 @@ class TestPrecisionValidator(unittest.TestCase):
 
 
 class TestPrecisionReporting(unittest.TestCase):
+    """Test precision reporting."""
+
     def test_section_renders_without_answer_text(self):
+        """Test section renders without answer text."""
         payload = _valid_payload()
         html = reporting.render_html({"precision": payload})
         self.assertIn("Load precision (fp32 vs bf16)", html)
@@ -443,6 +486,7 @@ class TestPrecisionReporting(unittest.TestCase):
         self.assertNotIn('"42"', html)
 
     def test_section_absent_without_payload(self):
+        """Test section absent without payload."""
         self.assertNotIn("Load precision", reporting.render_html({}))
         html = reporting.render_html(
             {"precision": {"available": False, "detail": "precision_unavailable"}}
@@ -451,12 +495,16 @@ class TestPrecisionReporting(unittest.TestCase):
 
 
 class TestPrecisionCliWrapper(unittest.TestCase):
+    """Test precision cli wrapper."""
+
     @staticmethod
     def _result():
+        """Result."""
         return _native_result(_ScriptedBackend(_full_table()), _cases())
 
     @staticmethod
     def _probe(result, bf16_backend):
+        """Probe."""
         cli._run_precision_probe(
             _ScriptedBackend(_full_table()),
             _FORMATS,
@@ -471,6 +519,7 @@ class TestPrecisionCliWrapper(unittest.TestCase):
         )
 
     def test_gate_on_incomplete_native(self):
+        """Test gate on incomplete native."""
         result = self._result()
         result["search"] = []
         self._probe(
@@ -483,6 +532,7 @@ class TestPrecisionCliWrapper(unittest.TestCase):
         )
 
     def test_gate_on_failed_decision(self):
+        """Test gate on failed decision."""
         result = self._result()
         result["decision"] = "failed"
         self._probe(
@@ -495,6 +545,7 @@ class TestPrecisionCliWrapper(unittest.TestCase):
         )
 
     def test_backend_construction_failure(self):
+        """Test backend construction failure."""
         result = self._result()
         self._probe(result, None)
         self.assertEqual(
@@ -503,6 +554,7 @@ class TestPrecisionCliWrapper(unittest.TestCase):
         )
 
     def test_happy_path_attaches_payload_and_preserves_primary(self):
+        """Test happy path attaches payload and preserves primary."""
         result = self._result()
         before = (result["decision"], result.get("selected_candidate"))
         self._probe(
@@ -513,6 +565,7 @@ class TestPrecisionCliWrapper(unittest.TestCase):
         self.assertEqual((result["decision"], result.get("selected_candidate")), before)
 
     def test_flag_default_and_set(self):
+        """Test flag default and set."""
         parser = cli.build_parser()
         base = [
             "run",
@@ -532,7 +585,10 @@ class TestPrecisionCliWrapper(unittest.TestCase):
 
 
 class TestPrecisionPureModule(unittest.TestCase):
+    """Test precision pure module."""
+
     def test_fingerprint_stable_and_bound(self):
+        """Test fingerprint stable and bound."""
         protocol = precision.protocol_object(
             seed=0,
             max_new_tokens=8,
@@ -553,6 +609,7 @@ class TestPrecisionPureModule(unittest.TestCase):
         self.assertNotEqual(precision.protocol_fingerprint(changed), fp)
 
     def test_cell_verdict_binds_boundary_and_digest(self):
+        """Test cell verdict binds boundary and digest."""
         cell = {"answer_digest": "a" * 64, "boundary_found": True}
         self.assertTrue(precision.cell_verdict(cell, "a" * 64))
         self.assertFalse(precision.cell_verdict(cell, "b" * 64))
@@ -560,6 +617,7 @@ class TestPrecisionPureModule(unittest.TestCase):
         self.assertFalse(precision.cell_verdict(cell, "a" * 64))
 
     def test_derived_zero_paired_vacuates(self):
+        """Test derived zero paired vacuates."""
         derived = precision.compute_derived(
             [],
             ["alpha"],
@@ -580,6 +638,7 @@ class TestBackendDtype(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         if importlib.util.find_spec("torch") is None:  # pragma: no cover
             raise unittest.SkipTest("torch unavailable")
         from tests.test_adapter_integration import build_tiny_gpt2
@@ -590,9 +649,11 @@ class TestBackendDtype(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        """Tear down the test fixture."""
         cls._tmp.cleanup()
 
     def test_default_is_float32_and_fingerprint_stable(self):
+        """Test default is float32 and fingerprint stable."""
         from model_protocol_lab.backends import LocalHFBackend
 
         default = LocalHFBackend(self.model_dir, max_context=64)
@@ -601,6 +662,7 @@ class TestBackendDtype(unittest.TestCase):
         self.assertEqual(default.dtype, "float32")
 
     def test_bf16_fingerprint_differs_and_params_are_bf16(self):
+        """Test bf16 fingerprint differs and params are bf16."""
         import torch
 
         from model_protocol_lab.backends import LocalHFBackend
@@ -615,12 +677,14 @@ class TestBackendDtype(unittest.TestCase):
         self.assertEqual(len(gen.token_ids), 4)
 
     def test_declared_dtype_recorded(self):
+        """Test declared dtype recorded."""
         from model_protocol_lab.backends import LocalHFBackend
 
         backend = LocalHFBackend(self.model_dir, max_context=64)
         self.assertEqual(backend.declared_dtype, "float32")
 
     def test_invalid_dtype_rejected(self):
+        """Test invalid dtype rejected."""
         from model_protocol_lab.backends import LocalHFBackend
 
         for bad in ("float16", "int8", "FP32", ""):
@@ -630,12 +694,14 @@ class TestBackendDtype(unittest.TestCase):
                 self.assertEqual(str(ctx.exception), "local_backend_initialization_failed")
 
     def test_nonfinite_logits_surface_as_error_generation(self):
+        """Test nonfinite logits surface as error generation."""
         from model_protocol_lab.backends import LocalHFBackend
 
         backend = LocalHFBackend(self.model_dir, max_context=64, dtype="bfloat16")
         orig = backend._model.forward
 
         def bad_forward(*args, **kwargs):
+            """Bad forward."""
             out = orig(*args, **kwargs)
             out.logits[..., :] = float("inf")
             return out
@@ -656,6 +722,7 @@ class TestBackendDtype(unittest.TestCase):
 
 
 def _event():
+    """Event."""
     # skipcq: PYL-W0404 - test-local import isolates the module under audit
     from threading import Event
 
@@ -663,7 +730,10 @@ def _event():
 
 
 class TestPrecisionEndToEndTiny(unittest.TestCase):
+    """Test precision end to end tiny."""
+
     def test_real_checkpoint_arms_and_primary_invariant(self):
+        """Test real checkpoint arms and primary invariant."""
         if importlib.util.find_spec("torch") is None:  # pragma: no cover
             raise unittest.SkipTest("torch unavailable")
         from model_protocol_lab.backends import LocalHFBackend

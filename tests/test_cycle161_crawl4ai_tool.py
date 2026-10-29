@@ -34,7 +34,13 @@ class CrawlerContracts(unittest.TestCase):
                 observed = []
 
                 def resolve(
-                    command, env, timeout=900, _calls=observed, _home=home, _failure=failure
+                    # skipcq: PYL-W0102 - The list default binds the shared observed list by design.
+                    command,
+                    env,
+                    timeout=900,
+                    _calls=observed,
+                    _home=home,
+                    _failure=failure,
                 ):
                     """Purpose: Inspect the resolver boundary
                     Inputs: Actual argv/env

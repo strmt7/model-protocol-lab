@@ -56,6 +56,7 @@ def _obs(
     boundary_found: bool = True,
     btm: Any = True,
 ) -> dict[str, Any]:
+    """Obs."""
     return {
         "candidate": candidate,
         "fixture": fixture,
@@ -79,6 +80,7 @@ def _entry(
     eligible: bool = True,
     planned: int = 2,
 ) -> dict[str, Any]:
+    """Entry."""
     return {
         "format": {"name": name},
         "boundary_token_ids": list(boundary),
@@ -88,6 +90,7 @@ def _entry(
 
 
 def _result(entries: list[dict[str, Any]], *, decision: str = "ambiguous") -> dict[str, Any]:
+    """Result."""
     return {
         "decision": decision,
         "selected_candidate": None,
@@ -112,12 +115,16 @@ def _aliased_pair(**kw: Any) -> dict[str, Any]:
 
 
 class TestDigestAndPredicate(unittest.TestCase):
+    """Test digest and predicate."""
+
     def test_ids_digest_canonical_form(self):
+        """Test ids digest canonical form."""
         self.assertEqual(aliasing.ids_digest([1, 2]), hashlib.sha256(b"[1,2]").hexdigest())
         self.assertEqual(aliasing.ids_digest((1, 2)), aliasing.ids_digest([1, 2]))
         self.assertNotEqual(aliasing.ids_digest([1, 2]), aliasing.ids_digest([2, 1]))
 
     def test_evaluable_ids_predicate(self):
+        """Test evaluable ids predicate."""
         self.assertTrue(aliasing.is_evaluable_ids([0]))
         self.assertTrue(aliasing.is_evaluable_ids((3, 4)))
         self.assertFalse(aliasing.is_evaluable_ids([]))  # the abort sentinel
@@ -130,8 +137,11 @@ class TestDigestAndPredicate(unittest.TestCase):
 
 
 class TestAnalyzeCandidate(unittest.TestCase):
+    """Test analyze candidate."""
+
     @staticmethod
     def _analyze(observations: Any, **kw: Any) -> dict[str, Any]:
+        """Analyze."""
         return aliasing.analyze_candidate(
             observations,
             candidate_name="A",
@@ -142,12 +152,14 @@ class TestAnalyzeCandidate(unittest.TestCase):
         )
 
     def test_missing_and_invalid_observations(self):
+        """Test missing and invalid observations."""
         self.assertEqual(
             self._analyze(None), {"available": False, "detail": "observations_missing"}
         )
         self.assertEqual(self._analyze("nope")["detail"], "observations_not_a_list")
 
     def test_boundary_invalid(self):
+        """Test boundary invalid."""
         out = aliasing.analyze_candidate(
             [],
             candidate_name="A",
@@ -158,10 +170,12 @@ class TestAnalyzeCandidate(unittest.TestCase):
         self.assertEqual(out["detail"], "boundary_invalid")
 
     def test_duplicate_fixture_fails_closed(self):
+        """Test duplicate fixture fails closed."""
         out = self._analyze([_obs("A", "f1", [1]), _obs("A", "f1", [2])])
         self.assertEqual(out["detail"], "duplicate_observation")
 
     def test_candidate_field_mismatch_fails_closed(self):
+        """Test candidate field mismatch fails closed."""
         out = self._analyze([_obs("B", "f1", [1])])
         self.assertEqual(out["detail"], "observation_candidate_mismatch")
         obs = _obs("A", "f1", [1])
@@ -169,6 +183,7 @@ class TestAnalyzeCandidate(unittest.TestCase):
         self.assertEqual(self._analyze([obs])["detail"], "observation_candidate_mismatch")
 
     def test_malformed_observation(self):
+        """Test malformed observation."""
         self.assertEqual(self._analyze([42])["detail"], "observation_malformed")
         obs = _obs("A", "f1", [1])
         obs["exact_match"] = "yes"
@@ -178,6 +193,7 @@ class TestAnalyzeCandidate(unittest.TestCase):
         self.assertEqual(self._analyze([obs])["detail"], "observation_malformed")
 
     def test_completed_empty_input_is_recorded_ids_invalid(self):
+        """Test completed empty input is recorded ids invalid."""
         # The abort sentinel on a claimed-completed cell is an
         # artifact defect, never a class member (red-team A F3).
         out = self._analyze([_obs("A", "f1", ())])
@@ -186,6 +202,7 @@ class TestAnalyzeCandidate(unittest.TestCase):
         self.assertEqual(out["detail"], "recorded_ids_invalid")
 
     def test_non_completed_cells_carry_no_digests(self):
+        """Test non completed cells carry no digests."""
         out = self._analyze([_obs("A", "f1", [1]), _obs("A", "f2", (), status="failed")])
         self.assertTrue(out["available"])
         self.assertEqual(out["n_completed"], 1)
@@ -196,6 +213,7 @@ class TestAnalyzeCandidate(unittest.TestCase):
         self.assertIsNone(failed["output_sha256"])
 
     def test_evaluable_record_digests(self):
+        """Test evaluable record digests."""
         out = self._analyze([_obs("A", "f1", [1, 2], (5, 99))])
         record = out["records"][0]
         self.assertTrue(record["evaluable"])
@@ -210,6 +228,7 @@ class TestFingerprintTrap(unittest.TestCase):
 
     @staticmethod
     def _fmt(name: str, **over: Any) -> Format:
+        """Fmt."""
         base: dict[str, Any] = {
             "name": name,
             "bos": "",
@@ -221,6 +240,7 @@ class TestFingerprintTrap(unittest.TestCase):
         return Format(**base)
 
     def test_name_only_pair_aliased_despite_fingerprints(self):
+        """Test name only pair aliased despite fingerprints."""
         # Executed by both red teams: A/B differ only in name (and
         # repeat_bos under an empty bos), render byte-identically,
         # and have different fingerprints -- fingerprint classes
@@ -232,6 +252,7 @@ class TestFingerprintTrap(unittest.TestCase):
         self.assertEqual(payload["measurement_classes"], [["A", "B"], ["C"]])
 
     def test_turn_end_pair_aliased_on_single_turn_fixtures(self):
+        """Test turn end pair aliased on single turn fixtures."""
         fmt_d = self._fmt("delta", assistant_turn_end="XXX")
         fmt_e = self._fmt("epsilon", assistant_turn_end="YYY")
         self.assertNotEqual(candidate_fingerprint(fmt_d), candidate_fingerprint(fmt_e))
@@ -247,7 +268,10 @@ class TestFingerprintTrap(unittest.TestCase):
 
 
 class TestProfileClasses(unittest.TestCase):
+    """Test profile classes."""
+
     def test_global_alias_counts_and_pairs(self):
+        """Test global alias counts and pairs."""
         payload = aliasing_profile(_aliased_pair())
         self.assertTrue(payload["available"])
         self.assertEqual(payload["n_candidates_recorded"], 3)
@@ -263,6 +287,7 @@ class TestProfileClasses(unittest.TestCase):
         self.assertTrue(_valid_aliasing(payload))
 
     def test_boundary_refines_render_into_measurements(self):
+        """Test boundary refines render into measurements."""
         result = _aliased_pair()
         result["search"][1]["boundary_token_ids"] = [7]
         payload = aliasing_profile(result)
@@ -274,6 +299,7 @@ class TestProfileClasses(unittest.TestCase):
         self.assertEqual(payload["n_redundant_render_observations"], 2)
 
     def test_partial_aliasing_visible_only_in_pairs(self):
+        """Test partial aliasing visible only in pairs."""
         result = _result(
             [
                 _entry("A", [_obs("A", "f1", [1]), _obs("A", "f2", [2])]),
@@ -291,6 +317,7 @@ class TestProfileClasses(unittest.TestCase):
         self.assertIn((("A", "C"), 0), shared)
 
     def test_cohort_discipline_interrupter_excluded(self):
+        """Test cohort discipline interrupter excluded."""
         result = _result(
             [
                 _entry("A", [_obs("A", "f1", [1]), _obs("A", "f2", [2])]),
@@ -316,6 +343,7 @@ class TestProfileClasses(unittest.TestCase):
         self.assertTrue(_valid_aliasing(payload))
 
     def test_duplicate_candidate_entry_unavailable(self):
+        """Test duplicate candidate entry unavailable."""
         result = _aliased_pair()
         result["search"].append(_entry("A", [_obs("A", "f1", [1, 2]), _obs("A", "f2", [3])]))
         payload = aliasing_profile(result)
@@ -326,6 +354,7 @@ class TestProfileClasses(unittest.TestCase):
         self.assertTrue(_valid_aliasing(payload))
 
     def test_malformed_entry_and_top_level_shapes(self):
+        """Test malformed entry and top level shapes."""
         self.assertEqual(
             aliasing_profile("nope"), {"available": False, "detail": "result_not_a_dict"}
         )
@@ -336,6 +365,7 @@ class TestProfileClasses(unittest.TestCase):
         self.assertIsNone(payload["candidates"][0]["candidate"])
 
     def test_stripped_artifact_contract(self):
+        """Test stripped artifact contract."""
         # Amended gate 2: top-level stripped only when EVERY entry
         # lacks the observations key (the determinism test).
         stripped = {
@@ -355,6 +385,7 @@ class TestProfileClasses(unittest.TestCase):
         self.assertEqual(payload["candidates"][2]["detail"], "observations_missing")
 
     def test_pair_matrix_skips_disjoint_completed_sets(self):
+        """Test pair matrix skips disjoint completed sets."""
         result = _result(
             [
                 _entry(
@@ -375,6 +406,7 @@ class TestProfileClasses(unittest.TestCase):
         self.assertTrue(_valid_aliasing(payload))
 
     def test_run_configuration_carried(self):
+        """Test run configuration carried."""
         payload = aliasing_profile(_aliased_pair())
         self.assertEqual(payload["decision"], "ambiguous")
         self.assertIsNone(payload["selected_candidate"])
@@ -391,6 +423,7 @@ class TestA1BruteForceOracle(unittest.TestCase):
     """A1': profile classes equal a naive oracle over raw recorded ids."""
 
     def test_classes_match_naive_oracle(self):
+        """Test classes match naive oracle."""
         import random
 
         rng = random.Random(181)  # noqa: S311 -- deterministic test seed
@@ -426,7 +459,10 @@ class TestA1BruteForceOracle(unittest.TestCase):
 
 
 class TestSuspectCells(unittest.TestCase):
+    """Test suspect cells."""
+
     def test_output_only_suspect_reported_flag_not_suppressed(self):
+        """Test output only suspect reported flag not suppressed."""
         # Amended gate 6: a post-boundary-only output divergence is
         # a suspect cell, but every selection-relevant quantity is
         # identical, so the flag still fires.
@@ -441,6 +477,7 @@ class TestSuspectCells(unittest.TestCase):
         self.assertTrue(payload["alias_suspect_abstention"])
 
     def test_outcome_suspect_in_class_suppresses_flag(self):
+        """Test outcome suspect in class suppresses flag."""
         # Class {A, B, C} measurement-identical; C's outcome differs
         # on f2 -- the aliasing explanation of the A/B tie is exactly
         # what the suspect cell refutes.
@@ -457,7 +494,10 @@ class TestSuspectCells(unittest.TestCase):
 
 
 class TestFlag(unittest.TestCase):
+    """Test flag."""
+
     def test_fires_on_contained_tie(self):
+        """Test fires on contained tie."""
         payload = aliasing_profile(_aliased_pair())
         self.assertTrue(payload["alias_suspect_abstention"])
         self.assertEqual(payload["alias_suspect_detail"], "")
@@ -465,10 +505,12 @@ class TestFlag(unittest.TestCase):
         self.assertEqual(payload["passing_candidates"], ["A", "B"])
 
     def test_decision_not_ambiguous(self):
+        """Test decision not ambiguous."""
         payload = aliasing_profile(_aliased_pair(decision="no_candidate"))
         self.assertEqual(payload["alias_suspect_detail"], "decision_not_ambiguous")
 
     def test_passing_set_inconsistent(self):
+        """Test passing set inconsistent."""
         entries = [
             _entry("A", [_obs("A", "f1", [1]), _obs("A", "f2", [2])]),
             _entry("B", [_obs("B", "f1", [9]), _obs("B", "f2", [8], exact=False)]),
@@ -478,6 +520,7 @@ class TestFlag(unittest.TestCase):
         self.assertTrue(_valid_aliasing(payload))
 
     def test_passing_spans_classes_never_fires(self):
+        """Test passing spans classes never fires."""
         # Two genuinely different prompts both passing: a real tie
         # between distinct measurements, not an artifact (A F8.3).
         entries = [
@@ -489,18 +532,21 @@ class TestFlag(unittest.TestCase):
         self.assertTrue(_valid_aliasing(payload))
 
     def test_boundaries_differ_never_fires(self):
+        """Test boundaries differ never fires."""
         result = _aliased_pair()
         result["search"][1]["boundary_token_ids"] = [7]
         payload = aliasing_profile(result)
         self.assertEqual(payload["alias_suspect_detail"], "boundaries_differ_within_passing_set")
 
     def test_priority_unavailable_beats_decision(self):
+        """Test priority unavailable beats decision."""
         result = _aliased_pair(decision="no_candidate")
         del result["search"][2]["observations"]
         payload = aliasing_profile(result)
         self.assertEqual(payload["alias_suspect_detail"], "candidate_unavailable")
 
     def test_flag_never_rewrites_decision(self):
+        """Test flag never rewrites decision."""
         result = _aliased_pair()
         payload = aliasing_profile(result)
         self.assertEqual(payload["decision"], "ambiguous")
@@ -514,15 +560,19 @@ class TestValidatorBattery(unittest.TestCase):
     """One broken identity at a time: the recompute must catch all."""
 
     def setUp(self):
+        """Set up the test fixture."""
         self.payload = aliasing_profile(_aliased_pair())
         self.assertTrue(_valid_aliasing(self.payload))
 
-    def _tamper(self, mutate) -> None:  # noqa: ANN001
+    def _tamper(self, mutate) -> None:
+        """Tamper."""
+        # noqa: ANN001
         payload = copy.deepcopy(self.payload)
         mutate(payload)
         self.assertFalse(_valid_aliasing(payload))
 
     def test_tamper_counts(self):
+        """Test tamper counts."""
         self._tamper(lambda p: p.update(n_effective_render=9))
         self._tamper(lambda p: p.update(n_effective_measurement=9))
         self._tamper(lambda p: p.update(n_redundant_completed_observations=0))
@@ -534,6 +584,7 @@ class TestValidatorBattery(unittest.TestCase):
         self._tamper(lambda p: p.update(n_outcome_suspect_cells=1))
 
     def test_tamper_classes_and_membership(self):
+        """Test tamper classes and membership."""
         self._tamper(lambda p: p.update(render_classes=[["A"], ["B"], ["C"]]))
         self._tamper(lambda p: p.update(measurement_classes=[["A", "B", "C"]]))
         self._tamper(lambda p: p["candidates"][0].update(render_class_members=["A"]))
@@ -541,44 +592,54 @@ class TestValidatorBattery(unittest.TestCase):
         self._tamper(lambda p: p.update(excluded_candidates=["C"]))
 
     def test_tamper_flag(self):
+        """Test tamper flag."""
         self._tamper(lambda p: p.update(alias_suspect_abstention=False))
         self._tamper(lambda p: p.update(alias_suspect_detail="decision_not_ambiguous"))
         self._tamper(lambda p: p.update(alias_suspect_class_members=["A"]))
         self._tamper(lambda p: p.update(passing_candidates=["A"]))
 
     def test_tamper_records(self):
+        """Test tamper records."""
+
         def flip_digest(p):
+            """Flip digest."""
             p["candidates"][0]["records"][0]["input_sha256"] = "0" * 64
 
         self._tamper(flip_digest)
 
         def drop_digest(p):
+            """Drop digest."""
             p["candidates"][0]["records"][0]["output_sha256"] = None
 
         self._tamper(drop_digest)
 
         def duplicate_fixture(p):
+            """Duplicate fixture."""
             p["candidates"][0]["records"].append(dict(p["candidates"][0]["records"][0]))
             p["candidates"][0]["n_observations"] += 1
 
         self._tamper(duplicate_fixture)
 
         def wrong_counts(p):
+            """Wrong counts."""
             p["candidates"][0]["n_completed"] = 1
 
         self._tamper(wrong_counts)
 
         def bad_boundary(p):
+            """Bad boundary."""
             p["candidates"][0]["boundary_token_ids"] = []
 
         self._tamper(bad_boundary)
 
         def completed_not_evaluable(p):
+            """Completed not evaluable."""
             p["candidates"][0]["records"][0]["evaluable"] = False
 
         self._tamper(completed_not_evaluable)
 
     def test_tamper_header(self):
+        """Test tamper header."""
         self._tamper(lambda p: p.update(fixture_set_sha256="0" * 64))
         self._tamper(lambda p: p.update(evaluable_mismatch=True))
         self._tamper(lambda p: p.update(seed=True))  # bool is not an int here
@@ -587,6 +648,7 @@ class TestValidatorBattery(unittest.TestCase):
         self._tamper(lambda p: p.update(pairs=[]))
 
     def test_cell_bound_rejects_oversize_payload(self):
+        """Test cell bound rejects oversize payload."""
         # 25 available candidates x 100 fixtures = 2500 cells > 2400.
         entries = []
         for i in range(25):
@@ -601,6 +663,7 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_aliasing(payload))
 
     def test_foreign_digest_version_validates(self):
+        """Test foreign digest version validates."""
         # Amended gate 7(d): recompute is equality-only, so a
         # coherent foreign digest version is internally valid.
         payload = copy.deepcopy(self.payload)
@@ -609,16 +672,21 @@ class TestValidatorBattery(unittest.TestCase):
 
 
 class TestDiff(unittest.TestCase):
+    """Test diff."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.payload = aliasing_profile(_aliased_pair())
 
     def test_self_diff_unchanged(self):
+        """Test self diff unchanged."""
         diff = diff_aliasing(self.payload, copy.deepcopy(self.payload))
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
         self.assertTrue(diff["comparable"])
 
     def test_partition_split_and_count_drift(self):
+        """Test partition split and count drift."""
         other = copy.deepcopy(self.payload)
         other_result = _aliased_pair()
         other_result["search"][1]["observations"][0]["input_ids"] = [42]
@@ -630,6 +698,7 @@ class TestDiff(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_boundary_drift(self):
+        """Test boundary drift."""
         other_result = _aliased_pair()
         other_result["search"][0]["boundary_token_ids"] = [5]
         other = aliasing_profile(other_result)
@@ -638,6 +707,7 @@ class TestDiff(unittest.TestCase):
         self.assertEqual(diff["boundary_drift"][0]["candidate"], "A")
 
     def test_backend_drift_not_comparable(self):
+        """Test backend drift not comparable."""
         other = copy.deepcopy(self.payload)
         other["backend_fingerprint"] = "sha256:different"
         diff = diff_aliasing(self.payload, other)
@@ -646,6 +716,7 @@ class TestDiff(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_protocol_drift_foreign_version(self):
+        """Test protocol drift foreign version."""
         other = copy.deepcopy(self.payload)
         other["method"]["token_ids_digest"] = "sha256-json-intlist-v99"
         diff = diff_aliasing(self.payload, other)
@@ -653,11 +724,13 @@ class TestDiff(unittest.TestCase):
         self.assertFalse(diff["comparable"])
 
     def test_flag_drift(self):
+        """Test flag drift."""
         other = aliasing_profile(_aliased_pair(decision="no_candidate"))
         diff = diff_aliasing(self.payload, other)
         self.assertTrue(diff["flag_changed"])
 
     def test_asymmetric_and_neither(self):
+        """Test asymmetric and neither."""
         diff = diff_aliasing(self.payload, None)
         self.assertEqual(diff["available"], "old")
         self.assertFalse(diff["changed"])
@@ -670,7 +743,10 @@ class TestDiff(unittest.TestCase):
 
 
 class TestReportingSection(unittest.TestCase):
+    """Test reporting section."""
+
     def test_section_renders_counts_classes_flag(self):
+        """Test section renders counts classes flag."""
         payload = aliasing_profile(_aliased_pair())
         html = reporting.render_html({"decision": "ambiguous", "search": [], "aliasing": payload})
         self.assertIn('id="aliasing"', html)
@@ -680,6 +756,7 @@ class TestReportingSection(unittest.TestCase):
         self.assertNotIn(digest, html)  # digests are never rendered
 
     def test_section_absent_without_payload(self):
+        """Test section absent without payload."""
         html = reporting.render_html({"decision": "failed", "search": []})
         self.assertNotIn('id="aliasing"', html)
         html = reporting.render_html(
@@ -692,6 +769,7 @@ class TestReportingSection(unittest.TestCase):
         self.assertNotIn('id="aliasing"', html)
 
     def test_suspect_cells_lead_and_names_escaped(self):
+        """Test suspect cells lead and names escaped."""
         entries = [
             _entry("A<x>", [_obs("A<x>", "f1", [1]), _obs("A<x>", "f2", [2])]),
             _entry("B", [_obs("B", "f1", [1]), _obs("B", "f2", [2], exact=False)]),
@@ -707,7 +785,10 @@ class TestReportingSection(unittest.TestCase):
 
 
 class TestCliProbe(unittest.TestCase):
+    """Test cli probe."""
+
     def test_helper_attaches_payload(self):
+        """Test helper attaches payload."""
         result = _aliased_pair()
         cli_module._run_aliasing_probe(result)
         self.assertIn("aliasing", result)
@@ -715,6 +796,7 @@ class TestCliProbe(unittest.TestCase):
         self.assertTrue(result["aliasing"]["alias_suspect_abstention"])
 
     def test_helper_never_raises(self):
+        """Test helper never raises."""
         result: dict[str, Any] = {}
         import model_protocol_lab.experiments as experiments_mod
 
@@ -732,25 +814,33 @@ class TestRunExperimentConstruction(unittest.TestCase):
     """
 
     def test_flag_fires_on_real_run(self):
+        """Test flag fires on real run."""
         from model_protocol_lab.core import Fixture, Generation, Message, Split
         from model_protocol_lab.experiments import run_experiment
 
         class _StubBackend:
+            """Stub backend."""
+
             fingerprint = "sha256:stub"
             eos_token_id = None
 
             @staticmethod
             def encode(text: str) -> tuple[int, ...]:
+                """Encode."""
                 # Deliberately lossy: every prompt encodes to the
                 # same ids, so distinct formats alias by construction.
                 return (1, 2, 3)
 
             @staticmethod
-            def generate(input_ids, *, max_new_tokens, seed, cancel):  # noqa: ANN001, ANN202
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
+                """Generate."""
+                # noqa: ANN001, ANN202
                 return Generation((5, 99, 5, 99)[:max_new_tokens], "limit")
 
             @staticmethod
-            def decode(ids) -> str:  # noqa: ANN001, ANN202
+            def decode(ids) -> str:
+                """Decode."""
+                # noqa: ANN001, ANN202
                 return "yo"
 
         fmt_a = Format(name="alpha", bos="", user_prefix="U:", assistant_prefix="A:", turn_end="\n")
@@ -799,6 +889,7 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
     """
 
     def test_aliasing_dispatches_through_main(self):
+        """Test aliasing dispatches through main."""
         from model_protocol_lab import backends, doctor, experiments
 
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
@@ -834,12 +925,15 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
             result_doc["held_out"] = {}
 
             class _FakeHFBackend:
+                """Fake hf backend."""
+
                 def __init__(self, model, device=None, max_context=None):
                     self.model = model
 
                 eos_token_id = None
 
             def fake_prepare(path):
+                """Fake prepare."""
                 Path(path).mkdir(parents=True, exist_ok=False)
                 return Path(path)
 
@@ -901,7 +995,9 @@ class TestMutationGates(unittest.TestCase):
     scenario, and each scenario must pass on the real module.
     """
 
-    def _run_gate(self, name, old_text, new_text, scenario):  # noqa: ANN001
+    def _run_gate(self, name, old_text, new_text, scenario):
+        """Run gate."""
+        # noqa: ANN001
         import importlib.util
         import os
         import sys
@@ -928,7 +1024,11 @@ class TestMutationGates(unittest.TestCase):
                 scenario(mutant)
 
     def test_mutant_boundary_dropped_from_measurement_caught(self):
-        def scenario(mod):  # noqa: ANN001
+        """Test mutant boundary dropped from measurement caught."""
+
+        def scenario(mod):
+            """Scenario."""
+            # noqa: ANN001
             members = [
                 {
                     "candidate": "A",
@@ -964,7 +1064,11 @@ class TestMutationGates(unittest.TestCase):
         )
 
     def test_mutant_empty_ids_evaluable_caught(self):
-        def scenario(mod):  # noqa: ANN001
+        """Test mutant empty ids evaluable caught."""
+
+        def scenario(mod):
+            """Scenario."""
+            # noqa: ANN001
             out = mod.analyze_candidate(
                 [
                     {
@@ -993,7 +1097,11 @@ class TestMutationGates(unittest.TestCase):
         )
 
     def test_mutant_redundant_ignores_boundary_caught(self):
-        def scenario(mod):  # noqa: ANN001
+        """Test mutant redundant ignores boundary caught."""
+
+        def scenario(mod):
+            """Scenario."""
+            # noqa: ANN001
             members = [
                 {
                     "candidate": "A",
@@ -1042,15 +1150,19 @@ class TestValidatorGapBattery(unittest.TestCase):
     """
 
     def setUp(self):
+        """Set up the test fixture."""
         self.payload = aliasing_profile(_aliased_pair())
         self.assertTrue(_valid_aliasing(self.payload))
 
-    def _tamper(self, mutate) -> None:  # noqa: ANN001
+    def _tamper(self, mutate) -> None:
+        """Tamper."""
+        # noqa: ANN001
         payload = copy.deepcopy(self.payload)
         mutate(payload)
         self.assertFalse(_valid_aliasing(payload))
 
     def test_candidates_container(self):
+        """Test candidates container."""
         self._tamper(lambda p: p.update(candidates="x"))
         self._tamper(lambda p: p.update(candidates=[]))
         self._tamper(lambda p: p.pop("candidates"))
@@ -1059,19 +1171,26 @@ class TestValidatorGapBattery(unittest.TestCase):
         self._tamper(lambda p: p["candidates"][0].update(available="yes"))
 
     def test_duplicate_candidate_name_in_payload(self):
+        """Test duplicate candidate name in payload."""
+
         def dup(p):
+            """Dup."""
             p["candidates"].append(copy.deepcopy(p["candidates"][0]))
             p["n_candidates_recorded"] += 1
 
         self._tamper(dup)
 
     def test_unavailable_entry_needs_str_detail(self):
+        """Test unavailable entry needs str detail."""
+
         def bad(p):
+            """Bad."""
             p["candidates"][0] = {"candidate": "X", "available": False, "detail": 7}
 
         self._tamper(bad)
 
     def test_available_entry_field_types(self):
+        """Test available entry field types."""
         self._tamper(lambda p: p["candidates"][0].update(eligible="yes"))
         self._tamper(lambda p: p["candidates"][0].update(planned=-1))
         self._tamper(lambda p: p["candidates"][0].update(planned="2"))
@@ -1084,6 +1203,7 @@ class TestValidatorGapBattery(unittest.TestCase):
         self._tamper(lambda p: p["candidates"][0].update(n_evaluable=9))
 
     def test_record_field_types(self):
+        """Test record field types."""
         self._tamper(lambda p: p["candidates"][0]["records"].__setitem__(0, 42))
         self._tamper(lambda p: p["candidates"][0]["records"][0].update(fixture=""))
         self._tamper(lambda p: p["candidates"][0]["records"][0].update(status=7))
@@ -1094,6 +1214,7 @@ class TestValidatorGapBattery(unittest.TestCase):
         self._tamper(lambda p: p["candidates"][0].update(measurement_class_members=["A"]))
 
     def test_header_field_types(self):
+        """Test header field types."""
         self._tamper(lambda p: p.update(method="x"))
         self._tamper(lambda p: p["method"].update(scope=""))
         self._tamper(lambda p: p.update(max_new_tokens="8"))
@@ -1103,6 +1224,7 @@ class TestValidatorGapBattery(unittest.TestCase):
         self._tamper(lambda p: p.update(evaluable_mismatch="yes"))
 
     def _interrupted_payload(self):
+        """Interrupted payload."""
         result = _result(
             [
                 _entry("A", [_obs("A", "f1", [1]), _obs("A", "f2", [2])]),
@@ -1119,6 +1241,7 @@ class TestValidatorGapBattery(unittest.TestCase):
         return payload
 
     def test_evaluable_status_coupling(self):
+        """Test evaluable status coupling."""
         payload = self._interrupted_payload()
         # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         zed = next(c for c in payload["candidates"] if c["candidate"] == "Z")
@@ -1128,6 +1251,7 @@ class TestValidatorGapBattery(unittest.TestCase):
         self.assertFalse(_valid_aliasing(payload))
 
     def test_non_evaluable_digest_must_be_none(self):
+        """Test non evaluable digest must be none."""
         payload = self._interrupted_payload()
         # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         zed = next(c for c in payload["candidates"] if c["candidate"] == "Z")
@@ -1137,6 +1261,7 @@ class TestValidatorGapBattery(unittest.TestCase):
         self.assertFalse(_valid_aliasing(payload))
 
     def test_malformed_entry_payload_validates_and_diffs(self):
+        """Test malformed entry payload validates and diffs."""
         payload = aliasing_profile({"search": [42, *_aliased_pair()["search"]]})
         self.assertTrue(_valid_aliasing(payload))
         diff = diff_aliasing(payload, copy.deepcopy(payload))
@@ -1144,6 +1269,7 @@ class TestValidatorGapBattery(unittest.TestCase):
         self.assertFalse(diff["changed"])
 
     def test_diff_with_excluded_candidates(self):
+        """Test diff with excluded candidates."""
         payload = self._interrupted_payload()
         diff = diff_aliasing(payload, copy.deepcopy(payload))
         self.assertEqual(diff["available"], "both")
@@ -1154,6 +1280,7 @@ class TestValidatorGapBattery(unittest.TestCase):
         self.assertIn("Z", diff["excluded_removed"])
 
     def test_pairs_joined(self):
+        """Test pairs joined."""
         other_result = _aliased_pair()
         other_result["search"][1]["observations"][0]["input_ids"] = [42]
         other = aliasing_profile(other_result)
@@ -1168,15 +1295,18 @@ class TestReportingGaps(unittest.TestCase):
 
     @staticmethod
     def _render(aliasing_payload: Any) -> str:
+        """Render."""
         return reporting.render_html(
             {"decision": "ambiguous", "search": [], "aliasing": aliasing_payload}
         )
 
     def test_candidates_not_a_list(self):
+        """Test candidates not a list."""
         html = self._render({"available": True, "candidates": "x"})
         self.assertNotIn('id="aliasing"', html)
 
     def test_hostile_section_payload(self):
+        """Test hostile section payload."""
         payload = aliasing_profile(_aliased_pair())
         payload["determinism_suspect_cells"] = [
             42,
@@ -1190,6 +1320,7 @@ class TestReportingGaps(unittest.TestCase):
         self.assertIn("n/a", html)
 
     def test_mismatch_and_status_lines(self):
+        """Test mismatch and status lines."""
         result = _result(
             [
                 _entry("A", [_obs("A", "f1", [1]), _obs("A", "f2", [2])]),
@@ -1215,6 +1346,7 @@ class TestReportingGaps(unittest.TestCase):
         self.assertIn("outside the primary cohort", html)
 
     def test_mismatch_caution_line(self):
+        """Test mismatch caution line."""
         result = _result(
             [
                 _entry("A", [_obs("A", "f1", [1]), _obs("A", "f2", [2])]),

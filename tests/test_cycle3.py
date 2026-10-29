@@ -26,6 +26,7 @@ FIXTURES = REPO_ROOT / "examples" / "fixtures.json"
 
 
 def _suggested_new_tokens(command: str) -> int:
+    """Suggested new tokens."""
     match = re.search(r"--max-new-tokens (\d+)", command)
     assert match is not None, f"no --max-new-tokens in suggestion: {command!r}"
     return int(match.group(1))
@@ -33,8 +34,11 @@ def _suggested_new_tokens(command: str) -> int:
 
 @unittest.skipUnless(HAS_HF, "the 'hf' extra is not installed")
 class DoctorSuggestionSizingTests(unittest.TestCase):
+    """Doctor suggestion sizing tests."""
+
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         from tests.test_adapter_integration import build_tiny_gpt2
 
         cls._tmp = TemporaryDirectory()
@@ -43,6 +47,7 @@ class DoctorSuggestionSizingTests(unittest.TestCase):
         build_tiny_gpt2(cls.base)
 
     def _variant(self, n_positions):
+        """Variant."""
         from tests.test_adapter_integration import build_tiny_gpt2  # noqa: F401
 
         root = Path(self._tmp.name) / f"tiny-{n_positions}"
@@ -56,11 +61,13 @@ class DoctorSuggestionSizingTests(unittest.TestCase):
 
     @staticmethod
     def _doctor(model_path):
+        """Doctor."""
         from model_protocol_lab.doctor import doctor
 
         return doctor(str(model_path), str(FIXTURES), boundary_ids=(62,))
 
     def test_suggestion_sizes_new_tokens_to_fit_declared_window(self):
+        """Test suggestion sizes new tokens to fit declared window."""
         from model_protocol_lab.doctor import _build_primary_tokenizer, _longest_prompt_tokens
 
         # A window comfortably larger than the catalog's longest render, so
@@ -84,6 +91,7 @@ class DoctorSuggestionSizingTests(unittest.TestCase):
         self.assertIn("sized so the longest fixture prompt", suggestion["note"])
 
     def test_suggestion_keeps_default_for_large_window(self):
+        """Test suggestion keeps default for large window."""
         report = self._doctor(self._variant(2048))
         suggestion = report["suggestion"]
         self.assertIsNotNone(suggestion)
@@ -91,6 +99,7 @@ class DoctorSuggestionSizingTests(unittest.TestCase):
         self.assertNotIn("WARNING", suggestion["note"])
 
     def test_suggestion_warns_when_prompt_fills_window(self):
+        """Test suggestion warns when prompt fills window."""
         report = self._doctor(self._variant(8))
         self.assertEqual(report["verdict"], "ok")
         suggestion = report["suggestion"]
@@ -100,11 +109,15 @@ class DoctorSuggestionSizingTests(unittest.TestCase):
 
 
 class NextCommandDegradationTests(unittest.TestCase):
+    """Next command degradation tests."""
+
     @staticmethod
     def _report():
+        """Report."""
         return {"verdict": "ok", "model": {"context_window": 64}}
 
     def test_no_tokenizer_keeps_default_budget(self):
+        """Test no tokenizer keeps default budget."""
         from model_protocol_lab.doctor import _next_command
 
         suggestion = _next_command("model", str(FIXTURES), (62,), self._report())
@@ -113,6 +126,7 @@ class NextCommandDegradationTests(unittest.TestCase):
         self.assertNotIn("sized so the longest fixture prompt", suggestion["note"])
 
     def test_longest_prompt_tokens_degrades_gracefully(self):
+        """Test longest prompt tokens degrades gracefully."""
         from model_protocol_lab.doctor import _longest_prompt_tokens
 
         # No tokenizer, or an unreadable dataset: None, never an exception.
@@ -120,6 +134,7 @@ class NextCommandDegradationTests(unittest.TestCase):
         self.assertIsNone(_longest_prompt_tokens(None, "/nonexistent.json"))
 
     def test_sizing_degrades_when_measurement_fails(self):
+        """Test sizing degrades when measurement fails."""
         from model_protocol_lab.doctor import _next_command, _suggestion_tokenizer
 
         report = {"verdict": "ok", "model": {"context_window": 64}}
@@ -138,7 +153,10 @@ class NextCommandDegradationTests(unittest.TestCase):
 
 
 class AuthoringBoundaryTests(unittest.TestCase):
+    """Authoring boundary tests."""
+
     def test_exactly_at_size_limit_is_accepted(self):
+        """Test exactly at size limit is accepted."""
         # Found by the Cycle 3 mutation-testing trial (cosmic-ray): the
         # mutant `len(content) > MAX_BYTES` -> `>=` survived, so no test
         # pinned the boundary. A file of exactly MAX_BYTES bytes is within
@@ -152,6 +170,7 @@ class AuthoringBoundaryTests(unittest.TestCase):
             self.assertEqual(read_authoring_file(path), "x" * MAX_BYTES)
 
     def test_exactly_at_case_limit_is_accepted(self):
+        """Test exactly at case limit is accepted."""
         # Same trial, same pattern: `len(cases) > MAX_CASES_PER_SPLIT` ->
         # `>=` survived. Exactly MAX_CASES_PER_SPLIT fixtures per split is
         # within the documented limit ("more than N" is the refusal).
@@ -167,6 +186,7 @@ class AuthoringBoundaryTests(unittest.TestCase):
         self.assertEqual(len(split.held_out), 1)
 
     def test_all_blank_cell_rows_are_skipped_like_blank_lines(self):
+        """Test all blank cell rows are skipped like blank lines."""
         # Same trial: `not record or all(...)` -> `and` survived. A row of
         # only empty cells is a blank line for authoring purposes and must
         # be skipped, not rejected downstream.
@@ -183,7 +203,10 @@ class AuthoringBoundaryTests(unittest.TestCase):
 
 
 class FailureCodeTests(unittest.TestCase):
+    """Failure code tests."""
+
     def test_allowlisted_backend_code_passes_through(self):
+        """Test allowlisted backend code passes through."""
         from tests.test_core import FakeBackend, run_case
 
         backend = FakeBackend(Generation((), "error", "context_limit_exceeded"))
@@ -192,6 +215,7 @@ class FailureCodeTests(unittest.TestCase):
         self.assertEqual(report.observations[0].error, "context_limit_exceeded")
 
     def test_arbitrary_backend_text_still_collapses(self):
+        """Test arbitrary backend text still collapses."""
         from tests.test_core import FakeBackend, run_case
 
         backend = FakeBackend(Generation((), "error", "weird <script>alert(1)"))
@@ -199,6 +223,7 @@ class FailureCodeTests(unittest.TestCase):
         self.assertEqual(report.observations[0].error, "backend_reported_error")
 
     def test_passing_report_has_no_failure_code(self):
+        """Test passing report has no failure code."""
         from model_protocol_lab.experiments import _summary
         from tests.test_core import FakeBackend, run_case
 
@@ -206,6 +231,7 @@ class FailureCodeTests(unittest.TestCase):
         self.assertIsNone(summary["failure_code"])
 
     def test_run_experiment_failure_code_reaches_banner(self):
+        """Test run experiment failure code reaches banner."""
         from model_protocol_lab.experiments import run_experiment
         from model_protocol_lab.reporting import _failure_diagnosis, render_html
         from tests.test_core import FakeBackend
@@ -230,6 +256,7 @@ class FailureCodeTests(unittest.TestCase):
         self.assertIn("context_limit_exceeded", html)
 
     def test_failure_diagnosis_empty_for_other_decisions(self):
+        """Test failure diagnosis empty for other decisions."""
         from model_protocol_lab.reporting import _failure_diagnosis
 
         self.assertEqual(_failure_diagnosis({"decision": "no_candidate"}), "")

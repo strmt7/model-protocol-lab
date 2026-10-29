@@ -63,15 +63,18 @@ class ScriptedBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(ord(char) for char in text)
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(chr(token) for token in token_ids)
 
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate."""
         prompt = "".join(chr(token) for token in input_ids)
         answer, marker = self._script.get(prompt, ("WRONG", ""))
         text = answer + marker
@@ -122,6 +125,7 @@ def _script_for_flip_at_1() -> dict[str, tuple[str, str]]:
 
 
 def _sweep(**kwargs) -> dict:
+    """Sweep."""
     backend = ScriptedBackend(_script_for_flip_at_1())
     return prompt_token_depth_sweep(
         backend,
@@ -135,7 +139,10 @@ def _sweep(**kwargs) -> dict:
 
 
 class TokenWrapperTests(unittest.TestCase):
+    """Token wrapper tests."""
+
     def test_drops_whole_token_ids_and_fingerprint_uses_t_suffix(self) -> None:
+        """Test drops whole token ids and fingerprint uses t suffix."""
         backend = ScriptedBackend({})
         wrapped = TokenTruncatedPromptBackend(backend, 2)
         self.assertEqual(wrapped.fingerprint, "cycle206-scripted-backend+prompt-trunc-2t")
@@ -143,6 +150,7 @@ class TokenWrapperTests(unittest.TestCase):
         self.assertEqual(wrapped.decode((ord("x"),)), "x")
 
     def test_beyond_length_raises_instead_of_empty_prompt(self) -> None:
+        """Test beyond length raises instead of empty prompt."""
         wrapped = TokenTruncatedPromptBackend(ScriptedBackend({}), 2)
         with self.assertRaises(ValueError):
             wrapped.encode("hi")
@@ -152,12 +160,14 @@ class TokenWrapperTests(unittest.TestCase):
             TokenTruncatedPromptBackend(ScriptedBackend({}), "2")  # type: ignore[arg-type]
 
     def test_non_string_fingerprint_rejected(self) -> None:
+        """Test non string fingerprint rejected."""
         backend = ScriptedBackend({})
         backend.fingerprint = 42  # type: ignore[assignment]
         with self.assertRaises(ValueError):
             TokenTruncatedPromptBackend(backend, 1)
 
     def test_prefill_wrapped_inner_refused(self) -> None:
+        """Test prefill wrapped inner refused."""
         # B1: naive [:-K] over a PrefillBackend drops prefill ids first,
         # leaving the prompt intact -- a silent wrong measurement.
         inner = PrefillBackend(ScriptedBackend({}), (900, 901), "p")
@@ -165,6 +175,7 @@ class TokenWrapperTests(unittest.TestCase):
             TokenTruncatedPromptBackend(inner, 1)
 
     def test_generate_passes_ids_through_unchanged(self) -> None:
+        """Test generate passes ids through unchanged."""
         backend = ScriptedBackend({})
         wrapped = TokenTruncatedPromptBackend(backend, 1)
         generation = wrapped.generate((ord("a"),), max_new_tokens=_CAP, seed=0, cancel=Event())
@@ -172,7 +183,10 @@ class TokenWrapperTests(unittest.TestCase):
 
 
 class TokenSweepTests(unittest.TestCase):
+    """Token sweep tests."""
+
     def test_p1_shape_granularity_native_and_suffix_counts(self) -> None:
+        """Test p1 shape granularity native and suffix counts."""
         result = _sweep(max_drop_tokens=2)
         self.assertEqual(result["granularity"], "tokens")
         self.assertEqual(result["native_winner"], "cand-a")
@@ -184,6 +198,7 @@ class TokenSweepTests(unittest.TestCase):
         self.assertEqual(result["inapplicable_at"], [])
 
     def test_flip_at_first_depth_only(self) -> None:
+        """Test flip at first depth only."""
         result = _sweep(max_drop_tokens=2)
         self.assertEqual(result["depths"][0]["winner_changed"], True)
         self.assertEqual(result["depths"][0]["decision"], "no_candidate")
@@ -191,6 +206,7 @@ class TokenSweepTests(unittest.TestCase):
         self.assertEqual(result["flips_at"], [1])
 
     def test_p2_beyond_length_is_inapplicable_not_a_flip(self) -> None:
+        """Test p2 beyond length is inapplicable not a flip."""
         # Single-char prompt ">": every drop meets or exceeds its length.
         fmt = Format(name="tiny", bos="", user_prefix=">", assistant_prefix="", turn_end="")
         search = (
@@ -224,6 +240,7 @@ class TokenSweepTests(unittest.TestCase):
         self.assertEqual(result["inapplicable_at"], [1, 2])
 
     def test_mixed_statuses_from_shortest_prompt(self) -> None:
+        """Test mixed statuses from shortest prompt."""
         # Search prompt ">ab" (3 tokens): drops 1-2 applied, 3-4
         # inapplicable. Held-out ">hey" (4) does not rescue drop 3.
         fmt = Format(name="short", bos="", user_prefix=">", assistant_prefix="", turn_end="")
@@ -262,6 +279,7 @@ class TokenSweepTests(unittest.TestCase):
         self.assertEqual(result["flips_at"], [])
 
     def test_applied_failure_still_counts_when_decision_differs(self) -> None:
+        """Test applied failure still counts when decision differs."""
         # An applied depth whose truncated run genuinely fails (not
         # because the prompt was too short) is a change, not a
         # labelling artefact: here drop 1 flips the winner.
@@ -271,12 +289,17 @@ class TokenSweepTests(unittest.TestCase):
         self.assertEqual(result["flips_at"], [1])
 
     def test_precheck_skips_natively_failing_prompts(self) -> None:
+        """Test precheck skips natively failing prompts."""
+
         # A prompt whose encoding fails natively carries no
         # truncation-specific fact: the pre-run check skips it (the
         # except branch) and the minimum comes from the prompts that
         # do encode, while the sweep itself still completes.
         class BoomBackend(ScriptedBackend):
+            """Boom backend."""
+
             def encode(self, text: str) -> tuple[int, ...]:
+                """Encode."""
                 if "BOOM" in text:
                     raise ValueError("boom encode")
                 return super().encode(text)
@@ -305,10 +328,15 @@ class TokenSweepTests(unittest.TestCase):
         self.assertEqual(result["depths"][0]["status"], "applied")
 
     def test_suffix_count_none_when_suffix_unencodable(self) -> None:
+        """Test suffix count none when suffix unencodable."""
+
         # The suffix annotation degrades to None, never a sweep
         # failure, when the suffix alone does not encode.
         class SuffixFailBackend(ScriptedBackend):
+            """Suffix fail backend."""
+
             def encode(self, text: str) -> tuple[int, ...]:
+                """Encode."""
                 if text == "a:":
                     raise ValueError("suffix unencodable")
                 return super().encode(text)
@@ -326,6 +354,7 @@ class TokenSweepTests(unittest.TestCase):
         self.assertEqual(result["suffix_token_counts"], {"cand-a": None, "cand-b": 2})
 
     def test_validation_mirrors_byte_range(self) -> None:
+        """Test validation mirrors byte range."""
         backend = ScriptedBackend({})
         for bad in (0, 9, "2"):
             with self.assertRaises(ValueError):
@@ -338,6 +367,7 @@ class TokenSweepTests(unittest.TestCase):
                 )
 
     def test_supplied_native_is_honoured(self) -> None:
+        """Test supplied native is honoured."""
         # Cycle 207 (wave-10 B10-2) changed the supplied-native
         # contract: a baseline is honoured only when it carries the
         # configuration_digest of exactly this sweep's configuration.
@@ -375,6 +405,7 @@ class TokenSweepTests(unittest.TestCase):
             _sweep(max_drop_tokens=1, native=stale)
 
     def test_shared_native_is_used_by_both_sweeps(self) -> None:
+        """Test shared native is used by both sweeps."""
         # The CLI's shared-native path passes one native dict to both
         # sweeps; each sweep must honour it rather than recomputing.
         # Cycle 207: the shared native must be a genuine result for
@@ -416,8 +447,11 @@ class TokenSweepTests(unittest.TestCase):
 
 
 class TokenReportingTests(unittest.TestCase):
+    """Token reporting tests."""
+
     @staticmethod
     def _payload() -> dict:
+        """Payload."""
         return {
             "granularity": "tokens",
             "native_winner": "cand-a",
@@ -444,6 +478,7 @@ class TokenReportingTests(unittest.TestCase):
         }
 
     def test_token_section_renders_status_and_inapplicable(self) -> None:
+        """Test token section renders status and inapplicable."""
         html = reporting._token_depth_section({"sensitivity_sweep_tokens": self._payload()})
         self.assertIn('id="token-depth-sweep"', html)
         self.assertIn("Token-depth sensitivity sweep", html)
@@ -453,6 +488,7 @@ class TokenReportingTests(unittest.TestCase):
         self.assertIn("Depths that could not be applied (shorter than the depth): [2].", html)
 
     def test_token_section_skips_non_dict_depths(self) -> None:
+        """Test token section skips non dict depths."""
         payload = self._payload()
         payload["depths"] = ["junk", payload["depths"][0]]
         html = reporting._token_depth_section({"sensitivity_sweep_tokens": payload})
@@ -460,6 +496,7 @@ class TokenReportingTests(unittest.TestCase):
         self.assertNotIn("junk", html)
 
     def test_token_section_empty_and_absent(self) -> None:
+        """Test token section empty and absent."""
         self.assertIn(
             "No depths were evaluated.",
             reporting._token_depth_section({"sensitivity_sweep_tokens": {"depths": []}}),
@@ -467,6 +504,7 @@ class TokenReportingTests(unittest.TestCase):
         self.assertEqual(reporting._token_depth_section({}), "")
 
     def test_token_section_escapes_hostile_values(self) -> None:
+        """Test token section escapes hostile values."""
         payload = self._payload()
         payload["depths"][0]["selected_candidate"] = "<x>"
         html = reporting._token_depth_section({"sensitivity_sweep_tokens": payload})
@@ -474,6 +512,7 @@ class TokenReportingTests(unittest.TestCase):
         self.assertNotIn("<x>", html)
 
     def test_byte_section_unchanged_by_token_key(self) -> None:
+        """Test byte section unchanged by token key."""
         byte_payload = {
             "native_winner": "chatml",
             "native_decision": "compatible_on_fixture_set",
@@ -505,6 +544,7 @@ class TokenReportingTests(unittest.TestCase):
         self.assertIn("Depths where the winner or decision changed: [3].", byte_only)
 
     def test_full_report_includes_token_section_only_when_present(self) -> None:
+        """Test full report includes token section only when present."""
         base = {"decision": "compatible_on_fixture_set", "search": []}
         without = reporting.render_html(base)
         self.assertNotIn('id="token-depth-sweep"', without)
@@ -525,6 +565,7 @@ class PerProbeEscapeTests(unittest.TestCase):
     _SUR = "\ud800"
 
     def test_token_section_strips_lone_surrogate(self) -> None:
+        """Test token section strips lone surrogate."""
         payload = {
             "native_winner": "chatml" + self._SUR,
             "native_decision": "compatible_on_fixture_set",
@@ -547,6 +588,7 @@ class PerProbeEscapeTests(unittest.TestCase):
         self.assertIn("no_candidate", html)
 
     def test_sweep_section_strips_surrogate_and_controls(self) -> None:
+        """Test sweep section strips surrogate and controls."""
         payload = {
             "native_winner": "chatml",
             "native_decision": "compatible_on_fixture_set",
@@ -568,6 +610,7 @@ class PerProbeEscapeTests(unittest.TestCase):
         self.assertIn("compatible", html)
 
     def test_rotation_section_strips_surrogate_name_and_winner(self) -> None:
+        """Test rotation section strips surrogate name and winner."""
         result = {
             "rotation": {
                 "available": True,
@@ -581,6 +624,7 @@ class PerProbeEscapeTests(unittest.TestCase):
         self.assertIn("chatml", html)
 
     def test_field_order_section_strips_surrogate_name_and_direction(self) -> None:
+        """Test field order section strips surrogate name and direction."""
         result = {
             "field_order": {
                 "available": True,
@@ -599,6 +643,7 @@ class PerProbeEscapeTests(unittest.TestCase):
         self.assertIn("field-order invariance falsified", html)
 
     def test_save_report_survives_surrogate_sweep_payload(self) -> None:
+        """Test save report survives surrogate sweep payload."""
         repo_root = Path(__file__).resolve().parents[1]
         base = json.loads((repo_root / "examples" / "sample-report" / "results.json").read_text())
         base["sensitivity_sweep_tokens"] = {
@@ -626,11 +671,14 @@ class PerProbeEscapeTests(unittest.TestCase):
 
 
 class _Sentinel(dict):
+    """Sentinel."""
+
     def __missing__(self, key):  # noqa: ANN001, ANN202
         return self
 
 
 def _write_fixture_file(directory: str) -> Path:
+    """Write fixture file."""
     path = Path(directory) / "fixture.json"
     path.write_text(
         json.dumps(
@@ -659,18 +707,25 @@ def _write_fixture_file(directory: str) -> Path:
 
 
 class _FakeHFBackend:
+    """Fake hf backend."""
+
     fingerprint = "fake-hf"
 
     def __init__(self, *args, **kwargs) -> None:
         """Accept and ignore any construction arguments; the fake has no state."""
 
     @staticmethod
-    def encode(text):  # noqa: ANN001, ANN202
+    def encode(text):
+        """Encode."""
+        # noqa: ANN001, ANN202
         return (7, 8)
 
 
 class TokenCliTests(unittest.TestCase):
+    """Token cli tests."""
+
     def test_parser_defaults_and_flags(self) -> None:
+        """Test parser defaults and flags."""
         ns = build_parser().parse_args(
             [
                 "run",
@@ -710,6 +765,7 @@ class TokenCliTests(unittest.TestCase):
         self.assertEqual(ns.max_drop_tokens, 7)
 
     def test_max_drop_tokens_range_enforced_up_front(self) -> None:
+        """Test max drop tokens range enforced up front."""
         out, err = io.StringIO(), io.StringIO()
         try:
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
@@ -738,6 +794,7 @@ class TokenCliTests(unittest.TestCase):
 
     @staticmethod
     def _run_with(argv_extra, exp_patches):
+        """Run with."""
         with tempfile.TemporaryDirectory() as tmp:
             fixture = _write_fixture_file(tmp)
             outdir = Path(tmp) / "report"
@@ -776,7 +833,9 @@ class TokenCliTests(unittest.TestCase):
                 for name in exp_patches:
                     stack.enter_context(mock.patch.object(experiments, name, return_value=sentinel))
 
-                def fake_prepare(path):  # noqa: ANN001, ANN202
+                def fake_prepare(path):
+                    """Fake prepare."""
+                    # noqa: ANN001, ANN202
                     Path(path).mkdir(parents=True, exist_ok=False)
                     return Path(path)
 
@@ -810,6 +869,7 @@ class TokenCliTests(unittest.TestCase):
             return (kind, code), result_doc, sentinel
 
     def test_token_depth_sweep_dispatches(self) -> None:
+        """Test token depth sweep dispatches."""
         (kind, code), result_doc, sentinel = self._run_with(
             ["--token-depth-sweep"],
             ["prompt_token_depth_sweep"],
@@ -818,13 +878,16 @@ class TokenCliTests(unittest.TestCase):
         self.assertIs(result_doc["sensitivity_sweep_tokens"], sentinel)
 
     def test_both_sweeps_share_one_native(self) -> None:
+        """Test both sweeps share one native."""
         # Both flags together: the CLI computes one shared native via
         # experiments.run_experiment and passes it to both sweeps, so
         # the shared call count is exactly one (not two sweep natives).
         calls: list = []
         real_run = experiments.run_experiment
 
-        def counting_run(*args, **kwargs):  # noqa: ANN001, ANN202
+        def counting_run(*args, **kwargs):
+            """Counting run."""
+            # noqa: ANN001, ANN202
             calls.append(1)
             return {
                 "decision": "compatible_on_fixture_set",

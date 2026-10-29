@@ -71,6 +71,7 @@ _REPO_ROOT = Path(reporting.__file__).resolve().parent.parent
 
 
 def _obs(fixture, exact, boundary, status="completed", in_len=10, out_len=3):
+    """Obs."""
     obs = {
         "fixture": fixture,
         "status": status,
@@ -83,6 +84,7 @@ def _obs(fixture, exact, boundary, status="completed", in_len=10, out_len=3):
 
 
 def _search_run(name, observations, rate, passes, planned, boundary_ids, fingerprint):
+    """Search run."""
     return {
         "format": {"name": name},
         "candidate_fingerprint": fingerprint,
@@ -389,6 +391,7 @@ def _result_solo():
 
 
 def _result_no_candidate():
+    """Result no candidate."""
     return {
         "decision": "no_candidate",
         "search": [
@@ -410,6 +413,7 @@ def _result_no_candidate():
 
 
 def _result_ambiguous():
+    """Result ambiguous."""
     return {
         "decision": "ambiguous",
         "search": [
@@ -427,6 +431,7 @@ def _result_ambiguous():
 
 
 def _result_failed():
+    """Result failed."""
     return {
         "decision": "failed",
         "seed": 1,
@@ -482,6 +487,7 @@ def _result_edge_sections():
 
 
 def _result_hostile():
+    """Result hostile."""
     name = 'X <script>alert("x")</script> & "q" \'s\' caf\u00e9 \u2603'
     return {
         "decision": "ambiguous",
@@ -500,6 +506,7 @@ def _result_hostile():
 
 
 def _result_huge(n=1200):
+    """Result huge."""
     runs = []
     for cand in ("h1", "h2"):
         obs = [_obs(f"bulk-{i:05d}", i % 2 == 0, True, in_len=3, out_len=1) for i in range(n)]
@@ -552,6 +559,7 @@ def _save_triple(mod, result, tmpdir, tag):
 
 
 def _read_json(raw):
+    """Read json."""
     return json.loads(raw.decode("utf-8"))
 
 
@@ -699,6 +707,7 @@ def check_margin_oracle(mod, tc):
 
 
 def check_overhead_oracle(mod, tc):
+    """Check overhead oracle."""
     result = _result_full()
     with tc.subTest("json"):
         payload = _read_json(
@@ -768,6 +777,7 @@ def check_overhead_oracle(mod, tc):
 
 
 def check_toc(mod, tc):
+    """Check toc."""
     html = mod.render_html(_result_full())
     tc.assertEqual(_toc_anchors(html), _EXPECT_TOC_FULL)
     # Minimal result: only the always-rendered sections get TOC entries.
@@ -794,6 +804,7 @@ def check_toc(mod, tc):
 
 
 def check_fingerprint(mod, tc):
+    """Check fingerprint."""
     html = mod.render_html(_result_full())
     # Config section: truncated fingerprint + full fingerprint in <details>.
     tc.assertIn("<dd>" + _EXPECT_FP_SHORT + "</dd>", html)
@@ -816,6 +827,7 @@ def check_determinism(mod, tc, tmpdir):
 
 
 def check_conformance_section(mod, tc):
+    """Check conformance section."""
     html = mod.render_html(_result_full())
     tc.assertIn('<span class="badge pass">identical</span>', html)
     tc.assertIn('<span class="badge fail">1 divergent segment(s)</span>', html)
@@ -835,6 +847,7 @@ def check_conformance_section(mod, tc):
 
 
 def check_stop_matrix_section(mod, tc):
+    """Check stop matrix section."""
     html = mod.render_html(_result_full())
     # Header excludes the native semantic; legend covers all three.
     tc.assertIn('<th scope="col">HF stop string</th><th scope="col">vLLM strip</th>', html)
@@ -855,6 +868,7 @@ def check_stop_matrix_section(mod, tc):
 
 
 def check_divergence_section(mod, tc):
+    """Check divergence section."""
     html = mod.render_html(_result_full())
     tc.assertIn('<span class="badge fail">diverge</span> 1 of 2 pairs diverge.', html)
     # Matrix row: severity badge + fixed class order + per-semantic counts.
@@ -884,6 +898,7 @@ def check_divergence_section(mod, tc):
 
 
 def check_frontier_section(mod, tc):
+    """Check frontier section."""
     html = mod.render_html(_result_full())
     tc.assertIn('<span class="badge fail">budget-sensitive</span>', html)
     tc.assertIn("<li>budgets 1&ndash;7: no_candidate</li>", html)
@@ -916,6 +931,7 @@ def check_frontier_section(mod, tc):
 
 
 def check_sweep_section(mod, tc):
+    """Check sweep section."""
     html = mod.render_html(_result_full())
     tc.assertIn(
         "Native winner: alpha (compatible_on_fixture_set). "
@@ -940,6 +956,7 @@ def check_sweep_section(mod, tc):
 
 
 def check_logprob_section(mod, tc):
+    """Check logprob section."""
     html = mod.render_html(_result_full())
     tc.assertIn(
         "Declared bands: mean \u2265 -0.5 nats/token reads as greedy derailment, "
@@ -965,6 +982,7 @@ def check_logprob_section(mod, tc):
 
 
 def check_heldout_section(mod, tc):
+    """Check heldout section."""
     html = mod.render_html(_result_full())
     tc.assertIn('<div class="k">Status</div><div class="v">complete</div>', html)
     tc.assertIn('<div class="k">Pass rate</div><div class="v">100%</div>', html)
@@ -977,6 +995,7 @@ def check_heldout_section(mod, tc):
 
 
 def check_decision_banner(mod, tc):
+    """Check decision banner."""
     cases = [
         ("full", "compatible_on_fixture_set", "pass"),
         ("no_candidate", "no_candidate", "neutral"),
@@ -1011,6 +1030,7 @@ def check_decision_banner(mod, tc):
 
 
 def check_config_section(mod, tc):
+    """Check config section."""
     html = mod.render_html(_result_full())
     tc.assertIn("<dt>Selection rule</dt><dd>sole search winner</dd>", html)
     tc.assertIn("<dt>Seed</dt><dd>7</dd>", html)
@@ -1023,6 +1043,7 @@ def check_config_section(mod, tc):
 
 
 def check_outcome_grid_and_decisive(mod, tc):
+    """Check outcome grid and decisive."""
     html = mod.render_html(_result_full())
     # Winner star on alpha; columns follow search order gamma, alpha, aardvark, beta.
     tc.assertIn('<th scope="col">alpha \u2605</th>', html)
@@ -1042,6 +1063,7 @@ def check_outcome_grid_and_decisive(mod, tc):
 
 
 def check_json_public_view(mod, tc):
+    """Check json public view."""
     result = _result_full()
     noev = _read_json(
         mod.save_report(copy.deepcopy(result), _fresh("pv0"), include_evidence=False)[
@@ -1087,6 +1109,7 @@ def check_json_public_view(mod, tc):
 
 
 def check_self_contained(mod, tc):
+    """Check self contained."""
     html = mod.render_html(_result_full())
     tc.assertIn(
         '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; '
@@ -1099,6 +1122,7 @@ def check_self_contained(mod, tc):
 
 
 def check_hostile_escaping(mod, tc):
+    """Check hostile escaping."""
     html = mod.render_html(_result_hostile())
     tc.assertIn(
         "X &lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &quot;q&quot; "
@@ -1114,6 +1138,7 @@ def check_hostile_escaping(mod, tc):
 
 
 def check_no_caller_mutation(mod, tc):
+    """Check no caller mutation."""
     for name, builder in _FIXTURES.items():
         if name == "huge":
             continue
@@ -1147,19 +1172,25 @@ def _fresh(tag):
 
 
 class TestInProcessDeterminism(unittest.TestCase):
+    """Test in process determinism."""
+
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         _SCRATCH.mkdir(parents=True, exist_ok=True)
         cls.tmpdir = Path(tempfile.mkdtemp(prefix="c75_det_", dir=str(_SCRATCH)))
 
     @classmethod
     def tearDownClass(cls):
+        """Tear down the test fixture."""
         shutil.rmtree(cls.tmpdir, ignore_errors=True)
 
     def test_triple_renders_byte_identical(self):
+        """Test triple renders byte identical."""
         check_determinism(reporting, self, self.tmpdir)
 
     def test_huge_result_byte_identical(self):
+        """Test huge result byte identical."""
         result = _result_huge()
         triples = [_save_triple(reporting, result, self.tmpdir, f"huge_{i}") for i in range(2)]
         self.assertEqual(triples[1], triples[0])
@@ -1182,6 +1213,7 @@ _DRIVER = (
 
 
 def _run_driver_subprocess(repo_root, fixture_path, outdir, hash_seed):
+    """Run driver subprocess."""
     driver = outdir / "driver.py"
     driver.write_text(_DRIVER, encoding="utf-8")
     env = dict(os.environ)
@@ -1202,6 +1234,7 @@ class TestSubprocessDeterminism(unittest.TestCase):
     """Fresh interpreters with varied PYTHONHASHSEED must emit identical bytes."""
 
     def test_cross_process_byte_identical(self):
+        """Test cross process byte identical."""
         workdir = _fresh("sub")
         workdir.mkdir()
         fixture_path = workdir / "fixture.json"
@@ -1221,6 +1254,7 @@ class TestSubprocessDeterminism(unittest.TestCase):
                 self.assertEqual([hashlib.sha256(b).hexdigest() for b in blobs], digests_expected)
 
     def test_cross_process_hostile_and_empty(self):
+        """Test cross process hostile and empty."""
         for name in ("hostile", "empty"):
             with self.subTest(fixture=name):
                 workdir = _fresh(f"sub{name}")
@@ -1241,57 +1275,78 @@ class TestSubprocessDeterminism(unittest.TestCase):
 
 
 class TestSectionFidelity(unittest.TestCase):
+    """Test section fidelity."""
+
     def test_margin_oracle(self):
+        """Test margin oracle."""
         check_margin_oracle(reporting, self)
 
     def test_overhead_oracle(self):
+        """Test overhead oracle."""
         check_overhead_oracle(reporting, self)
 
     def test_toc(self):
+        """Test toc."""
         check_toc(reporting, self)
 
     def test_fingerprint(self):
+        """Test fingerprint."""
         check_fingerprint(reporting, self)
 
     def test_conformance_section(self):
+        """Test conformance section."""
         check_conformance_section(reporting, self)
 
     def test_stop_matrix_section(self):
+        """Test stop matrix section."""
         check_stop_matrix_section(reporting, self)
 
     def test_divergence_section(self):
+        """Test divergence section."""
         check_divergence_section(reporting, self)
 
     def test_frontier_section(self):
+        """Test frontier section."""
         check_frontier_section(reporting, self)
 
     def test_sweep_section(self):
+        """Test sweep section."""
         check_sweep_section(reporting, self)
 
     def test_logprob_section(self):
+        """Test logprob section."""
         check_logprob_section(reporting, self)
 
     def test_heldout_section(self):
+        """Test heldout section."""
         check_heldout_section(reporting, self)
 
     def test_decision_banner(self):
+        """Test decision banner."""
         check_decision_banner(reporting, self)
 
     def test_config_section(self):
+        """Test config section."""
         check_config_section(reporting, self)
 
     def test_outcome_grid_and_decisive(self):
+        """Test outcome grid and decisive."""
         check_outcome_grid_and_decisive(reporting, self)
 
     def test_json_public_view(self):
+        """Test json public view."""
         check_json_public_view(reporting, self)
 
     def test_self_contained(self):
+        """Test self contained."""
         check_self_contained(reporting, self)
 
 
 class TestAdversarialEdges(unittest.TestCase):
+    """Test adversarial edges."""
+
     def test_empty_result_renders(self):
+        """Test empty result renders."""
         html = reporting.render_html({})
         self.assertIn('<section class="decision neutral"', html)
         self.assertIn('<div class="decision-value"></div>', html)
@@ -1308,12 +1363,15 @@ class TestAdversarialEdges(unittest.TestCase):
         self.assertIsNone(payload["token_overhead"]["cheapest_candidate"])
 
     def test_hostile_escaping(self):
+        """Test hostile escaping."""
         check_hostile_escaping(reporting, self)
 
     def test_no_caller_mutation(self):
+        """Test no caller mutation."""
         check_no_caller_mutation(reporting, self)
 
     def test_contradictory_fields_pinned(self):
+        """Test contradictory fields pinned."""
         # Observed behavior pin (real pipeline never emits this): the margin
         # is computed over the recorded runners even when selected_candidate
         # names nobody; the winner tax is reported unavailable.
@@ -1417,6 +1475,7 @@ _CHECKS = {
 
 
 def _check_determinism_gate(mod, tc):
+    """Check determinism gate."""
     tmpdir = Path(tempfile.mkdtemp(prefix="c75_mutdet_", dir=str(_SCRATCH)))
     try:
         check_determinism(mod, tc, tmpdir)
@@ -1429,6 +1488,7 @@ class TestMutantGate(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         if _MUTANT_ROOT.exists():
             shutil.rmtree(_MUTANT_ROOT)
         src = Path(reporting.__file__).read_text(encoding="utf-8")
@@ -1452,11 +1512,13 @@ class TestMutantGate(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        """Tear down the test fixture."""
         if str(_MUTANT_ROOT) in sys.path:
             sys.path.remove(str(_MUTANT_ROOT))
         shutil.rmtree(_MUTANT_ROOT, ignore_errors=True)
 
     def _run_checks(self, mod, names):
+        """Run checks."""
         # NOTE: checks run against a bare TestCase probe, never against
         # ``self`` inside a subTest: on this interpreter a subTest nested
         # inside another subTest records its failure but does NOT propagate
@@ -1472,10 +1534,12 @@ class TestMutantGate(unittest.TestCase):
                     _CHECKS[name](mod, probe)
 
     def test_control_copy_passes_all_checks(self):
+        """Test control copy passes all checks."""
         mod = importlib.import_module("control.reporting")
         self._run_checks(mod, list(_CHECKS))
 
     def test_mutants_are_caught(self):
+        """Test mutants are caught."""
         probe = unittest.TestCase()
         for pkg, _, check_names, _ in _MUTANTS:
             mod = importlib.import_module(f"{pkg}.reporting")
@@ -1495,6 +1559,7 @@ class TestMutantGate(unittest.TestCase):
 
 
 def tearDownModule():
+    """TearDownModule."""
     shutil.rmtree(_SCRATCH, ignore_errors=True)
 
 

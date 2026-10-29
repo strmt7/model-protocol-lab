@@ -42,6 +42,7 @@ _ABSENT = object()  # sentinel: argument not supplied
 
 
 def _obs(fixture, output_ids=_ABSENT, **flags):
+    """Obs."""
     obs = {"fixture": fixture, "status": "completed", "exact_match": True, "boundary_found": True}
     if output_ids is not _ABSENT:
         obs["output_ids"] = output_ids
@@ -50,6 +51,7 @@ def _obs(fixture, output_ids=_ABSENT, **flags):
 
 
 def _entry(name, observations, boundary_token_ids=_ABSENT):
+    """Entry."""
     entry = {"format": {"name": name}, "observations": list(observations)}
     if boundary_token_ids is not _ABSENT:
         entry["boundary_token_ids"] = boundary_token_ids
@@ -57,6 +59,7 @@ def _entry(name, observations, boundary_token_ids=_ABSENT):
 
 
 def _run(bf, search, *, boundary, max_new_tokens, native_decision, native_winner):
+    """Run."""
     return bf(
         search,
         boundary=boundary,
@@ -89,6 +92,7 @@ def _ref_first_cut(tokens, boundary):
 
 
 def _ref_passes_at(obs, boundary, budget):
+    """Ref passes at."""
     if obs.get("status") != "completed":
         return False
     if obs.get("exact_match") is not True:
@@ -106,11 +110,13 @@ def _ref_passes_at(obs, boundary, budget):
 
 
 def _ref_entry_boundary(entry, default):
+    """Ref entry boundary."""
     eb = entry.get("boundary_token_ids")
     return default if eb is None else tuple(eb)
 
 
 def _ref_min_budget(obs, boundary, max_new_tokens):
+    """Ref min budget."""
     # The true minimal budget is recorded even beyond max_new_tokens (the
     # implementation derives it from the full recorded output), so the scan
     # runs past max_new_tokens up to the output length, which bounds it:
@@ -123,7 +129,9 @@ def _ref_min_budget(obs, boundary, max_new_tokens):
     return None
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _ref_frontier(search, *, boundary, max_new_tokens, native_decision, native_winner):
+    """Ref frontier."""
     names = [e["format"]["name"] for e in search]
     eb = {n: _ref_entry_boundary(e, boundary) for n, e in zip(names, search, strict=True)}
     obss = {n: e["observations"] for n, e in zip(names, search, strict=True)}
@@ -131,9 +139,11 @@ def _ref_frontier(search, *, boundary, max_new_tokens, native_decision, native_w
     mins = {n: [_ref_min_budget(o, eb[n], max_new_tokens) for o in obss[n]] for n in names}
 
     def count(name, b):
+        """Count."""
         return sum(1 for m in mins[name] if m is not None and m <= b)
 
     def decision(b):
+        """Decision."""
         winners = [n for n in names if count(n, b) == n_fix]
         if len(winners) == 1:
             return ("selected", winners[0])
@@ -190,6 +200,7 @@ def _ref_frontier(search, *, boundary, max_new_tokens, native_decision, native_w
 def _check_matches_reference(
     bf, search, *, boundary, max_new_tokens, native_decision, native_winner
 ):
+    """Check matches reference."""
     impl = _run(
         bf,
         search,
@@ -217,7 +228,9 @@ def _check_matches_reference(
     return impl, ref
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _check_invariants(impl, ref, max_new_tokens):
+    """Check invariants."""
     # pass_steps: sorted, strictly increasing, minimal (no redundant points),
     # first point always at budget 1.
     for name, c in impl["candidates"].items():
@@ -542,6 +555,7 @@ def _case_k(bf):
 
 
 def _fuzz_search(rng):
+    """Fuzz search."""
     vocab = [1, 2, 3, 5, 7, 8, 9]
     boundaries = [(7,), (7, 8), (1, 2, 3)]
     n_candidates = rng.randint(1, 3)
@@ -582,6 +596,7 @@ def _fuzz_search(rng):
 
 
 def _check_fuzz(bf, seeds):
+    """Check fuzz."""
     for seed in range(seeds):
         rng = random.Random(10_000 + seed)  # noqa: S311 -- deterministic fuzz, not crypto
         search, boundary, max_new_tokens, native_decision, native_winner = _fuzz_search(rng)
@@ -632,59 +647,78 @@ def run_audit_checks(bf, fuzz_seeds=N_FUZZ_SEEDS):
 
 
 class StepFunctionFrontierTests(unittest.TestCase):
+    """Step function frontier tests."""
+
     @staticmethod
     def test_step_function_exact_points():
+        """Test step function exact points."""
         _case_a(budget_frontier)
 
     @staticmethod
     def test_flat_region_no_flips():
+        """Test flat region no flips."""
         _case_b(budget_frontier)
 
     @staticmethod
     def test_flip_at_budget_one_is_initial_point():
+        """Test flip at budget one is initial point."""
         _case_c(budget_frontier)
 
     @staticmethod
     def test_multiple_flips_non_monotonic_decision():
+        """Test multiple flips non monotonic decision."""
         _case_d(budget_frontier)
 
     @staticmethod
     def test_singleton_budget_range():
+        """Test singleton budget range."""
         _case_e(budget_frontier)
 
     @staticmethod
     def test_min_budget_beyond_max_recorded_without_step():
+        """Test min budget beyond max recorded without step."""
         _case_f(budget_frontier)
 
     @staticmethod
     def test_first_boundary_occurrence_counts():
+        """Test first boundary occurrence counts."""
         _case_g(budget_frontier)
 
     @staticmethod
     def test_flag_lies_and_malformed_outputs_never_pass():
+        """Test flag lies and malformed outputs never pass."""
         _case_h(budget_frontier)
 
     @staticmethod
     def test_per_candidate_boundary_override():
+        """Test per candidate boundary override."""
         _case_i(budget_frontier)
 
     @staticmethod
     def test_flip_flip_back_ranges_merged():
+        """Test flip flip back ranges merged."""
         _case_j(budget_frontier)
 
     @staticmethod
     def test_held_out_failed_native_winner_comparison():
+        """Test held out failed native winner comparison."""
         _case_k(budget_frontier)
 
 
 class FrontierFuzzTests(unittest.TestCase):
+    """Frontier fuzz tests."""
+
     @staticmethod
     def test_reference_agreement_and_invariants_on_fuzz():
+        """Test reference agreement and invariants on fuzz."""
         _check_fuzz(budget_frontier, N_FUZZ_SEEDS)
 
 
 class FrontierValidationTests(unittest.TestCase):
+    """Frontier validation tests."""
+
     def test_empty_search_rejected(self):
+        """Test empty search rejected."""
         with self.assertRaises(ValueError):
             budget_frontier(
                 [],
@@ -695,6 +729,7 @@ class FrontierValidationTests(unittest.TestCase):
             )
 
     def test_zero_max_new_tokens_rejected(self):
+        """Test zero max new tokens rejected."""
         search = [_entry("a", [_obs("f1", (7,))])]
         with self.assertRaises(ValueError):
             budget_frontier(

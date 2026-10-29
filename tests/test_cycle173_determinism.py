@@ -86,15 +86,18 @@ class _PureBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(text.encode("utf-8"))
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return bytes(t % 256 for t in token_ids).decode("utf-8", errors="replace")
 
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate."""
         self.calls.append((tuple(input_ids), max_new_tokens, seed))
         return Generation(_pure_output(tuple(input_ids), seed, max_new_tokens), "limit")
 
@@ -105,6 +108,7 @@ class _FlakyBackend(_PureBackend):
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate."""
         result = super().generate(
             input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel
         )
@@ -116,14 +120,22 @@ class _FlakyBackend(_PureBackend):
 
 
 class _RaisingBackend(_PureBackend):
+    """Raising backend."""
+
     @staticmethod
-    def generate(input_ids, *, max_new_tokens, seed, cancel):  # type: ignore[no-untyped-def]
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
+        # type: ignore[no-untyped-def]
         raise RuntimeError("boom -- private backend text")
 
 
 class _InterruptingBackend(_PureBackend):
+    """Interrupting backend."""
+
     @staticmethod
-    def generate(input_ids, *, max_new_tokens, seed, cancel):  # type: ignore[no-untyped-def]
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
+        # type: ignore[no-untyped-def]
         raise KeyboardInterrupt
 
 
@@ -134,7 +146,9 @@ class _ReasonBackend(_PureBackend):
         super().__init__(fingerprint)
         self.mode = mode
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):  # type: ignore[no-untyped-def]
+    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
+        # type: ignore[no-untyped-def]
         self.calls.append((tuple(input_ids), max_new_tokens, seed))
         if self.mode == "error_allowlisted":
             return Generation((), "error", "invalid_seed")
@@ -157,6 +171,7 @@ def _obs(
     output_ids: tuple[int, ...] = (4, 5, 6, 7),
     status: str = "completed",
 ) -> dict:
+    """Obs."""
     return {
         "candidate": "cand-a",
         "fixture": fixture,
@@ -181,6 +196,7 @@ def _artifact(
     fingerprint: str = "testfp",
     decision: str = "no_candidate",
 ) -> dict:
+    """Artifact."""
     return {
         "schema_version": 1,
         "seed": seed,
@@ -202,6 +218,7 @@ def _entry(
     eligible: bool = True,
     planned: int = 2,
 ) -> dict:
+    """Entry."""
     entry: dict = {
         "format": {"name": name},
         "summary": {
@@ -235,7 +252,10 @@ def _recorded_artifact(backend: _PureBackend, *, seed: int = 7, cap: int = 4) ->
 
 
 class TestCompareTokenIds(unittest.TestCase):
+    """Test compare token ids."""
+
     def test_compare_battery_against_oracle(self) -> None:
+        """Test compare battery against oracle."""
         cases = [
             ((1, 2, 3), (1, 2, 3), True, None, 3),
             ((1, 2, 3), (1, 9, 3), False, 1, 1),
@@ -256,7 +276,10 @@ class TestCompareTokenIds(unittest.TestCase):
 
 
 class TestRequestSeedOracle(unittest.TestCase):
+    """Test request seed oracle."""
+
     def test_helper_matches_independent_oracle(self) -> None:
+        """Test helper matches independent oracle."""
         # F3's expectation: the seed formula recomputed inline from
         # hashlib -- never via request_seed_for itself.
         ids = ["f1", "café", "café", "a\0b", "\ud800x", "", "x" * 500]
@@ -271,6 +294,7 @@ class TestRequestSeedOracle(unittest.TestCase):
                 self.assertEqual(request_seed_for(seed, case_id), expected)
 
     def test_surfacenoise_derivation_drift_guard(self) -> None:
+        """Test surfacenoise derivation drift guard."""
         # B3: surfacenoise carries a pre-existing private copy of the
         # derivation; pin the two equal so any drift is loud.
         from model_protocol_lab import surfacenoise
@@ -283,7 +307,10 @@ class TestRequestSeedOracle(unittest.TestCase):
 
 
 class TestPrecheck(unittest.TestCase):
+    """Test precheck."""
+
     def test_header_problems(self) -> None:
+        """Test header problems."""
         good = _recorded_artifact(_PureBackend())
         self.assertIsNone(determinism.precheck(good))
         self.assertEqual(determinism.precheck(None), "artifact_malformed")
@@ -308,6 +335,7 @@ class TestPrecheck(unittest.TestCase):
             self.assertEqual(determinism.precheck(bad), code, mutate)
 
     def test_stripped_and_empty(self) -> None:
+        """Test stripped and empty."""
         stripped = _artifact([_entry(None)])
         self.assertEqual(determinism.precheck(stripped), "observations_stripped")
         empty = _artifact([_entry([])])
@@ -319,7 +347,10 @@ class TestPrecheck(unittest.TestCase):
 
 
 class TestAuditDeterministic(unittest.TestCase):
+    """Test audit deterministic."""
+
     def test_f1_certificate_and_digest(self) -> None:
+        """Test f1 certificate and digest."""
         artifact = _recorded_artifact(_PureBackend())
         audit = determinism.audit_determinism(
             artifact, _PureBackend(), replay={"device": "cpu", "max_context": 2048}
@@ -355,6 +386,7 @@ class TestAuditDeterministic(unittest.TestCase):
         )
 
     def test_held_out_is_never_replayed(self) -> None:
+        """Test held out is never replayed."""
         artifact = _recorded_artifact(_PureBackend())
         artifact["held_out"] = {
             "summary": {"aggregate_eligible": True},
@@ -367,6 +399,7 @@ class TestAuditDeterministic(unittest.TestCase):
         self.assertEqual(len(backend.calls), 2)
 
     def test_duplicate_cells_are_reexecuted_individually(self) -> None:
+        """Test duplicate cells are reexecuted individually."""
         # B1: no memoisation -- two entries recording the same
         # (fixture, input) cell cost two generate calls.
         artifact = _recorded_artifact(_PureBackend())
@@ -381,7 +414,10 @@ class TestAuditDeterministic(unittest.TestCase):
 
 
 class TestAuditEndToEnd(unittest.TestCase):
+    """Test audit end to end."""
+
     def test_f3_seeds_match_evaluate_and_oracle(self) -> None:
+        """Test f3 seeds match evaluate and oracle."""
         recorder = _PureBackend()
         fmt = CATALOG["chatml"]
         cases = (
@@ -434,7 +470,10 @@ class TestAuditEndToEnd(unittest.TestCase):
 
 
 class TestAuditDivergence(unittest.TestCase):
+    """Test audit divergence."""
+
     def test_f6_flipped_token_diverges_at_exact_index(self) -> None:
+        """Test f6 flipped token diverges at exact index."""
         artifact = _recorded_artifact(_PureBackend())
         artifact["search"][0]["observations"][0]["output_ids"][2] += 1
         audit = determinism.audit_determinism(artifact, _PureBackend())
@@ -447,6 +486,7 @@ class TestAuditDivergence(unittest.TestCase):
         self.assertEqual(audit["cells"][1]["status"], "reproduced")
 
     def test_f2_flaky_backend_divergence_matches_oracle(self) -> None:
+        """Test f2 flaky backend divergence matches oracle."""
         artifact = _recorded_artifact(_PureBackend())
         audit = determinism.audit_determinism(artifact, _FlakyBackend())
         self.assertEqual(audit["verdict"], "diverged")
@@ -456,6 +496,7 @@ class TestAuditDivergence(unittest.TestCase):
         self.assertEqual(cell["first_divergence"], 2)
 
     def test_f6_truncated_output_is_a_length_skip_not_divergence(self) -> None:
+        """Test f6 truncated output is a length skip not divergence."""
         artifact = _recorded_artifact(_PureBackend())
         artifact["search"][0]["observations"][0]["output_ids"] = [1, 2, 3]
         audit = determinism.audit_determinism(artifact, _PureBackend())
@@ -469,7 +510,10 @@ class TestAuditDivergence(unittest.TestCase):
 
 
 class TestAuditGates(unittest.TestCase):
+    """Test audit gates."""
+
     def test_f4_fingerprint_mismatch_makes_zero_calls(self) -> None:
+        """Test f4 fingerprint mismatch makes zero calls."""
         artifact = _recorded_artifact(_PureBackend())
         backend = _PureBackend(fingerprint="otherfp")
         audit = determinism.audit_determinism(artifact, backend)
@@ -479,6 +523,7 @@ class TestAuditGates(unittest.TestCase):
         self.assertEqual(len(backend.calls), 0)
 
     def test_missing_fingerprint_attribute_is_a_mismatch(self) -> None:
+        """Test missing fingerprint attribute is a mismatch."""
         artifact = _recorded_artifact(_PureBackend())
         backend = _PureBackend()
         del backend.fingerprint
@@ -488,6 +533,7 @@ class TestAuditGates(unittest.TestCase):
         self.assertIsNone(audit["replay_backend_fingerprint"])
 
     def test_out_of_vocab_ids_are_skips_not_blame(self) -> None:
+        """Test out of vocab ids are skips not blame."""
         artifact = _recorded_artifact(_PureBackend())
         artifact["search"][0]["observations"][0]["output_ids"][1] = 5000
         artifact["search"][0]["observations"][1]["input_ids"] = [1, 5000]
@@ -498,7 +544,11 @@ class TestAuditGates(unittest.TestCase):
         self.assertEqual(audit["verdict"], "inconclusive")
 
     def test_backend_without_vocab_skips_the_vocab_check(self) -> None:
+        """Test backend without vocab skips the vocab check."""
+
         class NoVocab(_PureBackend):
+            """No vocab."""
+
             vocab_size = None  # type: ignore[assignment]
 
         artifact = _recorded_artifact(_PureBackend())
@@ -510,12 +560,20 @@ class TestAuditGates(unittest.TestCase):
         self.assertEqual(audit["cells"][0]["status"], "diverged")
 
     def test_vocab_method_and_hostile_vocab(self) -> None:
+        """Test vocab method and hostile vocab."""
+
         class MethodVocab(_PureBackend):
+            """Method vocab."""
+
             @staticmethod
-            def vocab_size():  # type: ignore[no-untyped-def]
+            def vocab_size():
+                """Vocab size."""
+                # type: ignore[no-untyped-def]
                 return 1000
 
         class HostileVocab(_PureBackend):
+            """Hostile vocab."""
+
             @property
             def vocab_size(self):  # type: ignore[no-untyped-def]
                 raise RuntimeError("nope")
@@ -531,6 +589,7 @@ class TestAuditGates(unittest.TestCase):
         )
 
     def test_f7_aborted_search_earns_no_certificate(self) -> None:
+        """Test f7 aborted search earns no certificate."""
         artifact = _recorded_artifact(_PureBackend())
         artifact["decision"] = "cancelled"
         audit = determinism.audit_determinism(artifact, _PureBackend())
@@ -540,6 +599,7 @@ class TestAuditGates(unittest.TestCase):
         self.assertIsNone(audit["certificate"])
 
     def test_non_eligible_entry_blocks_certificate(self) -> None:
+        """Test non eligible entry blocks certificate."""
         artifact = _recorded_artifact(_PureBackend())
         artifact["search"][0]["summary"]["aggregate_eligible"] = False
         artifact["decision"] = "failed"
@@ -548,6 +608,7 @@ class TestAuditGates(unittest.TestCase):
         self.assertIsNone(audit["certificate"])
 
     def test_partial_strip_blocks_certificate_but_replays_the_rest(self) -> None:
+        """Test partial strip blocks certificate but replays the rest."""
         artifact = _recorded_artifact(_PureBackend())
         artifact["search"].append(_entry(None, name="cand-b"))
         audit = determinism.audit_determinism(artifact, _PureBackend())
@@ -557,6 +618,7 @@ class TestAuditGates(unittest.TestCase):
         self.assertIsNone(audit["certificate"])
 
     def test_not_completed_cells_are_scope_not_gaps(self) -> None:
+        """Test not completed cells are scope not gaps."""
         artifact = _recorded_artifact(_PureBackend())
         artifact["search"][0]["observations"].append(
             _obs(fixture="f3", status="failed", output_ids=())
@@ -570,7 +632,10 @@ class TestAuditGates(unittest.TestCase):
 
 
 class TestAuditErrors(unittest.TestCase):
+    """Test audit errors."""
+
     def test_raising_backend_is_an_error_cell_not_a_crash(self) -> None:
+        """Test raising backend is an error cell not a crash."""
         artifact = _recorded_artifact(_PureBackend())
         audit = determinism.audit_determinism(artifact, _RaisingBackend())
         self.assertEqual(audit["n_error"], 2)
@@ -582,11 +647,13 @@ class TestAuditErrors(unittest.TestCase):
         self.assertNotIn("boom", json.dumps(audit))
 
     def test_keyboard_interrupt_propagates(self) -> None:
+        """Test keyboard interrupt propagates."""
         artifact = _recorded_artifact(_PureBackend())
         with self.assertRaises(KeyboardInterrupt):
             determinism.audit_determinism(artifact, _InterruptingBackend())
 
     def test_reason_error_classification(self) -> None:
+        """Test reason error classification."""
         artifact = _recorded_artifact(_PureBackend())
         cases = [
             ("error_allowlisted", "error", "invalid_seed"),
@@ -608,6 +675,7 @@ class TestAuditErrors(unittest.TestCase):
         )
 
     def test_budget_blocks_certificate(self) -> None:
+        """Test budget blocks certificate."""
         artifact = _recorded_artifact(_PureBackend())
         backend = _PureBackend()
         with mock.patch.object(determinism, "MAX_AUDIT_CELLS", 1):
@@ -620,11 +688,16 @@ class TestAuditErrors(unittest.TestCase):
 
 
 class TestAuditHostile(unittest.TestCase):
+    """Test audit hostile."""
+
     def test_f5_hostile_battery_never_raises(self) -> None:
+        """Test f5 hostile battery never raises."""
         backend = _PureBackend()
         base = _recorded_artifact(_PureBackend())
 
-        def variant(mutate) -> dict:  # type: ignore[no-untyped-def]
+        def variant(mutate) -> dict:
+            """Variant."""
+            # type: ignore[no-untyped-def]
             import copy
 
             data = copy.deepcopy(base)
@@ -649,6 +722,7 @@ class TestAuditHostile(unittest.TestCase):
             json.dumps(audit, ensure_ascii=True)  # must stay serializable
 
     def test_lone_surrogate_fixture_id_replays_and_certifies(self) -> None:
+        """Test lone surrogate fixture id replays and certifies."""
         # Byte-exact IDs (A9): a lone-surrogate fixture id derives its
         # seed via surrogatepass and the certificate digest encodes it
         # via ensure_ascii escapes -- neither path may raise.
@@ -664,7 +738,9 @@ class TestAuditHostile(unittest.TestCase):
         json.dumps(audit, ensure_ascii=True)
 
 
-def _verify_args(**overrides) -> argparse.Namespace:  # type: ignore[no-untyped-def]
+def _verify_args(**overrides) -> argparse.Namespace:
+    """Verify args."""
+    # type: ignore[no-untyped-def]
     values = {
         "results": None,
         "bundle": None,
@@ -679,6 +755,7 @@ def _verify_args(**overrides) -> argparse.Namespace:  # type: ignore[no-untyped-
 
 
 def _run_verify(args: argparse.Namespace) -> tuple[int, dict | None, str]:
+    """Run verify."""
     out, err = io.StringIO(), io.StringIO()
     with redirect_stdout(out), redirect_stderr(err):
         code = verify.run_verify(args, None)
@@ -708,13 +785,17 @@ def _wiring_artifact() -> dict:
 
 
 class TestVerifyWiring(unittest.TestCase):
+    """Test verify wiring."""
+
     @staticmethod
     def _write(tmp: str, data: dict) -> Path:
+        """Write."""
         path = Path(tmp) / "results.json"
         path.write_text(json.dumps(data), encoding="utf-8")
         return path
 
     def test_plain_verify_output_has_no_determinism_section(self) -> None:
+        """Test plain verify output has no determinism section."""
         with TemporaryDirectory() as tmp:
             path = self._write(tmp, _wiring_artifact())
             code, payload, _err = _run_verify(_verify_args(results=path))
@@ -723,6 +804,7 @@ class TestVerifyWiring(unittest.TestCase):
         self.assertNotIn("determinism_replay", [c["id"] for c in payload["checks"]])
 
     def test_flag_matrix_errors(self) -> None:
+        """Test flag matrix errors."""
         with TemporaryDirectory() as tmp:
             path = self._write(tmp, _wiring_artifact())
             cases = [
@@ -745,6 +827,7 @@ class TestVerifyWiring(unittest.TestCase):
                     self.assertIn("verify:", err)
 
     def test_precheck_failure_never_constructs_a_backend(self) -> None:
+        """Test precheck failure never constructs a backend."""
         stripped = _wiring_artifact()
         for entry in stripped["search"]:
             del entry["observations"]
@@ -763,6 +846,7 @@ class TestVerifyWiring(unittest.TestCase):
         self.assertEqual(check["status"], "unavailable")
 
     def test_full_determinism_run_via_verify(self) -> None:
+        """Test full determinism run via verify."""
         with TemporaryDirectory() as tmp:
             path = self._write(tmp, _wiring_artifact())
             args = _verify_args(results=path, determinism=True, model=Path(tmp))
@@ -781,6 +865,7 @@ class TestVerifyWiring(unittest.TestCase):
         self.assertEqual(check["status"], "passed")
 
     def test_diverged_run_fails_verify_with_finding_framing(self) -> None:
+        """Test diverged run fails verify with finding framing."""
         data = _wiring_artifact()
         data["search"][0]["observations"][0]["output_ids"][1] += 1
         with TemporaryDirectory() as tmp:
@@ -799,6 +884,7 @@ class TestVerifyWiring(unittest.TestCase):
         self.assertIn("backend-determinism finding", check["detail"])
 
     def test_error_cells_map_to_an_unavailable_check_not_a_failure(self) -> None:
+        """Test error cells map to an unavailable check not a failure."""
         # A6 (verify doctrine): a backend that errors during
         # re-execution means the check could not be performed -- the
         # run still exits 0 when nothing else failed, and the JSON
@@ -819,6 +905,7 @@ class TestVerifyWiring(unittest.TestCase):
         self.assertIn("determinism not established", check["detail"])
 
     def test_incomplete_search_detail_names_the_gap(self) -> None:
+        """Test incomplete search detail names the gap."""
         data = _wiring_artifact()
         data["decision"] = "cancelled"
         with TemporaryDirectory() as tmp:
@@ -836,7 +923,11 @@ class TestVerifyWiring(unittest.TestCase):
         self.assertIn("search incomplete", check["detail"])
 
     def test_backend_construction_failure_is_fixed_vocabulary(self) -> None:
-        def explode(*a, **k):  # type: ignore[no-untyped-def]
+        """Test backend construction failure is fixed vocabulary."""
+
+        def explode(*a, **k):
+            """Explode."""
+            # type: ignore[no-untyped-def]
             raise RuntimeError("local_backend_initialization_failed")
 
         with TemporaryDirectory() as tmp:
@@ -876,7 +967,10 @@ def _exec_variant(original: str, mutant: str, tag: str):  # type: ignore[no-unty
 
 
 class TestMutationGates(unittest.TestCase):
+    """Test mutation gates."""
+
     def test_gate_comparison_off_by_one_is_killed(self) -> None:
+        """Test gate comparison off by one is killed."""
         mutant = _exec_variant(
             '"first_divergence": None if match else shared,',
             '"first_divergence": None if match else shared + 1,',
@@ -887,6 +981,7 @@ class TestMutationGates(unittest.TestCase):
         self.assertEqual(determinism.compare_token_ids((1, 2, 3), (1, 9, 3))["first_divergence"], 1)
 
     def test_gate_fingerprint_gate_removed_is_killed(self) -> None:
+        """Test gate fingerprint gate removed is killed."""
         mutant = _exec_variant(
             "if type(replay_fingerprint) is not str or replay_fingerprint != recorded_fingerprint:",
             "if False:",
@@ -901,6 +996,7 @@ class TestMutationGates(unittest.TestCase):
         self.assertEqual(len(clean.calls), 0)
 
     def test_gate_length_invariant_removed_is_killed(self) -> None:
+        """Test gate length invariant removed is killed."""
         mutant = _exec_variant(
             "if len(output_ids) != cap:",
             "if False:",
@@ -917,7 +1013,10 @@ class TestMutationGates(unittest.TestCase):
 
 @unittest.skipUnless(HAS_HF, "hf extra not installed")
 class TestRealBackendEndToEnd(unittest.TestCase):
+    """Test real backend end to end."""
+
     def test_local_hf_backend_reproduces_its_own_run(self) -> None:
+        """Test local hf backend reproduces its own run."""
         # Reality check with the shipped backend on a tiny checkpoint:
         # evaluate once, then audit with a FRESH backend instance over
         # the same checkpoint. CPU fp32 greedy must reproduce exactly.

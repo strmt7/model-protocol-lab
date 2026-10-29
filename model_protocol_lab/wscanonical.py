@@ -147,6 +147,7 @@ def compare_id_sequences(base_ids: object, variant_ids: object) -> bool:
     return base_ids == variant_ids
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def aggregate_mutation_records(records: list[dict[str, object]]) -> dict[str, object]:
     """Aggregate validated per-mutation whitespace records.
 

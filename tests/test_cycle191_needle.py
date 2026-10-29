@@ -58,6 +58,7 @@ class _WordBackend:
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -69,9 +70,11 @@ class _WordBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.calls += 1
         if self.mode == "explode":
             raise RuntimeError("boom")
@@ -115,13 +118,16 @@ class _ByteBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(text.encode("utf-8"))
 
     @staticmethod
     def decode(ids):
+        """Decode."""
         return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         text = self.decode(list(input_ids))
         found = _NEEDLE_RE.findall(text)
         answer = found[-1] if found else "unknown"
@@ -161,6 +167,7 @@ class _MergeBackend:
             self.by_first.setdefault(token[0], []).append(token)
 
     def encode(self, text):
+        """Encode."""
         ids = []
         at = 0
         while at < len(text):
@@ -174,9 +181,11 @@ class _MergeBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return "".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         text = self.decode(list(input_ids))
         found = _NEEDLE_RE.findall(text)
         answer = found[-1] if found else "unknown"
@@ -187,6 +196,7 @@ class _MergeBackend:
 
 
 def _payload(backend=None, formats=FORMATS, seed=0, **stage_kwargs):
+    """Payload."""
     backend = backend if backend is not None else _WordBackend()
     stage_kwargs.setdefault("max_context", 2048)
     stage = experiments.needle_stage(
@@ -200,6 +210,7 @@ def _payload(backend=None, formats=FORMATS, seed=0, **stage_kwargs):
 
 
 def _full_payload(seed=0):
+    """Full payload."""
     backend = _ByteBackend()
     stage = experiments.needle_stage(
         backend,
@@ -212,7 +223,10 @@ def _full_payload(seed=0):
 
 
 class TestProtocol(unittest.TestCase):
+    """Test protocol."""
+
     def test_constants(self):
+        """Test constants."""
         self.assertEqual(needle.DOSES, (1024, 4096))
         self.assertEqual(needle.DEPTHS, (0, 25, 50, 75, 100))
         self.assertEqual(needle.CASE_COUNT, 20)
@@ -224,6 +238,7 @@ class TestProtocol(unittest.TestCase):
         self.assertEqual(needle.MIN_HEADLINE_POPULATION, 6)
 
     def test_generation_deterministic_and_distinct(self):
+        """Test generation deterministic and distinct."""
         first = needle.generate_cases(7)
         self.assertEqual(first, needle.generate_cases(7))
         self.assertNotEqual(first, needle.generate_cases(8))
@@ -239,10 +254,12 @@ class TestProtocol(unittest.TestCase):
             self.assertEqual(case["expected"], case["value"])
 
     def test_generation_seed_must_be_int(self):
+        """Test generation seed must be int."""
         with self.assertRaises(ValueError):
             needle.generate_cases("0")  # type: ignore[arg-type]
 
     def test_topics_and_words_absent_from_corpus(self):
+        """Test topics and words absent from corpus."""
         from model_protocol_lab.distraction import NEUTRAL_CORPUS
 
         corpus = "".join(NEUTRAL_CORPUS).casefold()
@@ -253,6 +270,7 @@ class TestProtocol(unittest.TestCase):
         self.assertFalse(any(ch.isdigit() for ch in corpus))
 
     def test_protocol_binding(self):
+        """Test protocol binding."""
         self.assertEqual(
             needle.protocol_fingerprint(3, "sha256:x"),
             needle.protocol_fingerprint(3, "sha256:x"),
@@ -272,6 +290,7 @@ class TestProtocol(unittest.TestCase):
         self.assertEqual(protocol["case_material_sha256"], needle.case_material_sha256())
 
     def test_target_offsets(self):
+        """Test target offsets."""
         self.assertEqual(
             [needle.target_offset(1024, d) for d in needle.DEPTHS],
             [0, 256, 512, 768, 1024],
@@ -282,6 +301,7 @@ class TestProtocol(unittest.TestCase):
         )
 
     def test_offset_measurement_head_merge_cancels(self):
+        """Test offset measurement head merge cancels."""
         # No merges: head 9, needle starts 70, question starts
         # 50, prefix is (30, 1, 2) -- D reads the prefix length.
         q = (9, 50, 5, 6)
@@ -304,6 +324,7 @@ class TestProtocol(unittest.TestCase):
         self.assertEqual(needle.lcp_len((), (1,)), 0)
 
     def test_filler_screened(self):
+        """Test filler screened."""
         self.assertTrue(needle.filler_screened("... Velvet-1234 ...", "velvet-1234", ""))
         self.assertTrue(needle.filler_screened("has END inside", "velvet-1234", "END"))
         self.assertFalse(needle.filler_screened("plain prose", "velvet-1234", "END"))
@@ -315,6 +336,7 @@ class TestAggregatesPure(unittest.TestCase):
 
     @staticmethod
     def _record(fixture, verdicts):
+        """Record."""
         expected = f"{fixture}-value"
         digest = hashlib.sha256(expected.encode("utf-8")).hexdigest()
         wrong = hashlib.sha256(b"wrong").hexdigest()
@@ -357,9 +379,11 @@ class TestAggregatesPure(unittest.TestCase):
 
     @staticmethod
     def _all(verdict=True):
+        """All."""
         return dict.fromkeys(needle.CELL_KEYS, verdict)
 
     def test_generation_collision_redraws_both_slots(self):
+        """Test generation collision redraws both slots."""
         # Seed 584's first draws (counter 0) collide: only 19
         # distinct values for 20 cases. The frozen redraw rule
         # must still deliver 20 pairwise-distinct values.
@@ -373,6 +397,7 @@ class TestAggregatesPure(unittest.TestCase):
         self.assertEqual(len({case["value"] for case in cases}), needle.CASE_COUNT)
 
     def test_aggregates_tolerate_non_dict_cell(self):
+        """Test aggregates tolerate non dict cell."""
         # A cell slot holding a non-dict is treated as missing
         # by every readout (the _cell guard), never crashed on;
         # the same holds when the cells mapping itself is junk.
@@ -386,12 +411,14 @@ class TestAggregatesPure(unittest.TestCase):
         self.assertEqual(control["n_recorded"], 0)
 
     def test_headline_population_empty_records(self):
+        """Test headline population empty records."""
         self.assertEqual(needle.headline_population({}, 1024), [])
         readouts = needle.headline_readouts({})
         self.assertEqual(readouts["1024"]["n_population"], 0)
         self.assertEqual(readouts["1024"]["curves"], {})
 
     def test_headline_population_requires_every_candidate(self):
+        """Test headline population requires every candidate."""
         good = [self._record(f"needle-{i:02d}", self._all()) for i in range(8)]
         bad = [self._record(f"needle-{i:02d}", self._all()) for i in range(8)]
         bad[3]["cells"]["dose_0"]["verdict"] = False
@@ -400,6 +427,7 @@ class TestAggregatesPure(unittest.TestCase):
         self.assertNotIn("needle-03", population)
 
     def test_deficit_withheld_below_floor(self):
+        """Test deficit withheld below floor."""
         records = [self._record(f"needle-{i:02d}", self._all()) for i in range(5)]
         readouts = needle.headline_readouts({"a": records})
         self.assertEqual(readouts["1024"]["n_population"], 5)
@@ -408,6 +436,7 @@ class TestAggregatesPure(unittest.TestCase):
         self.assertEqual(readouts["1024"]["curves"]["a"]["50"]["rate"], 1.0)
 
     def test_deficit_is_edge_mean_minus_middle(self):
+        """Test deficit is edge mean minus middle."""
         records = []
         for i in range(8):
             verdicts = self._all()
@@ -422,6 +451,7 @@ class TestAggregatesPure(unittest.TestCase):
         self.assertEqual(first["n_no_failure"], 4)
 
     def test_duplicate_independence_baseline(self):
+        """Test duplicate independence baseline."""
         records = []
         for i in range(10):
             verdicts = self._all()
@@ -439,6 +469,7 @@ class TestAggregatesPure(unittest.TestCase):
         self.assertEqual(dup["rescue_rate"], 1.0)
 
     def test_cell_selection_and_flip(self):
+        """Test cell selection and flip."""
         # Candidate a passes everything; b fails one dose-0 case
         # and one treated case on a different fixture, so the
         # treated selection over its completed set flips against
@@ -461,6 +492,7 @@ class TestAggregatesPure(unittest.TestCase):
         self.assertFalse(treated["flip"])
 
     def test_cell_selection_withheld_on_mismatched_sets(self):
+        """Test cell selection withheld on mismatched sets."""
         a = [self._record(f"needle-{i:02d}", self._all()) for i in range(3)]
         b = [self._record(f"needle-{i:02d}", self._all()) for i in range(3)]
         b[1]["cells"]["dose_1024_depth_50"] = None
@@ -472,7 +504,10 @@ class TestAggregatesPure(unittest.TestCase):
 
 
 class TestStageWordBackend(unittest.TestCase):
+    """Test stage word backend."""
+
     def test_perfect_backend_default_context(self):
+        """Test perfect backend default context."""
         payload = _payload()
         self.assertTrue(payload["available"])
         self.assertTrue(_valid_needle(payload))
@@ -497,6 +532,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertFalse(payload["conditions"]["dose_0"]["flip"])
 
     def test_midfail_backend_shows_deficit(self):
+        """Test midfail backend shows deficit."""
         payload = _payload(_WordBackend(mode="midfail"))
         self.assertTrue(_valid_needle(payload))
         deficit = payload["readouts"]["1024"]["deficit"]["nd-a"]
@@ -508,6 +544,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertGreater(first["counts"]["25"] + first["counts"]["50"], 0)
 
     def test_wrong_backend_empties_headline(self):
+        """Test wrong backend empties headline."""
         payload = _payload(_WordBackend(mode="wrong"))
         self.assertTrue(_valid_needle(payload))
         entry = payload["candidates"]["nd-a"]
@@ -516,6 +553,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertEqual(payload["conditions"]["dose_0"]["decision"], "no_candidate")
 
     def test_stage_rejects_bad_formats(self):
+        """Test stage rejects bad formats."""
         backend = _WordBackend()
         with self.assertRaises(ValueError):
             experiments.needle_stage(backend, [], boundary=(1,), max_context=100)
@@ -523,6 +561,7 @@ class TestStageWordBackend(unittest.TestCase):
             experiments.needle_stage(backend, (), boundary=(1,), max_context=100)
 
     def test_record_budget(self):
+        """Test record budget."""
         backend = _WordBackend()
         formats = tuple(
             Format(name=f"f{i}", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>")
@@ -533,6 +572,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertEqual(stage["detail"], "needle_record_budget_exceeded")
 
     def test_screen_failed_stage(self):
+        """Test screen failed stage."""
         # A boundary whose decoded text appears inside the
         # frozen generated text fails the whole stage closed
         # before any generation.
@@ -548,9 +588,14 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertEqual(stage["detail"], "needle_screen_failed")
 
     def test_degenerate_tokenizer_all_unmatchable(self):
+        """Test degenerate tokenizer all unmatchable."""
+
         class _OneTokenBackend(_WordBackend):
+            """One token backend."""
+
             @staticmethod
             def encode(text):
+                """Encode."""
                 return (1,)
 
         backend = _OneTokenBackend()
@@ -562,6 +607,7 @@ class TestStageWordBackend(unittest.TestCase):
             self.assertTrue(all(d == "arm_unmatchable" for d in record["cell_details"].values()))
 
     def test_cancel_unwinds_stage(self):
+        """Test cancel unwinds stage."""
         backend = _WordBackend(cancel_after=1)
         event = threading.Event()
         backend.cancel_event = event
@@ -577,6 +623,7 @@ class TestStageWordBackend(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_exploding_backend_marks_cells_failed(self):
+        """Test exploding backend marks cells failed."""
         payload = _payload(_WordBackend(mode="explode"))
         # evaluate() surfaces the failure as an ineligible
         # report, so cells degrade to arm_evaluation_failed and
@@ -589,7 +636,10 @@ class TestStageWordBackend(unittest.TestCase):
 
 
 class TestStageFullGrid(unittest.TestCase):
+    """Test stage full grid."""
+
     def test_byte_backend_full_grid(self):
+        """Test byte backend full grid."""
         payload = _full_payload()
         self.assertTrue(payload["available"])
         self.assertTrue(_valid_needle(payload))
@@ -602,6 +652,7 @@ class TestStageFullGrid(unittest.TestCase):
         self.assertEqual(payload["n_candidates"], 2)
 
     def test_merge_backend_places_needles(self):
+        """Test merge backend places needles."""
         backend = _MergeBackend()
         stage = experiments.needle_stage(
             backend,
@@ -641,18 +692,24 @@ class TestValidatorBattery(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls.payload = _full_payload()
 
     def _broken(self, mutate):
+        """Broken."""
         payload = copy.deepcopy(self.payload)
         mutate(payload)
         return payload
 
     def test_coherent_payload_valid(self):
+        """Test coherent payload valid."""
         self.assertTrue(_valid_needle(self.payload))
 
     def test_breaks_rejected(self):
+        """Test breaks rejected."""
+
         def rec(p, name="nd-a", i=0):
+            """Rec."""
             return p["candidates"][name]["records"][i]
 
         breaks = {
@@ -731,23 +788,29 @@ class TestValidatorBattery(unittest.TestCase):
                 self.assertFalse(_valid_needle(self._broken(mutate)), name)
 
     def test_unavailable_payload_invalid(self):
+        """Test unavailable payload invalid."""
         self.assertFalse(_valid_needle({"available": False, "detail": "needle_unavailable"}))
         self.assertFalse(_valid_needle(None))
         self.assertFalse(_valid_needle({}))
 
 
 class TestDiffNeedle(unittest.TestCase):
+    """Test diff needle."""
+
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls.payload = _full_payload()
 
     def test_self_diff_unchanged(self):
+        """Test self diff unchanged."""
         diff = diff_needle(self.payload, copy.deepcopy(self.payload))
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
         self.assertTrue(diff["comparable"])
 
     def test_seed_change_is_generator_drift(self):
+        """Test seed change is generator drift."""
         other = _full_payload(seed=1)
         diff = diff_needle(self.payload, other)
         self.assertTrue(diff["generator_drift"])
@@ -755,6 +818,7 @@ class TestDiffNeedle(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_one_sided_availability(self):
+        """Test one sided availability."""
         diff = diff_needle(self.payload, {"available": False})
         self.assertEqual(diff["available"], "old")
         self.assertFalse(diff["changed"])
@@ -762,6 +826,7 @@ class TestDiffNeedle(unittest.TestCase):
         self.assertEqual(diff["available"], "neither")
 
     def test_deficit_drift_reported(self):
+        """Test deficit drift reported."""
         backend = _WordBackend(mode="midfail")
         stage = experiments.needle_stage(
             backend,
@@ -779,7 +844,10 @@ class TestDiffNeedle(unittest.TestCase):
 
 
 class TestReportingAndCli(unittest.TestCase):
+    """Test reporting and cli."""
+
     def test_section_renders(self):
+        """Test section renders."""
         payload = _full_payload()
         html = render_html({"needle": payload})
         self.assertIn('<section class="card" id="needle">', html)
@@ -788,10 +856,12 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertNotIn("obelisk", html)  # no needle values rendered
 
     def test_section_absent_without_payload(self):
+        """Test section absent without payload."""
         html = render_html({})
         self.assertNotIn('<section class="card" id="needle">', html)
 
     def test_cli_helper_attaches_payload(self):
+        """Test cli helper attaches payload."""
         backend = _ByteBackend()
         result: dict = {}
         cli._run_needle_probe(
@@ -809,11 +879,16 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertTrue(_valid_needle(result["needle"]))
 
     def test_cli_helper_never_raises(self):
+        """Test cli helper never raises."""
+
         class _Boom:
+            """Boom."""
+
             fingerprint = "sha256:boom"
 
             @staticmethod
             def encode(text):
+                """Encode."""
                 raise RuntimeError("boom")
 
         result: dict = {}

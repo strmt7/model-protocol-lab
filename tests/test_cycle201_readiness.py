@@ -26,10 +26,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _cli_surface() -> tuple[set[str], set[str]]:
+    """Cli surface."""
     subcommands: set[str] = set()
     flags: set[str] = set()
 
     def walk(parser: object) -> None:
+        """Walk."""
         for action in parser._actions:  # noqa: SLF001 - argparse has no public walk
             if action.__class__.__name__ == "_SubParsersAction":
                 for name, sub in action.choices.items():
@@ -80,12 +82,14 @@ class TestChangelogGate(unittest.TestCase):
     """The changelog covers the shipped surface — measured, not sampled."""
 
     def test_every_subcommand_and_flag_appears_in_changelog(self) -> None:
+        """Test every subcommand and flag appears in changelog."""
         changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
         subcommands, flags = _cli_surface()
         missing = [name for name in sorted(subcommands | flags) if not _mentioned(name, changelog)]
         self.assertEqual(missing, [], f"CLI surface missing from CHANGELOG.md: {missing}")
 
     def test_every_recent_cycle_appears_in_changelog(self) -> None:
+        """Test every recent cycle appears in changelog."""
         # The per-cycle changelog convention holds from cycle 165 onward
         # (earlier cycles are covered by the rolled [0.1.0]/[0.1.0a0]
         # sections); every cycle the research log documents in that
@@ -98,6 +102,7 @@ class TestChangelogGate(unittest.TestCase):
         self.assertEqual(missing, [], f"cycles missing from CHANGELOG.md: {missing}")
 
     def test_documented_cycles_ignores_mentions_without_an_entry(self) -> None:
+        """Test documented cycles ignores mentions without an entry."""
         # Pins the extraction semantics above: a forward reference in
         # prose and a quoted example string are not documented cycles;
         # a cycle-entry heading is.
@@ -115,6 +120,7 @@ class TestSdistNormalization(unittest.TestCase):
 
     @staticmethod
     def _synthetic_sdist() -> bytes:
+        """Synthetic sdist."""
         buffer = io.BytesIO()
         with gzip.GzipFile(filename="x.tar.gz", mode="wb", fileobj=buffer, mtime=999) as gz:
             tar_buffer = io.BytesIO()
@@ -135,6 +141,7 @@ class TestSdistNormalization(unittest.TestCase):
         return buffer.getvalue()
 
     def test_normalization_is_deterministic_and_scrubs_metadata(self) -> None:
+        """Test normalization is deterministic and scrubs metadata."""
         epoch = 1700000000
         once = release_build.normalize_sdist_bytes(self._synthetic_sdist(), epoch)
         twice = release_build.normalize_sdist_bytes(once, epoch)
@@ -154,10 +161,14 @@ class TestSdistNormalization(unittest.TestCase):
 
 
 class TestReleaseSurface(unittest.TestCase):
+    """Test release surface."""
+
     def test_py_typed_marker_present(self) -> None:
+        """Test py typed marker present."""
         self.assertTrue((REPO_ROOT / "model_protocol_lab" / "py.typed").is_file())
 
     def test_release_workflow_is_tag_gated_and_token_free(self) -> None:
+        """Test release workflow is tag gated and token free."""
         workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         self.assertIn("tags:", workflow)
         self.assertIn("gh-action-pypi-publish", workflow)
@@ -167,6 +178,7 @@ class TestReleaseSurface(unittest.TestCase):
         self.assertNotIn("password:", workflow)
 
     def test_metadata_story_is_consistent(self) -> None:
+        """Test metadata story is consistent."""
         pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn("Development Status :: 4 - Beta", pyproject)
         self.assertNotIn("Pre-Alpha", pyproject)

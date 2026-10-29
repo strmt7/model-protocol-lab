@@ -71,6 +71,7 @@ def _entry(name, specs):
 
 
 def _frontier(entries, max_new_tokens, native_decision, native_winner):
+    """Frontier."""
     return budget_frontier(
         entries,
         boundary=BOUNDARY,
@@ -81,7 +82,10 @@ def _frontier(entries, max_new_tokens, native_decision, native_winner):
 
 
 class TestFlipAttributionDerivation(unittest.TestCase):
+    """Test flip attribution derivation."""
+
     def test_single_span_two_crossings(self):
+        """Test single span two crossings."""
         frontier = _frontier(
             [
                 _entry("A", {"f0": 3, "f1": 7}),
@@ -106,6 +110,7 @@ class TestFlipAttributionDerivation(unittest.TestCase):
         )
 
     def test_single_span_multiple_crossings(self):
+        """Test single span multiple crossings."""
         # flip_ranges is always [] or a single prefix span [[1, K]]: the
         # full-passer set only grows with the budget, so once the native
         # decision is reached it can never be left again.
@@ -134,6 +139,7 @@ class TestFlipAttributionDerivation(unittest.TestCase):
         )
 
     def test_cold_start_span_has_empty_crossings(self):
+        """Test cold start span has empty crossings."""
         # The decision already differs at budget 1; the only mark (6) lies
         # above the flip span, so the span brackets no pass-status change.
         frontier = _frontier(
@@ -152,6 +158,7 @@ class TestFlipAttributionDerivation(unittest.TestCase):
         )
 
     def test_tied_marks_sorted_by_candidate_then_fixture(self):
+        """Test tied marks sorted by candidate then fixture."""
         frontier = _frontier(
             [
                 _entry("A", {"f0": 4, "f1": 4}),
@@ -169,6 +176,7 @@ class TestFlipAttributionDerivation(unittest.TestCase):
         )
 
     def test_crossings_sorted_across_candidates(self):
+        """Test crossings sorted across candidates."""
         # B's mark (3) precedes A's (5): without the explicit sort the
         # candidate-iteration order (A before B) would win.
         frontier = _frontier(
@@ -188,6 +196,7 @@ class TestFlipAttributionDerivation(unittest.TestCase):
         )
 
     def test_no_flips_empty_attribution(self):
+        """Test no flips empty attribution."""
         frontier = _frontier(
             [
                 _entry("A", {"f0": 1}),
@@ -201,6 +210,7 @@ class TestFlipAttributionDerivation(unittest.TestCase):
         self.assertEqual(frontier["flip_attribution"], [])
 
     def test_never_passing_observations_excluded(self):
+        """Test never passing observations excluded."""
         frontier = _frontier(
             [
                 _entry("A", {"f0": 3, "f1": None}),
@@ -215,6 +225,7 @@ class TestFlipAttributionDerivation(unittest.TestCase):
                 self.assertIsNotNone(crossing["min_budget"])
 
     def test_marks_outside_all_spans_attributed_nowhere(self):
+        """Test marks outside all spans attributed nowhere."""
         # A/f1 passes at 12, after the last flip span ends: it must not
         # appear in any span's crossings.
         frontier = _frontier(
@@ -259,7 +270,10 @@ def _oracle_attribution(frontier):
 
 
 class TestFlipAttributionOracle(unittest.TestCase):
+    """Test flip attribution oracle."""
+
     def test_agrees_with_oracle_on_randomized_inputs(self):
+        """Test agrees with oracle on randomized inputs."""
         rng = random.Random(20261017)  # noqa: S311 -- deterministic test seeding
         decisions = [
             "compatible_on_fixture_set",
@@ -294,6 +308,7 @@ class TestFlipAttributionOracle(unittest.TestCase):
                 self.assertEqual(frontier["flip_attribution"], _oracle_attribution(frontier))
 
     def test_crossings_cover_exactly_the_in_span_marks(self):
+        """Test crossings cover exactly the in span marks."""
         # Every recorded min_budget inside a span appears exactly once in
         # that span's crossings, and no crossing lies outside its span.
         frontier = _frontier(
@@ -314,6 +329,7 @@ class TestFlipAttributionOracle(unittest.TestCase):
                 self.assertTrue(lo <= crossing["min_budget"] <= hi)
 
     def test_flip_ranges_is_always_a_single_prefix_span(self):
+        """Test flip ranges is always a single prefix span."""
         # Theorem: the per-budget full-passer set only grows with the
         # budget, so once the native decision is reached it can never be
         # left again. Hence flip_ranges is [] or [[1, K]] with K < max.
@@ -361,12 +377,16 @@ class TestFlipAttributionOracle(unittest.TestCase):
 
 
 class TestFlipAttributionHtml(unittest.TestCase):
+    """Test flip attribution html."""
+
     @staticmethod
     def _section(frontier):
+        """Section."""
         return _frontier_section({"budget_frontier": frontier})
 
     @staticmethod
     def _flipping_frontier():
+        """Flipping frontier."""
         return _frontier(
             [
                 _entry("A", {"f0": 3, "f1": 12}),
@@ -378,12 +398,14 @@ class TestFlipAttributionHtml(unittest.TestCase):
         )
 
     def test_attribution_rendered_per_span(self):
+        """Test attribution rendered per span."""
         html = self._section(self._flipping_frontier())
         self.assertIn("pass-status changes inside this span", html)
         self.assertIn("<code>A</code>/<code>f0</code> passes at budget 3", html)
         self.assertIn("<code>B</code>/<code>f1</code> passes at budget 9", html)
 
     def test_empty_crossings_wording(self):
+        """Test empty crossings wording."""
         frontier = _frontier(
             [
                 _entry("A", {"f0": 6}),
@@ -397,6 +419,7 @@ class TestFlipAttributionHtml(unittest.TestCase):
         self.assertIn("no pass-status change inside this span", html)
 
     def test_hostile_names_escaped(self):
+        """Test hostile names escaped."""
         hostile_candidate = "<img src=x onerror=alert(1)>"
         hostile_fixture = 'f<0>"1'
         frontier = _frontier(
@@ -416,6 +439,7 @@ class TestFlipAttributionHtml(unittest.TestCase):
         self.assertIn("f&lt;0&gt;&quot;1", html)
 
     def test_missing_attribution_renders_plain_spans(self):
+        """Test missing attribution renders plain spans."""
         frontier = self._flipping_frontier()
         del frontier["flip_attribution"]
         html = self._section(frontier)
@@ -424,6 +448,7 @@ class TestFlipAttributionHtml(unittest.TestCase):
         self.assertNotIn("attribution", html)
 
     def test_malformed_attribution_tolerated(self):
+        """Test malformed attribution tolerated."""
         frontier = self._flipping_frontier()
         frontier["flip_attribution"] = [
             {"span": "bogus"},
@@ -441,6 +466,7 @@ class TestFlipAttributionHtml(unittest.TestCase):
         self.assertIn("<code>B</code>/<code>None</code> passes at budget None", html)
 
     def test_robust_frontier_has_no_attribution_list(self):
+        """Test robust frontier has no attribution list."""
         frontier = _frontier(
             [
                 _entry("A", {"f0": 1}),
@@ -455,6 +481,7 @@ class TestFlipAttributionHtml(unittest.TestCase):
         self.assertNotIn("attribution", html)
 
     def test_rendering_deterministic(self):
+        """Test rendering deterministic."""
         frontier = self._flipping_frontier()
         self.assertEqual(self._section(frontier), self._section(frontier))
 

@@ -89,11 +89,15 @@ _LING_EXPECTED = (
 
 
 class LingRenderTests(unittest.TestCase):
+    """Ling render tests."""
+
     def test_ling_renders_byte_exact(self) -> None:
+        """Test ling renders byte exact."""
         fmt = CATALOG["ling"]
         self.assertEqual(fmt.render(_MESSAGES), _LING_EXPECTED)
 
     def test_ling_fields_match_catalog_entry(self) -> None:
+        """Test ling fields match catalog entry."""
         fmt = CATALOG["ling"]
         self.assertEqual(fmt.bos, _LING_BOS)
         self.assertEqual(fmt.user_prefix, _LING_USER_PREFIX)
@@ -105,6 +109,7 @@ class LingRenderTests(unittest.TestCase):
         self.assertFalse(fmt.repeat_bos)
 
     def test_ling_system_block_documented_not_modeled(self) -> None:
+        """Test ling system block documented not modeled."""
         # The real template ALWAYS emits a system block (jinja lines 19,
         # 35-45); the lab's Format only renders user/assistant turns, so the
         # block is a documented constant (pinned byte-exact here), not a
@@ -126,6 +131,7 @@ class LingRenderTests(unittest.TestCase):
         self.assertNotIn("<role>SYSTEM</role>", rendered)
 
     def test_ling_eos_caveat_documented(self) -> None:
+        """Test ling eos caveat documented."""
         # The official tokenizer_config.json eos_token field is
         # <|role_end|> -- NOT <|endoftext|> (that token is the pad_token and
         # a special added token); the catalog documents this and asserts no
@@ -136,6 +142,7 @@ class LingRenderTests(unittest.TestCase):
         self.assertNotIn("<|endoftext|>", fmt.turn_end + (fmt.open_suffix or ""))
 
     def test_ling_base_is_thinking_on_default(self) -> None:
+        """Test ling base is thinking on default."""
         # The template defaults thinking_option to 'on' when
         # enable_thinking/thinking_option are unset (jinja lines 5-13), so
         # the base entry's generation tail is the bare "\n<think>" suffix
@@ -152,7 +159,10 @@ class LingRenderTests(unittest.TestCase):
 
 
 class LingThinkingOffTests(unittest.TestCase):
+    """Ling thinking off tests."""
+
     def test_ling_thinking_off_mutation_pin(self) -> None:
+        """Test ling thinking off mutation pin."""
         variants = {variant.name: variant for variant in candidates("ling", mutate=True)}
         self.assertIn("ling/thinking-off", variants)
         off = variants["ling/thinking-off"]
@@ -171,12 +181,15 @@ class LingThinkingOffTests(unittest.TestCase):
         )
 
     def test_ling_thinking_off_dedup_no_collision(self) -> None:
+        """Test ling thinking off dedup no collision."""
+
         # The thinking-off open_suffix must be genuinely new -- i.e. its
         # local_repairs dedup key must differ from every key already
         # present, or candidates() would silently drop it. This mirrors the
         # "cannot collide with local_repairs' dedup keys" note in
         # catalog.candidates().
         def _key(fmt: Format) -> tuple[object, ...]:
+            """Key."""
             return (
                 fmt.bos,
                 fmt.user_prefix,
@@ -210,7 +223,10 @@ class LingThinkingOffTests(unittest.TestCase):
 
 
 class LingDiffTests(unittest.TestCase):
+    """Ling diff tests."""
+
     def test_ling_differs_from_every_other_family(self) -> None:
+        """Test ling differs from every other family."""
         # ling's frames share no opener/terminator literals with any other
         # catalog family; on the same messages the full render must be
         # byte-different from every other family's render (dynamic count).
@@ -221,6 +237,7 @@ class LingDiffTests(unittest.TestCase):
         self.assertEqual(collisions, [])
 
     def test_ling_vs_lfm25_shares_bos_only(self) -> None:
+        """Test ling vs lfm25 shares bos only."""
         # lfm25 is the only other family with a <|startoftext|> BOS; its
         # ChatML frames differ everywhere else (user/assistant prefixes,
         # turn ends, generation tail).
@@ -238,7 +255,10 @@ class LingDiffTests(unittest.TestCase):
 
 
 class ReadmeLingTests(unittest.TestCase):
+    """Readme ling tests."""
+
     def test_readme_names_ling(self) -> None:
+        """Test readme names ling."""
         # The README's family list must name the new family (the N-family
         # count pin lives in tests/test_cycle10_families.py and
         # tests/test_cycle11_families.py and enforces 23 -> 24).

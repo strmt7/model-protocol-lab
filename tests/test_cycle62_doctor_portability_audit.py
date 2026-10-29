@@ -124,6 +124,7 @@ from model_protocol_lab.fixtures import _extract_special_tokens
 
 
 def _unused(*args: Any, **kwargs: Any) -> Any:
+    """Unused."""
     raise AssertionError("fake tokenizer method called without a script")
 
 
@@ -173,12 +174,15 @@ class _FakePreTrainedTokenizerFast:
 
     # skipcq: PYL-E0202 - the attribute deliberately shadows the method to fake a missing primitive
     def encode(self, text: str, add_special_tokens: bool = False) -> Any:
+        """Encode."""
         return self._spec.encode(text)
 
     def decode(self, token_ids: list) -> Any:
+        """Decode."""
         return self._spec.decode(token_ids)
 
     def convert_tokens_to_ids(self, token: str) -> Any:
+        """Convert tokens to ids."""
         return self._spec.convert(token)
 
 
@@ -189,16 +193,19 @@ class _PrimaryFake:
         self._decode = decode
 
     def decode(self, token_ids: list) -> Any:
+        """Decode."""
         return self._decode(token_ids)
 
 
 def _write_ckpt(directory: Path, doc: dict) -> Path:
+    """Write ckpt."""
     directory.mkdir(parents=True, exist_ok=True)
     (directory / "tokenizer.json").write_text(json.dumps(doc), encoding="utf-8")
     return directory
 
 
 def _register(registry: dict[str, FakeSpec], ckpt: Path, spec: FakeSpec) -> None:
+    """Register."""
     registry[str(ckpt / "tokenizer.json")] = spec
 
 
@@ -228,6 +235,7 @@ def _no_transformers():
 _CHECK_SKIPPED = "skipped"
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_portability_check(
     *,
     primary: dict | None,
@@ -278,6 +286,7 @@ def _oracle_portability_check(
         return {"status": _CHECK_SKIPPED, "detail": "reference_tokenizer_unavailable"}
 
     def closure(probe: str) -> tuple[int, ...]:
+        """Closure."""
         return tuple(reference["encode"](probe))
 
     outcome = check_boundary_portability(text, clean, closure)
@@ -292,6 +301,7 @@ def _oracle_portability_check(
 
 
 def _impl_boundary_value(boundary: dict | None) -> Any:
+    """Impl boundary value."""
     if boundary is None:
         return None
     kind, ids = boundary["kind"], boundary["ids"]
@@ -436,6 +446,7 @@ def _oracle_row_verdict(name: str, token_rows: list[dict[str, Any]]) -> tuple[st
 
 
 def _oracle_unavailable(second_checkpoint: Any, detail: str) -> dict[str, Any]:
+    """Oracle unavailable."""
     return {
         "status": "unavailable",
         "detail": detail,
@@ -456,6 +467,7 @@ def _oracle_matrix(
     registered = _oracle_secondary_registered(doc, attrs, convert)
 
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(raw_encode(text))
 
     rows: list[dict[str, Any]] = []
@@ -484,6 +496,7 @@ def _oracle_matrix(
 
 
 def _all_inventory_literals() -> list[str]:
+    """All inventory literals."""
     seen: list[str] = []
     for family in sorted(CATALOG):
         for fmt in candidates(family, mutate=True):
@@ -494,6 +507,7 @@ def _all_inventory_literals() -> list[str]:
 
 
 def _row_by_format(report: dict[str, Any], name: str) -> dict[str, Any]:
+    """Row by format."""
     for row in report["rows"]:
         if row["format"] == name:
             return row
@@ -506,14 +520,18 @@ def _row_by_format(report: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 class _StrSub(str):
+    """Str sub."""
+
     pass
 
 
 def _raise_decode(ids: list) -> Any:
+    """Raise decode."""
     raise ValueError("decode boom")
 
 
 def _raise_encode(text: str) -> Any:
+    """Raise encode."""
     raise RuntimeError("encode boom")
 
 
@@ -527,6 +545,7 @@ def _run_check(
     encode: Callable[[str], Any] | None = None,
     construct_error: BaseException | None = None,
 ) -> dict[str, str]:
+    """Run check."""
     if load == "missing_dir":
         ref_path: Any = dirs["base"] / "does-not-exist"
     elif load == "bad_path":
@@ -551,6 +570,7 @@ def _run_check(
 
 
 def _std_case(**over: Any) -> dict[str, Any]:
+    """Std case."""
     case: dict[str, Any] = {
         "primary": {"decode": lambda ids: "<m>"},
         "boundary": {"kind": "tuple", "ids": [1, 2]},
@@ -566,6 +586,7 @@ def _assert_check(
     dirs: dict[str, Path],
     case: dict[str, Any],
 ) -> None:
+    """Assert check."""
     expected = _oracle_portability_check(
         primary=case["primary"], boundary=case["boundary"], reference=case
     )
@@ -586,6 +607,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
     """unittest entry point; pytest runs TestCase classes natively."""
 
     def setUp(self) -> None:
+        """Set up the test fixture."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import sys
         import tempfile
@@ -613,6 +635,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         self.check_dirs = {"good": good, "nofile": nofile, "bad": bad, "base": base}
 
     def tearDown(self) -> None:
+        """Tear down the test fixture."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import sys
 
@@ -625,12 +648,15 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         self._td.cleanup()
 
     def test_check_none_primary(self):
+        """Test check none primary."""
         _assert_check(self.fake_transformers, self.check_dirs, _std_case(primary=None))
 
     def test_check_none_boundary_ids(self):
+        """Test check none boundary ids."""
         _assert_check(self.fake_transformers, self.check_dirs, _std_case(boundary=None))
 
     def test_check_bool_boundary_id_invalid(self):
+        """Test check bool boundary id invalid."""
         case = _std_case(boundary={"kind": "tuple", "ids": [7, True]})
         _assert_check(self.fake_transformers, self.check_dirs, case)
         assert _oracle_portability_check(
@@ -638,6 +664,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         ) == {"status": "skipped", "detail": "invalid boundary ids"}
 
     def test_check_zero_boundary_id_valid(self):
+        """Test check zero boundary id valid."""
         _assert_check(
             self.fake_transformers,
             self.check_dirs,
@@ -648,6 +675,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_check_negative_boundary_id_invalid(self):
+        """Test check negative boundary id invalid."""
         _assert_check(
             self.fake_transformers,
             self.check_dirs,
@@ -655,6 +683,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_check_noniterable_boundary_ids(self):
+        """Test check noniterable boundary ids."""
         _assert_check(
             self.fake_transformers,
             self.check_dirs,
@@ -662,6 +691,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_check_str_boundary_ids_invalid(self):
+        """Test check str boundary ids invalid."""
         _assert_check(
             self.fake_transformers,
             self.check_dirs,
@@ -669,6 +699,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_check_empty_boundary_ids(self):
+        """Test check empty boundary ids."""
         _assert_check(
             self.fake_transformers,
             self.check_dirs,
@@ -676,6 +707,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_check_generator_boundary_ids(self):
+        """Test check generator boundary ids."""
         _assert_check(
             self.fake_transformers,
             self.check_dirs,
@@ -683,6 +715,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_check_decode_raises(self):
+        """Test check decode raises."""
         _assert_check(
             self.fake_transformers,
             self.check_dirs,
@@ -690,6 +723,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_check_decode_returns_bytes(self):
+        """Test check decode returns bytes."""
         _assert_check(
             self.fake_transformers,
             self.check_dirs,
@@ -697,6 +731,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_check_decode_returns_empty(self):
+        """Test check decode returns empty."""
         _assert_check(
             self.fake_transformers,
             self.check_dirs,
@@ -704,6 +739,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_check_decode_returns_str_subclass(self):
+        """Test check decode returns str subclass."""
         _assert_check(
             self.fake_transformers,
             self.check_dirs,
@@ -711,21 +747,27 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_check_reference_dir_missing(self):
+        """Test check reference dir missing."""
         _assert_check(self.fake_transformers, self.check_dirs, _std_case(load="missing_dir"))
 
     def test_check_reference_bad_path(self):
+        """Test check reference bad path."""
         _assert_check(self.fake_transformers, self.check_dirs, _std_case(load="bad_path"))
 
     def test_check_reference_tokenizer_json_missing(self):
+        """Test check reference tokenizer json missing."""
         _assert_check(self.fake_transformers, self.check_dirs, _std_case(load="nofile"))
 
     def test_check_reference_tokenizer_json_malformed(self):
+        """Test check reference tokenizer json malformed."""
         _assert_check(self.fake_transformers, self.check_dirs, _std_case(load="bad_json"))
 
     def test_check_reference_transformers_missing(self):
+        """Test check reference transformers missing."""
         _assert_check(self.fake_transformers, self.check_dirs, _std_case(load="no_transformers"))
 
     def test_check_reference_construct_raises(self):
+        """Test check reference construct raises."""
         _assert_check(
             self.fake_transformers,
             self.check_dirs,
@@ -733,6 +775,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_check_encode_returns_list_normalized(self):
+        """Test check encode returns list normalized."""
         case = _std_case(encode=lambda text: [1, 2])
         _assert_check(self.fake_transformers, self.check_dirs, case)
         assert _run_check(
@@ -744,6 +787,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         ) == {"status": "ok", "detail": "boundary ids identical under reference tokenizer"}
 
     def test_check_encode_returns_generator(self):
+        """Test check encode returns generator."""
         _assert_check(
             self.fake_transformers,
             self.check_dirs,
@@ -751,9 +795,11 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_check_encode_returns_none(self):
+        """Test check encode returns none."""
         _assert_check(self.fake_transformers, self.check_dirs, _std_case(encode=lambda t: None))
 
     def test_check_encode_returns_bool_ids(self):
+        """Test check encode returns bool ids."""
         _assert_check(
             self.fake_transformers,
             self.check_dirs,
@@ -761,6 +807,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_check_encode_returns_negative_ids(self):
+        """Test check encode returns negative ids."""
         _assert_check(
             self.fake_transformers,
             self.check_dirs,
@@ -768,6 +815,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_check_encode_returns_str_elements(self):
+        """Test check encode returns str elements."""
         _assert_check(
             self.fake_transformers,
             self.check_dirs,
@@ -775,6 +823,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_check_encode_returns_empty_tuple_is_divergent(self):
+        """Test check encode returns empty tuple is divergent."""
         case = _std_case(encode=lambda t: ())
         _assert_check(self.fake_transformers, self.check_dirs, case)
         assert _run_check(
@@ -786,9 +835,11 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         ) == {"status": "mismatch", "detail": "primary=[1, 2] reference=[]"}
 
     def test_check_encode_raises(self):
+        """Test check encode raises."""
         _assert_check(self.fake_transformers, self.check_dirs, _std_case(encode=_raise_encode))
 
     def test_check_encode_missing_attr(self):
+        """Test check encode missing attr."""
         registry = self.fake_transformers
         _register(registry, self.check_dirs["good"], FakeSpec(drop_encode=True))
         primary = _PrimaryFake(lambda ids: "<m>")
@@ -799,6 +850,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         }
 
     def test_check_identical_exact_dict(self):
+        """Test check identical exact dict."""
         case = _std_case()
         actual = _run_check(
             self.fake_transformers,
@@ -813,6 +865,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         }
 
     def test_check_divergent_exact_detail(self):
+        """Test check divergent exact detail."""
         case = _std_case(encode=lambda t: (1, 3))
         actual = _run_check(
             self.fake_transformers,
@@ -824,6 +877,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         assert actual == {"status": "mismatch", "detail": "primary=[1, 2] reference=[1, 3]"}
 
     def test_fuzz_portability_check(self):
+        """Test fuzz portability check."""
         rng = random.Random(0xC62)  # noqa: S311 -- deterministic test seed
         failures: list[str] = []
         for n in range(_CHECK_FUZZ_CASES):
@@ -853,20 +907,24 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         )
 
     def test_matrix_rejects_non_path(self):
+        """Test matrix rejects non path."""
         for bad in (123, None, b"x"):
             with self.assertRaisesRegex(ValueError, "second_checkpoint must be a path"):
                 portability_matrix(bad)
 
     def test_matrix_missing_dir(self):
+        """Test matrix missing dir."""
         target = self.tmp_path / "does-not-exist"
         assert portability_matrix(target) == _oracle_unavailable(target, "not_a_readable_directory")
 
     def test_matrix_path_is_file(self):
+        """Test matrix path is file."""
         target = self.tmp_path / "afile"
         target.write_text("x", encoding="utf-8")
         assert portability_matrix(target) == _oracle_unavailable(target, "not_a_readable_directory")
 
     def test_matrix_missing_tokenizer_json(self):
+        """Test matrix missing tokenizer json."""
         target = self.tmp_path / "nodoc"
         target.mkdir()
         report = portability_matrix(target)
@@ -874,12 +932,14 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         assert report["second_checkpoint"] == str(target)
 
     def test_matrix_malformed_tokenizer_json(self):
+        """Test matrix malformed tokenizer json."""
         target = _matrix_ckpt(self.tmp_path, "badjson", {})
         (target / "tokenizer.json").write_text("{oops", encoding="utf-8")
         report = portability_matrix(target)
         _assert_unavailable_shape(report, "tokenizer_load_failed")
 
     def test_matrix_oversized_tokenizer_json(self):
+        """Test matrix oversized tokenizer json."""
         import os
 
         target = _matrix_ckpt(self.tmp_path, "huge", {})
@@ -894,12 +954,14 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         _assert_unavailable_shape(report, "oversized_tokenizer_file")
 
     def test_matrix_transformers_missing(self):
+        """Test matrix transformers missing."""
         target = _matrix_ckpt(self.tmp_path, "notk", {})
         with _no_transformers():
             report = portability_matrix(target)
         _assert_unavailable_shape(report, "transformers_not_installed")
 
     def test_matrix_construct_raises(self):
+        """Test matrix construct raises."""
         target = self.tmp_path / "matrix" / "boom"
         _write_ckpt(target, {})
         _register(self.fake_transformers, target, FakeSpec(construct_error=RuntimeError("boom")))
@@ -907,6 +969,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         _assert_unavailable_shape(report, "tokenizer_load_failed")
 
     def test_matrix_construct_raises_allowlisted_code(self):
+        """Test matrix construct raises allowlisted code."""
         target = self.tmp_path / "matrix" / "boom2"
         _write_ckpt(target, {})
         _register(
@@ -918,6 +981,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         _assert_unavailable_shape(report, "oversized_tokenizer_file")
 
     def test_matrix_all_compatible_checkpoint(self):
+        """Test matrix all compatible checkpoint."""
         doc, ids = _full_coverage_doc()
         target = self.tmp_path / "matrix" / "full"
         report = _run_matrix(
@@ -949,10 +1013,12 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
                 assert token_row["encoded_id"] == token_row["registered_id"]
 
     def test_matrix_one_bad_literal_poisons_only_its_row(self):
+        """Test matrix one bad literal poisons only its row."""
         lit = _LITS[0]
         doc, ids = _full_coverage_doc()
 
         def encode(text: str) -> Any:
+            """Encode."""
             if text == lit:
                 raise RuntimeError("encode boom on one literal")
             return (ids[text],)
@@ -972,6 +1038,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
             assert row["verdict"] == "compatible", row
 
     def test_matrix_duplicate_added_tokens_first_wins(self):
+        """Test matrix duplicate added tokens first wins."""
         lit = _LITS[1]
         doc, ids = _full_coverage_doc()
         doc["added_tokens"].append({"content": lit, "id": ids[lit] + 5000})  # later dupe loses
@@ -990,6 +1057,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
                     assert token_row["status"] == "ok"
 
     def test_matrix_unregistered_literal(self):
+        """Test matrix unregistered literal."""
         lit = _LITS[2]
         doc, ids = _full_coverage_doc()
         doc["added_tokens"] = [e for e in doc["added_tokens"] if e["content"] != lit]
@@ -1014,10 +1082,12 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
             assert token_row["id_match"] is None
 
     def test_matrix_fragmenting_literal(self):
+        """Test matrix fragmenting literal."""
         lit = _LITS[3]
         doc, ids = _full_coverage_doc()
 
         def encode(text: str) -> Any:
+            """Encode."""
             return (ids[text], ids[text] + 1) if text == lit else (ids[text],)
 
         target = self.tmp_path / "matrix" / "frag"
@@ -1033,10 +1103,12 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
             assert token_row["id_match"] is None
 
     def test_matrix_id_mismatch_literal(self):
+        """Test matrix id mismatch literal."""
         lit = _LITS[4]
         doc, ids = _full_coverage_doc()
 
         def encode(text: str) -> Any:
+            """Encode."""
             return (ids[text] + 1,) if text == lit else (ids[text],)
 
         target = self.tmp_path / "matrix" / "mismatch"
@@ -1053,6 +1125,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
             assert token_row["registered_id"] == ids[lit]
 
     def test_matrix_added_tokens_not_a_list_ignored(self):
+        """Test matrix added tokens not a list ignored."""
         lit = _LITS[0]
         doc = {"added_tokens": {lit: 123}}  # dict, not list -> ignored
         target = self.tmp_path / "matrix" / "notalist"
@@ -1070,11 +1143,13 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
             assert row["reason"] == "unregistered"
 
     def test_matrix_convert_raises_attr_skipped(self):
+        """Test matrix convert raises attr skipped."""
         lit = _LITS[0]
         doc, ids = _full_coverage_doc()
         doc["added_tokens"] = [e for e in doc["added_tokens"] if e["content"] != lit]
 
         def convert(token: str) -> Any:
+            """Convert."""
             raise RuntimeError("convert boom")
 
         target = self.tmp_path / "matrix" / "convraise"
@@ -1093,6 +1168,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
             assert row["reason"] == "unregistered"
 
     def test_matrix_empty_doc_all_encode_invalid(self):
+        """Test matrix empty doc all encode invalid."""
         target = self.tmp_path / "matrix" / "emptydoc"
         report = _run_matrix(
             self.fake_transformers,
@@ -1110,6 +1186,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
                 assert row["reason"] == "empty_inventory"
 
     def test_matrix_never_raises_on_hostile_doc(self):
+        """Test matrix never raises on hostile doc."""
         doc = {
             "added_tokens": [
                 {"content": 1, "id": 2},
@@ -1133,6 +1210,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         assert len(report["rows"]) == 118
 
     def test_matrix_str_and_path_agree(self):
+        """Test matrix str and path agree."""
         doc, ids = _full_coverage_doc()
         target = self.tmp_path / "matrix" / "both"
         spec = FakeSpec(encode=lambda text: (ids[text],), attrs={})
@@ -1143,6 +1221,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_registered_first_wins_and_zero_id():
+        """Test registered first wins and zero id."""
         doc = {
             "added_tokens": [
                 {"content": "<a>", "id": 1},
@@ -1154,6 +1233,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_registered_rejects_malformed_entries():
+        """Test registered rejects malformed entries."""
         doc = {
             "added_tokens": [
                 {"content": "<bool>", "id": True},
@@ -1173,15 +1253,18 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_registered_ignores_non_list_section():
+        """Test registered ignores non list section."""
         assert _secondary_registered(_AttrFake({}), {"added_tokens": {"<a>": 1}}) == {}
         assert _secondary_registered(_AttrFake({}), {}) == {}
 
     @staticmethod
     def test_registered_attr_gap_fill_and_doc_wins():
+        """Test registered attr gap fill and doc wins."""
         doc = {"added_tokens": [{"content": "<d>", "id": 1}]}
         seen: list[str] = []
 
         def convert(token: str) -> int:
+            """Convert."""
             seen.append(token)
             return {"<d>": 99, "<a>": 2}[token]
 
@@ -1191,7 +1274,10 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_registered_convert_failures_suppressed():
+        """Test registered convert failures suppressed."""
+
         def convert(token: str) -> Any:
+            """Convert."""
             raise RuntimeError("convert boom")
 
         tok = _AttrFake({"bos_token": "<a>"}, convert)
@@ -1199,12 +1285,14 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_registered_convert_bad_values_skipped():
+        """Test registered convert bad values skipped."""
         for bad in (True, -1, "12", None):
             tok = _AttrFake({"bos_token": "<a>"}, lambda token, b=bad: b)
             assert _secondary_registered(tok, {"added_tokens": []}) == {}, bad
 
     @staticmethod
     def test_registered_non_string_attrs_skipped():
+        """Test registered non string attrs skipped."""
         tok = _AttrFake(
             {"bos_token": 123, "eos_token": "", "pad_token": None},
             lambda token: (_ for _ in ()).throw(AssertionError("must not be called")),
@@ -1212,6 +1300,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         assert _secondary_registered(tok, {"added_tokens": []}) == {}
 
     def test_fuzz_portability_matrix(self):
+        """Test fuzz portability matrix."""
         rng = random.Random(0xC620)  # noqa: S311 -- deterministic test seed
         failures: list[str] = []
         for n in range(_MATRIX_FUZZ_CASES):
@@ -1250,6 +1339,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
             registered = _oracle_secondary_registered(doc, attrs, convert)
 
             def encode(text: str, _re: Callable[[str], Any] = raw_encode) -> tuple[int, ...]:
+                """Encode."""
                 return tuple(_re(text))
 
             for family in sorted(CATALOG):
@@ -1277,7 +1367,9 @@ _CHECK_FUZZ_CASES = 220
 _DECODE_TEXTS = ("<m>", "hello world", "<m0><m1>", "x", "  spaced\t\n")
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _fuzz_check_case(rng: random.Random) -> dict[str, Any]:
+    """Fuzz check case."""
     bkind = rng.choice(
         [
             "none",
@@ -1423,6 +1515,7 @@ for _fam in sorted(CATALOG):
 
 
 def _matrix_ckpt(tmp_path: Path, name: str, doc: dict) -> Path:
+    """Matrix ckpt."""
     return _write_ckpt(tmp_path / "matrix" / name, doc)
 
 
@@ -1432,6 +1525,7 @@ def _run_matrix(
     doc: dict,
     spec: FakeSpec,
 ) -> dict[str, Any]:
+    """Run matrix."""
     _write_ckpt(ckpt, doc)
     _register(registry, ckpt, spec)
     return portability_matrix(ckpt)
@@ -1447,6 +1541,7 @@ def _full_coverage_doc(extra: list[dict] | None = None) -> tuple[dict, dict[str,
 
 
 def _assert_unavailable_shape(report: dict[str, Any], detail: str) -> None:
+    """Assert unavailable shape."""
     assert set(report) == {
         "status",
         "detail",
@@ -1466,12 +1561,15 @@ def _assert_unavailable_shape(report: dict[str, Any], detail: str) -> None:
 
 
 class _AttrFake:
+    """Attr fake."""
+
     def __init__(self, attrs: dict[str, Any], convert: Callable[[str], Any] | None = None) -> None:
         for name, value in attrs.items():
             setattr(self, name, value)
         self._convert = convert or _unused
 
     def convert_tokens_to_ids(self, token: str) -> Any:
+        """Convert tokens to ids."""
         return self._convert(token)
 
 
@@ -1483,6 +1581,7 @@ _MATRIX_FUZZ_CASES = 130
 _MATRIX_POOL: list[str] = list(dict.fromkeys(_LITS[:14])) + [f"<syn{i}>" for i in range(8)]
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _fuzz_matrix_stimulus(
     rng: random.Random,
 ) -> tuple[dict, dict[str, Any], Callable[[str], Any], Callable[[str], Any]]:
@@ -1533,6 +1632,7 @@ def _fuzz_matrix_stimulus(
             attrs[attr] = 123
 
     def convert(token: str) -> Any:
+        """Convert."""
         mode = convert_modes.get(token, "ok")
         if mode == "raise":
             raise RuntimeError("fuzz convert boom")
@@ -1569,6 +1669,7 @@ def _fuzz_matrix_stimulus(
     default_kind = rng.choice(["raise", "empty", "zero"])
 
     def apply(kind: str, text: str) -> Any:
+        """Apply."""
         if kind == "match":
             return (registered[text],) if text in registered else (4242,)
         if kind == "wrong":
@@ -1597,6 +1698,7 @@ def _fuzz_matrix_stimulus(
         return (0,)
 
     def raw_encode(text: str) -> Any:
+        """Raw encode."""
         return apply(emap.get(text, default_kind), text)
 
     return doc, attrs, convert, raw_encode

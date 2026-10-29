@@ -139,6 +139,7 @@ def oracle_first_boundary(tokens: tuple, stop: tuple):
 
 
 def oracle_valid_token_ids(value, *, nonempty: bool = False) -> bool:
+    """Oracle valid token ids."""
     return (
         type(value) is tuple
         and (not nonempty or bool(value))
@@ -147,6 +148,7 @@ def oracle_valid_token_ids(value, *, nonempty: bool = False) -> bool:
 
 
 def oracle_valid_generation(result, cap: int) -> bool:
+    """Oracle valid generation."""
     if type(result) is not Generation or not oracle_valid_token_ids(result.token_ids):
         return False
     if len(result.token_ids) > cap or type(result.reason) is not str:
@@ -163,6 +165,7 @@ def oracle_valid_generation(result, cap: int) -> bool:
 
 
 def oracle_request_seed(seed: int, case_id: str) -> int:
+    """Oracle request seed."""
     material = f"{seed}\0{case_id}".encode("utf-8", errors="surrogatepass")
     return int.from_bytes(sha256(material).digest()[:4], "big")
 
@@ -185,6 +188,8 @@ class Behavior:
 
 @dataclass(frozen=True)
 class Plan:
+    """Plan."""
+
     behaviors: dict = field(default_factory=dict)
     encode_mode: str = "ok"  # "ok" | "raise" | "invalid" | "empty"
     encode_sets_event: bool = False
@@ -208,6 +213,7 @@ class ScriptedBackend:
         self.generate_log: list = []
 
     def encode(self, text: str) -> tuple:
+        """Encode."""
         self.encode_log.append(text)
         if self.plan.encode_sets_event and self.event is not None:
             self.event.set()
@@ -221,6 +227,7 @@ class ScriptedBackend:
         return script_encode(text)
 
     def decode(self, token_ids: tuple) -> str:
+        """Decode."""
         self.decode_log.append(token_ids)
         if token_ids in self.plan.decode_sets_event and self.event is not None:
             self.event.set()
@@ -233,6 +240,7 @@ class ScriptedBackend:
     def generate(
         self, input_ids: tuple, *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate."""
         self.generate_log.append((input_ids, max_new_tokens, seed, cancel))
         behavior = self.plan.behaviors.get(input_ids)
         if behavior is None:
@@ -253,6 +261,7 @@ class ScriptedBackend:
 # ---------------------------------------------------------------------------
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_evaluate(plan, candidate, cases, *, boundary, max_new_tokens, seed, event):
     """Simulate ``evaluate`` from the docstring + triple-checked code reading.
 
@@ -276,6 +285,7 @@ def oracle_evaluate(plan, candidate, cases, *, boundary, max_new_tokens, seed, e
         btm=None,
         input_text="",
     ):
+        """Make."""
         return Observation(
             candidate=candidate.name,
             fixture=case.id,
@@ -292,6 +302,7 @@ def oracle_evaluate(plan, candidate, cases, *, boundary, max_new_tokens, seed, e
         )
 
     def abort(status, case, error=None):
+        """Abort."""
         records.append(make(status, case, (), (), "", None, None, error=error))
 
     report_status = None
@@ -598,6 +609,7 @@ def run_scenario(
 
 
 def make_format(**overrides):
+    """Make format."""
     params = {
         "name": "fmt",
         "bos": "<s>",
@@ -614,6 +626,7 @@ def make_format(**overrides):
 
 
 def make_fixture(fid, messages, expected, group="g"):
+    """Make fixture."""
     return Fixture(id=fid, messages=messages, expected=expected, group=group)
 
 
@@ -627,10 +640,12 @@ def msgs(*contents):
 
 
 def tid(text):
+    """Tid."""
     return script_encode(text)
 
 
 def pad_to(ids, cap):
+    """Pad to."""
     assert len(ids) <= cap
     return ids + tid("q") * (cap - len(ids))
 
@@ -641,9 +656,12 @@ def pad_to(ids, cap):
 
 
 class EvaluateAgainstOracle(unittest.TestCase):
+    """Evaluate against oracle."""
+
     BOUNDARY = (70, 71)  # decodes to "XY" via the merge table
 
     def test_clean_match_with_trailing_suffix(self):
+        """Test clean match with trailing suffix."""
         candidate = make_format()
         case = make_fixture("m1", msgs("hello"), "Paris")
         output = tid("Paris") + self.BOUNDARY + tid(" junk")
@@ -665,6 +683,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertTrue(report.aggregate_eligible)
 
     def test_exact_answer_mismatch(self):
+        """Test exact answer mismatch."""
         candidate = make_format()
         case = make_fixture("m2", msgs("hello"), "Paris")
         output = tid("London") + self.BOUNDARY
@@ -683,6 +702,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertTrue(obs.boundary_found)
 
     def test_boundary_absent_answer_matches(self):
+        """Test boundary absent answer matches."""
         candidate = make_format()
         case = make_fixture("m3", msgs("hello"), "Paris")
         output = tid("Paris")
@@ -702,6 +722,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertFalse(obs.boundary_text_match)
 
     def test_boundary_text_match_without_token_id_match(self):
+        """Test boundary text match without token id match."""
         # The documented false-negative mode: the boundary text is emitted
         # with a different tokenization than the configured IDs.
         candidate = make_format()
@@ -722,6 +743,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertTrue(obs.exact_match)
 
     def test_boundary_text_match_none_when_boundary_text_empty(self):
+        """Test boundary text match none when boundary text empty."""
         candidate = make_format()
         case = make_fixture("m5", msgs("hello"), "hi")
         output = pad_to(tid("hi"), 8)
@@ -737,6 +759,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertIsNone(report.observations[0].boundary_text_match)
 
     def test_boundary_text_match_none_when_boundary_undecodable(self):
+        """Test boundary text match none when boundary undecodable."""
         candidate = make_format()
         case = make_fixture("m6", msgs("hello"), "hi")
         output = pad_to(tid("hi"), 8)
@@ -752,6 +775,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertIsNone(report.observations[0].boundary_text_match)
 
     def test_error_with_allowlisted_code_passes_through(self):
+        """Test error with allowlisted code passes through."""
         candidate = make_format()
         case = make_fixture("e1", msgs("hello"), "Paris")
         output = tid("oops") + self.BOUNDARY
@@ -777,6 +801,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertFalse(report.aggregate_eligible)
 
     def test_error_with_arbitrary_text_is_sanitized(self):
+        """Test error with arbitrary text is sanitized."""
         candidate = make_format()
         case = make_fixture("e2", msgs("hello"), "Paris")
         output = tid("oops") + self.BOUNDARY
@@ -797,6 +822,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertNotIn("OOM", repr(report))
 
     def test_error_none_collapses_to_sanitized(self):
+        """Test error none collapses to sanitized."""
         candidate = make_format()
         case = make_fixture("e3", msgs("hello"), "Paris")
         plan = plan_for(candidate, [(case, Behavior("error", (), error=None))])
@@ -811,6 +837,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertEqual(report.observations[0].error, "backend_reported_error")
 
     def test_generate_raises_records_sanitized_failure(self):
+        """Test generate raises records sanitized failure."""
         candidate = make_format()
         case = make_fixture("g1", msgs("hello"), "Paris")
         plan = plan_for(candidate, [(case, Behavior("raise"))])
@@ -832,24 +859,31 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertEqual(backend.generate_log[0][1], 8)
 
     def test_invalid_generation_too_long(self):
+        """Test invalid generation too long."""
         self._check_invalid(Generation(tuple(range(9)), "limit"), 8)
 
     def test_invalid_generation_limit_short(self):
+        """Test invalid generation limit short."""
         self._check_invalid(Generation(tuple(range(7)), "limit"), 8)
 
     def test_invalid_generation_bad_reason(self):
+        """Test invalid generation bad reason."""
         self._check_invalid(Generation(tuple(range(8)), "done"), 8)
 
     def test_invalid_generation_error_field_on_limit(self):
+        """Test invalid generation error field on limit."""
         self._check_invalid(Generation(tuple(range(8)), "limit", error="x"), 8)
 
     def test_invalid_generation_not_a_generation(self):
+        """Test invalid generation not a generation."""
         self._check_invalid("not-a-generation", 8)
 
     def test_invalid_generation_negative_ids(self):
+        """Test invalid generation negative ids."""
         self._check_invalid(Generation((1, -5), "cancelled"), 8)
 
     def _check_invalid(self, payload, cap):
+        """Check invalid."""
         candidate = make_format()
         case = make_fixture("iv", msgs("hello"), "Paris")
         plan = plan_for(candidate, [(case, Behavior("invalid", invalid_payload=payload))])
@@ -866,6 +900,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertEqual(obs.error, "invalid_generation")
 
     def test_empty_output_on_cancelled_reason(self):
+        """Test empty output on cancelled reason."""
         candidate = make_format()
         case = make_fixture("c1", msgs("hello"), "Paris")
         plan = plan_for(candidate, [(case, Behavior("cancelled", ()))])
@@ -885,6 +920,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertEqual(obs.answer, "")
 
     def test_output_shorter_than_boundary(self):
+        """Test output shorter than boundary."""
         candidate = make_format()
         case = make_fixture("c2", msgs("hello"), "Paris")
         plan = plan_for(candidate, [(case, Behavior("cancelled", (1088,)))])
@@ -901,6 +937,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertFalse(obs.boundary_found)
 
     def test_generate_reports_cancelled_keeps_evidence(self):
+        """Test generate reports cancelled keeps evidence."""
         candidate = make_format()
         case = make_fixture("c3", msgs("hello"), "Paris")
         output = tid("partial") + self.BOUNDARY
@@ -921,6 +958,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertEqual(obs.raw_reason, "cancelled")
 
     def test_decode_raises(self):
+        """Test decode raises."""
         candidate = make_format()
         case = make_fixture("d1", msgs("hello"), "Paris")
         output = pad_to(tid("Paris") + self.BOUNDARY, 16)
@@ -943,6 +981,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertEqual(obs.output_ids, output)
 
     def test_decode_non_str(self):
+        """Test decode non str."""
         candidate = make_format()
         case = make_fixture("d2", msgs("hello"), "Paris")
         output = pad_to(tid("Paris") + self.BOUNDARY, 16)
@@ -962,6 +1001,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertEqual(report.observations[0].error, "decode_failed")
 
     def test_cancel_preset_aborts_run(self):
+        """Test cancel preset aborts run."""
         candidate = make_format()
         cases = (
             make_fixture("p1", msgs("one"), "Paris"),
@@ -990,6 +1030,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertFalse(report.aggregate_eligible)
 
     def test_cancel_during_encode(self):
+        """Test cancel during encode."""
         candidate = make_format()
         case = make_fixture("ce", msgs("hello"), "Paris")
         plan = plan_for(
@@ -1013,6 +1054,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertIsNone(obs.raw_reason)
 
     def test_cancel_between_render_and_encode(self):
+        """Test cancel between render and encode."""
         candidate = make_format()
         case = make_fixture("cr", msgs("hello"), "Paris")
         plan = plan_for(
@@ -1022,9 +1064,11 @@ class EvaluateAgainstOracle(unittest.TestCase):
         )
 
         def render_wrapper(event):
+            """Render wrapper."""
             real_render = Format.render
 
             def setting_render(self, messages):
+                """Setting render."""
                 event.set()
                 return real_render(self, messages)
 
@@ -1045,6 +1089,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertIsNone(obs.error)
 
     def test_cancel_during_generate(self):
+        """Test cancel during generate."""
         candidate = make_format()
         case = make_fixture("cg", msgs("hello"), "Paris")
         output = tid("Paris") + self.BOUNDARY
@@ -1068,6 +1113,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertEqual(obs.raw_reason, "limit")
 
     def test_cancel_between_fixtures_via_decode_hook(self):
+        """Test cancel between fixtures via decode hook."""
         candidate = make_format()
         c1 = make_fixture("k1", msgs("one"), "Paris")
         c2 = make_fixture("k2", msgs("two"), "London")
@@ -1094,6 +1140,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertFalse(report.aggregate_eligible)
 
     def test_render_failed(self):
+        """Test render failed."""
         candidate = make_format()
         # Messages that fail the renderer's alternation check.
         case = make_fixture("rf", (Message("assistant", "x"),), "Paris")
@@ -1113,6 +1160,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertEqual(backend.encode_log, [])
 
     def test_encode_failed(self):
+        """Test encode failed."""
         candidate = make_format()
         case = make_fixture("ef", msgs("hello"), "Paris")
         plan = plan_for(candidate, [(case, Behavior("raise"))], encode_mode="raise")
@@ -1129,6 +1177,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertEqual(obs.error, "encode_failed")
 
     def test_invalid_input_ids(self):
+        """Test invalid input ids."""
         candidate = make_format()
         case = make_fixture("ii", msgs("hello"), "Paris")
         plan = plan_for(candidate, [(case, Behavior("raise"))], encode_mode="invalid")
@@ -1146,6 +1195,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertEqual(obs.input_ids, ())
 
     def test_empty_input_ids_are_valid(self):
+        """Test empty input ids are valid."""
         candidate = make_format()
         case = make_fixture("ei", msgs("hello"), "Paris")
         output = tid("Paris") + self.BOUNDARY
@@ -1163,6 +1213,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertEqual(backend.generate_log[0][0], ())
 
     def test_request_seed_and_call_contract(self):
+        """Test request seed and call contract."""
         candidate = make_format()
         case = make_fixture("s1", msgs("hello"), "Paris")
         output = tid("Paris") + self.BOUNDARY
@@ -1185,6 +1236,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertEqual(report.observations[0].input_ids, tid(backend.encode_log[0]))
 
     def test_two_fixtures_mixed(self):
+        """Test two fixtures mixed."""
         candidate = make_format()
         c1 = make_fixture("t1", msgs("one"), "Paris")
         c2 = make_fixture("t2", msgs("two"), "London")
@@ -1210,6 +1262,7 @@ class EvaluateAgainstOracle(unittest.TestCase):
         self.assertTrue(report.aggregate_eligible)
 
     def test_repeat_bos_and_per_role_format(self):
+        """Test repeat bos and per role format."""
         candidate = make_format(
             bos="<s>",
             repeat_bos=True,
@@ -1242,6 +1295,8 @@ class EvaluateAgainstOracle(unittest.TestCase):
 
 
 class EvaluateDocstringContracts(unittest.TestCase):
+    """Evaluate docstring contracts."""
+
     BOUNDARY = (70, 71)
     FIXED_ERRORS = {
         "render_failed",
@@ -1254,6 +1309,7 @@ class EvaluateDocstringContracts(unittest.TestCase):
     } | set(ORACLE_ALLOWLIST)
 
     def test_exact_and_boundary_are_separate_no_composite_gate(self):
+        """Test exact and boundary are separate no composite gate."""
         # The docstring: "Exact match and boundary presence are separate."
         # Neither combination may flip a fixture's status away from completed.
         candidate = make_format()
@@ -1280,6 +1336,7 @@ class EvaluateDocstringContracts(unittest.TestCase):
         self.assertEqual((o2.status, o2.exact_match, o2.boundary_found), ("completed", False, True))
 
     def test_only_complete_reports_are_aggregate_eligible(self):
+        """Test only complete reports are aggregate eligible."""
         candidate = make_format()
         case = make_fixture("a1", msgs("hello"), "Paris")
         out = tid("Paris") + self.BOUNDARY
@@ -1316,6 +1373,7 @@ class EvaluateDocstringContracts(unittest.TestCase):
         self.assertFalse(failed.aggregate_eligible)
 
     def test_no_backend_exception_text_exported(self):
+        """Test no backend exception text exported."""
         candidate = make_format()
         c1 = make_fixture("x1", msgs("one"), "Paris")
         c2 = make_fixture("x2", msgs("two"), "Paris")
@@ -1342,6 +1400,7 @@ class EvaluateDocstringContracts(unittest.TestCase):
             self.assertNotIn("secret backend detail", text)
 
     def test_limit_result_has_exactly_the_requested_cap(self):
+        """Test limit result has exactly the requested cap."""
         candidate = make_format()
         case = make_fixture("l1", msgs("hello"), "Paris")
         plan = plan_for(
@@ -1359,6 +1418,7 @@ class EvaluateDocstringContracts(unittest.TestCase):
         self.assertEqual(report.observations[0].error, "invalid_generation")
 
     def test_suffix_tokens_remain_in_evidence(self):
+        """Test suffix tokens remain in evidence."""
         # The docstring: "Boundary IDs must be verified in context; suffix
         # tokens remain in evidence." Tokens after the boundary stay in
         # output_ids but out of the decoded answer.
@@ -1386,12 +1446,16 @@ class EvaluateDocstringContracts(unittest.TestCase):
 
 
 class EvaluateValidation(unittest.TestCase):
+    """Evaluate validation."""
+
     def setUp(self):
+        """Set up the test fixture."""
         self.candidate = make_format()
         self.case = make_fixture("v1", msgs("hello"), "Paris")
         self.backend = ScriptedBackend(Plan(), Event())
 
     def _raises(self, **overrides):
+        """Raises."""
         params = {
             "backend": self.backend,
             "candidate": self.candidate,
@@ -1403,39 +1467,47 @@ class EvaluateValidation(unittest.TestCase):
             evaluate(**params)
 
     def test_candidate_must_be_format(self):
+        """Test candidate must be format."""
         self._raises(candidate="not-a-format")
 
     def test_cases_must_be_nonempty_tuple_of_fixtures(self):
+        """Test cases must be nonempty tuple of fixtures."""
         self._raises(cases=())
         self._raises(cases=[self.case])
         self._raises(cases=(self.case, "nope"))
 
     def test_fixture_ids_must_be_unique(self):
+        """Test fixture ids must be unique."""
         dup = make_fixture("v1", msgs("other"), "x")
         self._raises(cases=(self.case, dup))
 
     def test_fixture_ids_unique_after_nfc_normalization(self):
+        """Test fixture ids unique after nfc normalization."""
         nfc = make_fixture("café", msgs("one"), "x")
         nfd = make_fixture("café", msgs("two"), "x")
         self.assertNotEqual(nfc.id, nfd.id)  # distinct code points...
         self._raises(cases=(nfc, nfd))  # ...but canonically equivalent
 
     def test_max_new_tokens_bounds(self):
+        """Test max new tokens bounds."""
         for bad in (0, 4097, -3, "64", True, 1.5, None):
             with self.subTest(bad=bad):
                 self._raises(max_new_tokens=bad)
 
     def test_boundary_must_be_nonempty_id_tuple(self):
+        """Test boundary must be nonempty id tuple."""
         for bad in ((), [1, 2], (1, -1), (True,), ("a",), (1.0,), None):
             with self.subTest(bad=bad):
                 self._raises(boundary=bad)
 
     def test_seed_bounds(self):
+        """Test seed bounds."""
         for bad in (-1, 2**64, "0", 3.5):
             with self.subTest(bad=bad):
                 self._raises(seed=bad)
 
     def test_cancel_must_be_event_or_none(self):
+        """Test cancel must be event or none."""
         for bad in ("nope", 42, object()):
             with self.subTest(bad=bad):
                 self._raises(cancel=bad)
@@ -1447,15 +1519,19 @@ class EvaluateValidation(unittest.TestCase):
 
 
 class EvaluateFuzz(unittest.TestCase):
+    """Evaluate fuzz."""
+
     TRIALS = 30
 
     def test_fuzz_seeded(self):
+        """Test fuzz seeded."""
         for trial in range(self.TRIALS):
             rng = random.Random(0xC0DE20 + trial)  # noqa: S311 -- fixed deterministic fuzz seed, not crypto
             with self.subTest(trial=trial):
                 self._run_fuzz_trial(rng, trial)
 
     def _run_fuzz_trial(self, rng, trial):
+        """Run fuzz trial."""
         candidate = Format(
             name=f"fuzzfmt{trial}",
             bos=rng.choice(["", "<s>", "BOS:"]),
@@ -1547,8 +1623,10 @@ class EvaluateFuzz(unittest.TestCase):
             preset_cancel=(cancel_mode == "preset"),
         )
 
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     @staticmethod
     def _script_behavior(rng, kind, case, boundary, cap, decode_raises, answers):
+        """Script behavior."""
         ans = case.expected
         if kind == "match":
             out = tid(ans) + boundary
@@ -1664,9 +1742,12 @@ def load_mutant(t: unittest.TestCase, name: str, old: str, new: str):
 
 
 class EvaluateSensitivity(unittest.TestCase):
+    """Evaluate sensitivity."""
+
     BOUNDARY = (70, 71)
 
     def _sensitivity_fixtures(self):
+        """Sensitivity fixtures."""
         candidate = make_format()
         a = make_fixture("sa", msgs("q"), "Paris")
         b = make_fixture("sb", msgs("q2"), "x")
@@ -1695,6 +1776,7 @@ class EvaluateSensitivity(unittest.TestCase):
         return candidate, (cap, plan1, (a, b)), (cap, plan2, (a, c))
 
     def _run_both_scenarios(self, evaluate_fn):
+        """Run both scenarios."""
         candidate, s1, s2 = self._sensitivity_fixtures()
         for cap, plan, cases in (s1, s2):
             run_scenario(
@@ -1708,6 +1790,7 @@ class EvaluateSensitivity(unittest.TestCase):
             )
 
     def test_unmutated_copy_passes_control(self):
+        """Test unmutated copy passes control."""
         module = load_mutant(
             self,
             "control",
@@ -1717,6 +1800,7 @@ class EvaluateSensitivity(unittest.TestCase):
         self._run_both_scenarios(module.evaluate)
 
     def test_mutants_are_caught(self):
+        """Test mutants are caught."""
         for name, (old, new) in MUTANTS.items():
             with self.subTest(mutant=name):
                 module = load_mutant(self, name, old, new)

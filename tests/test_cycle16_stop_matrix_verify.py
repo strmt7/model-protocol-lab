@@ -99,9 +99,11 @@ class TextBackend:
         self._texts = dict(texts)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(self._texts[token] for token in token_ids)
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_outcome(
     backend: TextBackend,
     semantic: str,
@@ -192,6 +194,7 @@ def _expected_cell(
     }
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def check_matrix_against_oracle(
     stop_matrix_fn: Callable[..., list[dict[str, Any]]],
     backend: TextBackend,
@@ -279,6 +282,7 @@ def check_matrix_against_oracle(
 
 
 def _make_fixture(fixture_id: str, expected: str) -> Fixture:
+    """Make fixture."""
     return Fixture(
         id=fixture_id,
         messages=(Message(role="user", content="cycle16 probe"),),
@@ -332,9 +336,12 @@ def _native_fields(
 
 
 class StopMatrixOracleFuzzTests(unittest.TestCase):
+    """Stop matrix oracle fuzz tests."""
+
     N_CASES = 250
 
     def test_fuzz_against_incremental_oracle(self) -> None:
+        """Test fuzz against incremental oracle."""
         backend = TextBackend(_TOKEN_TEXTS)
         rng = random.Random(0xC16C)  # noqa: S311 -- deterministic test seed
         for case_index in range(self.N_CASES):
@@ -366,7 +373,10 @@ class StopMatrixOracleFuzzTests(unittest.TestCase):
 
 
 class StopMatrixTargetedTests(unittest.TestCase):
+    """Stop matrix targeted tests."""
+
     def setUp(self) -> None:
+        """Set up the test fixture."""
         self.backend = TextBackend(_TOKEN_TEXTS)
 
     def _run(
@@ -384,6 +394,7 @@ class StopMatrixTargetedTests(unittest.TestCase):
         vllm_min_tokens: int = 0,
         fixture_id: str = "fx",
     ) -> list[dict[str, Any]]:
+        """Run."""
         cut = first_boundary(tuple(output_ids), tuple(boundary))
         if boundary_found is None:
             boundary_found = cut is not None
@@ -421,6 +432,7 @@ class StopMatrixTargetedTests(unittest.TestCase):
         )
 
     def test_stop_at_offset_zero_fires_at_step_1(self) -> None:
+        """Test stop at offset zero fires at step 1."""
         rows = self._run((6, 1, 2), (6,), "")
         cells = rows[0]["cells"]
         self.assertEqual(cells["hf_stop_string"]["detail"], "fired_at_step_1")
@@ -428,11 +440,13 @@ class StopMatrixTargetedTests(unittest.TestCase):
         self.assertTrue(cells["hf_stop_string"]["pass"])
 
     def test_first_occurrence_wins(self) -> None:
+        """Test first occurrence wins."""
         rows = self._run((6, 1, 6), (6,), "")
         self.assertEqual(rows[0]["cells"]["hf_stop_string"]["detail"], "fired_at_step_1")
         self.assertEqual(rows[0]["cells"]["vllm_holdback"]["detail"], "fired_at_step_1")
 
     def test_prompt_overhang_fires_hf_but_not_vllm(self) -> None:
+        """Test prompt overhang fires hf but not vllm."""
         # Prompt ends with "ST", output starts with "OP": HF sees the
         # prompt+output overhang and fires at step 1; vLLM only searches the
         # decoded output text, which never contains "STOP".
@@ -443,6 +457,7 @@ class StopMatrixTargetedTests(unittest.TestCase):
         self.assertEqual(cells["vllm_holdback"]["detail"], "no_stop_within_cap")
 
     def test_empty_output_fires_nothing(self) -> None:
+        """Test empty output fires nothing."""
         rows = self._run((), (6,), "zzz", eos_id=0)
         cells = rows[0]["cells"]
         for semantic in _SEMANTICS:
@@ -451,6 +466,7 @@ class StopMatrixTargetedTests(unittest.TestCase):
         self.assertEqual(rows[0]["flips"], [])
 
     def test_empty_boundary_text_marks_string_cells_unavailable(self) -> None:
+        """Test empty boundary text marks string cells unavailable."""
         rows = self._run((1, 2), (9,), "zzz", eos_id=0)
         cells = rows[0]["cells"]
         for semantic in ("hf_stop_string", "vllm_holdback"):
@@ -462,6 +478,7 @@ class StopMatrixTargetedTests(unittest.TestCase):
         self.assertFalse(cells["eos_appended"]["fired"])
 
     def test_eos_before_boundary_flips_verdict(self) -> None:
+        """Test eos before boundary flips verdict."""
         # Token 0 decodes to "<EOS>" text, so the native answer is "ab<EOS>".
         rows = self._run((1, 2, 0, 6), (6,), "ab<EOS>", eos_id=0)
         row = rows[0]
@@ -474,6 +491,7 @@ class StopMatrixTargetedTests(unittest.TestCase):
         self.assertEqual(row["flips"], ["eos_appended"])
 
     def test_min_tokens_gate_suppresses_completed_stop(self) -> None:
+        """Test min tokens gate suppresses completed stop."""
         # "STOP" completes at step 2 but min_tokens=2 gates it; the later
         # find window does not refind it, so vLLM never fires.
         rows = self._run((1, 6, 2, 3), (6,), "ab", vllm_min_tokens=2)
@@ -484,12 +502,14 @@ class StopMatrixTargetedTests(unittest.TestCase):
         self.assertEqual(rows[0]["cells"]["hf_stop_string"]["detail"], "fired_at_step_2")
 
     def test_fully_gated_output_reports_gated_detail(self) -> None:
+        """Test fully gated output reports gated detail."""
         rows = self._run((1, 6), (6,), "ab", vllm_min_tokens=2)
         vllm_cell = rows[0]["cells"]["vllm_holdback"]
         self.assertFalse(vllm_cell["fired"])
         self.assertEqual(vllm_cell["detail"], "gated_by_min_tokens")
 
     def test_incomplete_observation_marks_cells_unavailable(self) -> None:
+        """Test incomplete observation marks cells unavailable."""
         rows = self._run(
             (1, 2, 6), (6,), "ab", status="failed", exact_match=False, boundary_found=True
         )
@@ -502,6 +522,7 @@ class StopMatrixTargetedTests(unittest.TestCase):
         self.assertEqual(row["flips"], [])
 
     def test_stop_spanning_final_tokens(self) -> None:
+        """Test stop spanning final tokens."""
         # The "STOP" text ends at the final token; the token-id boundary is
         # present, so the truncated output still passes.
         rows = self._run((1, 6), (6,), "a")
@@ -511,6 +532,7 @@ class StopMatrixTargetedTests(unittest.TestCase):
         self.assertTrue(cells["hf_stop_string"]["pass"])
 
     def test_multi_token_stop_boundary(self) -> None:
+        """Test multi token stop boundary."""
         # Boundary (7, 8) decodes to "STOP" across two tokens; the output
         # carries the same split, so the token-id boundary is found and the
         # string stop fires on the completed text at step 3.
@@ -521,6 +543,7 @@ class StopMatrixTargetedTests(unittest.TestCase):
         self.assertTrue(cells["hf_stop_string"]["pass"])
 
     def test_prefix_related_stop_strings(self) -> None:
+        """Test prefix related stop strings."""
         # Same output, two matrices: "ST" fires at step 1, "STOP" never fires.
         rows_st = self._run((7, 1), (7,), "", fixture_id="fx-st")
         self.assertEqual(rows_st[0]["cells"]["hf_stop_string"]["detail"], "fired_at_step_1")
@@ -529,12 +552,14 @@ class StopMatrixTargetedTests(unittest.TestCase):
         self.assertFalse(rows_stop[0]["cells"]["vllm_holdback"]["fired"])
 
     def test_overlapping_stop_occurrence(self) -> None:
+        """Test overlapping stop occurrence."""
         # "abab": the "ab" stop completes at step 1 (first occurrence wins).
         rows = self._run((4, 4), (4,), "")
         self.assertEqual(rows[0]["cells"]["hf_stop_string"]["detail"], "fired_at_step_1")
         self.assertTrue(rows[0]["cells"]["hf_stop_string"]["pass"])
 
     def test_vllm_keep_vs_strip_disposition(self) -> None:
+        """Test vllm keep vs strip disposition."""
         rows_stripped = self._run((1, 6), (6,), "a")
         self.assertEqual(rows_stripped[0]["cells"]["vllm_holdback"]["stop_text"], "stripped")
         self.assertEqual(rows_stripped[0]["cells"]["hf_stop_string"]["stop_text"], "kept")
@@ -542,6 +567,7 @@ class StopMatrixTargetedTests(unittest.TestCase):
         self.assertEqual(rows_kept[0]["cells"]["vllm_holdback"]["stop_text"], "kept")
 
     def test_multi_fixture_matrix(self) -> None:
+        """Test multi fixture matrix."""
         backend = self.backend
         fixtures = (
             _make_fixture("m1", "a"),  # passes natively
@@ -590,7 +616,10 @@ class StopMatrixTargetedTests(unittest.TestCase):
 
 
 class StopMatrixValidationTests(unittest.TestCase):
+    """Stop matrix validation tests."""
+
     def setUp(self) -> None:
+        """Set up the test fixture."""
         self.backend = TextBackend(_TOKEN_TEXTS)
         self.fixture = _make_fixture("v", "a")
         self.obs = {
@@ -603,6 +632,7 @@ class StopMatrixValidationTests(unittest.TestCase):
         }
 
     def _call(self, **kwargs: Any) -> list[dict[str, Any]]:
+        """Call."""
         args: dict[str, Any] = {
             "candidate_name": "c",
             "fixtures": (self.fixture,),
@@ -613,23 +643,28 @@ class StopMatrixValidationTests(unittest.TestCase):
         return stop_matrix(self.backend, **args)  # type: ignore[arg-type]
 
     def test_mismatched_fixture_id_raises(self) -> None:
+        """Test mismatched fixture id raises."""
         obs = dict(self.obs, fixture="other")
         with self.assertRaises(ValueError):
             self._call(observations=(obs,))
 
     def test_blank_candidate_name_raises(self) -> None:
+        """Test blank candidate name raises."""
         with self.assertRaises(ValueError):
             self._call(candidate_name="")
 
     def test_misaligned_lengths_raise(self) -> None:
+        """Test misaligned lengths raise."""
         with self.assertRaises(ValueError):
             self._call(fixtures=(self.fixture, self.fixture))
 
     def test_empty_boundary_raises(self) -> None:
+        """Test empty boundary raises."""
         with self.assertRaises(ValueError):
             self._call(boundary=())
 
     def test_negative_min_tokens_raises(self) -> None:
+        """Test negative min tokens raises."""
         with self.assertRaises(ValueError):
             stop_matrix(
                 self.backend,
@@ -665,6 +700,7 @@ class StopMatrixSensitivityTests(unittest.TestCase):
     """
 
     def _mutated(self, tag: str, patches: list[tuple[str, str, int]]) -> tuple[Any, Any]:
+        """Mutated."""
         src_dir = os.path.dirname(os.path.abspath(model_protocol_lab.__file__))
         tmp = tempfile.mkdtemp(prefix="c16sens_")
         self.addCleanup(shutil.rmtree, tmp, True)
@@ -689,6 +725,7 @@ class StopMatrixSensitivityTests(unittest.TestCase):
     def _sensitivity_inputs(
         core_mod: Any,
     ) -> tuple[TextBackend, tuple[Any, ...], tuple[dict[str, Any], ...]]:
+        """Sensitivity inputs."""
         backend = TextBackend(_TOKEN_TEXTS)
         fixture = core_mod.Fixture(
             id="sens",
@@ -707,6 +744,7 @@ class StopMatrixSensitivityTests(unittest.TestCase):
         return backend, (fixture,), (obs,)
 
     def _assert_mutation_caught(self, tag: str, patches: list[tuple[str, str, int]]) -> None:
+        """Assert mutation caught."""
         experiments_mod, core_mod = self._mutated(tag, patches)
         backend, fixtures, observations = self._sensitivity_inputs(core_mod)
         with self.assertRaises(AssertionError):
@@ -722,6 +760,7 @@ class StopMatrixSensitivityTests(unittest.TestCase):
             )
 
     def test_unmutated_copy_passes_oracle(self) -> None:
+        """Test unmutated copy passes oracle."""
         # Control: the harness itself is sound -- an exact copy passes.
         experiments_mod, core_mod = self._mutated("control", [])
         backend, fixtures, observations = self._sensitivity_inputs(core_mod)
@@ -737,6 +776,7 @@ class StopMatrixSensitivityTests(unittest.TestCase):
         )
 
     def test_shifted_firing_step_is_caught(self) -> None:
+        """Test shifted firing step is caught."""
         self._assert_mutation_caught(
             "step",
             [
@@ -751,6 +791,7 @@ class StopMatrixSensitivityTests(unittest.TestCase):
         )
 
     def test_swapped_kept_stripped_is_caught(self) -> None:
+        """Test swapped kept stripped is caught."""
         self._assert_mutation_caught(
             "disposition",
             [
@@ -770,6 +811,7 @@ class StopMatrixSensitivityTests(unittest.TestCase):
         )
 
     def test_inverted_pass_verdict_is_caught(self) -> None:
+        """Test inverted pass verdict is caught."""
         self._assert_mutation_caught(
             "pass",
             [

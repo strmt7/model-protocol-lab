@@ -94,6 +94,7 @@ def _messages(contents: tuple[str, ...]) -> tuple[Message, ...]:
 
 
 def _fixture(fid: str, group: str, expected: str, contents: tuple[str, ...]) -> Fixture:
+    """Fixture."""
     return Fixture(id=fid, messages=_messages(contents), expected=expected, group=group)
 
 
@@ -171,6 +172,7 @@ def _expected_text(split: Split) -> str:
     """Independent reconstruction of the documented serialization."""
 
     def fixture_dict(case: Fixture) -> dict[str, Any]:
+        """Fixture dict."""
         return {
             "id": case.id,
             "group": case.group,
@@ -193,6 +195,7 @@ def _fx_json(
     expected: str = "e",
     contents: tuple[str, ...] = ("q",),
 ) -> dict[str, Any]:
+    """Fx json."""
     return {
         "id": fid,
         "group": group,
@@ -205,10 +208,12 @@ def _fx_json(
 
 
 def _doc_json(search: list[Any], held_out: list[Any]) -> str:
+    """Doc json."""
     return json.dumps({"search": search, "held_out": held_out})
 
 
 def _valid_doc() -> str:
+    """Valid doc."""
     return _doc_json(
         [_fx_json("a1", group="g1", contents=("q1",))],
         [_fx_json("b1", group="h1", contents=("z1",))],
@@ -223,6 +228,7 @@ class FixtureSerializationAuditTests(unittest.TestCase):
     """unittest entry point; pytest runs TestCase classes natively."""
 
     def setUp(self) -> None:
+        """Set up the test fixture."""
         import tempfile
 
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
@@ -232,15 +238,18 @@ class FixtureSerializationAuditTests(unittest.TestCase):
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self) -> None:
+        """Tear down the test fixture."""
         self._td.cleanup()
 
     @staticmethod
     def test_roundtrip_adversarial_split():
+        """Test roundtrip adversarial split."""
         split = _adversarial_split()
         _assert_splits_equal(split, parse_dataset(split_to_json_text(split)))
 
     @staticmethod
     def test_roundtrip_preserves_nfd_codepoints_exactly():
+        """Test roundtrip preserves nfd codepoints exactly."""
         split = _adversarial_split()
         reparsed = parse_dataset(split_to_json_text(split))
         original = split.search[0].messages[0].content
@@ -251,6 +260,7 @@ class FixtureSerializationAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_roundtrip_max_text_boundary():
+        """Test roundtrip max text boundary."""
         split = _adversarial_split()
         huge = split.search[2]
         assert len(huge.messages[0].content) == MAX_TEXT
@@ -260,12 +270,14 @@ class FixtureSerializationAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_roundtrip_max_messages_boundary():
+        """Test roundtrip max messages boundary."""
         split = _adversarial_split()
         assert len(split.search[3].messages) == MAX_MESSAGES
         _assert_splits_equal(split, parse_dataset(split_to_json_text(split)))
 
     @staticmethod
     def test_roundtrip_max_cases_boundary():
+        """Test roundtrip max cases boundary."""
         search = tuple(
             _fixture(f"s{i:03d}", "gs", "e", (f"sq{i}",)) for i in range(MAX_CASES_PER_SPLIT)
         )
@@ -277,6 +289,7 @@ class FixtureSerializationAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_roundtrip_duplicate_looking_ids_survive():
+        """Test roundtrip duplicate looking ids survive."""
         split = _adversarial_split()
         reparsed = parse_dataset(split_to_json_text(split))
         assert reparsed.held_out[0].id == "DUP-LOOK"
@@ -286,6 +299,7 @@ class FixtureSerializationAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_text_byte_identical_to_independent_reconstruction():
+        """Test text byte identical to independent reconstruction."""
         for split in (
             _adversarial_split(),
             Split(
@@ -297,6 +311,7 @@ class FixtureSerializationAuditTests(unittest.TestCase):
 
     @staticmethod
     def test_text_framing():
+        """Test text framing."""
         split = _adversarial_split()
         text = split_to_json_text(split)
         assert text.startswith("{")
@@ -305,12 +320,17 @@ class FixtureSerializationAuditTests(unittest.TestCase):
         assert type(text) is str
 
     def test_split_to_json_text_rejects_non_split(self):
+        """Test split to json text rejects non split."""
         for bad in ["nope", None, 123, ["x"], {"search": []}]:
             with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "needs a Split"):
                 split_to_json_text(bad)
 
     def test_split_to_json_text_rejects_split_subclass(self):
+        """Test split to json text rejects split subclass."""
+
         class _SplitSubclass(Split):
+            """Split subclass."""
+
             pass
 
         good = _adversarial_split()
@@ -319,22 +339,26 @@ class FixtureSerializationAuditTests(unittest.TestCase):
             split_to_json_text(sub)
 
     def test_by_construction_rejects_oversized_text(self):
+        """Test by construction rejects oversized text."""
         split = _lone_fixture(messages=(Message("user", "x" * (MAX_TEXT + 1)),))
         with self.assertRaisesRegex(ValueError, "oversized text"):
             split_to_json_text(split)
 
     def test_by_construction_rejects_too_many_messages(self):
+        """Test by construction rejects too many messages."""
         contents = tuple(f"m{index}" for index in range(MAX_MESSAGES + 2))  # 23, odd
         split = _lone_fixture(messages=_messages(contents))
         with self.assertRaisesRegex(ValueError, "1-21 messages"):
             split_to_json_text(split)
 
     def test_by_construction_rejects_bad_alternation(self):
+        """Test by construction rejects bad alternation."""
         split = _lone_fixture(messages=(Message("assistant", "q"),))
         with self.assertRaisesRegex(ValueError, "must alternate"):
             split_to_json_text(split)
 
     def test_by_construction_rejects_assistant_final(self):
+        """Test by construction rejects assistant final."""
         split = _lone_fixture(
             messages=(Message("user", "q"), Message("assistant", "a")),
         )
@@ -342,6 +366,7 @@ class FixtureSerializationAuditTests(unittest.TestCase):
             split_to_json_text(split)
 
     def test_exclusive_creation_refuses_existing_and_preserves_bytes(self):
+        """Test exclusive creation refuses existing and preserves bytes."""
         target = self.tmp_path / "exists.json"
         original = b'{"original": true}'
         target.write_bytes(original)
@@ -354,21 +379,25 @@ class FixtureSerializationAuditTests(unittest.TestCase):
         assert target.read_bytes() == original
 
     def test_missing_parent_directory_rejected(self):
+        """Test missing parent directory rejected."""
         with self.assertRaisesRegex(ValueError, "parent directory"):
             write_fixture_file("x", self.tmp_path / "no-such-dir" / "f.json")
 
     def test_parent_that_is_a_file_rejected(self):
+        """Test parent that is a file rejected."""
         parent = self.tmp_path / "afile"
         parent.write_text("x", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "parent directory"):
             write_fixture_file("x", parent / "f.json")
 
     def test_non_string_text_rejected(self):
+        """Test non string text rejected."""
         for bad in [b"x", None, 123, ["x"]]:
             with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "must be a string"):
                 write_fixture_file(bad, self.tmp_path / "f.json")
 
     def test_invalid_path_type_rejected(self):
+        """Test invalid path type rejected."""
         for bad in [123, None, b"x"]:
             with (
                 self.subTest(bad=bad),
@@ -377,6 +406,7 @@ class FixtureSerializationAuditTests(unittest.TestCase):
                 write_fixture_file("x", bad)
 
     def test_created_file_is_owner_only_and_verbatim(self):
+        """Test created file is owner only and verbatim."""
         text = split_to_json_text(_adversarial_split())
         target = write_fixture_file(text, self.tmp_path / "f.json")
         assert isinstance(target, Path)
@@ -387,11 +417,13 @@ class FixtureSerializationAuditTests(unittest.TestCase):
         assert mode == 0o600
 
     def test_str_path_spelling_writes_and_returns_path(self):
+        """Test str path spelling writes and returns path."""
         target = write_fixture_file("{}", str(self.tmp_path / "s.json"))
         assert target == self.tmp_path / "s.json"
         assert target.read_text(encoding="utf-8") == "{}"
 
     def test_relative_path_resolves_in_cwd(self):
+        """Test relative path resolves in cwd."""
         _old_cwd = os.getcwd()
         os.chdir(self.tmp_path)
         self.addCleanup(os.chdir, _old_cwd)
@@ -405,9 +437,11 @@ class FixtureSerializationAuditTests(unittest.TestCase):
         assert target.read_text(encoding="utf-8") == ""
 
     def test_partial_write_leaves_no_file(self):
+        """Test partial write leaves no file."""
         target = self.tmp_path / "partial.json"
 
         def fake_fdopen(fd: int, *args: Any, **kwargs: Any) -> io.StringIO:
+            """Fake fdopen."""
             os.close(fd)  # the real fd must not leak when fdopen "fails"
             return _FailingWriter()
 
@@ -420,6 +454,7 @@ class FixtureSerializationAuditTests(unittest.TestCase):
         assert not target.exists()
 
     def test_os_open_oserror_becomes_valueerror(self):
+        """Test os open oserror becomes valueerror."""
         with (
             mock.patch.object(os, "open", side_effect=OSError("EACCES")),
             self.assertRaisesRegex(ValueError, "not writable"),
@@ -433,16 +468,19 @@ class FixtureSerializationAuditTests(unittest.TestCase):
             write_fixture_file("x", self.tmp_path / "f.json")
 
     def test_write_then_load_dataset_roundtrip(self):
+        """Test write then load dataset roundtrip."""
         split = _adversarial_split()
         target = write_fixture_file(split_to_json_text(split), self.tmp_path / "fx.json")
         _assert_splits_equal(split, load_dataset(target))
         _assert_splits_equal(split, load_dataset(str(target)))
 
     def test_reject_duplicate_json_field(self):
+        """Test reject duplicate json field."""
         with self.assertRaisesRegex(ValueError, "Duplicate JSON field"):
             parse_dataset('{"search": [], "held_out": [], "search": []}')
 
     def test_reject_nonfinite_constants(self):
+        """Test reject nonfinite constants."""
         for constant in ["NaN", "Infinity", "-Infinity"]:
             with self.subTest(constant=constant):
                 text = _valid_doc().replace('"expected": "e"', f'"expected": {constant}', 1)
@@ -450,15 +488,18 @@ class FixtureSerializationAuditTests(unittest.TestCase):
                     parse_dataset(text)
 
     def test_reject_missing_held_out(self):
+        """Test reject missing held out."""
         with self.assertRaisesRegex(ValueError, "Unexpected or missing JSON fields"):
             parse_dataset('{"search": []}')
 
     def test_reject_extra_top_level_key(self):
+        """Test reject extra top level key."""
         text = _valid_doc().replace('{"search":', '{"extra": 1, "search":', 1)
         with self.assertRaisesRegex(ValueError, "Unexpected or missing JSON fields"):
             parse_dataset(text)
 
     def test_reject_non_object_top_level(self):
+        """Test reject non object top level."""
         for text in ["[]", "null", '"str"', "42"]:
             with (
                 self.subTest(text=text),
@@ -467,61 +508,73 @@ class FixtureSerializationAuditTests(unittest.TestCase):
                 parse_dataset(text)
 
     def test_reject_empty_search_partition(self):
+        """Test reject empty search partition."""
         with self.assertRaisesRegex(ValueError, "Invalid fixture count"):
             parse_dataset(_doc_json([], [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_empty_held_out_partition(self):
+        """Test reject empty held out partition."""
         with self.assertRaisesRegex(ValueError, "Invalid fixture count"):
             parse_dataset(_doc_json([_fx_json("a1", contents=("q",))], []))
 
     def test_reject_non_list_partition(self):
+        """Test reject non list partition."""
         with self.assertRaisesRegex(ValueError, "Invalid fixture count"):
             parse_dataset('{"search": {}, "held_out": []}')
 
     def test_reject_too_many_fixtures(self):
+        """Test reject too many fixtures."""
         many = [_fx_json(f"s{i}", group="g", contents=(f"q{i}",)) for i in range(101)]
         with self.assertRaisesRegex(ValueError, "Invalid fixture count"):
             parse_dataset(_doc_json(many, [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_fixture_missing_field(self):
+        """Test reject fixture missing field."""
         bad = {"id": "a", "group": "g", "messages": [{"role": "user", "content": "q"}]}
         with self.assertRaisesRegex(ValueError, "Unexpected or missing JSON fields"):
             parse_dataset(_doc_json([bad], [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_fixture_extra_field(self):
+        """Test reject fixture extra field."""
         bad = dict(_fx_json("a1"), extra=1)
         with self.assertRaisesRegex(ValueError, "Unexpected or missing JSON fields"):
             parse_dataset(_doc_json([bad], [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_message_missing_field(self):
+        """Test reject message missing field."""
         bad = _fx_json("a1")
         bad["messages"] = [{"role": "user"}]
         with self.assertRaisesRegex(ValueError, "Unexpected or missing JSON fields"):
             parse_dataset(_doc_json([bad], [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_message_extra_field(self):
+        """Test reject message extra field."""
         bad = _fx_json("a1")
         bad["messages"] = [{"role": "user", "content": "q", "extra": 1}]
         with self.assertRaisesRegex(ValueError, "Unexpected or missing JSON fields"):
             parse_dataset(_doc_json([bad], [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_empty_messages(self):
+        """Test reject empty messages."""
         bad = _fx_json("a1", contents=())
         with self.assertRaisesRegex(ValueError, "1-21 messages"):
             parse_dataset(_doc_json([bad], [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_too_many_messages(self):
+        """Test reject too many messages."""
         bad = _fx_json("a1", contents=tuple(f"m{i}" for i in range(22)))
         with self.assertRaisesRegex(ValueError, "1-21 messages"):
             parse_dataset(_doc_json([bad], [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_bad_alternation_start(self):
+        """Test reject bad alternation start."""
         bad = _fx_json("a1")
         bad["messages"] = [{"role": "assistant", "content": "q"}]
         with self.assertRaisesRegex(ValueError, "must alternate"):
             parse_dataset(_doc_json([bad], [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_bad_alternation_middle(self):
+        """Test reject bad alternation middle."""
         bad = _fx_json("a1")
         bad["messages"] = [
             {"role": "user", "content": "q"},
@@ -532,6 +585,7 @@ class FixtureSerializationAuditTests(unittest.TestCase):
             parse_dataset(_doc_json([bad], [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_assistant_final(self):
+        """Test reject assistant final."""
         bad = _fx_json("a1")
         bad["messages"] = [
             {"role": "user", "content": "q"},
@@ -541,39 +595,46 @@ class FixtureSerializationAuditTests(unittest.TestCase):
             parse_dataset(_doc_json([bad], [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_non_string_content(self):
+        """Test reject non string content."""
         bad = _fx_json("a1")
         bad["messages"] = [{"role": "user", "content": 123}]
         with self.assertRaisesRegex(ValueError, "Invalid or oversized text field"):
             parse_dataset(_doc_json([bad], [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_oversized_content(self):
+        """Test reject oversized content."""
         bad = _fx_json("a1", contents=("x" * (MAX_TEXT + 1),))
         with self.assertRaisesRegex(ValueError, "Invalid or oversized text field"):
             parse_dataset(_doc_json([bad], [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_blank_id(self):
+        """Test reject blank id."""
         bad = _fx_json("   ")
         with self.assertRaisesRegex(ValueError, "Blank identifier"):
             parse_dataset(_doc_json([bad], [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_blank_group(self):
+        """Test reject blank group."""
         bad = _fx_json("a1", group="\t")
         with self.assertRaisesRegex(ValueError, "Blank identifier"):
             parse_dataset(_doc_json([bad], [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_non_string_expected(self):
+        """Test reject non string expected."""
         bad = _fx_json("a1", expected="e")
         bad["expected"] = 5
         with self.assertRaisesRegex(ValueError, "Invalid or oversized text field"):
             parse_dataset(_doc_json([bad], [_fx_json("b1", group="h1", contents=("z",))]))
 
     def test_reject_duplicate_ids_across_partitions(self):
+        """Test reject duplicate ids across partitions."""
         search = [_fx_json("dup", group="g1", contents=("q1",))]
         held_out = [_fx_json("dup", group="h1", contents=("z1",))]
         with self.assertRaisesRegex(ValueError, "globally unique"):
             parse_dataset(_doc_json(search, held_out))
 
     def test_reject_duplicate_ids_within_partition(self):
+        """Test reject duplicate ids within partition."""
         search = [
             _fx_json("dup", group="g1", contents=("q1",)),
             _fx_json("dup", group="g1", contents=("q2",)),
@@ -583,67 +644,80 @@ class FixtureSerializationAuditTests(unittest.TestCase):
             parse_dataset(_doc_json(search, held_out))
 
     def test_reject_group_overlap(self):
+        """Test reject group overlap."""
         search = [_fx_json("a1", group="same", contents=("q1",))]
         held_out = [_fx_json("b1", group="same", contents=("z1",))]
         with self.assertRaisesRegex(ValueError, "cannot cross the split"):
             parse_dataset(_doc_json(search, held_out))
 
     def test_reject_identical_messages_across_split(self):
+        """Test reject identical messages across split."""
         search = [_fx_json("a1", group="g1", contents=("same-q",))]
         held_out = [_fx_json("b1", group="h1", contents=("same-q",))]
         with self.assertRaisesRegex(ValueError, "Identical message inputs cannot cross"):
             parse_dataset(_doc_json(search, held_out))
 
     def test_reject_deep_nesting(self):
+        """Test reject deep nesting."""
         with self.assertRaisesRegex(ValueError, "nesting too deep"):
             parse_dataset("[" * 40000 + "]" * 40000)
 
     def test_reject_oversize_text(self):
+        """Test reject oversize text."""
         with self.assertRaisesRegex(ValueError, "exceeds size limit"):
             parse_dataset("x" * (MAX_BYTES + 1))
 
     def test_reject_non_string_input(self):
+        """Test reject non string input."""
         for bad in [None, 123, b"{}"]:
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 parse_dataset(bad)
 
     def test_load_dataset_roundtrip(self):
+        """Test load dataset roundtrip."""
         split = _adversarial_split()
         target = write_fixture_file(split_to_json_text(split), self.tmp_path / "fx.json")
         _assert_splits_equal(split, load_dataset(target))
         _assert_splits_equal(split, load_dataset(str(target)))
 
     def test_load_dataset_rejects_directory(self):
+        """Test load dataset rejects directory."""
         with self.assertRaisesRegex(ValueError, "not a regular file"):
             load_dataset(self.tmp_path)
 
     def test_load_dataset_rejects_fifo(self):
+        """Test load dataset rejects fifo."""
         fifo = self.tmp_path / "pipe"
         os.mkfifo(fifo)
         with self.assertRaisesRegex(ValueError, "not a regular file"):
             load_dataset(fifo)
 
     def test_load_dataset_rejects_missing(self):
+        """Test load dataset rejects missing."""
         with self.assertRaisesRegex(ValueError, "Unreadable fixture file"):
             load_dataset(self.tmp_path / "missing.json")
 
     def test_load_dataset_rejects_non_utf8(self):
+        """Test load dataset rejects non utf8."""
         target = self.tmp_path / "bad.json"
         target.write_bytes(b'{"search": "\xff\xfe"}')
         with self.assertRaisesRegex(ValueError, "not valid UTF-8"):
             load_dataset(target)
 
     def test_load_dataset_rejects_oversize_file(self):
+        """Test load dataset rejects oversize file."""
         target = self.tmp_path / "big.json"
         target.write_bytes(b"x" * (MAX_BYTES + 1))
         with self.assertRaisesRegex(ValueError, "exceeds size limit"):
             load_dataset(target)
 
     def test_load_dataset_rejects_bad_path_type(self):
+        """Test load dataset rejects bad path type."""
         with self.assertRaisesRegex(ValueError, "Invalid fixture path"):
             load_dataset(cast("str | Path", 123))
 
     def test_load_dataset_rejects_invalid_content(self):
+        """Test load dataset rejects invalid content."""
         target = self.tmp_path / "bad.json"
         target.write_text('{"search": [], "held_out": []}', encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "Invalid fixture count"):
@@ -672,8 +746,11 @@ def _lone_fixture(**kwargs: Any) -> Split:
 
 
 class _FailingWriter(io.StringIO):
+    """Failing writer."""
+
     @staticmethod
     def write(s: str) -> int:
+        """Write."""
         raise OSError("simulated write failure")
 
 

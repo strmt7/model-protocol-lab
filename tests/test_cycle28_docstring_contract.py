@@ -26,6 +26,7 @@ from model_protocol_lab import diffreports
 
 
 def _summary(planned: int, passes: int) -> dict[str, Any]:
+    """Summary."""
     return {
         "planned": planned,
         "exact_and_boundary_passes": passes,
@@ -38,6 +39,7 @@ class EvidenceDuplicateNameContractTests(unittest.TestCase):
 
     @staticmethod
     def _dup_run() -> dict[str, Any]:
+        """Dup run."""
         first = {
             "format": {"name": "dup"},
             "summary": _summary(1, 1),
@@ -103,6 +105,7 @@ class FixtureSetDriftGatingContractTests(unittest.TestCase):
 
     @staticmethod
     def _search_evidence_only() -> dict[str, Any]:
+        """Search evidence only."""
         return {
             "decision": "s",
             "search": [
@@ -124,6 +127,7 @@ class FixtureSetDriftGatingContractTests(unittest.TestCase):
 
     @staticmethod
     def _held_out_evidence_only() -> dict[str, Any]:
+        """Held out evidence only."""
         return {
             "decision": "s",
             "search": [

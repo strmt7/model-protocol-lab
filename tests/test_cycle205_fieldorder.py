@@ -78,6 +78,7 @@ def _wrong_value(spec, field):
 
 
 def _presented_order(text, spec):
+    """Presented order."""
     block = text.split("matching this schema: {", 1)[1].split("} (required:", 1)[0]
     return [part.split(":", 1)[0].strip().strip('"') for part in block.split("; ")]
 
@@ -111,6 +112,7 @@ class _FieldOrderBackend:
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -122,9 +124,11 @@ class _FieldOrderBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Generate."""
         self.calls += 1
         if self.mode == "explode":
             raise RuntimeError("boom")
@@ -164,6 +168,7 @@ class _FieldOrderBackend:
 
 
 def _payload(backend=None, formats=FORMATS, seed=0, **stage_kwargs):
+    """Payload."""
     backend = backend if backend is not None else _FieldOrderBackend()
     stage_kwargs.setdefault("max_context", 8192)
     stage = experiments.fieldorder_stage(
@@ -202,10 +207,12 @@ def _record(spec, arm, text, **overrides):
 
 
 def _good(spec):
+    """Good."""
     return structured._canonical_json(spec["answer"])
 
 
 def _corrupted(spec, arm):
+    """Corrupted."""
     document = dict(spec["answer"])
     field = spec["answer_field"]
     document[field] = _wrong_value(spec, field)
@@ -213,7 +220,10 @@ def _corrupted(spec, arm):
 
 
 class TestSpecTable(unittest.TestCase):
+    """Test spec table."""
+
     def test_constants(self):
+        """Test constants."""
         self.assertEqual(
             fieldorder.ARM_KEYS, ("canonical", "answer_first", "answer_last", "reversed")
         )
@@ -227,6 +237,7 @@ class TestSpecTable(unittest.TestCase):
         self.assertEqual(fieldorder.SIGN_ALPHA, 0.05)
 
     def test_fifteen_specs_ten_paired(self):
+        """Test fifteen specs ten paired."""
         # F1: pairing eligibility is the frozen per-spec flag,
         # set only where a reader given question, context and
         # schema can derive the answer field's value uniquely.
@@ -244,6 +255,7 @@ class TestSpecTable(unittest.TestCase):
         )
 
     def test_spec_table_shape(self):
+        """Test spec table shape."""
         specs = fieldorder.FIELD_ORDER_SPECS
         self.assertEqual(sum(1 for s in specs if s["source"] == "structured"), 9)
         self.assertEqual(sum(1 for s in specs if s["source"] == "fieldorder"), 6)
@@ -261,6 +273,7 @@ class TestSpecTable(unittest.TestCase):
                 self.assertNotEqual(field["type"], "number")
 
     def test_canonical_answer_positions(self):
+        """Test canonical answer positions."""
         positions = {"first": 0, "last": 0, "middle": 0}
         for spec in fieldorder.FIELD_ORDER_SPECS:
             if not spec["paired"]:
@@ -276,6 +289,7 @@ class TestSpecTable(unittest.TestCase):
         self.assertEqual(positions, {"first": 3, "last": 3, "middle": 4})
 
     def test_distinct_prompts_and_endpoint_pairs(self):
+        """Test distinct prompts and endpoint pairs."""
         # F3: 37 distinct prompts across the 60 (spec, arm)
         # cells; the endpoint orders differ on 12 of 15 specs
         # (they coincide exactly on the three 1-field specs).
@@ -294,6 +308,7 @@ class TestSpecTable(unittest.TestCase):
         self.assertEqual(endpoint_distinct, 12)
 
     def test_distinct_orders_follow_the_position_rule(self):
+        """Test distinct orders follow the position rule."""
         total = 0
         for spec in fieldorder.FIELD_ORDER_SPECS:
             orders = {tuple(fieldorder.arm_order(spec, arm)) for arm in fieldorder.ARM_KEYS}
@@ -312,6 +327,7 @@ class TestSpecTable(unittest.TestCase):
         self.assertEqual(total, 37)
 
     def test_canonical_coincides_with_an_endpoint_on_six_paired(self):
+        """Test canonical coincides with an endpoint on six paired."""
         count = 0
         for spec in fieldorder.FIELD_ORDER_SPECS:
             if not spec["paired"]:
@@ -325,12 +341,16 @@ class TestSpecTable(unittest.TestCase):
         self.assertEqual(count, 6)
 
     def test_spec_by_id_unknown_raises(self):
+        """Test spec by id unknown raises."""
         with self.assertRaises(ValueError):
             fieldorder.spec_by_id("nope")
 
 
 class TestRendering(unittest.TestCase):
+    """Test rendering."""
+
     def test_describe_byte_identity_for_all_specs(self):
+        """Test describe byte identity for all specs."""
         for spec in fieldorder.FIELD_ORDER_SPECS:
             self.assertEqual(
                 fieldorder.describe_ordered(spec["schema"], fieldorder.canonical_order(spec)),
@@ -339,6 +359,7 @@ class TestRendering(unittest.TestCase):
             )
 
     def test_canonical_prompt_byte_identity_for_shipped_specs(self):
+        """Test canonical prompt byte identity for shipped specs."""
         shipped = {spec["id"]: spec for spec in structured.STRUCTURED_SPECS}
         self.assertEqual(len(shipped), 9)
         for spec in fieldorder.FIELD_ORDER_SPECS:
@@ -350,6 +371,7 @@ class TestRendering(unittest.TestCase):
                 )
 
     def test_arm_orders(self):
+        """Test arm orders."""
         spec = fieldorder.spec_by_id("extract-product")
         self.assertEqual(fieldorder.canonical_order(spec), ["brand", "in_stock", "model", "price"])
         self.assertEqual(
@@ -369,6 +391,7 @@ class TestRendering(unittest.TestCase):
             fieldorder.arm_order(spec, "sideways")
 
     def test_new_spec_prompt_carries_fieldorder_ref(self):
+        """Test new spec prompt carries fieldorder ref."""
         prompt = fieldorder.arm_prompt(fieldorder.spec_by_id("extract-product"), "canonical")
         self.assertIn("(ref: fieldorder/extract-product)", prompt)
         shipped = fieldorder.arm_prompt(fieldorder.spec_by_id("extract-person"), "canonical")
@@ -376,7 +399,10 @@ class TestRendering(unittest.TestCase):
 
 
 class TestProtocol(unittest.TestCase):
+    """Test protocol."""
+
     def test_protocol_object_and_fingerprint(self):
+        """Test protocol object and fingerprint."""
         proto = fieldorder.protocol_object(7, "sha256:x")
         self.assertEqual(proto["spec_count"], 15)
         self.assertEqual(proto["max_records"], 1440)
@@ -393,6 +419,7 @@ class TestProtocol(unittest.TestCase):
             fieldorder.protocol_object("0", "sha256:x")
 
     def test_inventory_digest_binds_the_spec_table(self):
+        """Test inventory digest binds the spec table."""
         proto = fieldorder.protocol_object(0, "sha256:x")
         expect = fieldorder.digest_text(
             structured._canonical_json(list(fieldorder.FIELD_ORDER_SPECS))
@@ -405,7 +432,10 @@ class TestProtocol(unittest.TestCase):
 
 
 class TestParsing(unittest.TestCase):
+    """Test parsing."""
+
     def test_object_document(self):
+        """Test object document."""
         parsed = fieldorder.parse_document('{"name": "Ada Lovelace", "age": 36}')
         self.assertEqual(parsed["kind"], "object")
         self.assertEqual(parsed["field_values"], {"age": "36", "name": '"Ada Lovelace"'})
@@ -416,12 +446,14 @@ class TestParsing(unittest.TestCase):
         self.assertFalse(parsed["duplicate_keys"])
 
     def test_duplicate_keys_flagged_last_wins(self):
+        """Test duplicate keys flagged last wins."""
         parsed = fieldorder.parse_document('{"a": 1, "a": 2}')
         self.assertTrue(parsed["duplicate_keys"])
         self.assertEqual(parsed["field_values"], {"a": "2"})
         self.assertEqual(parsed["document_digest"], fieldorder.digest_text('{"a": 2}'))
 
     def test_nonfinite_numbers_become_none(self):
+        """Test nonfinite numbers become none."""
         # F2: a non-finite number has no canonical form; its
         # value is the None sentinel and the document digest
         # is withheld.
@@ -432,6 +464,7 @@ class TestParsing(unittest.TestCase):
             self.assertIsNone(parsed["document_digest"])
 
     def test_null_is_the_string_null(self):
+        """Test null is the string null."""
         # F2: a produced JSON null is the canonical string
         # "null", never the None sentinel.
         parsed = fieldorder.parse_document('{"a": null}')
@@ -439,6 +472,7 @@ class TestParsing(unittest.TestCase):
         self.assertIsNotNone(parsed["document_digest"])
 
     def test_non_object_and_unparseable(self):
+        """Test non object and unparseable."""
         self.assertEqual(fieldorder.parse_document("[1, 2]")["kind"], "non_object")
         self.assertEqual(fieldorder.parse_document("42")["kind"], "non_object")
         self.assertEqual(fieldorder.parse_document("no json")["kind"], "unparseable")
@@ -446,19 +480,24 @@ class TestParsing(unittest.TestCase):
         self.assertEqual(fieldorder.parse_document(None)["kind"], "unparseable")
 
     def test_huge_integer_has_no_canonical_form(self):
+        """Test huge integer has no canonical form."""
         parsed = fieldorder.parse_document('{"a": ' + "9" * 5000 + "}")
         self.assertEqual(parsed["kind"], "object")
         self.assertIsNone(parsed["field_values"]["a"])
         self.assertIsNone(parsed["document_digest"])
 
     def test_deep_nesting_never_crashes(self):
+        """Test deep nesting never crashes."""
         # F10: hostile text yields a kind, never an exception.
         parsed = fieldorder.parse_document("[" * 4000 + "]" * 4000)
         self.assertIn(parsed["kind"], ("unparseable", "non_object"))
 
 
 class TestDerived(unittest.TestCase):
+    """Test derived."""
+
     def test_field_correct_and_expected_digest(self):
+        """Test field correct and expected digest."""
         spec = fieldorder.spec_by_id("extract-person")
         digest = fieldorder.expected_value_digest(spec, "name")
         self.assertEqual(digest, fieldorder.digest_text(structured._canonical_json("Ada Lovelace")))
@@ -469,6 +508,7 @@ class TestDerived(unittest.TestCase):
         self.assertTrue(derived["fields"]["age"])
 
     def test_schema_verdict_ignores_duplicate_keys(self):
+        """Test schema verdict ignores duplicate keys."""
         # F7 + the frozen CHECKING rule: the schema verdict
         # is the flat schema check over the reconstructed
         # document and nothing else. A duplicate-keys record
@@ -484,6 +524,7 @@ class TestDerived(unittest.TestCase):
         self.assertTrue(derived["fields"]["name"])
 
     def test_schema_ok_variants(self):
+        """Test schema ok variants."""
         spec = fieldorder.spec_by_id("extract-person")
         self.assertFalse(fieldorder.schema_ok(spec, "object", {"name": '"X"'}))  # missing field
         self.assertFalse(fieldorder.schema_ok(spec, "non_object", {}))
@@ -496,6 +537,7 @@ class TestDerived(unittest.TestCase):
         self.assertTrue(derived["fields"]["name"])
 
     def test_none_value_fails_schema_before_reconstruction(self):
+        """Test none value fails schema before reconstruction."""
         spec = fieldorder.spec_by_id("extract-product")
         record = _record(spec, "canonical", _good(spec))
         field = spec["answer_field"]
@@ -506,6 +548,7 @@ class TestDerived(unittest.TestCase):
         self.assertFalse(derived["fields"][field])
 
     def test_whole_document_accuracy_rejects_extra_keys(self):
+        """Test whole document accuracy rejects extra keys."""
         # F15: whole-document accuracy is every spec field
         # correct AND no extra keys in field_values.
         spec = fieldorder.spec_by_id("extract-product")
@@ -518,8 +561,11 @@ class TestDerived(unittest.TestCase):
 
 
 class TestAggregate(unittest.TestCase):
+    """Test aggregate."""
+
     @staticmethod
     def _records(behaviour):
+        """Records."""
         return [
             behaviour(spec, arm)
             for spec in fieldorder.FIELD_ORDER_SPECS
@@ -527,6 +573,7 @@ class TestAggregate(unittest.TestCase):
         ]
 
     def test_perfect_model(self):
+        """Test perfect model."""
         aggregate = fieldorder.aggregate_candidate(
             self._records(lambda s, a: _record(s, a, _good(s)))
         )
@@ -543,7 +590,10 @@ class TestAggregate(unittest.TestCase):
         self.assertEqual(aggregate["whole_doc_by_arm"]["reversed"]["rate"], 1.0)
 
     def test_first_only_model_is_falsified(self):
+        """Test first only model is falsified."""
+
         def behaviour(spec, arm):
+            """Behaviour."""
             if arm == "answer_first":
                 return _record(spec, arm, _good(spec))
             return _record(spec, arm, _corrupted(spec, arm))
@@ -557,6 +607,7 @@ class TestAggregate(unittest.TestCase):
         self.assertEqual(aggregate["extraction_decision"]["n_paired"], 6)
 
     def test_sign_test_values(self):
+        """Test sign test values."""
         # The design's printed values, recomputed.
         self.assertEqual(fieldorder.sign_test_p(6, 0), 0.03125)
         self.assertEqual(fieldorder.sign_test_p(8, 1), 0.0390625)
@@ -567,6 +618,7 @@ class TestAggregate(unittest.TestCase):
         self.assertEqual(fieldorder.sign_test_p(0, 0), 1.0)
 
     def test_five_unanimous_is_insufficient(self):
+        """Test five unanimous is insufficient."""
         # Below six discordant specs the verdict is withheld
         # as insufficient -- never a defaulted acquittal.
         five = {
@@ -578,6 +630,7 @@ class TestAggregate(unittest.TestCase):
         }
 
         def behaviour(spec, arm):
+            """Behaviour."""
             if arm == "answer_last" and spec["id"] in five:
                 return _record(spec, arm, _corrupted(spec, arm))
             return _record(spec, arm, _good(spec))
@@ -587,6 +640,7 @@ class TestAggregate(unittest.TestCase):
         self.assertEqual(aggregate["decision"]["verdict"], "insufficient")
 
     def test_duplicate_records_are_excluded_from_pairing(self):
+        """Test duplicate records are excluded from pairing."""
         # F7: pairing excludes any spec with a duplicate-keys
         # record in either endpoint arm, counted as its own
         # attrition step; schema rates are untouched.
@@ -603,6 +657,7 @@ class TestAggregate(unittest.TestCase):
         self.assertLess(aggregate["by_arm"]["answer_last"]["adherent_rate"], 1.0)
 
     def test_zero_live_records_withhold_everything(self):
+        """Test zero live records withhold everything."""
         # NB6 shape at the aggregate level: no live records ->
         # rates None, decision insufficient, n_paired 0, and
         # every readout key still present beside the detail.
@@ -634,6 +689,7 @@ class TestAggregate(unittest.TestCase):
             self.assertIn(key, aggregate)
 
     def test_sensitivity_blocks_present(self):
+        """Test sensitivity blocks present."""
         # F5/F6/F13: the decision never travels alone -- the
         # extraction-only sensitivity, the ungated
         # discordance, and the field-count split always ship.
@@ -647,7 +703,10 @@ class TestAggregate(unittest.TestCase):
 
 
 class TestStage(unittest.TestCase):
+    """Test stage."""
+
     def test_perfect_backend_validates(self):
+        """Test perfect backend validates."""
         payload = _payload()
         self.assertTrue(payload["available"])
         self.assertEqual(payload["n_candidates"], 2)
@@ -661,6 +720,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(_valid_field_order(payload))
 
     def test_last_wrong_backend_is_falsified(self):
+        """Test last wrong backend is falsified."""
         payload = _payload(_FieldOrderBackend("last_wrong"))
         self.assertTrue(_valid_field_order(payload))
         for entry in payload["candidates"].values():
@@ -669,6 +729,7 @@ class TestStage(unittest.TestCase):
             self.assertEqual(entry["decision"]["n_first_only"], 10)
 
     def test_wrong_backend(self):
+        """Test wrong backend."""
         payload = _payload(_FieldOrderBackend("wrong"))
         self.assertTrue(_valid_field_order(payload))
         for entry in payload["candidates"].values():
@@ -677,6 +738,7 @@ class TestStage(unittest.TestCase):
             self.assertEqual(entry["answer_by_arm"]["canonical"]["rate"], 0.0)
 
     def test_dup_backend_schema_ok_but_not_adherent(self):
+        """Test dup backend schema ok but not adherent."""
         # F7 end to end: every record carries duplicate keys,
         # every last-wins document is the correct answer --
         # schema rates stay 1.0, adherence is 0, and pairing
@@ -691,6 +753,7 @@ class TestStage(unittest.TestCase):
             self.assertEqual(entry["pairing"]["n_paired"], 0)
 
     def test_nan_backend_yields_none_values(self):
+        """Test nan backend yields none values."""
         payload = _payload(_FieldOrderBackend("nan"))
         self.assertTrue(_valid_field_order(payload))
         entry = payload["candidates"]["fo-a"]
@@ -709,6 +772,7 @@ class TestStage(unittest.TestCase):
             )
 
     def test_no_boundary_backend(self):
+        """Test no boundary backend."""
         payload = _payload(_FieldOrderBackend("noboundary"))
         self.assertTrue(_valid_field_order(payload))
         for entry in payload["candidates"].values():
@@ -716,6 +780,7 @@ class TestStage(unittest.TestCase):
             self.assertEqual(entry["n_live"], 0)
 
     def test_explode_backend_degrades_and_validates(self):
+        """Test explode backend degrades and validates."""
         payload = _payload(_FieldOrderBackend("explode"))
         self.assertTrue(payload["available"])
         self.assertTrue(_valid_field_order(payload))
@@ -724,6 +789,7 @@ class TestStage(unittest.TestCase):
             self.assertEqual(entry["n_live"], 0)
 
     def test_field_values_cap_degrades(self):
+        """Test field values cap degrades."""
         # F8: a live record whose committed field values sum
         # over the 4,096-char cap degrades individually to
         # arm_evaluation_failed and is counted as detail
@@ -735,6 +801,7 @@ class TestStage(unittest.TestCase):
             self.assertEqual(entry["n_detail_screened"], 60)
 
     def test_cancel_unwinds_stage(self):
+        """Test cancel unwinds stage."""
         backend = _FieldOrderBackend()
         event = threading.Event()
         event.set()
@@ -750,6 +817,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_record_budget(self):
+        """Test record budget."""
         backend = _FieldOrderBackend()
         formats = tuple(
             Format(name=f"fo-{i}", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>")
@@ -766,6 +834,7 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "field_order_record_budget_exceeded")
 
     def test_boundary_in_prompts_screens_per_spec_not_stage(self):
+        """Test boundary in prompts screens per spec not stage."""
         # Design section 6: boundary-text containment screens the
         # affected spec's records; it does not fail the stage (the
         # stage-level screen is the special-token audit only).
@@ -792,6 +861,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(_valid_field_order(payload))
 
     def test_per_spec_screen(self):
+        """Test per spec screen."""
         backend = _FieldOrderBackend()
         # The candidate's boundary token decodes to "Rotor" (the
         # endmark token shares its id), so the boundary text
@@ -813,6 +883,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(_valid_field_order(payload))
 
     def test_context_overflow_skeleton(self):
+        """Test context overflow skeleton."""
         backend = _FieldOrderBackend()
         stage = experiments.fieldorder_stage(
             backend,
@@ -828,6 +899,7 @@ class TestStage(unittest.TestCase):
         self.assertTrue(_valid_field_order(payload))
 
     def test_duplicate_format_names_rejected(self):
+        """Test duplicate format names rejected."""
         backend = _FieldOrderBackend()
         with self.assertRaises(ValueError):
             experiments.fieldorder_stage(
@@ -840,7 +912,10 @@ class TestStage(unittest.TestCase):
 
 
 class TestDiff(unittest.TestCase):
+    """Test diff."""
+
     def test_self_diff_unchanged(self):
+        """Test self diff unchanged."""
         payload = _payload()
         result = diff_field_order(payload, payload)
         self.assertEqual(result["available"], "both")
@@ -848,6 +923,7 @@ class TestDiff(unittest.TestCase):
         self.assertEqual(result["candidate_drift"], [])
 
     def test_verdict_drift_detected(self):
+        """Test verdict drift detected."""
         old = _payload()
         new = _payload(_FieldOrderBackend("last_wrong"))
         result = diff_field_order(old, new)
@@ -858,6 +934,7 @@ class TestDiff(unittest.TestCase):
         self.assertIn(("fo-a", "answer_rate_answer_last"), metrics)
 
     def test_one_sided(self):
+        """Test one sided."""
         payload = _payload()
         self.assertEqual(diff_field_order(None, payload)["available"], "new")
         self.assertEqual(diff_field_order(payload, None)["available"], "old")
@@ -865,6 +942,7 @@ class TestDiff(unittest.TestCase):
         self.assertFalse(diff_field_order(None, payload)["changed"])
 
     def test_seed_drift_not_comparable(self):
+        """Test seed drift not comparable."""
         old = _payload(seed=0)
         new = _payload(seed=1)
         result = diff_field_order(old, new)
@@ -872,54 +950,70 @@ class TestDiff(unittest.TestCase):
         self.assertFalse(result["comparable"])
 
     def test_tamper_battery(self):
+        """Test tamper battery."""
         payload = _payload()
 
         def tampered(mutator):
+            """Tampered."""
             clone = copy.deepcopy(payload)
             mutator(clone)
             return clone
 
         def agg_rate(p):
+            """Agg rate."""
             p["candidates"]["fo-a"]["answer_by_arm"]["canonical"]["rate"] = 0.5
 
         def verdict(p):
+            """Verdict."""
             p["candidates"]["fo-a"]["decision"]["verdict"] = "falsified"
 
         def field_value(p):
+            """Field value."""
             p["candidates"]["fo-a"]["records"][0]["field_values"]["age"] = "99"
 
         def document_kind(p):
+            """Document kind."""
             p["candidates"]["fo-a"]["records"][0]["document_kind"] = "non_object"
 
         def dup_flag(p):
+            """Dup flag."""
             p["candidates"]["fo-a"]["records"][0]["duplicate_keys"] = True
 
         def doc_digest(p):
+            """Doc digest."""
             p["candidates"]["fo-a"]["records"][0]["document_digest"] = "0" * 64
 
         def content_digest(p):
+            """Content digest."""
             p["candidates"]["fo-a"]["records"][0]["content_digest"] = "0" * 64
 
         def noncanonical_value(p):
+            """Noncanonical value."""
             p["candidates"]["fo-a"]["records"][0]["field_values"]["age"] = " 36"
 
         def seed_type(p):
+            """Seed type."""
             p["protocol"]["seed"] = True
 
         def extra_record_key(p):
+            """Extra record key."""
             p["candidates"]["fo-a"]["records"][0]["extra"] = 1
 
         def deep_nesting(p):
+            """Deep nesting."""
             p["candidates"]["fo-a"]["records"][0]["field_values"]["age"] = "[" * 20000
 
         def nan_string(p):
+            """Nan string."""
             p["candidates"]["fo-a"]["records"][0]["field_values"]["age"] = "NaN"
 
         def record_swap(p):
+            """Record swap."""
             records = p["candidates"]["fo-a"]["records"]
             records[0], records[1] = records[1], records[0]
 
         def distinct_count(p):
+            """Distinct count."""
             p["candidates"]["fo-a"]["n_distinct_prompts"] = 60
 
         for mutator in (
@@ -942,6 +1036,7 @@ class TestDiff(unittest.TestCase):
                 self.assertFalse(_valid_field_order(tampered(mutator)))
 
     def test_unavailable_candidate_entry(self):
+        """Test unavailable candidate entry."""
         payload = _payload()
         payload["candidates"]["fo-b"] = {
             "status": "unavailable",
@@ -954,7 +1049,10 @@ class TestDiff(unittest.TestCase):
 
 
 class TestReportingAndCli(unittest.TestCase):
+    """Test reporting and cli."""
+
     def test_section_renders_decision_and_limits(self):
+        """Test section renders decision and limits."""
         payload = _payload(formats=FORMATS[:1])
         html = reporting.render_html({"field_order": payload})
         self.assertIn("Schema field order", html)
@@ -964,17 +1062,20 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertIn("37 distinct prompts", html)
 
     def test_section_renders_falsified(self):
+        """Test section renders falsified."""
         payload = _payload(_FieldOrderBackend("last_wrong"), formats=FORMATS[:1])
         html = reporting.render_html({"field_order": payload})
         self.assertIn("field-order invariance falsified", html)
 
     def test_section_absent_without_payload(self):
+        """Test section absent without payload."""
         self.assertNotIn('id="field_order"', reporting.render_html({}))
         self.assertNotIn(
             'id="field_order"', reporting.render_html({"field_order": {"available": False}})
         )
 
     def test_section_escapes_candidate_names(self):
+        """Test section escapes candidate names."""
         payload = _payload(formats=FORMATS[:1])
         payload["candidates"]["<script>x</script>"] = payload["candidates"].pop("fo-a")
         payload["n_candidates"] = 1
@@ -982,6 +1083,7 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertNotIn("<script>x</script>", html)
 
     def test_section_na_rates(self):
+        """Test section na rates."""
         payload = _payload()
         sparse = copy.deepcopy(payload)
         entry = sparse["candidates"]["fo-a"]
@@ -997,6 +1099,7 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertIn("Schema field order", html)
 
     def test_cli_helper_attaches_payload(self):
+        """Test cli helper attaches payload."""
         backend = _FieldOrderBackend()
         result: dict = {}
         cli._run_fieldorder_probe(
@@ -1014,7 +1117,11 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertTrue(_valid_field_order(result["field_order"]))
 
     def test_cli_helper_never_raises(self):
+        """Test cli helper never raises."""
+
         class _ExplodingFingerprint(_FieldOrderBackend):
+            """Exploding fingerprint."""
+
             @property
             def fingerprint(self):  # noqa: ANN202 -- test fake
                 raise RuntimeError("no fingerprint")
@@ -1034,6 +1141,7 @@ class TestReportingAndCli(unittest.TestCase):
         self.assertEqual(result["field_order"]["detail"], "field_order_unavailable")
 
         def boom(*args, **kwargs):
+            """Boom."""
             raise RuntimeError("stage exploded")
 
         original = experiments.fieldorder_stage

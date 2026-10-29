@@ -32,6 +32,7 @@ OK = Generation(ids("ok|"), "limit")
 
 
 def _obs(fixture, passed, *, n_in=10, n_out=5, status="completed"):
+    """Obs."""
     return {
         "fixture": fixture,
         "status": status,
@@ -56,11 +57,15 @@ def _entry(name, outcomes):
 
 
 def _result(decision, entries, selected=None):
+    """Result."""
     return {"decision": decision, "selected_candidate": selected, "search": entries}
 
 
 class SelectionMarginTests(unittest.TestCase):
+    """Selection margin tests."""
+
     def test_unique_winner_margin_is_closest_runner_up(self) -> None:
+        """Test unique winner margin is closest runner up."""
         result = _result(
             "compatible_on_fixture_set",
             [
@@ -81,6 +86,7 @@ class SelectionMarginTests(unittest.TestCase):
         )
 
     def test_unique_winner_runner_up_tie_breaks_by_name(self) -> None:
+        """Test unique winner runner up tie breaks by name."""
         result = _result(
             "held_out_failed",
             [
@@ -98,6 +104,7 @@ class SelectionMarginTests(unittest.TestCase):
         self.assertEqual(margin["decisive_fixtures"], ["f2"])
 
     def test_no_candidate_margin_is_closest_candidate(self) -> None:
+        """Test no candidate margin is closest candidate."""
         result = _result(
             "no_candidate",
             [
@@ -116,6 +123,7 @@ class SelectionMarginTests(unittest.TestCase):
         )
 
     def test_ambiguous_margin_counts_demotions(self) -> None:
+        """Test ambiguous margin counts demotions."""
         fixtures = [("f1", True), ("f2", True), ("f3", True)]
         result = _result(
             "ambiguous",
@@ -132,6 +140,7 @@ class SelectionMarginTests(unittest.TestCase):
         )
 
     def test_ambiguous_two_way_tie(self) -> None:
+        """Test ambiguous two way tie."""
         result = _result(
             "ambiguous",
             [
@@ -149,11 +158,13 @@ class SelectionMarginTests(unittest.TestCase):
         self.assertEqual(margin["decisive_fixtures"], ["f1", "f2"])
 
     def test_failed_and_cancelled_have_no_margin(self) -> None:
+        """Test failed and cancelled have no margin."""
         entries = [_entry("a", [("f1", True, "failed")])]
         self.assertIsNone(selection_margin(_result("failed", entries)))
         self.assertIsNone(selection_margin(_result("cancelled", entries)))
 
     def test_single_fixture_unique_winner(self) -> None:
+        """Test single fixture unique winner."""
         result = _result(
             "compatible_on_fixture_set",
             [_entry("winner", [("only", True)]), _entry("runner", [("only", False)])],
@@ -165,6 +176,7 @@ class SelectionMarginTests(unittest.TestCase):
         self.assertEqual((margin["value"], margin["runner_up"]), (1, "runner"))
 
     def test_single_candidate_winner_has_undefined_margin(self) -> None:
+        """Test single candidate winner has undefined margin."""
         result = _result(
             "compatible_on_fixture_set",
             [_entry("solo", [("f1", True), ("f2", True)])],
@@ -176,6 +188,7 @@ class SelectionMarginTests(unittest.TestCase):
         )
 
     def test_all_fail_no_candidate(self) -> None:
+        """Test all fail no candidate."""
         result = _result(
             "no_candidate",
             [_entry("a", [("f1", False), ("f2", False), ("f3", False)])],
@@ -191,6 +204,7 @@ class SelectionMarginTests(unittest.TestCase):
         )
 
     def test_incomplete_observation_counts_as_failing(self) -> None:
+        """Test incomplete observation counts as failing."""
         result = _result(
             "compatible_on_fixture_set",
             [
@@ -206,6 +220,7 @@ class SelectionMarginTests(unittest.TestCase):
         self.assertEqual(margin["decisive_fixtures"], ["f2"])
 
     def test_ambiguous_without_two_all_pass_candidates_is_absent(self) -> None:
+        """Test ambiguous without two all pass candidates is absent."""
         # Inconsistent records cannot yield a meaningful margin.
         result = _result(
             "ambiguous",
@@ -214,12 +229,16 @@ class SelectionMarginTests(unittest.TestCase):
         self.assertIsNone(selection_margin(result))
 
     def test_margin_rejects_non_dict(self) -> None:
+        """Test margin rejects non dict."""
         with self.assertRaises(ValueError):
             selection_margin([])  # type: ignore[arg-type]
 
 
 class TokenOverheadTests(unittest.TestCase):
+    """Token overhead tests."""
+
     def test_hand_computed_means_and_tax(self) -> None:
+        """Test hand computed means and tax."""
         result = _result(
             "compatible_on_fixture_set",
             [
@@ -249,6 +268,7 @@ class TokenOverheadTests(unittest.TestCase):
         self.assertEqual(overhead["winner_tax_vs_cheapest_pct"], 200.0)
 
     def test_winner_is_cheapest_reports_zero_tax(self) -> None:
+        """Test winner is cheapest reports zero tax."""
         result = _result(
             "compatible_on_fixture_set",
             [_entry("a", [("f1", True)]), _entry("b", [("f1", True)])],
@@ -260,6 +280,7 @@ class TokenOverheadTests(unittest.TestCase):
         self.assertEqual(overhead["winner_tax_vs_cheapest_pct"], 0.0)
 
     def test_cheapest_tie_breaks_by_name(self) -> None:
+        """Test cheapest tie breaks by name."""
         result = _result(
             "ambiguous",
             [_entry("zed", [("f1", True)]), _entry("abc", [("f1", True)])],
@@ -269,12 +290,14 @@ class TokenOverheadTests(unittest.TestCase):
         self.assertIsNone(overhead["winner_tax_vs_cheapest_pct"])
 
     def test_no_winner_reports_null_tax(self) -> None:
+        """Test no winner reports null tax."""
         result = _result("no_candidate", [_entry("a", [("f1", False)])])
         overhead = token_overhead(result)
         self.assertEqual(overhead["cheapest_candidate"], "a")
         self.assertIsNone(overhead["winner_tax_vs_cheapest_pct"])
 
     def test_incomplete_observations_excluded(self) -> None:
+        """Test incomplete observations excluded."""
         entry = _entry("a", [("f1", True, "completed"), ("f2", False, "failed")])
         entry["observations"][1]["input_ids"] = list(range(1000))
         overhead = token_overhead(_result("failed", [entry]))
@@ -283,6 +306,7 @@ class TokenOverheadTests(unittest.TestCase):
         self.assertEqual(stats["max_prompt_tokens"], 10)
 
     def test_candidate_without_completed_observations_gets_null_stats(self) -> None:
+        """Test candidate without completed observations gets null stats."""
         entry = _entry("a", [("f1", False, "failed")])
         overhead = token_overhead(_result("failed", [entry]))
         self.assertEqual(
@@ -312,12 +336,16 @@ class TokenOverheadTests(unittest.TestCase):
             self.assertEqual(overhead["per_candidate"][name]["max_prompt_tokens"], expected_max)
 
     def test_overhead_rejects_non_dict(self) -> None:
+        """Test overhead rejects non dict."""
         with self.assertRaises(ValueError):
             token_overhead("nope")  # type: ignore[arg-type]
 
 
 class DiagnosticsWiringTests(unittest.TestCase):
+    """Diagnostics wiring tests."""
+
     def test_attach_diagnostics_adds_both_keys_without_mutating(self) -> None:
+        """Test attach diagnostics adds both keys without mutating."""
         result = _result(
             "compatible_on_fixture_set",
             [
@@ -358,12 +386,14 @@ class DiagnosticsWiringTests(unittest.TestCase):
         self.assertIn("Token overhead", html)
 
     def test_failed_run_banner_has_no_margin_line(self) -> None:
+        """Test failed run banner has no margin line."""
         html = render_html({"decision": "failed", "search": []})
         self.assertNotIn("Selection margin:", html)
         self.assertIn("Token overhead", html)
         self.assertIn("no search candidates were recorded", html)
 
     def test_banner_line_content_and_escaping(self) -> None:
+        """Test banner line content and escaping."""
         from model_protocol_lab.reporting import _SCRIPT  # noqa: E402
 
         evil = "<script>alert(1)</script>"
@@ -381,6 +411,7 @@ class DiagnosticsWiringTests(unittest.TestCase):
         self.assertNotIn("<script>", scrubbed)
 
     def test_overhead_card_disclaimer_and_tax_line(self) -> None:
+        """Test overhead card disclaimer and tax line."""
         result = _result(
             "compatible_on_fixture_set",
             [_entry("a", [("f1", True)]), _entry("b", [("f1", True)])],
@@ -398,6 +429,7 @@ class DiagnosticsWiringTests(unittest.TestCase):
         self.assertIn("100.0%", html)
 
     def test_save_report_is_byte_deterministic(self) -> None:
+        """Test save report is byte deterministic."""
         second = replace(BASE, name="second")
         backend = FakeBackend(generation=OK)
         result = run_experiment(
@@ -414,6 +446,7 @@ class DiagnosticsWiringTests(unittest.TestCase):
                 )
 
     def test_overhead_html_has_no_remote_references(self) -> None:
+        """Test overhead html has no remote references."""
         result = _result(
             "compatible_on_fixture_set",
             [_entry("a", [("f1", True)]), _entry("b", [("f1", False)])],

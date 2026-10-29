@@ -45,6 +45,7 @@ BOUNDARY = (124,)  # ord("|")
 
 
 def _fixture(fid):
+    """Fixture."""
     return Fixture(
         id=fid,
         messages=(Message(role="user", content="Say the word."),),
@@ -54,6 +55,7 @@ def _fixture(fid):
 
 
 def _obs(fixture_id, output_ids, status="completed", input_ids=(10, 20, 30)):
+    """Obs."""
     return {
         "fixture": fixture_id,
         "status": status,
@@ -63,6 +65,7 @@ def _obs(fixture_id, output_ids, status="completed", input_ids=(10, 20, 30)):
 
 
 def _entry(name, observations, boundary_ids=None):
+    """Entry."""
     entry = {"format": {"name": name}, "observations": observations}
     if boundary_ids is not None:
         entry["boundary_token_ids"] = list(boundary_ids)
@@ -70,6 +73,7 @@ def _entry(name, observations, boundary_ids=None):
 
 
 def _result(entries, max_new_tokens=16):
+    """Result."""
     return {"max_new_tokens": max_new_tokens, "search": entries}
 
 
@@ -81,34 +85,46 @@ class ScriptedStopBackend:
 
     @staticmethod
     def encode(text):
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids):
+        """Decode."""
         return "".join(map(chr, token_ids))
 
     @staticmethod
     def generate(input_ids, *, max_new_tokens, seed, cancel):
+        """Generate."""
         raise AssertionError("stop_stage is post-hoc; generate must not run")
 
 
 class UndecodableBackend(ScriptedStopBackend):
+    """Undecodable backend."""
+
     @staticmethod
     def decode(token_ids):
+        """Decode."""
         raise RuntimeError("no codec")
 
 
 class FirstPositionTests(unittest.TestCase):
+    """First position tests."""
+
     def test_first_index(self):
+        """Test first index."""
         self.assertEqual(first_position((1, 5, 5, 9), 5), 1)
 
     def test_absent_returns_none(self):
+        """Test absent returns none."""
         self.assertIsNone(first_position((1, 2, 3), 9))
 
     def test_empty_tuple(self):
+        """Test empty tuple."""
         self.assertIsNone(first_position((), 9))
 
     def test_malformed_rejected(self):
+        """Test malformed rejected."""
         with self.assertRaises(ValueError):
             first_position([1, 2], 1)
         with self.assertRaises(ValueError):
@@ -122,8 +138,11 @@ class FirstPositionTests(unittest.TestCase):
 
 
 class ClassifyCauseTests(unittest.TestCase):
+    """Classify cause tests."""
+
     @staticmethod
     def _kw(**over):
+        """Kw."""
         base = {
             "output_len": 16,
             "max_new_tokens": 16,
@@ -136,36 +155,44 @@ class ClassifyCauseTests(unittest.TestCase):
         return base
 
     def test_eos_earlier_wins(self):
+        """Test eos earlier wins."""
         self.assertEqual(classify_cause(**self._kw(eos_first=2, stop_first=5)), "eos_id")
 
     def test_stop_earlier_wins(self):
+        """Test stop earlier wins."""
         self.assertEqual(classify_cause(**self._kw(eos_first=7, stop_first=5)), "stop_string")
 
     def test_same_step_tie_goes_to_stop_string(self):
+        """Test same step tie goes to stop string."""
         # Documented precedence: stop string beats EOS in the same step
         # (vLLM port notes in backends.py).
         self.assertEqual(classify_cause(**self._kw(eos_first=4, stop_first=4)), "stop_string")
 
     def test_nothing_fired_cap_reached(self):
+        """Test nothing fired cap reached."""
         self.assertEqual(classify_cause(**self._kw()), "max_length")
 
     def test_nothing_known_is_fail_closed(self):
+        """Test nothing known is fail closed."""
         self.assertEqual(
             classify_cause(**self._kw(eos_known=False, stop_known=False)),
             "stop_unknown",
         )
 
     def test_eos_known_only(self):
+        """Test eos known only."""
         self.assertEqual(classify_cause(**self._kw(eos_first=3, stop_known=False)), "eos_id")
         self.assertEqual(classify_cause(**self._kw(stop_known=False)), "max_length")
 
     def test_stop_known_only(self):
+        """Test stop known only."""
         self.assertEqual(
             classify_cause(**self._kw(eos_known=False, stop_first=6)),
             "stop_string",
         )
 
     def test_short_output_no_fire_is_unknown(self):
+        """Test short output no fire is unknown."""
         # Defensive: unreachable for completed lab observations (the
         # decoder always runs the cap), but never a phantom max_length.
         self.assertEqual(
@@ -174,6 +201,7 @@ class ClassifyCauseTests(unittest.TestCase):
         )
 
     def test_malformed_rejected(self):
+        """Test malformed rejected."""
         with self.assertRaises(ValueError):
             classify_cause(**self._kw(output_len=-1))
         with self.assertRaises(ValueError):
@@ -187,14 +215,19 @@ class ClassifyCauseTests(unittest.TestCase):
 
 
 class OverGeneratedTests(unittest.TestCase):
+    """Over generated tests."""
+
     def test_bleed_arithmetic(self):
+        """Test bleed arithmetic."""
         self.assertEqual(over_generated_tokens(16, 2), 13)
         self.assertEqual(over_generated_tokens(16, 15), 0)
 
     def test_no_eos_no_bleed(self):
+        """Test no eos no bleed."""
         self.assertEqual(over_generated_tokens(16, None), 0)
 
     def test_malformed_rejected(self):
+        """Test malformed rejected."""
         with self.assertRaises(ValueError):
             over_generated_tokens(-1, None)
         with self.assertRaises(ValueError):
@@ -204,16 +237,21 @@ class OverGeneratedTests(unittest.TestCase):
 
 
 class CauseRatesTests(unittest.TestCase):
+    """Cause rates tests."""
+
     def test_rates_sum_to_one(self):
+        """Test rates sum to one."""
         rates = cause_rates(["eos_id", "eos_id", "max_length", "stop_string"])
         self.assertAlmostEqual(sum(rates.values()), 1.0)
         self.assertEqual(rates["eos_id"], 0.5)
         self.assertEqual(rates["stop_unknown"], 0.0)
 
     def test_empty_is_all_zero(self):
+        """Test empty is all zero."""
         self.assertEqual(cause_rates([]), dict.fromkeys(CAUSES, 0.0))
 
     def test_unknown_cause_rejected(self):
+        """Test unknown cause rejected."""
         with self.assertRaises(ValueError):
             cause_rates(["eos_id", "mystery"])
         with self.assertRaises(ValueError):
@@ -221,7 +259,10 @@ class CauseRatesTests(unittest.TestCase):
 
 
 class AggregateTests(unittest.TestCase):
+    """Aggregate tests."""
+
     def test_aggregation_math(self):
+        """Test aggregation math."""
         records = [
             {"cause": "eos_id", "over_generated": 13},
             {"cause": "stop_string", "over_generated": 0},
@@ -235,12 +276,14 @@ class AggregateTests(unittest.TestCase):
         self.assertAlmostEqual(agg["max_length_rate"], 1 / 3)
 
     def test_empty_aggregates(self):
+        """Test empty aggregates."""
         agg = aggregate_cause_records([])
         self.assertEqual(agg["n"], 0)
         self.assertEqual(agg["over_generation_rate"], 0.0)
         self.assertEqual(agg["would_stop_early_rate"], 0.0)
 
     def test_malformed_rejected(self):
+        """Test malformed rejected."""
         with self.assertRaises(ValueError):
             aggregate_cause_records("junk")
         with self.assertRaises(ValueError):
@@ -272,7 +315,10 @@ def _reference_classify(output_len, max_new_tokens, eos_first, stop_first, eos_k
 
 
 class BruteForceOracleTests(unittest.TestCase):
+    """Brute force oracle tests."""
+
     def test_classify_matches_reference_on_200_cases(self):
+        """Test classify matches reference on 200 cases."""
         rng = random.Random(0xC155)  # noqa: S311 -- deterministic test seed
         for _ in range(200):
             output_len = rng.randint(1, 32)
@@ -296,6 +342,7 @@ class BruteForceOracleTests(unittest.TestCase):
             self.assertIn(got, CAUSES)
 
     def test_first_position_matches_list_index(self):
+        """Test first position matches list index."""
         rng = random.Random(0xC155 + 1)  # noqa: S311 -- deterministic test seed
         for _ in range(200):
             ids = tuple(rng.randint(0, 20) for _ in range(rng.randint(0, 10)))
@@ -306,11 +353,14 @@ class BruteForceOracleTests(unittest.TestCase):
 
 
 class StopcauseHypothesisTests(unittest.TestCase):
+    """Stopcause hypothesis tests."""
+
     @given(
         st.lists(st.sampled_from(CAUSES), min_size=1, max_size=20),
     )
     @settings(max_examples=100)
     def test_rates_always_sum_to_one(self, causes):
+        """Test rates always sum to one."""
         self.assertAlmostEqual(sum(cause_rates(causes).values()), 1.0)
 
     @given(
@@ -321,6 +371,7 @@ class StopcauseHypothesisTests(unittest.TestCase):
     )
     @settings(max_examples=200)
     def test_classify_never_leaves_vocabulary(self, output_len, cap, eos_known, stop_known):
+        """Test classify never leaves vocabulary."""
         eos_first = 0 if eos_known else None
         stop_first = 0 if stop_known else None
         cause = classify_cause(
@@ -338,6 +389,7 @@ class StopcauseHypothesisTests(unittest.TestCase):
     )
     @settings(max_examples=100)
     def test_bleed_never_exceeds_output(self, output_len):
+        """Test bleed never exceeds output."""
         for eos_first in (None, 0, output_len - 1):
             bleed = over_generated_tokens(output_len, eos_first)
             self.assertGreaterEqual(bleed, 0)
@@ -345,8 +397,11 @@ class StopcauseHypothesisTests(unittest.TestCase):
 
 
 class StopStageTests(unittest.TestCase):
+    """Stop stage tests."""
+
     @staticmethod
     def _run(entries, backend=None, eos_id=EOS_ID, **kw):
+        """Run."""
         backend = backend or ScriptedStopBackend()
         return stop_stage(
             _result(entries),
@@ -359,9 +414,11 @@ class StopStageTests(unittest.TestCase):
 
     @staticmethod
     def _ids(text):
+        """Ids."""
         return tuple(map(ord, text))
 
     def test_eos_cause_and_bleed(self):
+        """Test eos cause and bleed."""
         # "AB" + EOT at index 2, then "C|": EOT fires before the
         # "|" stop text at index 4.
         out = self._ids("AB") + (EOS_ID,) + self._ids("C|") + self._ids(" " * 11)
@@ -381,6 +438,7 @@ class StopStageTests(unittest.TestCase):
         self.assertEqual(rec["over_generated"], 13)
 
     def test_max_length_cause(self):
+        """Test max length cause."""
         out = self._ids("Q" * 16)
         payload = self._run([_entry("alpha", [_obs("f1", out), _obs("f2", out)])])
         pc = payload["per_candidate"]["alpha"]
@@ -388,6 +446,7 @@ class StopStageTests(unittest.TestCase):
         self.assertEqual(pc["max_length_rate"], 1.0)
 
     def test_stop_unknown_when_nothing_known(self):
+        """Test stop unknown when nothing known."""
         out = self._ids("Q" * 16)
         payload = self._run(
             [_entry("alpha", [_obs("f1", out), _obs("f2", out)])],
@@ -400,6 +459,7 @@ class StopStageTests(unittest.TestCase):
         self.assertFalse(pc["stop_known"])
 
     def test_incomplete_observations_excluded_from_rates(self):
+        """Test incomplete observations excluded from rates."""
         good = self._ids("XY|" + " " * 13)
         payload = self._run([_entry("alpha", [_obs("f1", good), _obs("f2", (), status="failed")])])
         pc = payload["per_candidate"]["alpha"]
@@ -408,6 +468,7 @@ class StopStageTests(unittest.TestCase):
         self.assertFalse(pc["records"][1]["evaluable"])
 
     def test_misaligned_candidate_excluded(self):
+        """Test misaligned candidate excluded."""
         good = self._ids("XY|" + " " * 13)
         payload = self._run(
             [
@@ -419,6 +480,7 @@ class StopStageTests(unittest.TestCase):
         self.assertNotIn("beta", payload["per_candidate"])
 
     def test_per_candidate_boundary_override(self):
+        """Test per candidate boundary override."""
         # Candidate-level boundary ids override the run default.
         out = self._ids("AB#DEF" + " " * 10)
         assert len(out) == 16
@@ -430,6 +492,7 @@ class StopStageTests(unittest.TestCase):
         self.assertEqual(pc["records"][0]["stop_first"], 2)
 
     def test_malformed_result_is_unavailable(self):
+        """Test malformed result is unavailable."""
         backend = ScriptedStopBackend()
         cases = (_fixture("f1"), _fixture("f2"))
         self.assertEqual(
@@ -448,6 +511,7 @@ class StopStageTests(unittest.TestCase):
         )
 
     def test_caller_contract_violations_raise(self):
+        """Test caller contract violations raise."""
         backend = ScriptedStopBackend()
         cases = (_fixture("f1"), _fixture("f2"))
         entries = [_entry("alpha", [_obs("f1", (1, 2)), _obs("f2", (1, 2))])]
@@ -464,7 +528,10 @@ class StopStageTests(unittest.TestCase):
 
 
 def _stop_payload(**over):
+    """Stop payload."""
+
     def _cand(eos_rate=0.5, stop_rate=0.5, bleed=0.5, early=1.0, maxlen=0.0):
+        """Cand."""
         return {
             "n_observations": 2,
             "n_evaluable": 2,
@@ -501,13 +568,17 @@ def _stop_payload(**over):
 
 
 class DiffStopCauseTests(unittest.TestCase):
+    """Diff stop cause tests."""
+
     def test_identical_payloads_unchanged(self):
+        """Test identical payloads unchanged."""
         payload = _stop_payload()
         diff = diff_stop_cause(payload, copy.deepcopy(payload))
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
 
     def test_cause_drift_only_still_changed(self):
+        """Test cause drift only still changed."""
         # Single-disjunct pin: only one cause rate moves.
         old = _stop_payload()
         new = _stop_payload()
@@ -519,6 +590,7 @@ class DiffStopCauseTests(unittest.TestCase):
         self.assertEqual(diff["aggregate_drift"], [])
 
     def test_aggregate_drift_only_still_changed(self):
+        """Test aggregate drift only still changed."""
         old = _stop_payload()
         new = _stop_payload()
         new["per_candidate"]["alpha"]["over_generation_rate"] = 0.0
@@ -529,6 +601,7 @@ class DiffStopCauseTests(unittest.TestCase):
         self.assertEqual(diff["cause_drift"], [])
 
     def test_candidates_added_only_still_changed(self):
+        """Test candidates added only still changed."""
         old = _stop_payload()
         new = _stop_payload()
         new["per_candidate"]["gamma"] = copy.deepcopy(new["per_candidate"]["alpha"])
@@ -537,6 +610,7 @@ class DiffStopCauseTests(unittest.TestCase):
         self.assertEqual(diff["candidates_added"], ["gamma"])
 
     def test_candidates_removed_only_still_changed(self):
+        """Test candidates removed only still changed."""
         old = _stop_payload()
         new = _stop_payload()
         del new["per_candidate"]["beta"]
@@ -545,6 +619,7 @@ class DiffStopCauseTests(unittest.TestCase):
         self.assertEqual(diff["candidates_removed"], ["beta"])
 
     def test_asymmetric(self):
+        """Test asymmetric."""
         payload = _stop_payload()
         self.assertEqual(diff_stop_cause(payload, None)["available"], "old")
         self.assertEqual(diff_stop_cause(None, payload)["available"], "new")
@@ -552,6 +627,7 @@ class DiffStopCauseTests(unittest.TestCase):
         self.assertFalse(diff_stop_cause(payload, None)["changed"])
 
     def test_hostile_payloads_degrade_without_raising(self):
+        """Test hostile payloads degrade without raising."""
         good = _stop_payload()
         hostile = copy.deepcopy(good)
         hostile["per_candidate"][7] = {"cause_rates": {"eos_id": "x"}}
@@ -565,6 +641,7 @@ class DiffStopCauseTests(unittest.TestCase):
         self.assertEqual(diffreports._render_stop_cause_summary("junk"), [])
 
     def test_feeds_identical(self):
+        """Test feeds identical."""
         old = _stop_payload()
         new = _stop_payload()
         new["per_candidate"]["alpha"]["cause_rates"]["eos_id"] = 1.0
@@ -579,6 +656,7 @@ class DiffStopCauseTests(unittest.TestCase):
         self.assertIn("stop_cause", compared)
 
     def test_identical_reports_stay_identical(self):
+        """Test identical reports stay identical."""
         payload = _stop_payload()
         base = {"decision": "select_best", "selected_candidate": "alpha", "search": []}
         old_report = {**base, "stop_cause": copy.deepcopy(payload)}
@@ -592,6 +670,7 @@ class StopCauseMutationGateTests(unittest.TestCase):
     """Tempdir-module mutation gates (the real tree is never rewritten)."""
 
     def _run_gate(self, module_name, name, old_text, new_text, scenario):
+        """Run gate."""
         mod = __import__(f"model_protocol_lab.{module_name}", fromlist=["x"])
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
@@ -611,6 +690,7 @@ class StopCauseMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _tie_break_scenario(mod):
+        """Tie break scenario."""
         # A same-step tie must classify stop_string (documented precedence).
         assert (
             mod.classify_cause(
@@ -625,6 +705,7 @@ class StopCauseMutationGateTests(unittest.TestCase):
         )
 
     def test_mutant_flipped_tie_break_caught(self):
+        """Test mutant flipped tie break caught."""
         self._run_gate(
             "stopcause",
             "flipped_tie_break",
@@ -636,6 +717,7 @@ class StopCauseMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _fail_closed_scenario(mod):
+        """Fail closed scenario."""
         assert (
             mod.classify_cause(
                 output_len=16,
@@ -649,6 +731,7 @@ class StopCauseMutationGateTests(unittest.TestCase):
         )
 
     def test_mutant_dropped_fail_closed_caught(self):
+        """Test mutant dropped fail closed caught."""
         self._run_gate(
             "stopcause",
             "dropped_fail_closed",
@@ -659,6 +742,7 @@ class StopCauseMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _cause_drift_scenario(mod):
+        """Cause drift scenario."""
         old = _stop_payload()
         new = _stop_payload()
         new["per_candidate"]["alpha"]["cause_rates"]["eos_id"] = 1.0
@@ -666,6 +750,7 @@ class StopCauseMutationGateTests(unittest.TestCase):
         assert mod.diff_stop_cause(old, new)["changed"] is True
 
     def test_mutant_dropped_cause_drift_caught(self):
+        """Test mutant dropped cause drift caught."""
         self._run_gate(
             "diffreports",
             "dropped_cause_drift",
@@ -676,12 +761,14 @@ class StopCauseMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _aggregate_drift_scenario(mod):
+        """Aggregate drift scenario."""
         old = _stop_payload()
         new = _stop_payload()
         new["per_candidate"]["alpha"]["over_generation_rate"] = 0.0
         assert mod.diff_stop_cause(old, new)["changed"] is True
 
     def test_mutant_dropped_aggregate_drift_caught(self):
+        """Test mutant dropped aggregate drift caught."""
         self._run_gate(
             "diffreports",
             "dropped_aggregate_drift",
@@ -692,18 +779,23 @@ class StopCauseMutationGateTests(unittest.TestCase):
 
 
 class StopCauseSectionTests(unittest.TestCase):
+    """Stop cause section tests."""
+
     def test_renders_rates_and_bleed(self):
+        """Test renders rates and bleed."""
         html = _stopcause_section({"stop_cause": _stop_payload()})
         self.assertIn('id="stop-cause"', html)
         self.assertIn("alpha", html)
         self.assertIn("50%", html)
 
     def test_unavailable_renders_nothing(self):
+        """Test unavailable renders nothing."""
         self.assertEqual(_stopcause_section({}), "")
         self.assertEqual(_stopcause_section({"stop_cause": {"available": False}}), "")
         self.assertEqual(_stopcause_section({"stop_cause": {"available": True}}), "")
 
     def test_hostile_candidate_name_escaped(self):
+        """Test hostile candidate name escaped."""
         payload = _stop_payload()
         payload["per_candidate"]["<script>alert(1)</script>"] = copy.deepcopy(
             payload["per_candidate"]["alpha"]
@@ -713,6 +805,7 @@ class StopCauseSectionTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;", html)
 
     def test_renderer_constants_match_module(self):
+        """Test renderer constants match module."""
         # The renderer's local cause vocabulary must track stopcause.CAUSES.
         from model_protocol_lab.reporting import _STOPCAUSE_CAUSES
 
@@ -720,7 +813,10 @@ class StopCauseSectionTests(unittest.TestCase):
 
 
 class StopCauseSanitizationTests(unittest.TestCase):
+    """Stop cause sanitization tests."""
+
     def test_stderr_summary_strips_terminal_escapes(self):
+        """Test stderr summary strips terminal escapes."""
         old = _stop_payload()
         new = _stop_payload()
         new["per_candidate"]["\x1b[31malpha"] = copy.deepcopy(new["per_candidate"]["alpha"])
@@ -733,12 +829,15 @@ class StopCauseSanitizationTests(unittest.TestCase):
         self.assertTrue(any("added" in line for line in lines))
 
     def test_summary_unavailable_sides(self):
+        """Test summary unavailable sides."""
         self.assertEqual(diffreports._render_stop_cause_summary({"available": "neither"}), [])
         lines = diffreports._render_stop_cause_summary({"available": "old"})
         self.assertTrue(any("did not record" in line for line in lines))
 
 
 class StopCauseHypothesisDiffTests(unittest.TestCase):
+    """Stop cause hypothesis diff tests."""
+
     @given(
         st.dictionaries(
             st.text(min_size=1, max_size=8),
@@ -749,6 +848,7 @@ class StopCauseHypothesisDiffTests(unittest.TestCase):
     )
     @settings(max_examples=100)
     def test_diff_never_raises_on_rate_maps(self, rates):
+        """Test diff never raises on rate maps."""
         old = _stop_payload()
         new = _stop_payload()
         new["per_candidate"]["alpha"]["cause_rates"] = dict(rates)
@@ -759,7 +859,10 @@ class StopCauseHypothesisDiffTests(unittest.TestCase):
 
 
 class CliProbeTests(unittest.TestCase):
+    """Cli probe tests."""
+
     def test_run_stop_cause_flag(self):
+        """Test run stop cause flag."""
         from model_protocol_lab import cli
 
         self.assertTrue(hasattr(cli, "_run_stop_probe"))
@@ -783,6 +886,7 @@ class CliProbeTests(unittest.TestCase):
         self.assertEqual(payload["per_candidate"]["alpha"]["cause_rates"]["stop_string"], 1.0)
 
     def test_probe_never_raises(self):
+        """Test probe never raises."""
         from model_protocol_lab import cli
 
         result = {"decision": "selected"}
@@ -797,6 +901,7 @@ class CliProbeTests(unittest.TestCase):
         self.assertEqual(result["stop_cause"]["detail"], "stop_unavailable")
 
     def test_flag_registered(self):
+        """Test flag registered."""
         from model_protocol_lab.cli import build_parser
 
         parser = build_parser()
@@ -820,7 +925,10 @@ class CliProbeTests(unittest.TestCase):
 
 
 class SampleReportTests(unittest.TestCase):
+    """Sample report tests."""
+
     def test_sample_stop_cause_exercise_deterministic(self):
+        """Test sample stop cause exercise deterministic."""
         script = Path(__file__).resolve().parent.parent / "examples" / "make_sample_report.py"
         spec = importlib.util.spec_from_file_location("make_sample_report_c155", script)
         assert spec is not None and spec.loader is not None
@@ -847,6 +955,7 @@ class SampleReportTests(unittest.TestCase):
                 self.assertEqual(pc["cause_rates"]["stop_string"], 1.0)
 
     def test_committed_sample_has_stop_cause(self):
+        """Test committed sample has stop cause."""
         sample = Path(__file__).resolve().parent.parent / "examples" / "sample-report"
         results = json.loads((sample / "results.json").read_text(encoding="utf-8"))
         self.assertTrue(results["stop_cause"]["available"])
@@ -856,7 +965,10 @@ class SampleReportTests(unittest.TestCase):
 
 
 class TocAnchorTests(unittest.TestCase):
+    """Toc anchor tests."""
+
     def test_stop_cause_anchor_resolves(self):
+        """Test stop cause anchor resolves."""
         sample = Path(__file__).resolve().parent.parent / "examples" / "sample-report"
         results = json.loads((sample / "results.json").read_text(encoding="utf-8"))
         from model_protocol_lab import reporting

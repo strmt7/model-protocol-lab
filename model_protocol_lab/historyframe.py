@@ -723,6 +723,7 @@ def _rate(numerator: int, denominator: int) -> float | None:
     return (numerator / denominator) if denominator else None
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _contrast_aggregate(records: list[dict[str, Any]], contrast: str) -> dict[str, Any]:
     """One headline contrast (own vs ``contrast``) over one
     candidate's records: eligibility accounting, the paired

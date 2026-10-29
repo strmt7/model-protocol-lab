@@ -76,12 +76,14 @@ class TestBidiControlsStripped(unittest.TestCase):
     """Every bidi control must be stripped by every sanitizer."""
 
     def test_bidi_controls_stripped(self) -> None:
+        """Test bidi controls stripped."""
         for name, sanitize in _SANITIZERS:
             for ch in _BIDI:
                 with self.subTest(sanitizer=name, char=f"U+{ord(ch):04X}"):
                     self.assertEqual(sanitize(f"safe-{ch}evil"), "safe-evil")
 
     def test_trojan_source_spoof_neutralized(self) -> None:
+        """Test trojan source spoof neutralized."""
         # The canonical spoof: an ID that displays as a trusted name while
         # being logically different. After sanitization the override is gone,
         # so display order == logical order.
@@ -93,6 +95,7 @@ class TestBidiControlsStripped(unittest.TestCase):
                 self.assertEqual(cleaned, "trusted-fixture--evil")
 
     def test_isolate_spoof_neutralized(self) -> None:
+        """Test isolate spoof neutralized."""
         spoof = "\u2067evil\u2069-trusted"
         for name, sanitize in _SANITIZERS:
             with self.subTest(sanitizer=name):
@@ -108,12 +111,14 @@ class TestDiagnosticInvisiblePreserved(unittest.TestCase):
     """
 
     def test_invisible_formats_preserved(self) -> None:
+        """Test invisible formats preserved."""
         for name, sanitize in _SANITIZERS:
             for ch in _PRESERVED_INVISIBLE:
                 with self.subTest(sanitizer=name, char=f"U+{ord(ch):04X}"):
                     self.assertEqual(sanitize(f"a{ch}b"), f"a{ch}b")
 
     def test_bom_survives_in_fixtures_safe(self) -> None:
+        """Test bom survives in fixtures safe."""
         # Direct regression guard for the cycle-114 design decision: the BOM
         # must reach the ``!r`` diagnostic in the CSV-header error message.
         self.assertEqual(fixtures_mod._safe("\ufeffid"), "\ufeffid")
@@ -123,12 +128,14 @@ class TestLegitimateTextPreserved(unittest.TestCase):
     """Legitimate text must survive sanitization."""
 
     def test_text_preserved(self) -> None:
+        """Test text preserved."""
         for name, sanitize in _SANITIZERS:
             for ch in _PRESERVED_TEXT:
                 with self.subTest(sanitizer=name, char=f"U+{ord(ch):04X}"):
                     self.assertEqual(sanitize(f"a{ch}b"), f"a{ch}b")
 
     def test_zwj_emoji_sequence_preserved(self) -> None:
+        """Test zwj emoji sequence preserved."""
         # Family emoji: man + ZWJ + woman + ZWJ + girl.
         family = "\U0001f468\u200d\U0001f469\u200d\U0001f467"
         for name, sanitize in _SANITIZERS:
@@ -140,6 +147,7 @@ class TestExistingBehaviorPreserved(unittest.TestCase):
     """The C0/C1/surrogate stripping contract is unchanged."""
 
     def test_c0_c1_stripped_everywhere(self) -> None:
+        """Test c0 c1 stripped everywhere."""
         for name, sanitize in _SANITIZERS:
             with self.subTest(sanitizer=name):
                 self.assertEqual(sanitize("a\x1bb"), "ab")  # ESC
@@ -148,11 +156,13 @@ class TestExistingBehaviorPreserved(unittest.TestCase):
                 self.assertEqual(sanitize("a\x9bb"), "ab")  # C1 CSI
 
     def test_lone_surrogates_stripped_everywhere(self) -> None:
+        """Test lone surrogates stripped everywhere."""
         for name, sanitize in _SANITIZERS:
             with self.subTest(sanitizer=name):
                 self.assertEqual(sanitize("A\ud800B"), "AB")
 
     def test_debug_keeps_tab_lf_cr_others_strip(self) -> None:
+        """Test debug keeps tab lf cr others strip."""
         # debug keeps \t \n \r so multi-line renders stay readable; the
         # ID-oriented sanitizers strip all C0.
         self.assertEqual(debug_mod._sanitize_display("a\tb\nc\rd"), "a\tb\nc\rd")
@@ -167,6 +177,7 @@ class TestSanitizerParity(unittest.TestCase):
     """
 
     def test_parity_on_bidi_battery(self) -> None:
+        """Test parity on bidi battery."""
         battery = "".join(_BIDI)
         hostile = f"fixture-{battery}-id"
         results = {name: sanitize(hostile) for name, sanitize in _SANITIZERS}
@@ -190,6 +201,7 @@ class TestEndToEnd(unittest.TestCase):
     """Hostile IDs must not reach the operator's terminal with bidi intact."""
 
     def test_repl_fixtures_listing_strips_bidi(self) -> None:
+        """Test repl fixtures listing strips bidi."""
         from model_protocol_lab.core import Fixture, Message, Split
         from model_protocol_lab.debug import DebugShell
 
@@ -214,10 +226,12 @@ class TestEndToEnd(unittest.TestCase):
         out.encode("utf-8", errors="strict")
 
     def test_fixtures_safe_keeps_bom_for_diagnostics(self) -> None:
+        """Test fixtures safe keeps bom for diagnostics."""
         cleaned = fixtures_mod._safe("\ufeffid,group,partition,expected")
         self.assertEqual(cleaned, "\ufeffid,group,partition,expected")
 
     def test_diffreports_display_id_strips_bidi_candidate(self) -> None:
+        """Test diffreports display id strips bidi candidate."""
         cleaned = dr_mod._display_id("cand\u202eevil")
         self.assertEqual(cleaned, "candevil")
 

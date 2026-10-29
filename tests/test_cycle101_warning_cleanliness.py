@@ -24,6 +24,7 @@ PKG = REPO_ROOT / "model_protocol_lab"
 
 
 def _run_warnfree(code: str) -> subprocess.CompletedProcess[str]:
+    """Run warnfree."""
     return subprocess.run(
         [sys.executable, "-W", "error", "-c", code],
         capture_output=True,
@@ -35,7 +36,10 @@ def _run_warnfree(code: str) -> subprocess.CompletedProcess[str]:
 
 
 class WarningCleanlinessTests(unittest.TestCase):
+    """Warning cleanliness tests."""
+
     def test_all_modules_import_warnfree(self):
+        """Test all modules import warnfree."""
         mods = sorted(p.stem for p in PKG.glob("*.py") if p.name != "__init__.py")
         self.assertGreater(len(mods), 10)
         imports = "; ".join(f"import model_protocol_lab.{m}" for m in mods)
@@ -48,6 +52,7 @@ class WarningCleanlinessTests(unittest.TestCase):
         self.assertIn("ok", proc.stdout)
 
     def test_doctor_smoke_warnfree(self):
+        """Test doctor smoke warnfree."""
         code = (
             "import json, tempfile, pathlib;"
             "from model_protocol_lab.doctor import examine_model;"
@@ -67,6 +72,7 @@ class WarningCleanlinessTests(unittest.TestCase):
         )
 
     def test_report_render_smoke_warnfree(self):
+        """Test report render smoke warnfree."""
         code = (
             "from model_protocol_lab.reporting import render_html;"
             "h = render_html({'decision': 'abstained', 'search': []});"
@@ -82,6 +88,7 @@ class WarningCleanlinessTests(unittest.TestCase):
         self.assertIn("ok", proc.stdout)
 
     def test_cli_help_warnfree(self):
+        """Test cli help warnfree."""
         proc = subprocess.run(
             [sys.executable, "-W", "error", "-m", "model_protocol_lab", "--help"],
             capture_output=True,

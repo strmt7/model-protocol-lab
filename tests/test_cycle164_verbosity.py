@@ -50,10 +50,12 @@ class VerbosityScriptedBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(map(chr, token_ids))
 
     def generate(
@@ -64,6 +66,7 @@ class VerbosityScriptedBackend:
         seed: int,
         cancel: Event,
     ) -> Generation:
+        """Generate."""
         prompt = self.decode(tuple(input_ids))
         # candidate name travels in the prompt via the format marker
         name = prompt.split("\x00")[-1] if "\x00" in prompt else "?"
@@ -73,6 +76,7 @@ class VerbosityScriptedBackend:
 
 
 def _format(name: str) -> Format:
+    """Format."""
     return Format(
         name=name,
         bos="",
@@ -83,6 +87,7 @@ def _format(name: str) -> Format:
 
 
 def _obs(candidate: str, fixture: str, n_tokens: int, status: str = "completed") -> dict[str, Any]:
+    """Obs."""
     return {
         "candidate": candidate,
         "fixture": fixture,
@@ -93,45 +98,58 @@ def _obs(candidate: str, fixture: str, n_tokens: int, status: str = "completed")
 
 
 def _expected() -> dict[str, str]:
+    """Expected."""
     return {"f-blue": "BLUE", "f-green": "GREEN", "f-long": "x" * 100}
 
 
 class BrevityIdealTests(unittest.TestCase):
+    """Brevity ideal tests."""
+
     def test_short_answers_qualify(self):
+        """Test short answers qualify."""
         self.assertTrue(is_brevity_ideal("BLUE"))
         self.assertTrue(is_brevity_ideal("7"))
         self.assertTrue(is_brevity_ideal("  SOUTH  "))
         self.assertTrue(is_brevity_ideal("x" * BREVITY_IDEAL_MAX_CHARS))
 
     def test_long_answer_rejected(self):
+        """Test long answer rejected."""
         self.assertFalse(is_brevity_ideal("x" * (BREVITY_IDEAL_MAX_CHARS + 1)))
 
     def test_empty_and_whitespace_rejected(self):
+        """Test empty and whitespace rejected."""
         self.assertFalse(is_brevity_ideal(""))
         self.assertFalse(is_brevity_ideal("   "))
 
     def test_multiline_rejected(self):
+        """Test multiline rejected."""
         self.assertFalse(is_brevity_ideal("a\nb"))
         self.assertFalse(is_brevity_ideal("a\rb"))
 
     def test_non_string_rejected(self):
+        """Test non string rejected."""
         self.assertFalse(is_brevity_ideal(None))
         self.assertFalse(is_brevity_ideal(123))
         self.assertFalse(is_brevity_ideal(b"BLUE"))
 
 
 class ExcessTokensTests(unittest.TestCase):
+    """Excess tokens tests."""
+
     def test_basic(self):
+        """Test basic."""
         self.assertEqual(excess_tokens(16, 4), 12)
         self.assertEqual(excess_tokens(4, 4), 0)
 
     def test_clamped_at_zero(self):
+        """Test clamped at zero."""
         # Under-generation is a different failure mode (graded by
         # exact_match); verbosity never reports negative excess.
         self.assertEqual(excess_tokens(0, 4), 0)
         self.assertEqual(excess_tokens(3, 10), 0)
 
     def test_rejects_bad_input(self):
+        """Test rejects bad input."""
         for bad in (-1, 1.5, "4", True, None):
             with self.assertRaises(ValueError, msg=f"generated={bad!r}"):
                 excess_tokens(bad, 4)
@@ -140,7 +158,10 @@ class ExcessTokensTests(unittest.TestCase):
 
 
 class LengthDistributionTests(unittest.TestCase):
+    """Length distribution tests."""
+
     def test_empty(self):
+        """Test empty."""
         dist = length_distribution([])
         self.assertEqual(dist["n"], 0)
         for key in (
@@ -154,6 +175,7 @@ class LengthDistributionTests(unittest.TestCase):
             self.assertIsNone(dist[key])
 
     def test_single(self):
+        """Test single."""
         dist = length_distribution([7])
         self.assertEqual(dist["n"], 1)
         self.assertEqual(dist["median_excess"], 7.0)
@@ -164,6 +186,7 @@ class LengthDistributionTests(unittest.TestCase):
         self.assertEqual(dist["max_excess"], 7)
 
     def test_odd_count(self):
+        """Test odd count."""
         # [0, 10, 20]: type-7 quartiles -> p25=5, median=10, p75=15
         dist = length_distribution([20, 0, 10])
         self.assertEqual(dist["median_excess"], 10.0)
@@ -174,6 +197,7 @@ class LengthDistributionTests(unittest.TestCase):
         self.assertEqual(dist["max_excess"], 20)
 
     def test_even_count_interpolates(self):
+        """Test even count interpolates."""
         # [0, 10]: median=(0+10)/2=5, p25=2.5, p75=7.5
         dist = length_distribution([10, 0])
         self.assertEqual(dist["median_excess"], 5.0)
@@ -182,6 +206,7 @@ class LengthDistributionTests(unittest.TestCase):
         self.assertEqual(dist["iqr_excess"], 5.0)
 
     def test_rejects_bad_input(self):
+        """Test rejects bad input."""
         with self.assertRaises(ValueError):
             length_distribution("not a list")  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
@@ -191,7 +216,10 @@ class LengthDistributionTests(unittest.TestCase):
 
 
 class CandidateVerbosityTests(unittest.TestCase):
+    """Candidate verbosity tests."""
+
     def test_aggregation(self):
+        """Test aggregation."""
         cell = candidate_verbosity([(16, 4, True), (10, 5, False), (4, 4, False)])
         self.assertEqual(cell["n"], 3)
         self.assertEqual(cell["n_evaluable"], 3)
@@ -201,6 +229,7 @@ class CandidateVerbosityTests(unittest.TestCase):
         self.assertAlmostEqual(cell["capped_share"], 1 / 3)
 
     def test_malformed_records_excluded_fail_closed(self):
+        """Test malformed records excluded fail closed."""
         cell = candidate_verbosity(
             [
                 (16, 4, True),
@@ -216,6 +245,7 @@ class CandidateVerbosityTests(unittest.TestCase):
         self.assertEqual(cell["median_excess"], 12.0)
 
     def test_empty(self):
+        """Test empty."""
         cell = candidate_verbosity([])
         self.assertEqual(cell["n"], 0)
         self.assertEqual(cell["n_evaluable"], 0)
@@ -223,12 +253,16 @@ class CandidateVerbosityTests(unittest.TestCase):
         self.assertIsNone(cell["capped_share"])
 
     def test_rejects_non_list(self):
+        """Test rejects non list."""
         with self.assertRaises(ValueError):
             candidate_verbosity("nope")  # type: ignore[arg-type]
 
 
 class VerbosityStageTests(unittest.TestCase):
+    """Verbosity stage tests."""
+
     def test_posthoc_measurement(self):
+        """Test posthoc measurement."""
         backend = VerbosityScriptedBackend()
         stage = verbosity_stage(
             observations=[
@@ -254,6 +288,7 @@ class VerbosityStageTests(unittest.TestCase):
         self.assertEqual(b["capped_share"], 1.0)
 
     def test_non_brevity_fixtures_excluded(self):
+        """Test non brevity fixtures excluded."""
         backend = VerbosityScriptedBackend()
         stage = verbosity_stage(
             observations=[_obs("a", "f-long", 16)],
@@ -267,6 +302,7 @@ class VerbosityStageTests(unittest.TestCase):
         self.assertIsNone(cell["median_excess"])
 
     def test_failed_status_excluded(self):
+        """Test failed status excluded."""
         backend = VerbosityScriptedBackend()
         stage = verbosity_stage(
             observations=[_obs("a", "f-blue", 4, status="failed")],
@@ -279,6 +315,7 @@ class VerbosityStageTests(unittest.TestCase):
         self.assertEqual(cell["n_evaluable"], 0)
 
     def test_malformed_observations_fail_closed(self):
+        """Test malformed observations fail closed."""
         backend = VerbosityScriptedBackend()
         stage = verbosity_stage(
             observations=[
@@ -327,6 +364,7 @@ class VerbosityStageTests(unittest.TestCase):
         self.assertEqual(cell["n_evaluable"], 1)
 
     def test_contract_violations_raise(self):
+        """Test contract violations raise."""
         backend = VerbosityScriptedBackend()
         good_obs = [_obs("a", "f-blue", 4)]
         good_exp = _expected()
@@ -360,7 +398,11 @@ class VerbosityStageTests(unittest.TestCase):
             )
 
     def test_backend_without_encode_raises(self):
+        """Test backend without encode raises."""
+
         class NoEncode:
+            """No encode."""
+
             pass
 
         with self.assertRaises(ValueError):
@@ -372,9 +414,14 @@ class VerbosityStageTests(unittest.TestCase):
             )
 
     def test_backend_bad_encode_raises(self):
+        """Test backend bad encode raises."""
+
         class BadEncode(VerbosityScriptedBackend):
+            """Bad encode."""
+
             @staticmethod
             def encode(text: str):
+                """Encode."""
                 return "not ids"  # type: ignore[return-value]
 
         with self.assertRaises(ValueError):
@@ -387,6 +434,7 @@ class VerbosityStageTests(unittest.TestCase):
 
 
 def _stage_two_candidates() -> dict[str, Any]:
+    """Stage two candidates."""
     backend = VerbosityScriptedBackend()
     return verbosity_stage(
         observations=[
@@ -402,7 +450,10 @@ def _stage_two_candidates() -> dict[str, Any]:
 
 
 class VerbosityProfileTests(unittest.TestCase):
+    """Verbosity profile tests."""
+
     def test_gap_and_extremes(self):
+        """Test gap and extremes."""
         profile = verbosity_profile(("a", "b"), _stage_two_candidates())
         self.assertTrue(profile["available"])
         self.assertEqual(profile["n_brevity_fixtures"], 2)
@@ -414,6 +465,7 @@ class VerbosityProfileTests(unittest.TestCase):
         self.assertEqual(profile["excluded_candidates"], [])
 
     def test_uniform(self):
+        """Test uniform."""
         backend = VerbosityScriptedBackend()
         stage = verbosity_stage(
             observations=[_obs("a", "f-blue", 8), _obs("b", "f-blue", 8)],
@@ -430,6 +482,7 @@ class VerbosityProfileTests(unittest.TestCase):
         self.assertEqual(profile["least_verbose"], ["a", "b"])
 
     def test_excluded_candidates(self):
+        """Test excluded candidates."""
         backend = VerbosityScriptedBackend()
         stage = verbosity_stage(
             observations=[_obs("a", "f-blue", 8)],
@@ -443,6 +496,7 @@ class VerbosityProfileTests(unittest.TestCase):
         self.assertEqual(profile["median_excess_gap"], 0.0)  # single evaluable candidate
 
     def test_invalid_input_unavailable(self):
+        """Test invalid input unavailable."""
         stage = _stage_two_candidates()
         self.assertFalse(verbosity_profile((), stage)["available"])
         self.assertFalse(verbosity_profile(("a", "a"), stage)["available"])
@@ -480,6 +534,7 @@ def _oracle_distribution(excesses: list[int]) -> dict[str, Any]:
         }
 
     def q(frac: Fraction) -> float:
+        """Q."""
         pos = frac * (n - 1)
         low = int(pos)  # floor for non-negative
         high = low + (1 if pos != low else 0)
@@ -503,7 +558,10 @@ def _oracle_distribution(excesses: list[int]) -> dict[str, Any]:
 
 
 class VerbosityOracleTests(unittest.TestCase):
+    """Verbosity oracle tests."""
+
     def test_200_case_differential(self):
+        """Test 200 case differential."""
         rng = random.Random(20261019)  # noqa: S311 -- deterministic test seed
         for trial in range(200):
             n = rng.randint(0, 25)
@@ -527,6 +585,7 @@ class VerbosityOracleTests(unittest.TestCase):
                     )
 
     def test_excess_nonnegative_oracle(self):
+        """Test excess nonnegative oracle."""
         rng = random.Random(77)  # noqa: S311 -- deterministic test seed
         for _ in range(200):
             generated = rng.randint(0, 500)
@@ -541,9 +600,12 @@ class VerbosityOracleTests(unittest.TestCase):
 
 
 class VerbosityPropertyTests(unittest.TestCase):
+    """Verbosity property tests."""
+
     @given(st.lists(st.integers(min_value=0, max_value=10**6), max_size=50))
     @settings(max_examples=100)
     def test_distribution_properties(self, excesses):
+        """Test distribution properties."""
         dist = length_distribution(excesses)
         self.assertEqual(dist["n"], len(excesses))
         if not excesses:
@@ -560,11 +622,13 @@ class VerbosityPropertyTests(unittest.TestCase):
     @given(st.integers(min_value=0, max_value=10**6), st.integers(min_value=0, max_value=10**6))
     @settings(max_examples=100)
     def test_excess_clamped(self, generated, minimal):
+        """Test excess clamped."""
         self.assertGreaterEqual(excess_tokens(generated, minimal), 0)
 
     @given(st.text())
     @settings(max_examples=200)
     def test_brevity_ideal_bounded(self, text):
+        """Test brevity ideal bounded."""
         if is_brevity_ideal(text):
             stripped = text.strip()
             self.assertTrue(stripped)
@@ -578,7 +642,10 @@ class VerbosityPropertyTests(unittest.TestCase):
 
 
 class VerbosityMutationGateTests(unittest.TestCase):
+    """Verbosity mutation gate tests."""
+
     def _run_gate(self, module_name, name, old_text, new_text, scenario):
+        """Run gate."""
         mod = __import__(f"model_protocol_lab.{module_name}", fromlist=["x"])
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
@@ -598,11 +665,13 @@ class VerbosityMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _clamp_scenario(mod):
+        """Clamp scenario."""
         # Under-generation must clamp to zero, never go negative.
         result = mod.excess_tokens(3, 10)
         assert result == 0, result
 
     def test_mutant_clamp_removed_caught(self):
+        """Test mutant clamp removed caught."""
         self._run_gate(
             "verbosity",
             "clamp_removed",
@@ -613,11 +682,13 @@ class VerbosityMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _quantile_scenario(mod):
+        """Quantile scenario."""
         # Even-n median must interpolate, not snap to the lower value.
         dist = mod.length_distribution([0, 10])
         assert dist["median_excess"] == 5.0, dist
 
     def test_mutant_quantile_no_interpolation_caught(self):
+        """Test mutant quantile no interpolation caught."""
         self._run_gate(
             "verbosity",
             "quantile_no_interpolation",
@@ -628,6 +699,7 @@ class VerbosityMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _capped_boundary_scenario(mod):
+        """Capped boundary scenario."""
         backend = VerbosityScriptedBackend()
         stage = mod.verbosity_stage(
             observations=[_obs("a", "f-blue", 16)],
@@ -640,6 +712,7 @@ class VerbosityMutationGateTests(unittest.TestCase):
         assert cell["capped_share"] == 1.0, cell
 
     def test_mutant_capped_strict_caught(self):
+        """Test mutant capped strict caught."""
         self._run_gate(
             "experiments",
             "capped_strict",
@@ -650,6 +723,7 @@ class VerbosityMutationGateTests(unittest.TestCase):
 
     @staticmethod
     def _iqr_drift_scenario(mod):
+        """Iqr drift scenario."""
         old = _vb_diff_payload()
         new = _vb_diff_payload()
         # IQR widens within valid quartile ordering: only iqr_drift fires.
@@ -664,6 +738,7 @@ class VerbosityMutationGateTests(unittest.TestCase):
         assert not diff["capped_share_drift"], diff
 
     def test_mutant_diff_iqr_drift_ignored_caught(self):
+        """Test mutant diff iqr drift ignored caught."""
         self._run_gate(
             "diffreports",
             "iqr_drift_ignored",
@@ -674,6 +749,7 @@ class VerbosityMutationGateTests(unittest.TestCase):
 
 
 def _vb_entry(**overrides):
+    """Vb entry."""
     entry = {
         "n": 4,
         "n_evaluable": 4,
@@ -690,6 +766,7 @@ def _vb_entry(**overrides):
 
 
 def _vb_diff_payload():
+    """Vb diff payload."""
     return {
         "available": True,
         "n_fixtures": 3,
@@ -703,7 +780,10 @@ def _vb_diff_payload():
 
 
 class DiffVerbosityTests(unittest.TestCase):
+    """Diff verbosity tests."""
+
     def test_identical_payloads_unchanged(self):
+        """Test identical payloads unchanged."""
         diff = diffreports.diff_verbosity(_vb_diff_payload(), _vb_diff_payload())
         self.assertEqual(diff["available"], "both")
         self.assertFalse(diff["changed"])
@@ -711,6 +791,7 @@ class DiffVerbosityTests(unittest.TestCase):
         self.assertEqual(diff["candidates_added"], [])
 
     def test_median_drift_single_cause(self):
+        """Test median drift single cause."""
         old, new = _vb_diff_payload(), _vb_diff_payload()
         # Median moves within the pinned quartiles (2.0 -> 2.5).
         new["per_candidate"]["c"]["median_excess"] = 2.5
@@ -724,6 +805,7 @@ class DiffVerbosityTests(unittest.TestCase):
         self.assertFalse(diff["capped_share_drift"])
 
     def test_iqr_drift_single_cause(self):
+        """Test iqr drift single cause."""
         old, new = _vb_diff_payload(), _vb_diff_payload()
         new["per_candidate"]["d"]["iqr_excess"] = 7.5
         diff = diffreports.diff_verbosity(old, new)
@@ -733,6 +815,7 @@ class DiffVerbosityTests(unittest.TestCase):
         self.assertFalse(diff["capped_share_drift"])
 
     def test_capped_share_drift_single_cause(self):
+        """Test capped share drift single cause."""
         old, new = _vb_diff_payload(), _vb_diff_payload()
         new["per_candidate"]["c"]["capped_share"] = 1.0
         diff = diffreports.diff_verbosity(old, new)
@@ -742,6 +825,7 @@ class DiffVerbosityTests(unittest.TestCase):
         self.assertFalse(diff["iqr_drift"])
 
     def test_candidates_added_removed(self):
+        """Test candidates added removed."""
         old, new = _vb_diff_payload(), _vb_diff_payload()
         new["per_candidate"]["e"] = _vb_entry()
         diff = diffreports.diff_verbosity(old, new)
@@ -754,6 +838,7 @@ class DiffVerbosityTests(unittest.TestCase):
         self.assertEqual(diff2["candidates_removed"], ["d"])
 
     def test_excluded_set_changes(self):
+        """Test excluded set changes."""
         old, new = _vb_diff_payload(), _vb_diff_payload()
         new["excluded_candidates"] = ["c"]
         diff = diffreports.diff_verbosity(old, new)
@@ -762,6 +847,7 @@ class DiffVerbosityTests(unittest.TestCase):
         self.assertEqual(diff["excluded_removed"], [])
 
     def test_asymmetric_availability(self):
+        """Test asymmetric availability."""
         diff = diffreports.diff_verbosity(_vb_diff_payload(), {"available": False})
         self.assertEqual(diff["available"], "old")
         self.assertFalse(diff["changed"])
@@ -769,6 +855,7 @@ class DiffVerbosityTests(unittest.TestCase):
         self.assertEqual(neither["available"], "neither")
 
     def test_hostile_payload_rejected(self):
+        """Test hostile payload rejected."""
         hostile = _vb_diff_payload()
         hostile["per_candidate"]["c"]["median_excess"] = "huge"
         diff = diffreports.diff_verbosity(hostile, _vb_diff_payload())
@@ -776,6 +863,7 @@ class DiffVerbosityTests(unittest.TestCase):
         self.assertFalse(diff["changed"])
 
     def test_none_cell_supported(self):
+        """Test none cell supported."""
         old, new = _vb_diff_payload(), _vb_diff_payload()
         old["per_candidate"]["c"] = None
         new["per_candidate"]["c"] = _vb_entry()
@@ -785,6 +873,7 @@ class DiffVerbosityTests(unittest.TestCase):
         self.assertIsNone(diff["median_drift"][0]["old"])
 
     def test_quartile_ordering_rejected(self):
+        """Test quartile ordering rejected."""
         hostile = _vb_diff_payload()
         hostile["per_candidate"]["c"]["p25_excess"] = 9.0  # > median
         diff = diffreports.diff_verbosity(hostile, _vb_diff_payload())
@@ -793,8 +882,11 @@ class DiffVerbosityTests(unittest.TestCase):
 
 
 class VerbositySanitizationTests(unittest.TestCase):
+    """Verbosity sanitization tests."""
+
     @staticmethod
     def _result_with_evil_name():
+        """Result with evil name."""
         backend = VerbosityScriptedBackend()
         stage = verbosity_stage(
             observations=[_obs("evil<script>", "f-blue", 16)],
@@ -805,6 +897,7 @@ class VerbositySanitizationTests(unittest.TestCase):
         return {"verbosity": verbosity_profile(("evil<script>",), stage)}
 
     def test_script_bearing_candidate_escaped_in_html(self):
+        """Test script bearing candidate escaped in html."""
         from model_protocol_lab import reporting
 
         html = reporting._verbosity_section(self._result_with_evil_name())
@@ -813,6 +906,7 @@ class VerbositySanitizationTests(unittest.TestCase):
         self.assertIn("evil&lt;script&gt;", html)
 
     def test_terminal_escapes_stripped_from_stderr_summary(self):
+        """Test terminal escapes stripped from stderr summary."""
         old, new = _vb_diff_payload(), _vb_diff_payload()
         evil_name = "cand\x1b[31mRED"
         old["per_candidate"][evil_name] = _vb_entry()
@@ -824,6 +918,7 @@ class VerbositySanitizationTests(unittest.TestCase):
         self.assertNotIn("\x1b[31m", joined)
 
     def test_unavailable_summary_line(self):
+        """Test unavailable summary line."""
         diff = diffreports.diff_verbosity({"available": False}, _vb_diff_payload())
         lines = diffreports._render_verbosity_summary(diff)
         self.assertEqual(len(lines), 1)
@@ -833,8 +928,11 @@ class VerbositySanitizationTests(unittest.TestCase):
 
 
 class VerbosityCliTests(unittest.TestCase):
+    """Verbosity cli tests."""
+
     @staticmethod
     def _search_entries(names=("a",)):
+        """Search entries."""
         return [
             {
                 "format": {"name": name},
@@ -844,6 +942,7 @@ class VerbosityCliTests(unittest.TestCase):
         ]
 
     def test_probe_records_available(self):
+        """Test probe records available."""
         from model_protocol_lab import cli
         from model_protocol_lab.core import Fixture, Message
 
@@ -867,6 +966,7 @@ class VerbosityCliTests(unittest.TestCase):
         self.assertEqual(result["verbosity"]["per_candidate"]["a"]["median_excess"], 4.0)
 
     def test_probe_never_raises_on_hostile_result(self):
+        """Test probe never raises on hostile result."""
         from model_protocol_lab import cli
 
         for bad_result in ({}, {"search": "nope"}, None):
@@ -882,6 +982,7 @@ class VerbosityCliTests(unittest.TestCase):
             self.assertEqual(result["verbosity"]["detail"], "verbosity_unavailable")
 
     def test_probe_empty_observations_reports_excluded(self):
+        """Test probe empty observations reports excluded."""
         # No observations is not a failure: the probe ran, there is
         # just nothing to profile -- the candidate is excluded, honestly.
         from model_protocol_lab import cli
@@ -898,12 +999,16 @@ class VerbosityCliTests(unittest.TestCase):
         self.assertEqual(result["verbosity"]["excluded_candidates"], ["a"])
 
     def test_probe_never_raises_on_backend_failure(self):
+        """Test probe never raises on backend failure."""
         from model_protocol_lab import cli
         from model_protocol_lab.core import Fixture, Message
 
         class BoomBackend(VerbosityScriptedBackend):
+            """Boom backend."""
+
             @staticmethod
             def encode(text: str):
+                """Encode."""
                 raise RuntimeError("boom")
 
         fixtures = (
@@ -925,6 +1030,7 @@ class VerbosityCliTests(unittest.TestCase):
         self.assertFalse(result["verbosity"]["available"])
 
     def test_flag_registered(self):
+        """Test flag registered."""
         from model_protocol_lab import cli as cli_module
 
         parser = cli_module.build_parser()
@@ -948,7 +1054,10 @@ class VerbosityCliTests(unittest.TestCase):
 
 
 class VerbosityReportIntegrationTests(unittest.TestCase):
+    """Verbosity report integration tests."""
+
     def test_toc_anchor_present(self):
+        """Test toc anchor present."""
         from model_protocol_lab import reporting
 
         result = {"verbosity": verbosity_profile(("a", "b"), _stage_two_candidates())}
@@ -960,13 +1069,17 @@ class VerbosityReportIntegrationTests(unittest.TestCase):
         self.assertIn("quality judgment", html)
 
     def test_section_empty_when_unavailable(self):
+        """Test section empty when unavailable."""
         from model_protocol_lab import reporting
 
         self.assertEqual(reporting._verbosity_section({}), "")
         self.assertEqual(reporting._verbosity_section({"verbosity": {"available": False}}), "")
 
     def test_full_diff_reports_verbosity_section(self):
+        """Test full diff reports verbosity section."""
+
         def report():
+            """Report."""
             return {
                 "decision": "select_best",
                 "selected_candidate": "c",
@@ -982,7 +1095,10 @@ class VerbosityReportIntegrationTests(unittest.TestCase):
         self.assertTrue(diff["summary"]["identical"])
 
     def test_full_diff_reports_verbosity_changed_breaks_identical(self):
+        """Test full diff reports verbosity changed breaks identical."""
+
         def report(payload):
+            """Report."""
             return {
                 "decision": "select_best",
                 "selected_candidate": "c",
@@ -1008,6 +1124,7 @@ class VerbosityCoverageGapTests(unittest.TestCase):
     """
 
     def test_cell_valid_none_and_non_dict(self):
+        """Test cell valid none and non dict."""
         from model_protocol_lab.experiments import _verbosity_cell_valid
 
         self.assertTrue(_verbosity_cell_valid(None))
@@ -1015,6 +1132,7 @@ class VerbosityCoverageGapTests(unittest.TestCase):
             self.assertFalse(_verbosity_cell_valid(bad))
 
     def test_cell_valid_bad_counts(self):
+        """Test cell valid bad counts."""
         from model_protocol_lab.experiments import _verbosity_cell_valid
 
         for bad in (-1, True, "4", 2.5):
@@ -1024,12 +1142,14 @@ class VerbosityCoverageGapTests(unittest.TestCase):
         self.assertFalse(_verbosity_cell_valid(_vb_entry(n=2, n_evaluable=3)))
 
     def test_cell_valid_bad_stat_value(self):
+        """Test cell valid bad stat value."""
         from model_protocol_lab.experiments import _verbosity_cell_valid
 
         self.assertFalse(_verbosity_cell_valid(_vb_entry(median_excess="x")))
         self.assertFalse(_verbosity_cell_valid(_vb_entry(p25_excess=-1)))
 
     def test_cell_valid_bad_max_excess_and_share(self):
+        """Test cell valid bad max excess and share."""
         from model_protocol_lab.experiments import _verbosity_cell_valid
 
         self.assertFalse(_verbosity_cell_valid(_vb_entry(max_excess=-1)))
@@ -1038,6 +1158,7 @@ class VerbosityCoverageGapTests(unittest.TestCase):
             self.assertFalse(_verbosity_cell_valid(_vb_entry(capped_share=bad)), bad)
 
     def test_cell_valid_zero_evaluable(self):
+        """Test cell valid zero evaluable."""
         from model_protocol_lab.experiments import _verbosity_cell_valid
 
         empty = dict.fromkeys(
@@ -1058,6 +1179,7 @@ class VerbosityCoverageGapTests(unittest.TestCase):
         self.assertFalse(_verbosity_cell_valid(partial))
 
     def test_profile_stage_invalid_branches(self):
+        """Test profile stage invalid branches."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import verbosity_profile
 
@@ -1083,6 +1205,7 @@ class VerbosityCoverageGapTests(unittest.TestCase):
             self.assertEqual(prof["detail"], "stage_invalid")
 
     def test_profile_non_dict_entry_is_stage_invalid(self):
+        """Test profile non dict entry is stage invalid."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import verbosity_profile
 
@@ -1097,6 +1220,7 @@ class VerbosityCoverageGapTests(unittest.TestCase):
         self.assertEqual(prof["detail"], "stage_invalid")
 
     def test_diff_valid_verbosity_rejections(self):
+        """Test diff valid verbosity rejections."""
         # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab import diffreports
 
@@ -1127,6 +1251,7 @@ class VerbosityCoverageGapTests(unittest.TestCase):
         self.assertTrue(diffreports._valid_verbosity(p))
 
     def test_cli_probe_skips_non_dict_search_entry(self):
+        """Test cli probe skips non dict search entry."""
         from model_protocol_lab import cli
 
         result: dict = {"search": ["nope", {"observations": []}]}
@@ -1141,6 +1266,7 @@ class VerbosityCoverageGapTests(unittest.TestCase):
         self.assertEqual(result["verbosity"]["excluded_candidates"], ["a"])
 
     def test_reporting_section_degraded_paths(self):
+        """Test reporting section degraded paths."""
         from model_protocol_lab import reporting
 
         self.assertEqual(reporting._verbosity_section({}), "")

@@ -98,10 +98,12 @@ GOOD_HELD = "b,g2,held_out,y,hi,,"
 
 
 def _doc(search_row: str, held_row: str) -> str:
+    """Doc."""
     return f"{HDR}\n{search_row}\n{held_row}\n"
 
 
 def _expect_error(text: str) -> str:
+    """Expect error."""
     try:
         parse_fixture_csv(text)
     except ValueError as exc:
@@ -110,8 +112,11 @@ def _expect_error(text: str) -> str:
 
 
 class TestParseFixtureCsvAdversarial(unittest.TestCase):
+    """Test parse fixture csv adversarial."""
+
     @staticmethod
     def test_baseline_two_rows():
+        """Test baseline two rows."""
         split, empty = parse_fixture_csv(_doc(GOOD_SEARCH, GOOD_HELD))
         assert [f.id for f in split.search] == ["a"]
         assert [f.id for f in split.held_out] == ["b"]
@@ -119,6 +124,7 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
         assert empty == []
 
     def test_partition_label_is_case_sensitive(self):
+        """Test partition label is case sensitive."""
         for label in ["Search", "SEARCH", "held out", "search ", "held_OUT"]:
             with self.subTest(label=label):
                 message = _expect_error(_doc(f"a,g1,{label},x,hello,,", GOOD_HELD))
@@ -128,30 +134,35 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_empty_string_id_rejected_with_row_number():
+        """Test empty string id rejected with row number."""
         assert _expect_error(_doc(",g1,search,x,hello,,", GOOD_HELD)) == (
             "row 2: fixture id is blank"
         )
 
     @staticmethod
     def test_whitespace_only_id_rejected_with_row_number():
+        """Test whitespace only id rejected with row number."""
         assert _expect_error(_doc("  ,g1,search,x,hello,,", GOOD_HELD)) == (
             "row 2: fixture id is blank"
         )
 
     @staticmethod
     def test_whitespace_padded_ids_are_distinct_and_verbatim():
+        """Test whitespace padded ids are distinct and verbatim."""
         split, _ = parse_fixture_csv(_doc("ab,g1,search,x,hello,,", " ab,g2,held_out,y,hi,,"))
         assert split.search[0].id == "ab"
         assert split.held_out[0].id == " ab"
 
     @staticmethod
     def test_case_differing_ids_are_distinct():
+        """Test case differing ids are distinct."""
         split, _ = parse_fixture_csv(_doc("Ab,g1,search,x,hello,,", "ab,g2,held_out,y,hi,,"))
         assert [f.id for f in split.search] == ["Ab"]
         assert [f.id for f in split.held_out] == ["ab"]
 
     @staticmethod
     def test_nfc_nfd_duplicate_ids_rejected():
+        """Test nfc nfd duplicate ids rejected."""
         nfc = unicodedata.normalize("NFC", "caf\u00e9")
         nfd = unicodedata.normalize("NFD", "caf\u00e9")
         assert nfc != nfd
@@ -162,6 +173,7 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_exact_duplicate_ids_same_partition_rejected():
+        """Test exact duplicate ids same partition rejected."""
         text = HDR + "\na,g1,search,x,hello,,\na,g9,search,z,hey,,\n" + GOOD_HELD + "\n"
         assert _expect_error(text) == (
             "CSV fixtures violate the split discipline: Fixture IDs must be globally unique"
@@ -169,6 +181,7 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_nfd_group_overlap_rejected():
+        """Test nfd group overlap rejected."""
         nfc = unicodedata.normalize("NFC", "caf\u00e9")
         nfd = unicodedata.normalize("NFD", "caf\u00e9")
         message = _expect_error(_doc(f"a,{nfc},search,x,hello,,", f"b,{nfd},held_out,y,hi,,"))
@@ -178,6 +191,7 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_nfd_message_leakage_rejected():
+        """Test nfd message leakage rejected."""
         nfc = unicodedata.normalize("NFC", "caf\u00e9")
         nfd = unicodedata.normalize("NFD", "caf\u00e9")
         message = _expect_error(_doc(f"a,g1,search,x,{nfc},,", f"b,g2,held_out,y,{nfd},,"))
@@ -188,6 +202,7 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_nfd_data_kept_byte_exact():
+        """Test nfd data kept byte exact."""
         nfd = unicodedata.normalize("NFD", "caf\u00e9")
         split, _ = parse_fixture_csv(_doc(f"a,g1,search,x,{nfd},,", GOOD_HELD))
         assert split.search[0].messages[0].content == nfd
@@ -195,31 +210,37 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_header_only_file():
+        """Test header only file."""
         assert _expect_error(HDR + "\n") == "CSV has no 'search' fixtures"
 
     @staticmethod
     def test_header_only_held_out_reports_search_first():
+        """Test header only held out reports search first."""
         assert _expect_error(HDR + "\nb,g2,held_out,y,hi,,\n") == "CSV has no 'search' fixtures"
 
     @staticmethod
     def test_missing_trailing_columns_pad_with_empty():
+        """Test missing trailing columns pad with empty."""
         split, _ = parse_fixture_csv(_doc("a,g1,search,x,hello", GOOD_HELD))
         assert [(m.role, m.content) for m in split.search[0].messages] == [("user", "hello")]
 
     @staticmethod
     def test_row_shorter_than_fixed_columns_needs_user_1():
+        """Test row shorter than fixed columns needs user 1."""
         assert _expect_error(_doc("a,g1,search", GOOD_HELD)) == (
             "row 2 (id 'a'): fixture needs a user_1 message"
         )
 
     @staticmethod
     def test_extra_cell_rejected():
+        """Test extra cell rejected."""
         assert _expect_error(_doc("a,g1,search,x,hello,,,EXTRA", GOOD_HELD)) == (
             "row 2: 8 cells, header has 7"
         )
 
     @staticmethod
     def test_bom_prefixed_header_rejected():
+        """Test bom prefixed header rejected."""
         message = _expect_error("\ufeff" + _doc(GOOD_SEARCH, GOOD_HELD))
         assert message == (
             "CSV header must start with 'id,group,partition,expected', "
@@ -228,6 +249,7 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_crlf_accepted():
+        """Test crlf accepted."""
         text = HDR + "\r\n" + GOOD_SEARCH + "\r\n" + GOOD_HELD + "\r\n"
         split, _ = parse_fixture_csv(text)
         assert [f.id for f in split.search] == ["a"]
@@ -235,6 +257,7 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_quoted_comma_and_quote_verbatim():
+        """Test quoted comma and quote verbatim."""
         text = (
             HDR + "\n"
             '"a","g1","search","x","say, hi","",""\n'
@@ -246,12 +269,14 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_quoted_newline_verbatim():
+        """Test quoted newline verbatim."""
         text = HDR + '\n"a","g1","search","x","line1\nline2","",""\n' + GOOD_HELD + "\n"
         split, _ = parse_fixture_csv(text)
         assert split.search[0].messages[0].content == "line1\nline2"
 
     @staticmethod
     def test_multiline_record_error_reports_record_end_line():
+        """Test multiline record error reports record end line."""
         text = HDR + '\n"a","g1","search","x","ok","","after\ngap"\n' + GOOD_HELD + "\n"
         assert _expect_error(text) == (
             "row 3 (id 'a'): empty message followed by content at 'user_2'"
@@ -259,40 +284,47 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_gap_then_content_rejected():
+        """Test gap then content rejected."""
         assert _expect_error(_doc("a,g1,search,x,hello,,LATE", GOOD_HELD)) == (
             "row 2 (id 'a'): empty message followed by content at 'user_2'"
         )
 
     @staticmethod
     def test_conversation_ending_with_assistant_rejected():
+        """Test conversation ending with assistant rejected."""
         assert _expect_error(_doc("a,g1,search,x,hello,resp,", GOOD_HELD)) == (
             "row 2 (id 'a'): conversation must end with a user message"
         )
 
     @staticmethod
     def test_missing_user_1_rejected():
+        """Test missing user 1 rejected."""
         assert _expect_error(_doc("a,g1,search,x,,,", GOOD_HELD)) == (
             "row 2 (id 'a'): fixture needs a user_1 message"
         )
 
     @staticmethod
     def test_whitespace_only_user_1_kept_verbatim():
+        """Test whitespace only user 1 kept verbatim."""
         split, _ = parse_fixture_csv(_doc("a,g1,search,x,   ,,", GOOD_HELD))
         assert split.search[0].messages[0].content == "   "
 
     @staticmethod
     def test_whitespace_only_line_is_not_a_blank_line():
+        """Test whitespace only line is not a blank line."""
         message = _expect_error(HDR + "\na,g1,search,x,hello,,\n   \n" + GOOD_HELD + "\n")
         assert message == "row 3: fixture id is blank"
 
     @staticmethod
     def test_cell_exactly_at_text_limit_accepted():
+        """Test cell exactly at text limit accepted."""
         cell = "Z" * 16384
         split, _ = parse_fixture_csv(_doc(f"a,g1,search,x,{cell},,", GOOD_HELD))
         assert split.search[0].messages[0].content == cell
 
     @staticmethod
     def test_cell_over_text_limit_rejected():
+        """Test cell over text limit rejected."""
         cell = "Z" * 16385
         assert _expect_error(_doc(f"a,g1,search,x,{cell},,", GOOD_HELD)) == (
             "row 2 (id 'a'): text field exceeds size limit"
@@ -300,12 +332,14 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_expected_over_text_limit_rejected():
+        """Test expected over text limit rejected."""
         assert _expect_error(_doc(f"a,g1,search,{'E' * 16385},hello,,", GOOD_HELD)) == (
             "row 2 (id 'a'): text field exceeds size limit"
         )
 
     @staticmethod
     def test_21_message_columns_accepted():
+        """Test 21 message columns accepted."""
         cols = ",".join(
             f"user_{(i // 2) + 1}" if i % 2 == 0 else f"assistant_{(i // 2) + 1}" for i in range(21)
         )
@@ -319,6 +353,7 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_22_message_columns_rejected():
+        """Test 22 message columns rejected."""
         cols = ",".join(
             f"user_{(i // 2) + 1}" if i % 2 == 0 else f"assistant_{(i // 2) + 1}" for i in range(22)
         )
@@ -328,12 +363,14 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_header_without_message_columns_rejected():
+        """Test header without message columns rejected."""
         assert _expect_error("id,group,partition,expected\na,g1,search,x\n") == (
             "CSV needs 1-21 message columns after 'expected', got 0"
         )
 
     @staticmethod
     def test_bad_header_column_order():
+        """Test bad header column order."""
         message = _expect_error("id,group,expected,partition,user_1\n" + GOOD_SEARCH + "\n")
         assert message == (
             "CSV header must start with 'id,group,partition,expected', "
@@ -342,6 +379,7 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_uppercase_header_column_rejected():
+        """Test uppercase header column rejected."""
         message = _expect_error("ID,group,partition,expected,user_1\n" + GOOD_SEARCH + "\n")
         assert message == (
             "CSV header must start with 'id,group,partition,expected', "
@@ -350,6 +388,7 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_exactly_200_rows_accepted():
+        """Test exactly 200 rows accepted."""
         rows = "".join(f"s{i},gs{i},search,x,hello\n" for i in range(100))
         rows += "".join(f"h{i},gh{i},held_out,y,hi\n" for i in range(100))
         split, _ = parse_fixture_csv("id,group,partition,expected,user_1\n" + rows)
@@ -358,6 +397,7 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_201_rows_rejected():
+        """Test 201 rows rejected."""
         rows = "".join(f"s{i},gs{i},search,x,hello\n" for i in range(101))
         rows += "".join(f"h{i},gh{i},held_out,y,hi\n" for i in range(100))
         assert _expect_error("id,group,partition,expected,user_1\n" + rows) == (
@@ -366,6 +406,7 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_101_search_fixtures_rejected():
+        """Test 101 search fixtures rejected."""
         rows = "".join(f"s{i},gs{i},search,x,hello\n" for i in range(101))
         rows += "b,g2,held_out,y,hi\n"
         assert _expect_error("id,group,partition,expected,user_1\n" + rows) == (
@@ -373,17 +414,20 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
         )
 
     def test_non_string_source_rejected(self):
+        """Test non string source rejected."""
         with self.assertRaises(ValueError) as exc:
             parse_fixture_csv(b"bytes")
         assert str(exc.exception) == "CSV source must be text"
 
     def test_source_over_size_limit_rejected(self):
+        """Test source over size limit rejected."""
         with self.assertRaises(ValueError) as exc:
             parse_fixture_csv("x" * (MAX_BYTES + 1))
         assert str(exc.exception) == "CSV source exceeds size limit"
 
     @staticmethod
     def test_source_exactly_at_size_limit_accepted():
+        """Test source exactly at size limit accepted."""
         base = _doc(GOOD_SEARCH, GOOD_HELD)
         padding = "\n" * (MAX_BYTES - len(base.encode("utf-8")))
         split, _ = parse_fixture_csv(base + padding)
@@ -391,46 +435,57 @@ class TestParseFixtureCsvAdversarial(unittest.TestCase):
 
     @staticmethod
     def test_empty_expected_ids_reported():
+        """Test empty expected ids reported."""
         _, empty = parse_fixture_csv(_doc("a,g1,search,,hello,,", GOOD_HELD))
         assert empty == ["a"]
 
     def test_oversize_single_field_raises_valueerror(self):
+        """Test oversize single field raises valueerror."""
         text = _doc(f"a,g1,search,x,{'Z' * 200_000},,", GOOD_HELD)
         assert len(text.encode("utf-8")) < MAX_BYTES
         with self.assertRaisesRegex(ValueError, "exceeds the parser limit"):
             parse_fixture_csv(text)
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
 class TestReadAuthoringFileAdversarial(unittest.TestCase):
+    """Test read authoring file adversarial."""
+
     def _write(self, name, data: bytes):
+        """Write."""
         tmp_path = self.tmp_path
         target = tmp_path / name
         target.write_bytes(data)
         return target
 
     def test_roundtrip_small_file(self):
+        """Test roundtrip small file."""
         target = self._write("cases.csv", _doc(GOOD_SEARCH, GOOD_HELD).encode())
         assert read_authoring_file(target) == _doc(GOOD_SEARCH, GOOD_HELD)
 
     def test_str_and_path_both_accepted(self):
+        """Test str and path both accepted."""
         target = self._write("cases.csv", b"x")
         assert read_authoring_file(str(target)) == "x"
         assert read_authoring_file(target) == "x"
 
     def test_utf16_with_bom_refused(self):
+        """Test utf16 with bom refused."""
         target = self._write("u.csv", _doc(GOOD_SEARCH, GOOD_HELD).encode("utf-16"))
         with self.assertRaises(ValueError) as exc:
             read_authoring_file(target)
         assert str(exc.exception) == "Authoring file is not valid UTF-8"
 
     def test_bomless_utf16_decodes_then_fails_header_check(self):
+        """Test bomless utf16 decodes then fails header check."""
         target = self._write("u.csv", _doc(GOOD_SEARCH, GOOD_HELD).encode("utf-16-le"))
         text = read_authoring_file(target)
         assert "\x00" in text
@@ -443,12 +498,14 @@ class TestReadAuthoringFileAdversarial(unittest.TestCase):
         )
 
     def test_latin1_refused(self):
+        """Test latin1 refused."""
         target = self._write("l.csv", "a,g1,search,x,h\xe9llo\n".encode("latin-1"))
         with self.assertRaises(ValueError) as exc:
             read_authoring_file(target)
         assert str(exc.exception) == "Authoring file is not valid UTF-8"
 
     def test_utf8_bom_read_ok_but_header_rejected(self):
+        """Test utf8 bom read ok but header rejected."""
         target = self._write("b.csv", ("\ufeff" + _doc(GOOD_SEARCH, GOOD_HELD)).encode("utf-8"))
         text = read_authoring_file(target)
         assert text.startswith("\ufeff")
@@ -458,20 +515,24 @@ class TestReadAuthoringFileAdversarial(unittest.TestCase):
         )
 
     def test_over_size_limit_refused(self):
+        """Test over size limit refused."""
         target = self._write("big.csv", b"a" * (MAX_BYTES + 1))
         with self.assertRaises(ValueError) as exc:
             read_authoring_file(target)
         assert str(exc.exception) == "Authoring file exceeds size limit"
 
     def test_exactly_size_limit_accepted(self):
+        """Test exactly size limit accepted."""
         target = self._write("exact.csv", b"a" * MAX_BYTES)
         assert len(read_authoring_file(target)) == MAX_BYTES
 
     def test_empty_file_reads_empty(self):
+        """Test empty file reads empty."""
         target = self._write("empty.csv", b"")
         assert read_authoring_file(target) == ""
 
     def test_non_regular_files_refused(self):
+        """Test non regular files refused."""
         tmp_path = self.tmp_path
         for kind in ["fifo", "dir", "devnull", "fifo_symlink"]:
             with self.subTest(kind=kind):
@@ -495,12 +556,14 @@ class TestReadAuthoringFileAdversarial(unittest.TestCase):
                 assert str(exc.exception) == "Authoring path is not a regular file"
 
     def test_missing_file(self):
+        """Test missing file."""
         tmp_path = self.tmp_path
         with self.assertRaises(ValueError) as exc:
             read_authoring_file(tmp_path / "nope.csv")
         assert str(exc.exception) == "Unreadable authoring file"
 
     def test_dangling_symlink(self):
+        """Test dangling symlink."""
         tmp_path = self.tmp_path
         target = tmp_path / "dangling.csv"
         target.symlink_to(tmp_path / "nope.csv")
@@ -509,6 +572,7 @@ class TestReadAuthoringFileAdversarial(unittest.TestCase):
         assert str(exc.exception) == "Unreadable authoring file"
 
     def test_symlink_loop(self):
+        """Test symlink loop."""
         tmp_path = self.tmp_path
         first = tmp_path / "loop1.csv"
         second = tmp_path / "loop2.csv"
@@ -519,6 +583,7 @@ class TestReadAuthoringFileAdversarial(unittest.TestCase):
         assert str(exc.exception) == "Unreadable authoring file"
 
     def test_unreadable_file(self):
+        """Test unreadable file."""
         target = self._write("noperm.csv", b"x")
         target.chmod(0o000)
         try:
@@ -531,6 +596,7 @@ class TestReadAuthoringFileAdversarial(unittest.TestCase):
             target.chmod(0o600)
 
     def test_null_byte_in_path(self):
+        """Test null byte in path."""
         tmp_path = self.tmp_path
         # CPython changed the message across versions: "embedded null byte"
         # (<=3.12.3, 3.11) vs "open: embedded null character in path"
@@ -539,6 +605,7 @@ class TestReadAuthoringFileAdversarial(unittest.TestCase):
             read_authoring_file(tmp_path / "a\0b.csv")
 
     def test_non_path_types_rejected(self):
+        """Test non path types rejected."""
         for bad in [123, b"bytes", None]:
             with self.subTest(bad=bad):
                 with self.assertRaises(ValueError) as exc:
@@ -547,23 +614,30 @@ class TestReadAuthoringFileAdversarial(unittest.TestCase):
 
     @unittest.skipIf(not os.path.exists("/proc/self/mem"), "Linux /proc only")
     def test_read_error_after_open_normalized_to_valueerror(self):
+        """Test read error after open normalized to valueerror."""
         with self.assertRaisesRegex(ValueError, "Unreadable authoring file"):
             read_authoring_file("/proc/self/mem")
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 
 class TestDatasetsLoaderAdversarial(unittest.TestCase):
+    """Test datasets loader adversarial."""
+
     @staticmethod
     def _doc():
+        """Doc."""
         import json
 
         def fx(i, content):
+            """Fx."""
             return {
                 "id": f"id{i}",
                 "group": f"g{i}",
@@ -574,6 +648,7 @@ class TestDatasetsLoaderAdversarial(unittest.TestCase):
         return json.dumps({"search": [fx(0, "aaa")], "held_out": [fx(1, "bbb")]})
 
     def test_deeply_nested_arrays_become_valueerror(self):
+        """Test deeply nested arrays become valueerror."""
         nested = "[" * 300_000 + "]" * 300_000
         text = (
             '{"search":[{"id":"a","group":"g","messages":' + nested + ',"expected":"x"}],'
@@ -586,17 +661,20 @@ class TestDatasetsLoaderAdversarial(unittest.TestCase):
         assert str(exc.exception) == "Dataset nesting too deep"
 
     def test_text_over_size_limit_rejected(self):
+        """Test text over size limit rejected."""
         with self.assertRaises(ValueError) as exc:
             parse_dataset(" " * (MAX_BYTES + 1))
         assert str(exc.exception) == "Dataset exceeds size limit"
 
     def test_text_exactly_at_size_limit_parses(self):
+        """Test text exactly at size limit parses."""
         text = self._doc().ljust(MAX_BYTES)
         assert len(text.encode("utf-8")) == MAX_BYTES
         split = parse_dataset(text)
         assert [f.id for f in split.search] == ["id0"]
 
     def test_csv_and_json_loaders_agree_on_nfc_discipline(self):
+        """Test csv and json loaders agree on nfc discipline."""
         nfc = unicodedata.normalize("NFC", "caf\u00e9")
         nfd = unicodedata.normalize("NFD", "caf\u00e9")
         csv_text = _doc(f"{nfc},g1,search,x,hello,,", f"{nfd},g2,held_out,y,hi,,")
@@ -626,6 +704,7 @@ class TestDatasetsLoaderAdversarial(unittest.TestCase):
             parse_dataset(json.dumps(payload))
 
     def test_file_roundtrip_through_both_readers(self):
+        """Test file roundtrip through both readers."""
         tmp_path = self.tmp_path
         target = tmp_path / "cases.csv"
         target.write_text(_doc(GOOD_SEARCH, GOOD_HELD), encoding="utf-8")
@@ -638,6 +717,7 @@ class TestDatasetsLoaderAdversarial(unittest.TestCase):
         assert [f.id for f in reloaded.search] == ["a"]
 
     def _write_json(self, text):
+        """Write json."""
         tmp_path = self.tmp_path
         target = tmp_path / "fixtures.json"
         target.write_text(text, encoding="utf-8")
@@ -645,14 +725,17 @@ class TestDatasetsLoaderAdversarial(unittest.TestCase):
 
     @unittest.skipIf(not os.path.exists("/proc/self/mem"), "Linux /proc only")
     def test_load_dataset_read_error_normalized_to_valueerror(self):
+        """Test load dataset read error normalized to valueerror."""
         with self.assertRaisesRegex(ValueError, "Unreadable fixture file"):
             load_dataset("/proc/self/mem")
 
     def setUp(self):
+        """Set up the test fixture."""
         self._td = tempfile.TemporaryDirectory(prefix="mpl-c107-")
         self.tmp_path = Path(self._td.name)
 
     def tearDown(self):
+        """Tear down the test fixture."""
         self._td.cleanup()
 
 

@@ -76,15 +76,18 @@ class ScriptedBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(ord(char) for char in text)
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(chr(token) for token in token_ids)
 
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Any:
+        """Generate."""
         prompt = "".join(chr(token) for token in input_ids)
         answer, marker = self._script.get(prompt, self._default)
         ids = tuple(ord(char) for char in answer + marker)
@@ -111,6 +114,7 @@ def _naive_truncate_tail(text: str, drop_bytes: int) -> str | None:
 
 
 def _naive_first_boundary(tokens: tuple[int, ...], stop: tuple[int, ...]) -> int | None:
+    """Naive first boundary."""
     for index in range(len(tokens) - len(stop) + 1):
         if tokens[index : index + len(stop)] == stop:
             return index
@@ -120,6 +124,7 @@ def _naive_first_boundary(tokens: tuple[int, ...], stop: tuple[int, ...]) -> int
 def _naive_candidate_boundary(
     name: str, boundary: tuple[int, ...], boundary_map: dict[str, tuple[int, ...]] | None
 ) -> tuple[int, ...]:
+    """Naive candidate boundary."""
     if boundary_map is None:
         return boundary
     return boundary_map.get(name, boundary)
@@ -143,6 +148,7 @@ def _naive_run_decision(
     """
 
     def truncated_prompt(fmt: Any, case: Any) -> str | None:
+        """Truncated prompt."""
         prompt = fmt.render(case.messages)
         if drop_bytes == 0:
             return prompt
@@ -204,6 +210,7 @@ def _oracle_sweep(
     max_drop_bytes: int,
     max_new_tokens: int,
 ) -> dict[str, Any]:
+    """Oracle sweep."""
     native_decision, native_winner = _naive_run_decision(
         backend,
         formats,
@@ -326,9 +333,11 @@ _EXPECTED_POOL = ("yes", "no", "42", "a", "ok")
 _WRONG_POOL = ("WRONG", "nope", "0", "maybe", "")
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _build_fuzz_scenario(
     rng: random.Random, core_mod: Any
 ) -> tuple[ScriptedBackend, tuple[Any, ...], Any, dict[str, Any]]:
+    """Build fuzz scenario."""
     n_candidates = rng.randint(2, 5)
     n_search = rng.randint(1, 6)
     n_held = rng.randint(1, 3)
@@ -348,6 +357,7 @@ def _build_fuzz_scenario(
     )
 
     def make_fixture(prefix: str, index: int) -> Any:
+        """Make fixture."""
         content = rng.choice(_CONTENT_POOL)
         if prefix == "h":
             # Split forbids identical message inputs crossing the split.
@@ -415,6 +425,7 @@ def _build_fuzz_scenario(
 
 
 def _tiny_formats(core_mod: Any) -> tuple[Any, ...]:
+    """Tiny formats."""
     # Single-byte prefixes/suffixes so truncations of 1..2 bytes stay at
     # whole-character granularity (multibyte truncation is covered by the
     # fuzz pool and the codepoint-split edge test).
@@ -460,6 +471,7 @@ def _script_all_drops(
 
 
 def _tiny_fixture(core_mod: Any, fixture_id: str, content: str, expected: str) -> Any:
+    """Tiny fixture."""
     group = "cycle17-search" if fixture_id.startswith("s") else "cycle17-held"
     return core_mod.Fixture(
         id=fixture_id,
@@ -475,6 +487,7 @@ class SweepOracleFuzzTests(unittest.TestCase):
     TRIALS = 60
 
     def test_sweep_matches_oracle(self) -> None:
+        """Test sweep matches oracle."""
         for trial in range(self.TRIALS):
             with self.subTest(trial=trial):
                 rng = random.Random(0xC170 + trial)  # noqa: S311 -- deterministic test seed
@@ -495,9 +508,11 @@ class SweepEdgeCaseTests(unittest.TestCase):
         split: Any,
         **kwargs: Any,
     ) -> dict[str, Any]:
+        """Run."""
         return prompt_sensitivity_sweep(backend, formats, split, **kwargs)
 
     def test_codepoint_split_depth_records_failed_decision(self) -> None:
+        """Test codepoint split depth records failed decision."""
         # "🎉" is 4 UTF-8 bytes and prompt-final here (empty assistant_prefix):
         # drops 1..3 split the codepoint (failed depth), drop 4 truncates cleanly.
         core_mod = real_core
@@ -557,6 +572,7 @@ class SweepEdgeCaseTests(unittest.TestCase):
         self.assertEqual(result["flips_at"], [1, 2, 3])
 
     def test_drop_beyond_prompt_length_records_failed_decision(self) -> None:
+        """Test drop beyond prompt length records failed decision."""
         # ">" is a single byte and prompt-final here (empty content and empty
         # assistant_prefix): every drop in 1..3 exceeds the prompt length.
         core_mod = real_core
@@ -601,6 +617,7 @@ class SweepEdgeCaseTests(unittest.TestCase):
         self.assertEqual(result["flips_at"], [1, 2, 3])
 
     def test_decision_flip_with_same_winner_counts(self) -> None:
+        """Test decision flip with same winner counts."""
         # The winner is unchanged at depth 1 but the held-out check flips from
         # compatible to failed: winner_changed must still be True because the
         # decision differs.
@@ -643,6 +660,7 @@ class SweepEdgeCaseTests(unittest.TestCase):
         self.assertEqual(result["flips_at"], [1])
 
     def test_no_flip_gives_empty_flips_at(self) -> None:
+        """Test no flip gives empty flips at."""
         core_mod = real_core
         formats = _tiny_formats(core_mod)
         search = (_tiny_fixture(core_mod, "s0", "question", "yes"),)
@@ -668,6 +686,7 @@ class SweepEdgeCaseTests(unittest.TestCase):
         self.assertTrue(all(not d["winner_changed"] for d in result["depths"]))
 
     def test_multi_token_boundary(self) -> None:
+        """Test multi token boundary."""
         # A two-token boundary exercises the boundary scan at every depth.
         core_mod = real_core
         boundary = (_BOUNDARY_A, 0xE002)
@@ -705,6 +724,7 @@ class SweepEdgeCaseTests(unittest.TestCase):
         self.assertEqual(result["flips_at"], [1])
 
     def test_sweep_points_are_exactly_one_through_max(self) -> None:
+        """Test sweep points are exactly one through max."""
         core_mod = real_core
         formats = _tiny_formats(core_mod)
         search = (_tiny_fixture(core_mod, "s0", "q", "yes"),)
@@ -723,6 +743,7 @@ class SweepEdgeCaseTests(unittest.TestCase):
         self.assertEqual([d["drop_bytes"] for d in result["depths"]], [1, 2, 3, 4, 5])
 
     def test_deterministic_across_runs(self) -> None:
+        """Test deterministic across runs."""
         rng = random.Random(0xC171)  # noqa: S311 -- deterministic test seed
         backend, formats, split, kwargs = _build_fuzz_scenario(rng, real_core)
         first = prompt_sensitivity_sweep(backend, formats, split, **kwargs)
@@ -730,6 +751,7 @@ class SweepEdgeCaseTests(unittest.TestCase):
         self.assertEqual(first, second)
 
     def test_max_drop_bytes_validation(self) -> None:
+        """Test max drop bytes validation."""
         core_mod = real_core
         formats = _tiny_formats(core_mod)
         split = core_mod.Split(
@@ -762,6 +784,7 @@ class SweepSensitivityTests(unittest.TestCase):
     """
 
     def _mutated(self, tag: str, patches: list[tuple[str, str, int]]) -> tuple[Any, Any]:
+        """Mutated."""
         pkg_dir = os.path.dirname(os.path.abspath(real_core.__file__))
         tmp = tempfile.mkdtemp(prefix="c17sens_")
         self.addCleanup(shutil.rmtree, tmp, True)
@@ -817,6 +840,7 @@ class SweepSensitivityTests(unittest.TestCase):
         return backend, formats, split, kwargs
 
     def _assert_mutation_caught(self, tag: str, patches: list[tuple[str, str, int]]) -> None:
+        """Assert mutation caught."""
         experiments_mod, core_mod = self._mutated(tag, patches)
         backend, formats, split, kwargs = self._flip_scenario(core_mod)
         with self.assertRaises(AssertionError):
@@ -825,6 +849,7 @@ class SweepSensitivityTests(unittest.TestCase):
             )
 
     def test_unmutated_copy_passes_oracle(self) -> None:
+        """Test unmutated copy passes oracle."""
         experiments_mod, core_mod = self._mutated("control", [])
         backend, formats, split, kwargs = self._flip_scenario(core_mod)
         check_sweep_against_oracle(
@@ -832,6 +857,7 @@ class SweepSensitivityTests(unittest.TestCase):
         )
 
     def test_off_by_one_sweep_range_is_caught(self) -> None:
+        """Test off by one sweep range is caught."""
         self._assert_mutation_caught(
             "range",
             [
@@ -849,9 +875,11 @@ class SweepSensitivityTests(unittest.TestCase):
     )
 
     def test_inverted_flip_detection_is_caught(self) -> None:
+        """Test inverted flip detection is caught."""
         self._assert_mutation_caught("invert", [(self._FLIP_LINE, self._FLIP_INVERTED, 1)])
 
     def test_decision_ignored_in_flip_is_caught(self) -> None:
+        """Test decision ignored in flip is caught."""
         # A mutant that only compares winners misses decision-only flips (same
         # winner, held-out verdict changed). Build that scenario explicitly.
         experiments_mod, core_mod = self._mutated(

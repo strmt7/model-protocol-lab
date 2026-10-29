@@ -948,6 +948,7 @@ def template_firewall(model_path: str | Path) -> dict[str, Any]:
     return {"status": "allowed", "detail": "no_rce_primitives_found", "findings": []}
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def template_conformance(
     model_path: str | Path,
     formats: tuple[Format, ...],
@@ -1076,6 +1077,7 @@ class _TemplateProbeBudgetExceeded(Exception):
     """The probe's global render / wall-clock budget ran out."""
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def template_probe_section(model_path: str | Path) -> dict[str, Any]:
     """Behavioural probe of the checkpoint's chat template (cycle 182).
 
@@ -1247,6 +1249,7 @@ def template_probe_section(model_path: str | Path) -> dict[str, Any]:
         return section
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def marker_isolation(
     model_path: str | Path,
     formats: tuple[Format, ...],
@@ -1443,6 +1446,7 @@ def _longest_prompt_tokens(tokenizer: Any, dataset_path: str | Path) -> int | No
         return None
 
 
+# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _next_command(
     model_path: str | Path,
     dataset_path: str | Path | None,

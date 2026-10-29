@@ -212,16 +212,19 @@ class ScriptedBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode."""
         return tuple(ord(char) for char in text)
 
     @staticmethod
     def decode(token_ids: tuple[int, ...]) -> str:
+        """Decode."""
         return "".join(chr(token) for token in token_ids)
 
     @staticmethod
     def generate(
         input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Any:
+        """Generate."""
         prompt = "".join(chr(token) for token in input_ids)
         answer = "BLUE" if "BLUE" in prompt else "GREEN"
         ids = tuple(ord(char) for char in answer + "<END>")
@@ -275,6 +278,7 @@ class CommandNamesTest(unittest.TestCase):
     ]
 
     def test_all_documented_commands_exist(self):
+        """Test all documented commands exist."""
         parser = cli.build_parser()
         actions = parser._subparsers._group_actions[0]  # noqa: SLF001
         for command in self.DOCUMENTED_COMMANDS:
@@ -282,6 +286,7 @@ class CommandNamesTest(unittest.TestCase):
                 self.assertIn(command, actions.choices)
 
     def test_fixtures_build_subcommand_exists(self):
+        """Test fixtures build subcommand exists."""
         args = cli.build_parser().parse_args(
             ["fixtures", "build", "cases.csv", "--output", "fixtures.json"]
         )
@@ -289,6 +294,7 @@ class CommandNamesTest(unittest.TestCase):
         self.assertEqual(str(args.source), "cases.csv")
 
     def test_console_script_entry_point(self):
+        """Test console script entry point."""
         # README: "(a `model-protocol-lab` console script is installed as
         # an equivalent entry point.)"
         proc = subprocess.run(
@@ -307,6 +313,7 @@ class DocumentedFlagsTest(unittest.TestCase):
     """Every documented flag parses and round-trips to the namespace."""
 
     def test_doctor_flags(self):
+        """Test doctor flags."""
         args = cli.build_parser().parse_args(
             [
                 "doctor",
@@ -332,6 +339,7 @@ class DocumentedFlagsTest(unittest.TestCase):
         self.assertEqual(str(args.portability_matrix), "SECOND_CHECKPOINT")
 
     def test_run_flags(self):
+        """Test run flags."""
         # USAGE sec 5 template + sec 4/8.5/8.9 flags.
         args = cli.build_parser().parse_args(
             [
@@ -383,6 +391,7 @@ class DocumentedFlagsTest(unittest.TestCase):
         self.assertTrue(args.logprob_diagnostic)
 
     def test_run_defaults_match_documented_template(self):
+        """Test run defaults match documented template."""
         # USAGE sec 5: "--max-new-tokens 64 --max-context 2048"; "--seed
         # accepts an unsigned 64-bit integer (default 0)".
         args = cli.build_parser().parse_args(
@@ -407,6 +416,7 @@ class DocumentedFlagsTest(unittest.TestCase):
         self.assertFalse(args.mutate)
 
     def test_debug_flags(self):
+        """Test debug flags."""
         args = cli.build_parser().parse_args(
             [
                 "debug",
@@ -423,6 +433,7 @@ class DocumentedFlagsTest(unittest.TestCase):
         self.assertEqual(str(args.script), "session.txt")
 
     def test_diff_backends_flags_and_defaults(self):
+        """Test diff backends flags and defaults."""
         # USAGE sec 11: "--eos-id (default: none)", "--min-tokens (default 0)".
         args = cli.build_parser().parse_args(
             [
@@ -460,6 +471,7 @@ class DocumentedFlagsTest(unittest.TestCase):
         self.assertEqual(args2.min_tokens, 1)
 
     def test_diff_reports_flags(self):
+        """Test diff reports flags."""
         args = cli.build_parser().parse_args(
             ["diff-reports", "run-baseline", "run-fixed-template", "--all"]
         )
@@ -468,6 +480,7 @@ class DocumentedFlagsTest(unittest.TestCase):
         self.assertTrue(args.all)
 
     def test_boundary_ids_grammar(self):
+        """Test boundary ids grammar."""
         # USAGE sec 4/10: 1-16 ASCII token IDs.
         self.assertEqual(cli.parse_boundary("8"), (8,))
         self.assertEqual(cli.parse_boundary("1,2,3"), (1, 2, 3))
@@ -483,6 +496,7 @@ class CatalogInspectTest(unittest.TestCase):
     """USAGE sec 1 + README quick start: catalog / inspect."""
 
     def test_catalog_lists_29_families_with_framing_fields(self):
+        """Test catalog lists 29 families with framing fields."""
         code, out, _ = run_cli(["catalog"])
         self.assertEqual(code, 0)
         families = json.loads(out)
@@ -504,6 +518,7 @@ class CatalogInspectTest(unittest.TestCase):
                 self.assertIn(field, entry)
 
     def test_inspect_examples_fixtures(self):
+        """Test inspect examples fixtures."""
         code, out, _ = run_cli(["inspect", str(FIXTURES_JSON)])
         self.assertEqual(code, 0)
         report = json.loads(out)
@@ -519,6 +534,7 @@ class CatalogInspectTest(unittest.TestCase):
         )
 
     def test_inspect_rejects_non_regular_file(self):
+        """Test inspect rejects non regular file."""
         # USAGE sec 1: "The dataset path must be a regular file".
         with TemporaryDirectory() as tmp:
             code, _, err = run_cli(["inspect", tmp])
@@ -526,6 +542,7 @@ class CatalogInspectTest(unittest.TestCase):
         self.assertIn("not a regular file", err)
 
     def test_inspect_warns_on_empty_expected(self):
+        """Test inspect warns on empty expected."""
         # USAGE sec 1: "`inspect` and `run` warn on stderr naming such
         # fixtures".
         with TemporaryDirectory() as tmp:
@@ -559,6 +576,7 @@ class CatalogInspectTest(unittest.TestCase):
         self.assertIn("pass vacuously", err)
 
     def test_inspect_rejects_system_messages(self):
+        """Test inspect rejects system messages."""
         # USAGE sec 1: "System messages, tools and assistant prefills are
         # not supported."
         with TemporaryDirectory() as tmp:
@@ -600,6 +618,7 @@ class FixturesBuildTest(unittest.TestCase):
 
     @staticmethod
     def _build(tmp: str, csv_text: str, name: str = "fixtures.json"):
+        """Build."""
         csv_path = Path(tmp) / "cases.csv"
         csv_path.write_text(csv_text, encoding="utf-8")
         out_path = Path(tmp) / name
@@ -607,6 +626,7 @@ class FixturesBuildTest(unittest.TestCase):
         return code, out, err, out_path
 
     def test_documented_csv_example_builds_and_passes_inspect(self):
+        """Test documented csv example builds and passes inspect."""
         with TemporaryDirectory() as tmp:
             code, out, _, out_path = self._build(tmp, DOCUMENTED_CSV)
             self.assertEqual(code, 0)
@@ -631,6 +651,7 @@ class FixturesBuildTest(unittest.TestCase):
             )
 
     def test_build_never_overwrites(self):
+        """Test build never overwrites."""
         # USAGE sec 9: "The output path is never overwritten"; README:
         # "(a fresh path: fixtures build never overwrites an existing file)".
         with TemporaryDirectory() as tmp:
@@ -641,6 +662,7 @@ class FixturesBuildTest(unittest.TestCase):
             self.assertIn("already exists", err2)
 
     def test_build_refuses_cross_partition_group_overlap(self):
+        """Test build refuses cross partition group overlap."""
         # README: fixtures build "makes search/held-out leakage
         # structurally unbuildable".
         csv_text = (
@@ -655,6 +677,7 @@ class FixturesBuildTest(unittest.TestCase):
             self.assertFalse(out_path.exists())
 
     def test_build_rejects_empty_cell_followed_by_content(self):
+        """Test build rejects empty cell followed by content."""
         # USAGE sec 9: "an empty cell followed by content is an error".
         csv_text = (
             "id,group,partition,expected,user_1,assistant_1,user_2\na,g,search,BLUE,hi,,later\n"
@@ -670,6 +693,7 @@ class DoctorTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls._tmp = TemporaryDirectory()
         tmp = Path(cls._tmp.name)
         cls.ckpt = make_synthetic_checkpoint(tmp / "ckpt")
@@ -683,14 +707,17 @@ class DoctorTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        """Tear down the test fixture."""
         cls._tmp.cleanup()
 
     @staticmethod
     def _doctor(*argv: str) -> tuple[int, dict, str]:
+        """Doctor."""
         code, out, err = run_cli(["doctor", *argv])
         return code, json.loads(out), err
 
     def test_documented_invocation_passes_with_suggestion(self):
+        """Test documented invocation passes with suggestion."""
         code, report, _ = self._doctor(
             "--model",
             str(self.ckpt),
@@ -714,6 +741,7 @@ class DoctorTest(unittest.TestCase):
         self.assertIn("--output NEW_REPORT_DIRECTORY", command)
 
     def test_suggestion_omitted_without_declared_window(self):
+        """Test suggestion omitted without declared window."""
         # USAGE sec 2: "omitted whenever it could mislead ... or no
         # declared window".
         code, report, _ = self._doctor(
@@ -729,6 +757,7 @@ class DoctorTest(unittest.TestCase):
         self.assertIsNone(report["suggestion"])
 
     def test_failing_checks_exit_1(self):
+        """Test failing checks exit 1."""
         # USAGE sec 2: "Exit 0 means the run inputs look sane; exit 1
         # lists the failing checks."
         code, report, _ = self._doctor("--model", str(Path(self._tmp.name) / "missing"))
@@ -740,6 +769,7 @@ class DoctorTest(unittest.TestCase):
         self.assertTrue(failed)
 
     def test_boundary_ids_checked_against_vocabulary(self):
+        """Test boundary ids checked against vocabulary."""
         # USAGE sec 2: "verifies each ID against the tokenizer vocabulary".
         code, report, _ = self._doctor("--model", str(self.ckpt), "--boundary-ids", "1,999999")
         self.assertEqual(code, 1)
@@ -747,6 +777,7 @@ class DoctorTest(unittest.TestCase):
         self.assertEqual(report["model"]["checks"]["boundary_ids"]["status"], "failed")
 
     def test_boundary_map_checked_per_mapping(self):
+        """Test boundary map checked per mapping."""
         # USAGE sec 4: "doctor --boundary-map NAME=ID,ID, which checks
         # each mapping".
         code, report, _ = self._doctor("--model", str(self.ckpt), "--boundary-map", "chatml=1,2")
@@ -754,6 +785,7 @@ class DoctorTest(unittest.TestCase):
         self.assertEqual(report["model"]["checks"]["boundary_ids:chatml"]["status"], "ok")
 
     def test_reference_model_reports_mismatch(self):
+        """Test reference model reports mismatch."""
         # USAGE sec 8.4: "Non-portability is reported as `mismatch`".
         _code, report, _ = self._doctor(
             "--model",
@@ -766,6 +798,7 @@ class DoctorTest(unittest.TestCase):
         self.assertEqual(report["model"]["checks"]["boundary_portability"]["status"], "mismatch")
 
     def test_portability_matrix_stdout_stays_parseable_json(self):
+        """Test portability matrix stdout stays parseable json."""
         # USAGE sec 2: "the CLI also prints a readable table to stderr so
         # stdout stays parseable JSON".
         _code, out, err = run_cli(
@@ -789,6 +822,7 @@ class RunTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls._tmp = TemporaryDirectory()
         tmp = Path(cls._tmp.name)
         cls.ckpt = make_synthetic_checkpoint(tmp / "ckpt")
@@ -797,9 +831,11 @@ class RunTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        """Tear down the test fixture."""
         cls._tmp.cleanup()
 
     def _base_argv(self, output: Path, extra: list[str] | None = None) -> list[str]:
+        """Base argv."""
         # USAGE sec 5 invocation template, placeholders filled.
         argv = [
             "run",
@@ -824,6 +860,7 @@ class RunTest(unittest.TestCase):
         return argv + (extra or [])
 
     def test_documented_template_runs_end_to_end(self):
+        """Test documented template runs end to end."""
         with TemporaryDirectory() as tmp:
             output = Path(tmp) / "report"
             code, out, _err = patched_run(self._base_argv(output))
@@ -849,6 +886,7 @@ class RunTest(unittest.TestCase):
                 self.assertIn("boundary_token_ids", entry)
 
     def test_exit_zero_on_compatible(self):
+        """Test exit zero on compatible."""
         # USAGE sec 6: "0 for compatibility on the supplied fixture set".
         with TemporaryDirectory() as tmp:
             output = Path(tmp) / "report"
@@ -859,6 +897,7 @@ class RunTest(unittest.TestCase):
             self.assertEqual(json.loads(out)["decision"], "compatible_on_fixture_set")
 
     def test_exit_two_on_ambiguous(self):
+        """Test exit two on ambiguous."""
         # USAGE sec 6: "2 for completed negative or ambiguous decisions".
         with TemporaryDirectory() as tmp:
             output = Path(tmp) / "report"
@@ -867,6 +906,7 @@ class RunTest(unittest.TestCase):
             self.assertEqual(json.loads(out)["decision"], "ambiguous")
 
     def test_diagnostic_flags_run_end_to_end(self):
+        """Test diagnostic flags run end to end."""
         # USAGE sec 8.5 (--sensitivity-sweep/--max-drop-bytes), sec 8.9
         # (--logprob-diagnostic), sec 6 (--include-evidence).
         with TemporaryDirectory() as tmp:
@@ -899,11 +939,13 @@ class RunTest(unittest.TestCase):
                 self.assertIn("observations", entry)
 
     def test_argparse_errors_exit_2(self):
+        """Test argparse errors exit 2."""
         # USAGE sec 6: "Argument-parser errors also return 2."
         code, _, _ = patched_run(["run"])
         self.assertEqual(code, 2)
 
     def test_seed_must_be_unsigned_64_bit(self):
+        """Test seed must be unsigned 64 bit."""
         # USAGE sec 5: "--seed accepts an unsigned 64-bit integer ...
         # It is validated up front".
         with TemporaryDirectory() as tmp:
@@ -913,6 +955,7 @@ class RunTest(unittest.TestCase):
             self.assertIn("Seed", err)
 
     def test_max_drop_bytes_range_enforced(self):
+        """Test max drop bytes range enforced."""
         # USAGE sec 8.5 documents depths 1..--max-drop-bytes; the CLI
         # enforces 1-8.
         with TemporaryDirectory() as tmp:
@@ -925,6 +968,7 @@ class RunTest(unittest.TestCase):
             self.assertIn("max-drop-bytes", err)
 
     def test_output_must_be_fresh(self):
+        """Test output must be fresh."""
         # USAGE sec 6: "Output requires a new directory and will not
         # overwrite an existing one."
         with TemporaryDirectory() as tmp:
@@ -935,6 +979,7 @@ class RunTest(unittest.TestCase):
             self.assertIn("already exists", err)
 
     def test_boundary_map_typo_fails_fast(self):
+        """Test boundary map typo fails fast."""
         # USAGE sec 4: "A mistyped candidate name fails fast (the valid
         # names are listed)".
         with TemporaryDirectory() as tmp:
@@ -944,6 +989,7 @@ class RunTest(unittest.TestCase):
             self.assertIn("chatml/prefix-newline", err)
 
     def test_run_warns_on_empty_expected(self):
+        """Test run warns on empty expected."""
         # USAGE sec 1: "`inspect` and `run` warn on stderr naming such
         # fixtures".
         with TemporaryDirectory() as tmp:
@@ -983,6 +1029,7 @@ class DebugTest(unittest.TestCase):
 
     @staticmethod
     def _script_run(lines: list[str], model: Path | None = None):
+        """Script run."""
         with TemporaryDirectory() as tmp:
             script = Path(tmp) / "session.txt"
             script.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -992,6 +1039,7 @@ class DebugTest(unittest.TestCase):
             return run_cli(argv)
 
     def test_documented_example_session(self):
+        """Test documented example session."""
         # The verbatim session from USAGE sec 10 (the `.step` lines the
         # docs elide as "..." are asserted in full here).
         code, out, _ = self._script_run(
@@ -1007,6 +1055,7 @@ class DebugTest(unittest.TestCase):
         self.assertIn("token 4/4 id=3 overhang=0/1 boundary_at=2", out)
 
     def test_banner_and_live_prompt(self):
+        """Test banner and live prompt."""
         # USAGE sec 10 documents the banner text and the
         # `mpl:<family> fixture-<n> >` prompt; feed via piped stdin.
         proc = subprocess.run(
@@ -1040,6 +1089,7 @@ class DebugTest(unittest.TestCase):
         self.assertIn("mpl:chatml fixture-1 >", proc.stdout)
 
     def test_families_lists_29(self):
+        """Test families lists 29."""
         # USAGE sec 10: "`.families` | List the 29 catalog families".
         code, out, _ = self._script_run([".families", ".quit"])
         self.assertEqual(code, 0)
@@ -1048,6 +1098,7 @@ class DebugTest(unittest.TestCase):
         self.assertEqual(set(names), set(CATALOG))
 
     def test_abbreviations_comments_and_help_search(self):
+        """Test abbreviations comments and help search."""
         # USAGE sec 10: "unambiguous abbreviations like `.help ren`,
         # `.help PATTERN` search, `#` comments".
         code, out, _ = self._script_run(["# a comment line", ".fam", ".ren", ".help ren", ".quit"])
@@ -1057,6 +1108,7 @@ class DebugTest(unittest.TestCase):
         self.assertIn(".render: Render the hypothesis over messages", out)
 
     def test_fixture_by_id_audit_and_say(self):
+        """Test fixture by id audit and say."""
         code, out, _ = self._script_run(
             [
                 ".fixture search-copy-blue",
@@ -1075,6 +1127,7 @@ class DebugTest(unittest.TestCase):
         self.assertIn("buffered messages=1", out)
 
     def test_tokens_with_and_without_model(self):
+        """Test tokens with and without model."""
         # USAGE sec 10: "plus exact token IDs per segment when --model is
         # given"; without --model a reminder prints instead of IDs.
         code, out, _ = self._script_run([".render", ".tokens", ".quit"])
@@ -1088,6 +1141,7 @@ class DebugTest(unittest.TestCase):
         self.assertIn("ids=[", out2)
 
     def test_save_writes_transcript(self):
+        """Test save writes transcript."""
         with TemporaryDirectory() as tmp:
             target = Path(tmp) / "transcript.txt"
             code, _out, _ = self._script_run([".render", f".save {target}", ".quit"])
@@ -1096,6 +1150,7 @@ class DebugTest(unittest.TestCase):
             self.assertIn("render: family=chatml", target.read_text(encoding="utf-8"))
 
     def test_script_bounds_refused(self):
+        """Test script bounds refused."""
         # USAGE sec 10: ".read ... refused over 1 MB or 10k lines".
         with TemporaryDirectory() as tmp:
             script = Path(tmp) / "long.txt"
@@ -1118,6 +1173,7 @@ class DiffBackendsTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls._tmp = TemporaryDirectory()
         # Tokenizer that really encodes the documented example words, so
         # the documented divergence is reproducible.
@@ -1128,14 +1184,17 @@ class DiffBackendsTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        """Tear down the test fixture."""
         cls._tmp.cleanup()
 
     @staticmethod
     def _run(*argv: str) -> tuple[int, dict, str]:
+        """Run."""
         code, out, err = run_cli(["diff-backends", *argv])
         return code, (json.loads(out) if out.strip() else {}), err
 
     def test_documented_example_reproduces_documented_divergence(self):
+        """Test documented example reproduces documented divergence."""
         # The compact real example from USAGE sec 11.
         code, report, _ = self._run(
             "--model",
@@ -1181,6 +1240,7 @@ class DiffBackendsTest(unittest.TestCase):
         )
 
     def test_eos_id_and_min_tokens_flags(self):
+        """Test eos id and min tokens flags."""
         code, report, _ = self._run(
             "--model",
             str(self.ckpt),
@@ -1200,6 +1260,7 @@ class DiffBackendsTest(unittest.TestCase):
         self.assertEqual(report["min_tokens"], 1)
 
     def test_prompt_text_capped_at_1mb(self):
+        """Test prompt text capped at 1mb."""
         # USAGE sec 11: "`--prompt-text`/`--output-text` are capped at 1 MB
         # each ... never silent truncation".
         code, _, err = run_cli(
@@ -1224,6 +1285,7 @@ class DiffReportsTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Set up the test fixture."""
         cls._tmp = TemporaryDirectory()
         tmp = Path(cls._tmp.name)
         ckpt = make_synthetic_checkpoint(tmp / "ckpt")
@@ -1266,9 +1328,11 @@ class DiffReportsTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        """Tear down the test fixture."""
         cls._tmp.cleanup()
 
     def test_stdout_json_stderr_summary_shape(self):
+        """Test stdout json stderr summary shape."""
         # USAGE sec 12: "The JSON comparison goes to stdout; a
         # human-readable summary goes to stderr."
         code, out, err = run_cli(["diff-reports", str(self.fixed), str(self.baseline)])
@@ -1290,6 +1354,7 @@ class DiffReportsTest(unittest.TestCase):
         self.assertIn("Summary:", err)
 
     def test_direct_results_json_paths_and_config_drift(self):
+        """Test direct results json paths and config drift."""
         code, _, err = run_cli(
             [
                 "diff-reports",
@@ -1302,12 +1367,14 @@ class DiffReportsTest(unittest.TestCase):
         self.assertIn("diff-reports:", err)
 
     def test_identical_inputs_report_unchanged(self):
+        """Test identical inputs report unchanged."""
         code, _, err = run_cli(["diff-reports", str(self.baseline), str(self.baseline)])
         self.assertEqual(code, 0)
         self.assertIn("No differences", err)
         self.assertIn("identical on every compared axis", err)
 
     def test_missing_input_exits_1(self):
+        """Test missing input exits 1."""
         # USAGE sec 12: "Exit 1 means an input problem, with a fixed error
         # code on stderr".
         code, _, err = run_cli(["diff-reports", "/nonexistent-a", "/nonexistent-b"])
@@ -1319,6 +1386,7 @@ class ReadmeArtifactsTest(unittest.TestCase):
     """README command-adjacent artifacts that must exist."""
 
     def test_make_sample_report_script_exists(self):
+        """Test make sample report script exists."""
         # README: "python examples/make_sample_report.py". Not executed
         # here: it rewrites committed files under examples/sample-report/.
         script = EXAMPLES / "make_sample_report.py"
@@ -1326,9 +1394,11 @@ class ReadmeArtifactsTest(unittest.TestCase):
         compile(script.read_text(encoding="utf-8"), str(script), "exec")
 
     def test_sample_report_committed(self):
+        """Test sample report committed."""
         self.assertTrue((EXAMPLES / "sample-report" / "report.html").exists())
 
     def test_fixtures_csv_example_exists(self):
+        """Test fixtures csv example exists."""
         # README: "python -m model_protocol_lab fixtures build
         # examples/fixtures.csv --output /tmp/mpl-fixtures.json".
         self.assertTrue((EXAMPLES / "fixtures.csv").exists())
