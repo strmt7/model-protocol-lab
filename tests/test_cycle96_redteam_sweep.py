@@ -376,8 +376,6 @@ class BaseExceptionBoundaryTests(unittest.TestCase):
         class NastyError(BaseException):
             """Nasty error."""
 
-            pass
-
         fmt, cases = self._case()
         report = evaluate(
             self._backend(NastyError("boom")), fmt, cases, boundary=(99,), max_new_tokens=8
@@ -401,8 +399,6 @@ class BaseExceptionBoundaryTests(unittest.TestCase):
 
         class NastyError(BaseException):
             """Nasty error."""
-
-            pass
 
         class NastyBackend:
             """Nasty backend."""

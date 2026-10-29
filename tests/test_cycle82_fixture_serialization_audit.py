@@ -331,8 +331,6 @@ class FixtureSerializationAuditTests(unittest.TestCase):
         class _SplitSubclass(Split):
             """Split subclass."""
 
-            pass
-
         good = _adversarial_split()
         sub = _SplitSubclass(search=good.search, held_out=good.held_out)
         with self.assertRaisesRegex(ValueError, "needs a Split"):

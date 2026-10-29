@@ -1605,8 +1605,6 @@ class RoundThreeFixTests(unittest.TestCase):
         class NoFingerprint:
             """No fingerprint."""
 
-            pass
-
         with self.assertRaisesRegex(ValueError, "fingerprint must be a string"):
             run_experiment(NoFingerprint(), (BASE,), split(), boundary=ids("|"))
 

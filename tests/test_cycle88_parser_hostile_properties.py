@@ -283,8 +283,6 @@ class ParserHostilePropertiesTests(unittest.TestCase):
         class Sneaky(str):
             """Sneaky."""
 
-            pass
-
         with self.assertRaises(ValueError):
             parse_dataset(Sneaky("{}"))
 

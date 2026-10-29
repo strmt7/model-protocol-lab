@@ -438,8 +438,6 @@ class TruncatedBackendContract(unittest.TestCase):
         class MissingFingerprint:
             """Missing fingerprint."""
 
-            pass
-
         with self.assertRaises(ValueError):
             TruncatedPromptBackend(MissingFingerprint(), 1)
 

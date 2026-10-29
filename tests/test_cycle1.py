@@ -104,8 +104,6 @@ def _stub_tokenizer(decoder_name, decoder_state, vocab):
     class StubDecoder(_NamedDecoder):
         """Stub decoder."""
 
-        pass
-
     StubDecoder.__name__ = decoder_name
     return SimpleNamespace(
         backend_tokenizer=SimpleNamespace(decoder=StubDecoder(decoder_name, decoder_state)),

@@ -502,8 +502,6 @@ class HostileSecondCheckpointTests(unittest.TestCase):
         class BareTokenizer:
             """Bare tokenizer."""
 
-            pass
-
         doc = {
             "added_tokens": [
                 {"content": "<t>", "id": 7},

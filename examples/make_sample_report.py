@@ -10,7 +10,7 @@ Regenerating must be byte-identical; tests/test_sample_report.py enforces it.
 
 import re
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from threading import Event
 from typing import Any
@@ -767,7 +767,11 @@ def build_sample_report(output_dir: Path) -> dict[str, Any]:
         _probes: list[dict[str, Any]] = []
         for _fmt in candidates("llama3", mutate=True):
 
-            def _adapt(messages: Sequence[Message], _render=_fmt.render) -> str:
+            def _adapt(
+                messages: Sequence[Message],
+                _render: Callable[[tuple[Message, ...]], str] = _fmt.render,
+            ) -> str:
+                """Adapt a tuple-only format render to the probe signature."""
                 return _render(tuple(messages))
 
             for _case in split.search:

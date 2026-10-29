@@ -1623,8 +1623,8 @@ class EvaluateFuzz(unittest.TestCase):
             preset_cancel=(cancel_mode == "preset"),
         )
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     @staticmethod
+    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def _script_behavior(rng, kind, case, boundary, cap, decode_raises, answers):
         """Script behavior."""
         ans = case.expected

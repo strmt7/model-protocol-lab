@@ -775,7 +775,6 @@ class DiffSurfaceNoiseTests(unittest.TestCase):
     @staticmethod
     def _report(prompt="MAGICWORD please answer now"):
         """Report."""
-
         protocol, backend, fixtures = _protocol()
         return sn.probe_surface_noise(prompt, fixtures, backend, protocol, boundary=(7,))
 
@@ -1640,7 +1639,6 @@ class Wave5FixesTests(unittest.TestCase):
 
     def test_finding11_selftest_honors_cancel(self):
         """Test finding11 selftest honors cancel."""
-
         backend = sn.SelfTestBackend()
         cancel = threading.Event()
         cancel.set()
