@@ -249,12 +249,12 @@ class VerdictFunctionTests(unittest.TestCase):
     """R1: V(P, F, B) is the pass/fail/abstain vector — no per-prompt V."""
 
     def test_pass_vector(self):
-        protocol, backend, fixtures = _protocol()
+        _, backend, fixtures = _protocol()
         verdicts = sn.evaluate_prompt("MAGICWORD", fixtures, backend, boundary=(7,))
         self.assertEqual(verdicts, ("pass", "pass", "pass"))
 
     def test_fail_vector(self):
-        protocol, backend, fixtures = _protocol()
+        _, backend, fixtures = _protocol()
         verdicts = sn.evaluate_prompt("no marker here", fixtures, backend, boundary=(7,))
         self.assertEqual(verdicts, ("fail", "fail", "fail"))
 
@@ -267,7 +267,7 @@ class VerdictFunctionTests(unittest.TestCase):
                 id="b", messages=(Message(role="user", content="x"),), expected="RED", group="t"
             ),
         )
-        protocol, backend, _ = _protocol(fixtures=fixtures)
+        _, backend, _ = _protocol(fixtures=fixtures)
         verdicts = sn.evaluate_prompt("MAGICWORD", fixtures, backend, boundary=(7,))
         self.assertEqual(verdicts, ("pass", "fail"))
 
@@ -279,13 +279,13 @@ class VerdictFunctionTests(unittest.TestCase):
             def generate(input_ids, *, max_new_tokens, seed, cancel):
                 raise RuntimeError("boom")
 
-        protocol, _, fixtures = _protocol(backend=ExplodingBackend(), fixtures=_fixtures())
+        _, _, fixtures = _protocol(backend=ExplodingBackend(), fixtures=_fixtures())
         verdicts = sn.evaluate_prompt("MAGICWORD", fixtures, ExplodingBackend(), boundary=(7,))
         self.assertEqual(verdicts, ("abstain", "abstain", "abstain"))
 
     def test_flip_is_vector_difference(self):
         # R1: a flip = the verdict VECTOR differs on a mutually-evaluable fixture.
-        protocol, backend, fixtures = _protocol()
+        _, backend, fixtures = _protocol()
         base = sn.evaluate_prompt("MAGICWORD", fixtures, backend, boundary=(7,))
         variant = sn.perturb_text("MAGICWORD", "case_flip", seed=0)
         new = sn.evaluate_prompt(variant, fixtures, backend, boundary=(7,))
@@ -705,7 +705,7 @@ class DiffSurfaceNoiseTests(unittest.TestCase):
         from model_protocol_lab.diffreports import diff_surface_noise
 
         r1 = self._report()
-        protocol, _backend, fixtures = _protocol()
+        _, _backend, fixtures = _protocol()
         other = sn.SelfTestBackend(marker="OTHER")
         protocol2 = sn.freeze_surface_noise_protocol(
             backend_fingerprint=other.fingerprint, fixtures=fixtures
@@ -1345,7 +1345,7 @@ class Wave5FixesTests(unittest.TestCase):
 
     def test_finding1_fixture_binding_rejected(self):
         # Freeze with F1, probe with F2 -> ValueError (fail-closed).
-        protocol, backend, fixtures = _protocol()
+        protocol, backend, _ = _protocol()
         other_fixtures = _fixtures(expected="WRONG")
         with self.assertRaises(ValueError):
             sn.probe_surface_noise("MAGICWORD", other_fixtures, backend, protocol, boundary=(7,))
@@ -1413,7 +1413,7 @@ class Wave5FixesTests(unittest.TestCase):
     def test_finding6_unavailable_exit_3(self):
         # Unavailable status -> exit 3 (not 0).
 
-        protocol, _backend, fixtures = _protocol()
+        _, _backend, fixtures = _protocol()
 
         # Force unavailable by using a backend that fails to encode
         class BadEncodeBackend(sn.SelfTestBackend):
