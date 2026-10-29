@@ -294,6 +294,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "canonical_form": {"available": "neither", "changed": False},
         "instruction_distance": {"available": "neither", "changed": False},
         "history_frame": {"available": "neither", "changed": False},
+        "prune_sweep": {"available": "neither", "changed": False},
         "choice_audit": {"available": "neither", "changed": False},
         "precision": {"available": "neither", "changed": False},
         "confidence": {"available": "neither", "changed": False},
@@ -393,6 +394,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "instruction_distance_asymmetric": False,
             "history_frame_changed": False,
             "history_frame_asymmetric": False,
+            "prune_sweep_changed": False,
+            "prune_sweep_asymmetric": False,
             "choice_audit_changed": False,
             "choice_audit_asymmetric": False,
             "precision_changed": False,
@@ -8027,6 +8030,887 @@ def _o_historyframe(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+# ---------------------------------------------------------------------
+# Prune-sweep oracle (cycle 220): an independent
+# re-implementation of diffreports._valid_prune_sweep /
+# diff_prune_sweep from docs/PRUNESWEEP_DESIGN.md and the
+# fresh review's amendments A-I. Frozen literals are
+# transcribed from the design text; the case generator,
+# drop order, protocol, and aggregates are recomputed here
+# from the frozen rules alone, so a forged payload
+# disagrees with this oracle exactly where it disagrees
+# with the implementation.
+# ---------------------------------------------------------------------
+
+_O_PS_ARMS = ("dose0", "dose18", "dose36", "dose72", "tail72", "closed_book")
+_O_PS_HEADLINE = ("dose0", "dose18", "dose36", "dose72")
+_O_PS_SHARE_ARMS = ("dose18", "dose36", "dose72", "tail72")
+_O_PS_DOSES = {"dose0": 0, "dose18": 18, "dose36": 36, "dose72": 72}
+_O_PS_MIN_C = 12
+_O_PS_MIN_A = 5
+_O_PS_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+}
+_O_PS_CELL_DETAILS = {"", "arm_context_exceeded", "arm_evaluation_failed"}
+_O_PS_DECOMPOSITION = ("exact_pass", "boundary_only", "wrong_value", "non_value")
+_O_PS_INSTRUCTION = "Read the passage and answer the question."
+_O_PS_TOPICS = (
+    "harbor light",
+    "summit trail",
+    "quarry gate",
+    "tundra post",
+    "granite arch",
+    "willow ford",
+    "copper mill",
+    "saddle pass",
+)
+_O_PS_VALUES = (
+    "amber",
+    "birch",
+    "cobalt",
+    "dune",
+    "ember",
+    "flint",
+    "garnet",
+    "hazel",
+    "ivory",
+    "jasper",
+    "kelvin",
+    "linden",
+    "magnet",
+    "nickel",
+    "onyx",
+    "pepper",
+    "quartz",
+    "rowan",
+    "saffron",
+    "timber",
+    "umber",
+    "violet",
+    "walnut",
+    "yonder",
+)
+_O_PS_SUBJECTS = (
+    "archive",
+    "ledger",
+    "cabinet",
+    "chapel",
+    "meadow",
+    "workshop",
+    "station",
+    "garden",
+    "library",
+    "market",
+    "office",
+    "depot",
+)
+_O_PS_OBJECTS = (
+    "forms",
+    "letters",
+    "tools",
+    "charts",
+    "samples",
+    "records",
+    "parcels",
+    "volumes",
+    "tickets",
+    "bundles",
+    "reports",
+    "crates",
+)
+_O_PS_PLACES = (
+    "annex",
+    "attic",
+    "cellar",
+    "landing",
+    "terrace",
+    "alcove",
+    "gallery",
+    "storeroom",
+    "corridor",
+    "balcony",
+    "vestibule",
+    "loft",
+)
+_O_PS_TIMES = (
+    "morning",
+    "midday",
+    "evening",
+    "weekdays",
+    "season",
+    "harvest",
+    "holiday",
+    "weekend",
+    "noon",
+    "dusk",
+    "dawn",
+    "closing",
+)
+_O_PS_TEMPLATES = (
+    "The {subject} holds {object} inside the {place} each {time}.",
+    "A {subject} keeps {object} near the {place} during {time}.",
+    "Workers quietly move {object} past the {place} during {time}.",
+    "Each {time} the {subject} stores {object} under the {place}.",
+)
+_O_PS_NEGATION = frozenset(
+    {
+        "no",
+        "not",
+        "never",
+        "none",
+        "cannot",
+        "without",
+        "neither",
+        "nor",
+        "nothing",
+        "nobody",
+        "nowhere",
+        "hardly",
+        "barely",
+        "scarcely",
+    }
+)
+_O_PS_OC = {
+    "null_random_stated": 0.0121,
+    "null_competent_stated": 0.0143,
+    "null_jitter_stated": 0.000005,
+    "null_competent_exchangeable_v09": 0.003,
+    "null_competent_exchangeable_v05": 0.0004,
+    "null_competent_exchangeable_v02": 0.000004,
+    "familywise_expected_stated": 0.34,
+    "familywise_any_stated": 0.29,
+    "familywise_expected_exchangeable": 0.07,
+    "familywise_any_exchangeable": 0.07,
+    "power_q25": 0.3969,
+    "power_q50": 0.9601,
+    "power_q75": 0.9996,
+    "shape_returns_cap_graded": 0.094,
+    "shape_intermediate_support_threshold": 0.0,
+}
+_O_PS_MAX_BYTES = 12 * 1024 * 1024
+_O_PS_VALUE_DIGESTS = frozenset(
+    hashlib.sha256(value.encode("utf-8")).hexdigest() for value in _O_PS_VALUES
+)
+
+
+def _o_ps_digest_ok(value: Any) -> bool:
+    return type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def _o_ps_sha(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _o_ps_draw_sentence(seed: int, case_id: str, slot: int, seen: set) -> str:
+    template = _O_PS_TEMPLATES[slot % 4]
+    counter = 0
+    while True:
+        digest = _o_ps_sha(f"{seed}:{case_id}:slot:{slot}:{counter}")
+        subject = _O_PS_SUBJECTS[int(digest[0:8], 16) % 12]
+        obj = _O_PS_OBJECTS[int(digest[8:16], 16) % 12]
+        place = _O_PS_PLACES[int(digest[16:24], 16) % 12]
+        when = _O_PS_TIMES[int(digest[24:32], 16) % 12]
+        sentence = template.format(subject=subject, object=obj, place=place, time=when)
+        if sentence not in seen:
+            return sentence
+        counter += 1
+        if counter > 10000:
+            raise ValueError("prune_sentence_draw_exhausted")
+
+
+def _o_ps_generate_case(seed: int, index: int) -> dict[str, Any]:
+    case_id = f"prune-{index:02d}"
+    topic = _O_PS_TOPICS[index % len(_O_PS_TOPICS)]
+    value = _O_PS_VALUES[index]
+    seen: set = set()
+    sentences = []
+    for slot in range(16):
+        sentence = _o_ps_draw_sentence(seed, case_id, slot, seen)
+        seen.add(sentence)
+        sentences.append(sentence)
+    fact = f"The {topic} code is {value}."
+    return {
+        "case_id": case_id,
+        "topic": topic,
+        "value": value,
+        "context_sentences": tuple(sentences),
+        "fact_sentence": fact,
+        "passage_sentences": tuple(sentences[:8]) + (fact,) + tuple(sentences[8:]),
+    }
+
+
+def _o_ps_generate_cases(seed: int) -> tuple:
+    return tuple(_o_ps_generate_case(seed, index) for index in range(24))
+
+
+def _o_ps_drop_order(seed: int, case_id: str) -> tuple:
+    return tuple(sorted(range(144), key=lambda position: _o_ps_sha(f"{seed}:{case_id}:{position}")))
+
+
+def _o_ps_dropped(case_id: str, arm: str, seed: int) -> frozenset:
+    if arm == "tail72":
+        return frozenset(range(72, 144))
+    return frozenset(_o_ps_drop_order(seed, case_id)[: _O_PS_DOSES[arm]])
+
+
+def _o_ps_arm_content(case: dict, arm: str, seed: int) -> str:
+    question = f"What is the {case['topic']} code? Reply with only the code word."
+    if arm == "closed_book":
+        return "\n".join((_O_PS_INSTRUCTION, question))
+    dropped = _o_ps_dropped(case["case_id"], arm, seed)
+    kept = []
+    position = 0
+    for index, sentence in enumerate(case["passage_sentences"]):
+        words = sentence.split(" ")
+        if index == 8:
+            kept.extend(words)
+            continue
+        for offset, word in enumerate(words):
+            if position + offset not in dropped:
+                kept.append(word)
+        position += len(words)
+    return "\n".join((_O_PS_INSTRUCTION, " ".join(kept), question))
+
+
+def _o_ps_word_classes(word: str) -> tuple:
+    bare = word.strip(".,;:!?\"'").lower()
+    return (any(char.isdigit() for char in word), bare in _O_PS_NEGATION)
+
+
+def _o_ps_shares(case: dict, seed: int) -> dict[str, Any]:
+    words = []
+    for sentence in case["context_sentences"]:
+        words.extend(sentence.split(" "))
+    shares: dict[str, Any] = {}
+    for arm in _O_PS_SHARE_ARMS:
+        dropped_words = [
+            words[position] for position in sorted(_o_ps_dropped(case["case_id"], arm, seed))
+        ]
+        if not dropped_words:
+            shares[arm] = {"numeral": 0.0, "negation": 0.0}
+            continue
+        numeral = sum(1 for word in dropped_words if _o_ps_word_classes(word)[0])
+        negation = sum(1 for word in dropped_words if _o_ps_word_classes(word)[1])
+        shares[arm] = {
+            "numeral": numeral / len(dropped_words),
+            "negation": negation / len(dropped_words),
+        }
+    return shares
+
+
+def _o_ps_case_material() -> str:
+    material = {
+        "instruction": _O_PS_INSTRUCTION,
+        "fact_template": "The {topic} code is {value}.",
+        "question_template": "What is the {topic} code? Reply with only the code word.",
+        "topics": list(_O_PS_TOPICS),
+        "values": list(_O_PS_VALUES),
+        "subjects": list(_O_PS_SUBJECTS),
+        "objects": list(_O_PS_OBJECTS),
+        "places": list(_O_PS_PLACES),
+        "times": list(_O_PS_TIMES),
+        "templates": list(_O_PS_TEMPLATES),
+        "negation_words": sorted(_O_PS_NEGATION),
+        "doses": [0, 18, 36, 72],
+    }
+    raw = json.dumps(material, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    return _o_ps_sha(raw)
+
+
+def _o_ps_ground(seed: int) -> str:
+    rows = [
+        [
+            case["case_id"],
+            case["topic"],
+            case["value"],
+            list(case["context_sentences"]),
+            case["fact_sentence"],
+        ]
+        for case in _o_ps_generate_cases(seed)
+    ]
+    raw = json.dumps(rows, ensure_ascii=True, separators=(",", ":"))
+    return _o_ps_sha(raw)
+
+
+def _o_ps_protocol(seed: int, backend_fp: str) -> dict[str, Any]:
+    protocol = {
+        "version": 1,
+        "arm_keys": list(_O_PS_ARMS),
+        "headline_arms": list(_O_PS_HEADLINE),
+        "descriptive_arm": "tail72",
+        "screen_arm": "closed_book",
+        "doses": [0, 18, 36, 72],
+        "case_count": 24,
+        "eligible_words": 144,
+        "case_material_sha256": _o_ps_case_material(),
+        "ground_sha256": _o_ps_ground(seed),
+        "min_c": _O_PS_MIN_C,
+        "min_a": _O_PS_MIN_A,
+        "generation_budget": 3456,
+        "headline_generations": 2304,
+        "max_ground_records": 576,
+        "max_records_bytes": _O_PS_MAX_BYTES,
+        "max_candidates": 24,
+        "seed": seed,
+        "backend_fingerprint": backend_fp,
+    }
+    canonical = json.dumps(protocol, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    protocol["fingerprint"] = _o_ps_sha(canonical)
+    return protocol
+
+
+def _o_ps_mcnemar_p(a: int, b: int):
+    d = a + b
+    if d == 0:
+        return None
+    k = min(a, b)
+    tail = sum(math.comb(d, i) for i in range(k + 1)) / (2**d)
+    return min(1.0, 2.0 * tail)
+
+
+def _o_ps_classify(direct: int, drop: int, reverse: int) -> str:
+    if direct < _O_PS_MIN_C:
+        return "insufficient"
+    p = _o_ps_mcnemar_p(drop, reverse)
+    if drop >= _O_PS_MIN_A and p is not None and p < 0.05:
+        return "prune_drop_observed"
+    return "below_threshold"
+
+
+def _o_ps_cell(record: dict, arm: str):
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(arm)
+    return cell if isinstance(cell, dict) else None
+
+
+def _o_ps_detail(record: dict, arm: str) -> str:
+    details = record.get("cell_details")
+    if not isinstance(details, dict):
+        return ""
+    detail = details.get(arm, "")
+    return detail if type(detail) is str else ""
+
+
+def _o_ps_verdict(record: dict, arm: str) -> bool:
+    cell = _o_ps_cell(record, arm)
+    return bool(cell is not None and cell["verdict"])
+
+
+def _o_ps_decompose(cell: dict, expected_digest: str) -> str:
+    if cell.get("verdict") is True:
+        return "exact_pass"
+    digest = cell.get("answer_digest")
+    if digest is not None and digest == expected_digest:
+        return "boundary_only"
+    if digest is not None and digest in _O_PS_VALUE_DIGESTS:
+        return "wrong_value"
+    return "non_value"
+
+
+def _o_ps_first_flip(record: dict) -> str:
+    for arm in _O_PS_HEADLINE[1:]:
+        if not _o_ps_verdict(record, arm):
+            return arm
+    return "never"
+
+
+def _o_ps_aggregate(records: list) -> dict[str, Any]:
+    arms: dict[str, Any] = {}
+    for key in _O_PS_ARMS:
+        n_completed = 0
+        n_pass = 0
+        n_context = 0
+        n_failed = 0
+        decomposition = dict.fromkeys(_O_PS_DECOMPOSITION, 0)
+        for record in records:
+            detail = _o_ps_detail(record, key)
+            if detail == "arm_context_exceeded":
+                n_context += 1
+            elif detail == "arm_evaluation_failed":
+                n_failed += 1
+            cell = _o_ps_cell(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell["verdict"]:
+                n_pass += 1
+            decomposition[_o_ps_decompose(cell, str(record.get("expected_digest", "")))] += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": (n_pass / n_completed) if n_completed else None,
+            "n_context_exceeded": n_context,
+            "n_evaluation_failed": n_failed,
+            "decomposition": decomposition,
+        }
+    complete = [
+        record
+        for record in records
+        if all(_o_ps_cell(record, arm) is not None for arm in _O_PS_HEADLINE)
+    ]
+
+    def _screened(record: dict) -> bool:
+        cell = _o_ps_cell(record, "closed_book")
+        return bool(cell is not None and cell["verdict"])
+
+    screened = [record for record in complete if _screened(record)]
+    unscreened = [record for record in complete if not _screened(record)]
+    ids_excluded = []
+    population = []
+    for record in unscreened:
+        digests = record.get("id_digests")
+        identical = (
+            isinstance(digests, dict)
+            and digests.get("dose0") is not None
+            and digests.get("dose0") == digests.get("dose72")
+        )
+        if identical:
+            ids_excluded.append(record)
+        else:
+            population.append(record)
+    direct = [record for record in population if _o_ps_verdict(record, "dose0")]
+    drop_cases = 0
+    boundary_attrition = 0
+    a_by_first_flip = dict.fromkeys(_O_PS_HEADLINE[1:], 0)
+    for record in direct:
+        cell72 = _o_ps_cell(record, "dose72")
+        if cell72 is None or cell72["verdict"]:
+            continue
+        klass = _o_ps_decompose(cell72, str(record.get("expected_digest", "")))
+        if klass == "boundary_only":
+            boundary_attrition += 1
+        elif klass in ("wrong_value", "non_value"):
+            drop_cases += 1
+            a_by_first_flip[_o_ps_first_flip(record)] += 1
+    reverse = sum(
+        1
+        for record in population
+        if not _o_ps_verdict(record, "dose0") and _o_ps_verdict(record, "dose72")
+    )
+    headline = {
+        "n_population": len(population),
+        "n_headline_incomplete": len(records) - len(complete),
+        "n_screened": len(screened),
+        "n_closed_book_incomplete": sum(
+            1 for record in records if _o_ps_cell(record, "closed_book") is None
+        ),
+        "n_ids_identical": len(ids_excluded),
+        "direct_passes": len(direct),
+        "drop_cases": drop_cases,
+        "boundary_attrition": boundary_attrition,
+        "reverse": reverse,
+        "decision": _o_ps_classify(len(direct), drop_cases, reverse),
+        "a_by_first_flip": a_by_first_flip,
+    }
+    histogram = dict.fromkeys(_O_PS_HEADLINE[1:], 0)
+    histogram["never"] = 0
+    returns = 0
+    for record in direct:
+        histogram[_o_ps_first_flip(record)] += 1
+        if (
+            not _o_ps_verdict(record, "dose18") or not _o_ps_verdict(record, "dose36")
+        ) and _o_ps_verdict(record, "dose72"):
+            returns += 1
+    shape = {
+        "first_flip_histogram": histogram,
+        "returns": returns,
+        "dose_pass_rates": {
+            arm: (
+                sum(1 for record in population if _o_ps_verdict(record, arm)) / len(population)
+                if population
+                else None
+            )
+            for arm in _O_PS_HEADLINE
+        },
+    }
+    n_compared = 0
+    dose72_fails = 0
+    tail72_fails = 0
+    dose72_only = 0
+    tail72_only = 0
+    for record in population:
+        if _o_ps_cell(record, "tail72") is None:
+            continue
+        n_compared += 1
+        fail72 = not _o_ps_verdict(record, "dose72")
+        fail_tail = not _o_ps_verdict(record, "tail72")
+        dose72_fails += 1 if fail72 else 0
+        tail72_fails += 1 if fail_tail else 0
+        if fail72 and not fail_tail:
+            dose72_only += 1
+        elif fail_tail and not fail72:
+            tail72_only += 1
+    p_tail = _o_ps_mcnemar_p(dose72_only, tail72_only)
+    rival = dose72_fails > 0 and (
+        dose72_only + tail72_only == 0 or (p_tail is not None and p_tail >= 0.05)
+    )
+    tail_contrast = {
+        "n_compared": n_compared,
+        "dose72_fails": dose72_fails,
+        "tail72_fails": tail72_fails,
+        "dose72_only": dose72_only,
+        "tail72_only": tail72_only,
+        "rival_reading": rival,
+    }
+    ids: dict[str, Any] = {}
+    for arm in (*_O_PS_HEADLINE[1:], "tail72"):
+        deltas: list = []
+        n_ids_identical = 0
+        n_same_ids_flips = 0
+        for record in records:
+            tokens = record.get("arm_tokens")
+            tokens = tokens if isinstance(tokens, dict) else {}
+            digests = record.get("id_digests")
+            digests = digests if isinstance(digests, dict) else {}
+            treated = tokens.get(arm)
+            baseline = tokens.get("dose0")
+            if type(treated) is int and type(baseline) is int:
+                deltas.append(treated - baseline)
+            else:
+                deltas.append(0)
+            base_digest = digests.get("dose0")
+            if type(base_digest) is str and base_digest != "" and base_digest == digests.get(arm):
+                n_ids_identical += 1
+                base_cell = _o_ps_cell(record, "dose0")
+                arm_cell = _o_ps_cell(record, arm)
+                if (
+                    base_cell is not None
+                    and arm_cell is not None
+                    and base_cell["verdict"] != arm_cell["verdict"]
+                ):
+                    n_same_ids_flips += 1
+        ids[arm] = {
+            "id_length_delta_by_case": deltas,
+            "max_abs_id_delta": max((abs(delta) for delta in deltas), default=0),
+            "n_ids_identical": n_ids_identical,
+            "n_same_ids_flips": n_same_ids_flips,
+        }
+    dropped_shares: dict[str, Any] = {}
+    for arm in _O_PS_SHARE_ARMS:
+        numeral_total = 0.0
+        negation_total = 0.0
+        counted = 0
+        for record in records:
+            shares = record.get("dropped_shares")
+            if not isinstance(shares, dict) or not isinstance(shares.get(arm), dict):
+                continue
+            numeral_total += float(shares[arm].get("numeral", 0.0))
+            negation_total += float(shares[arm].get("negation", 0.0))
+            counted += 1
+        dropped_shares[arm] = {
+            "numeral": numeral_total / counted if counted else 0.0,
+            "negation": negation_total / counted if counted else 0.0,
+        }
+    return {
+        "arms": arms,
+        "headline": headline,
+        "shape": shape,
+        "tail_contrast": tail_contrast,
+        "ids": ids,
+        "dropped_shares": dropped_shares,
+        "operating_characteristics": dict(_O_PS_OC),
+        "n_cases": len(records),
+        "n_incomplete": sum(
+            1 for record in records if any(_o_ps_cell(record, arm) is None for arm in _O_PS_ARMS)
+        ),
+    }
+
+
+def _o_ps_recompute(payload: Any):
+    if type(payload) is not dict:
+        return None
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fp = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool):
+        return None
+    if type(backend_fp) is not str:
+        return None
+    if protocol != _o_ps_protocol(seed, backend_fp):
+        return None
+    cases = _o_ps_generate_cases(seed)
+    if len(cases) != protocol["case_count"]:
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    if len(candidates) > 24:
+        return None
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        if entry.get("status") == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            aggregates[name] = {}
+            continue
+        if entry.get("status") != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != {
+            "arms",
+            "headline",
+            "shape",
+            "tail_contrast",
+            "ids",
+            "dropped_shares",
+            "operating_characteristics",
+            "n_cases",
+            "n_incomplete",
+            "status",
+            "detail",
+            "records",
+        }:
+            return None
+        records = entry.get("records")
+        if type(records) is not list or len(records) != 24:
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _O_PS_MAX_BYTES:
+            return None
+        for record, case in zip(records, cases, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "arm_tokens",
+                "id_digests",
+                "ids_identical",
+                "content_digests",
+                "dropped_shares",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["case_id"] or record["topic"] != case["topic"]:
+                return None
+            if record["expected_digest"] != _o_ps_sha(case["value"]):
+                return None
+            for key in ("arm_tokens", "id_digests", "content_digests", "cells", "cell_details"):
+                mapping = record[key]
+                if type(mapping) is not dict or set(mapping) != set(_O_PS_ARMS):
+                    return None
+            if record["content_digests"] != {
+                arm: _o_ps_sha(_o_ps_arm_content(case, arm, seed)) for arm in _O_PS_ARMS
+            }:
+                return None
+            derived_identical = record["id_digests"].get("dose0") is not None and record[
+                "id_digests"
+            ].get("dose0") == record["id_digests"].get("dose72")
+            if record["ids_identical"] is not derived_identical:
+                return None
+            if record["dropped_shares"] != _o_ps_shares(case, seed):
+                return None
+            for arm in _O_PS_ARMS:
+                tokens = record["arm_tokens"][arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                    return None
+                if not _o_ps_digest_ok(record["id_digests"][arm]):
+                    return None
+                if not _o_ps_digest_ok(record["content_digests"][arm]):
+                    return None
+                detail = record["cell_details"][arm]
+                if detail not in _O_PS_CELL_DETAILS:
+                    return None
+                cell = record["cells"][arm]
+                if cell is None:
+                    if detail == "":
+                        return None
+                    continue
+                if detail != "":
+                    return None
+                if type(cell) is not dict or set(cell) != _O_PS_CELL_FIELDS:
+                    return None
+                if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+                    return None
+                if (
+                    cell["boundary_text_match"] is not None
+                    and type(cell["boundary_text_match"]) is not bool
+                ):
+                    return None
+                if cell["input_tokens"] != tokens:
+                    return None
+                digest = cell["answer_digest"]
+                if digest is not None and not _o_ps_digest_ok(digest):
+                    return None
+                if cell["verdict"] != (
+                    digest == record["expected_digest"] and cell["boundary_found"]
+                ):
+                    return None
+        aggregates[name] = _o_ps_aggregate(records)
+    if total_records > 576:
+        return None
+    if not aggregates:
+        return None
+    return {"aggregates": aggregates, "n_candidates": len(candidates), "n_cases": 24}
+
+
+def _o_prunesweep_valid(value: Any) -> bool:
+    """Oracle prune-sweep validator: mirrors
+    diffreports._valid_prune_sweep."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if value.get("detail") != "":
+        return False
+    audit = value.get("audit")
+    if type(audit) is not dict or set(audit) != {
+        "n_audit_excluded",
+        "by_reason",
+        "special_token_findings",
+    }:
+        return False
+    if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+        return False
+    if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+        return False
+    by_reason = audit["by_reason"]
+    if type(by_reason) is not dict:
+        return False
+    for key, count in by_reason.items():
+        if type(key) is not str or type(count) is not int or count < 0:
+            return False
+    recomputed = _o_ps_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, val in expected.items():
+            if entry.get(key) != val:
+                return False
+    return all(value.get(key) == recomputed[key] for key in ("n_candidates", "n_cases"))
+
+
+def _o_prunesweep(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle prune-sweep section: mirrors
+    diffreports.diff_prune_sweep."""
+    old_ok = _o_prunesweep_valid(old)
+    new_ok = _o_prunesweep_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    ) or old["protocol"].get("case_material_sha256") != new["protocol"].get("case_material_sha256")
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not generator_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        metrics: list[tuple[str, Any, Any]] = [
+            ("decision", old_entry["headline"]["decision"], new_entry["headline"]["decision"]),
+            (
+                "direct_passes",
+                old_entry["headline"]["direct_passes"],
+                new_entry["headline"]["direct_passes"],
+            ),
+            (
+                "drop_cases",
+                old_entry["headline"]["drop_cases"],
+                new_entry["headline"]["drop_cases"],
+            ),
+            (
+                "boundary_attrition",
+                old_entry["headline"]["boundary_attrition"],
+                new_entry["headline"]["boundary_attrition"],
+            ),
+            ("reverse", old_entry["headline"]["reverse"], new_entry["headline"]["reverse"]),
+            (
+                "n_population",
+                old_entry["headline"]["n_population"],
+                new_entry["headline"]["n_population"],
+            ),
+            (
+                "dose72_only",
+                old_entry["tail_contrast"]["dose72_only"],
+                new_entry["tail_contrast"]["dose72_only"],
+            ),
+            (
+                "tail72_only",
+                old_entry["tail_contrast"]["tail72_only"],
+                new_entry["tail_contrast"]["tail72_only"],
+            ),
+            (
+                "rival_reading",
+                old_entry["tail_contrast"]["rival_reading"],
+                new_entry["tail_contrast"]["rival_reading"],
+            ),
+            (
+                "n_same_ids_flips_dose72",
+                old_entry["ids"]["dose72"]["n_same_ids_flips"],
+                new_entry["ids"]["dose72"]["n_same_ids_flips"],
+            ),
+        ]
+        for metric, old_value, new_value in metrics:
+            if old_value != new_value:
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    diff["candidate_drift"] = candidate_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["generator_drift"] = generator_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        candidate_drift or added or removed or protocol_drift or generator_drift or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_instructiondistance_valid(value: Any) -> bool:
     """Oracle instruction-distance validator: mirrors
     diffreports._valid_instruction_distance."""
@@ -12468,6 +13352,9 @@ def _oracle_diff(
     o_hf, o_hf_changed, o_hf_asymmetric = _o_historyframe(
         old.get("history_frame"), new.get("history_frame")
     )
+    o_ps, o_ps_changed, o_ps_asymmetric = _o_prunesweep(
+        old.get("prune_sweep"), new.get("prune_sweep")
+    )
     o_ca, o_ca_changed, o_ca_asymmetric = _o_choiceaudit(
         old.get("choice_audit"), new.get("choice_audit")
     )
@@ -12635,6 +13522,7 @@ def _oracle_diff(
         "canonical_form": o_cform,
         "instruction_distance": o_idist,
         "history_frame": o_hf,
+        "prune_sweep": o_ps,
         "choice_audit": o_ca,
         "precision": o_pr,
         "confidence": o_cfd,
@@ -12730,6 +13618,8 @@ def _oracle_diff(
             "instruction_distance_asymmetric": o_idist_asymmetric,
             "history_frame_changed": o_hf_changed,
             "history_frame_asymmetric": o_hf_asymmetric,
+            "prune_sweep_changed": o_ps_changed,
+            "prune_sweep_asymmetric": o_ps_asymmetric,
             "choice_audit_changed": o_ca_changed,
             "choice_audit_asymmetric": o_ca_asymmetric,
             "precision_changed": o_pr_changed,
@@ -13679,6 +14569,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "instruction_distance_asymmetric": False,
                 "history_frame_changed": False,
                 "history_frame_asymmetric": False,
+                "prune_sweep_changed": False,
+                "prune_sweep_asymmetric": False,
                 "choice_audit_changed": False,
                 "choice_audit_asymmetric": False,
                 "precision_changed": False,
@@ -17589,6 +18481,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not instruction_distance_asymmetric\n"
             '        and not history_frame_diff["changed"]\n'
             "        and not history_frame_asymmetric\n"
+            '        and not prune_sweep_diff["changed"]\n'
+            "        and not prune_sweep_asymmetric\n"
             '        and not choiceaudit_diff["changed"]\n'
             "        and not choiceaudit_asymmetric\n"
             '        and not precision_diff["changed"]\n'
@@ -17691,6 +18585,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or instruction_distance_asymmetric\n"
             '        or history_frame_diff["changed"]\n'
             "        or history_frame_asymmetric\n"
+            '        or prune_sweep_diff["changed"]\n'
+            "        or prune_sweep_asymmetric\n"
             '        or choiceaudit_diff["changed"]\n'
             "        or choiceaudit_asymmetric\n"
             '        or precision_diff["changed"]\n'
@@ -17984,6 +18880,78 @@ class HistoryFrameOracleAgreementTests(unittest.TestCase):
         real = diffreports.diff_reports(old, new)
         self.assertEqual(oracle["history_frame"], real["history_frame"])
         self.assertEqual(real["history_frame"]["available"], "old")
+
+
+class PruneSweepOracleAgreementTests(unittest.TestCase):
+    """Cycle 220: the prune-sweep oracle must agree with the
+    real diff on REAL stage payloads, not just on the
+    neither stubs the fuzzer produces (the fuzzer emits no
+    prune_sweep section, so without this test the oracle's
+    recompute depth -- including the content-digest
+    rebinding and the ids-identical derivation -- would be
+    unproven)."""
+
+    def _payload(self, mode):
+        from tests.test_cycle220_prunesweep import _payload, _WordBackend
+
+        return _payload(_WordBackend(mode))
+
+    def _pair(self, old_payload, new_payload):
+        old = _base_report()
+        new = _base_report()
+        old["prune_sweep"] = old_payload
+        new["prune_sweep"] = new_payload
+        return old, new
+
+    def test_identical_real_payloads_agree(self):
+        payload = self._payload("perfect")
+        old, new = self._pair(payload, copy.deepcopy(payload))
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["prune_sweep"], real["prune_sweep"])
+        self.assertEqual(
+            oracle["summary"]["prune_sweep_changed"],
+            real["summary"]["prune_sweep_changed"],
+        )
+        self.assertFalse(real["summary"]["prune_sweep_changed"])
+        self.assertTrue(real["summary"]["identical"])
+        self.assertTrue(oracle["summary"]["identical"])
+
+    def test_changed_real_payloads_agree(self):
+        first = self._payload("perfect")
+        second = self._payload("dose72_drop")
+        old, new = self._pair(first, second)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["prune_sweep"], real["prune_sweep"])
+        self.assertTrue(real["prune_sweep"]["changed"])
+        self.assertFalse(real["summary"]["identical"])
+
+    def test_tampered_payload_agreement_is_old(self):
+        first = self._payload("perfect")
+        bad = copy.deepcopy(first)
+        bad["candidates"]["chatml"]["records"][0]["cells"]["dose72"]["verdict"] = False
+        old, new = self._pair(first, bad)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["prune_sweep"], real["prune_sweep"])
+        self.assertEqual(real["prune_sweep"]["available"], "old")
+        self.assertFalse(real["prune_sweep"]["changed"])
+
+    def test_ids_forgery_agreement_is_old(self):
+        # Amendment B: flipping a record's dose72 id digest
+        # to the dose0 digest (faking the ids-identical
+        # exclusion) must invalidate the payload on both
+        # sides of the oracle boundary.
+        first = self._payload("dose72_drop")
+        bad = copy.deepcopy(first)
+        for record in bad["candidates"]["chatml"]["records"]:
+            record["id_digests"]["dose72"] = record["id_digests"]["dose0"]
+        old, new = self._pair(first, bad)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["prune_sweep"], real["prune_sweep"])
+        self.assertEqual(real["prune_sweep"]["available"], "old")
 
 
 if __name__ == "__main__":

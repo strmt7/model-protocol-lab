@@ -10555,3 +10555,95 @@ code-scanning open 24 = 5 CodeQL + 19 Scorecard) and the
   claim (amendment A8); power at a 25-point drop is 0.52 at
   n = 30, so small panels read `insufficient` /
   `below_threshold`, never invariance.
+
+## Cycle 220 — prune-sweep probe: seeded interior word loss under answer protection (2026-10-29)
+
+- **What shipped:** `run --prune-sweep`
+  (`model_protocol_lab/prunesweep.py`, the package's 68th
+  source file): a generated 24-case panel of frozen
+  fact-recall passages (17 sentences; the ninth states the
+  case's code word; the other 16 are 9-word declarative
+  statements from frozen templates and slot pools, 144
+  eligible words) rendered at nested seeded doses of
+  interior word loss (0/18/36/72 words under one
+  sha256-ordered permutation per case, the position key
+  being the eligible-list index), a dose-matched displaced
+  control deleting the last 72 eligible words, and a
+  closed-book screen arm — the fact sentence, instruction,
+  and question byte-identical in every arm. The decision
+  rule (C >= 12, A >= 5, two-sided exact McNemar p < 0.05)
+  is unchanged from the adjudicated candidate; what the
+  fresh review corrected, and the build re-derived by
+  exact Fraction enumeration before writing any code, is
+  its printed operating characteristics: the candidate's
+  Monte Carlo claim of zero fires in 40,000 trials is
+  false under its own model (the rule's discreteness puts
+  the smallest firing count at A = 6, p = 0.03125), and
+  the true per-decision null rates are 0.0121 (random) /
+  0.0143 (competent) on the stated basis and 0.003
+  (competent, per-direction discordance 0.09) on the
+  exchangeable basis, family-wise expectation 0.34 per
+  24-candidate panel. A dose72 cell whose only failure is
+  the boundary event counts as boundary attrition beside
+  A, never toward it (amendment B, the negation section
+  4.2 disposition). The shape readout is printed, never
+  gated — under the frozen graded interpolation a
+  returns cap collapses power 0.9601 -> 0.094 (the
+  candidate's printed 0.031 does not reproduce and is
+  corrected) and intermediate support collapses it to
+  exactly 0.000.
+- **Uniqueness pass (combination framing; "first" claimed
+  nowhere).** The combination is: seeded nested word-level
+  deletion of a fixed passage's non-answer-bearing words
+  with the answer sentence held byte-identical, a
+  dose-matched displaced tail control and a closed-book
+  screen, a derived fail-closed decision rule with
+  exact-enumeration operating characteristics printed in
+  the report, and digest-only validator-mirrored records.
+  Primary sources resolved in the design rounds:
+  LLMLingua (arXiv:2310.05736), LongLLMLingua
+  (arXiv:2310.06839), LLMLingua-2 (arXiv:2403.12968,
+  section 4.2 for the word-level compression unit) — these
+  are compression methods, subjects of the measurement
+  class, not panels of this form; none ships a decision
+  instrument over protected-answer word loss. The general
+  evaluation harnesses (LM Evaluation Harness, HELM,
+  OpenAI Evals, DSPy, promptfoo) were not re-surveyed this
+  round; the uniqueness statement is scoped to the
+  surveyed sources and says so in the design doc. Inside
+  the tree the neighbours are density (character share of
+  one field), token-depth-sweep (prefix truncation),
+  needle-depth (insertion depth), distraction (added
+  distractors), surface-noise (character corruption), and
+  ablation (field removal) — each varies a different
+  dimension.
+- **Naming audit (binding build condition, re-executed
+  at build start).** The `run` subparser carried 61
+  optionals before this flag (argparse introspection of
+  `cli.build_parser()`); 70 `--flag` literals exist in
+  cli.py overall; `--prune-sweep` / `prune_sweep` occurred
+  nowhere in the package or tests; "prune" occurred in no
+  source file and once in the docs (USAGE.md, in the
+  candidate-set prose sense). Zero collisions. The name's
+  plain reading is accurate — the probe prunes passage
+  words — and the help text's first sentence says exactly
+  that.
+- **Honest limits, printed in the report itself:** the
+  label attributes the drop to the word-loss treatment as
+  a bundle (information loss + prompt shortening +
+  fact-position shift + sentence breakage), with the
+  executed operator constants printed (dose72 fact shift
+  mean 36.0 words, sd 3.01; 15.95 of 16 context sentences
+  partially broken, versus exactly 0 shift and 0 breakage
+  under tail72, which instead moves the fact to
+  passage-final position); when the tail discordance is
+  within noise of dose72's, the section prints the
+  word-count-loss reading in words. The instrument cannot
+  detect a trim that deletes the answer itself — the fact
+  sentence is protected by construction, and
+  answer-deleting trims are named out of scope. The
+  printed operating characteristics condition on headline
+  completion, and that conditioning is disclosed wherever
+  the figures print. Power at a 25 percent conditional
+  drop is 0.3969, so `below_threshold` is weak evidence,
+  never invariance.

@@ -6,6 +6,45 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 220 — prune-sweep probe, 2026-10-29)
+
+- A prune-sweep probe (`run --prune-sweep`,
+  `model_protocol_lab/prunesweep.py`): a generated panel of
+  24 frozen fact-recall cases (a 17-sentence passage whose
+  ninth sentence states a code word; 144 eligible words in
+  the other 16 sentences) is rendered at four nested seeded
+  doses of interior word loss — 0 / 18 / 36 / 72 eligible
+  words — plus a dose-matched displaced control deleting
+  the last 72 eligible words (`tail72`) and a closed-book
+  screen arm, the fact sentence, instruction, and question
+  byte-identical in every arm. Per candidate, over completed
+  unscreened ids-divergent cases, C (dose0 passes), A
+  (dose72 value failures; boundary-only failures count as
+  attrition beside A, never toward it), and B (reverse
+  cases) drive the frozen rule C >= 12, A >= 5, two-sided
+  exact McNemar p < 0.05 -> `prune_drop_observed`, with
+  `insufficient` / `below_threshold` in the tree's
+  fail-closed vocabulary and no winner readout. The
+  operating characteristics printed in the report are exact
+  enumerations (competent null 0.0143 stated basis, 0.003
+  exchangeable at per-direction discordance 0.09;
+  family-wise expectation 0.34 per 24-candidate panel) —
+  the candidate's printed Monte Carlo claim of zero fires
+  in 40,000 trials was false under its own model and is
+  corrected in the design doc, the report section, and this
+  entry's sources, not repeated. The label is fenced in
+  print as a bundle (information loss, prompt shortening,
+  fact-position shift, sentence breakage), with the
+  word-count-loss reading printed in words whenever the
+  tail contrast cannot separate placement from count.
+  Records are digest-only and validator-mirrored end to
+  end. The design of record is
+  `docs/PRUNESWEEP_DESIGN.md`, consolidated in this cycle
+  with the fresh review's binding amendments A–I
+  incorporated into the instrument text. Informational
+  only: the stage never affects selection and never fails
+  the run.
+
 ### Added (cycle 219 — history-frame probe, 2026-10-28)
 
 - A history-frame probe (`run --history-frame`,

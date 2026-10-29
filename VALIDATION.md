@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–219 (executed 2026-10-14 → 2026-10-28, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–220 (executed 2026-10-14 → 2026-10-29, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **8645 tests collected**
-  (cycle 219, 2026-10-28). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **8754 tests collected**
+  (cycle 220, 2026-10-29). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -48,23 +48,32 @@ doctor's resource fallbacks degrade there.
   the antonym-negated definite-description probe (`run --negation`),
   the instruction-distance probe (`run --instruction-distance`),
   the history-frame probe (`run --history-frame`),
+  the interior word-loss prune-sweep probe (`run --prune-sweep`),
   the real batched generation path behind the batch-invariance
   audit (`LocalHFBackend.generate_batch`, cycle 192),
   and differential-verification suites with
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  95.1077% (cycle 219, 2026-10-29)**. The gate compares the
+  95.1872% (cycle 220, 2026-10-29)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+0.608) is auditable rather than inferred from the display.
-  Cycle 219 moves both figures: the history-frame feature
-  added 1,092 statements (33,898 → 34,990) and 1,025 covered
-  statements (32,622 → 33,647), so the dip from cycle 218's
-  95.2578% is denominator growth, partially recovered by the
-  cycle-219 gap-test pass (the feature's first full run
-  measured 94.8451% before the gap battery; the new module
-  itself measures 99.59% after it, with zero missing lines).
+  (+0.687) is auditable rather than inferred from the display.
+  Cycle 220 moves both figures: the prune-sweep feature
+  added 1,014 statements (34,990 → 36,004) and 1,006 covered
+  statements (33,647 → 34,653); its first full run measured
+  94.9243% before the gap battery, and the new module itself
+  measures 98.99% after it — its only missing lines are two
+  validate_case guards that are unreachable by construction
+  (a word-total check subsumed by the per-sentence checks,
+  and a nesting check over one permutation's prefix sets),
+  left in place as defence against generator edits.
+  Cycle 219's move had the same shape: the history-frame
+  feature added 1,092 statements (33,898 → 34,990) and 1,025
+  covered statements (32,622 → 33,647), dipping from cycle
+  218's 95.2578%; its first full run measured 94.8451%
+  before its gap battery, and the module measured 99.59%
+  after it, with zero missing lines.
   Cycle 218's move had the same shape: the instruction-distance
   feature added 850 statements (33,048 → 33,898) and 802
   covered statements (31,820 → 32,622), dipping from cycle
@@ -74,10 +83,10 @@ doctor's resource fallbacks degrade there.
   negation feature added 393 statements, 32,655 → 33,048.)
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (304 files in that CI scope; the repo-root scope counts more.
+  (306 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
-- `mypy model_protocol_lab` — clean (67 source files).
+- `mypy model_protocol_lab` — clean (68 source files).
 - `bandit -r model_protocol_lab` — **no issues identified** at any
   severity/confidence (the targeted `# nosec B105` suppressions on
   report-schema fields carry justifications).

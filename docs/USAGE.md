@@ -2994,6 +2994,94 @@ candidate per search fixture (9,600 at the legal maximum:
 Informational only: the probe never affects selection,
 and the stage never fails the run.
 
+### 8.58 Prune sweep (`run --prune-sweep`)
+
+```sh
+model-protocol-lab run ... --prune-sweep
+```
+
+This probe prunes passage words: it deletes a seeded
+nested dose of the non-answer-bearing words of a frozen
+fact-recall passage and measures whether the verdict
+falls. A prompt engineer whose pipeline deletes interior
+passage words — question-aware compression, middle-chunk
+retrieval trimming, word-level redaction — uses this, per
+candidate, to learn whether deleting half the
+non-answer-bearing words of a frozen fact-recall passage
+(answer sentence, instruction, and question
+byte-identical) produces a large verdict drop at the
+printed operating characteristics, before that trim
+ships.
+
+The panel is generated, not read from the run's fixtures:
+24 cases, each a single user message — a frozen
+instruction, a 17-sentence passage, a frozen question.
+The passage's ninth sentence states the case's code word;
+the other 16 sentences are 9-word declarative statements
+from frozen templates and slot pools, so exactly 144
+words are eligible for deletion. Six arms per case: the
+dose ladder 0 / 18 / 36 / 72 eligible words (0, 12.5, 25,
+50 percent), nested under one seeded sha256 order per
+case; `tail72`, a descriptive control that deletes the
+72 eligible words with the largest passage positions
+instead; and `closed_book`, a screen arm with no passage
+at all. The fact sentence, instruction, and question are
+never pruned, and every case passes a frozen invariant
+battery (distinct sentences, exact dose counts, no
+digit or negation word in the context sentences, an
+acrostic screen) before any generation. The scorer is
+the run's own verdict — byte-exact answer conjoined with
+boundary presence — per cell.
+
+Per candidate, over cases completed in all four headline
+arms, excluding closed-book-screened cases (answered with
+no passage at all) and ids-identical cases (the dose0 and
+dose72 renders tokenise identically, derived from the
+records' per-arm token-id digests): C is the dose0 pass
+count, A the cases in C failing dose72 — a dose72 cell
+whose only failure is the boundary event counts as
+boundary attrition beside A, never toward it — and B the
+cases failing dose0 and passing dose72. C below 12 is
+`insufficient`; C at least 12 with A at least 5 and a
+two-sided exact McNemar p(A, B) below 0.05 is
+`prune_drop_observed`; anything else is
+`below_threshold`. There is no winner readout.
+
+The label attributes the drop to the word-loss treatment
+as a bundle — information loss, prompt shortening,
+fact-position shift, and sentence breakage move together
+under the scattered operator (at dose72 the fact
+sentence's position shifts by a mean of 36.0 words and an
+expected 15.95 of the 16 context sentences are partially
+broken; under tail72 the shift is zero and no sentence
+breaks) — and when the tail72 discordance is within noise
+of dose72's, the report prints the word-count-loss
+reading in words. The operating characteristics are
+exact enumerations, not simulations: under a competent
+null the per-decision false-label rate is 0.0143 on the
+stated basis and 0.003 on the exchangeable basis at
+per-direction discordance 0.09 (an earlier Monte Carlo
+claim of zero fires in 40,000 trials was wrong — the
+rule's discreteness puts the smallest firing count at
+A = 6 — and is corrected in the design doc and the report
+section, not repeated); the family-wise expectation over
+a 24-candidate panel is 0.34 labels on the stated basis.
+Power is 0.40 at a 25 percent conditional drop and 0.96
+at 50 percent, so `below_threshold` is weak evidence,
+never invariance. The first-flip histogram, returns, and
+per-dose pass rates print descriptively and are never
+gated: an executed shape-gate analysis shows a returns
+cap would collapse graded-drop power from 0.9601 to
+0.094. The probe cannot detect a trim that deletes the
+answer itself — the fact sentence is protected by design,
+and answer-deleting trims are out of scope, stated in
+the report. The full contract is in
+`docs/PRUNESWEEP_DESIGN.md`. Costs 144 generations per
+candidate (3,456 at the legal maximum: 24 candidates x
+24 cases x 6 arms; 2,304 headline). Informational only:
+the probe never affects selection, and the stage never
+fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out
