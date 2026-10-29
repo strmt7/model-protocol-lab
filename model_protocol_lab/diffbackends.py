@@ -896,6 +896,7 @@ def run_diff_backends(args: argparse.Namespace, parser: argparse.ArgumentParser)
         # Only exact-match fixed codes (e.g. oversized_tokenizer_file)
         # reach the terminal; a parse failure echoing checkpoint bytes
         # collapses to the fixed code.
+        # skipcq: PYL-E0601 - bound by the try import whenever this handler runs
         print(f"diff-backends: {_loader_failure_code(exc)}", file=sys.stderr)
         return 1
     try:

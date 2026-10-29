@@ -205,6 +205,7 @@ def read_window(root: Path, args: argparse.Namespace) -> dict:
         emitted.append(value)
         used += len(value)
     complete = len(emitted) == len(selected)
+    # skipcq: PY-W0072 - a dict is defined here, mutated by subscript; no list/append
     result = {
         **record,
         "status": "complete" if complete else "partial",

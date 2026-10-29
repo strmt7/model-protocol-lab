@@ -25,6 +25,12 @@ else:
     from agent_context import relative_source_path, safe_path
 
 ROOT = Path(__file__).resolve().parent.parent
+# Git is a hard dependency of this tool (its inventory is defined over
+# git's own file listing); resolve it once to an absolute path so no
+# call site ever starts a process from a partial executable path.
+_GIT = shutil.which("git")
+if _GIT is None:
+    raise RuntimeError("git executable not found on PATH")
 VERSION = "0.2.41"
 MODEL = "Snowflake/snowflake-arctic-embed-xs"
 INDEX_SUFFIXES = (
@@ -158,7 +164,7 @@ def tracked_files(repo: Path) -> list[tuple[str, Path]]:
     Inputs: checkout
     Outputs: safe paths without Git-confirmed deletions."""
     raw = subprocess.run(
-        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--deduplicate"],
+        [_GIT, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--deduplicate"],
         cwd=repo,
         timeout=30,
         check=True,
@@ -176,7 +182,7 @@ def tracked_files(repo: Path) -> list[tuple[str, Path]]:
         if not source.exists() and not source.is_symlink():
             if deleted is None:
                 removed = subprocess.run(
-                    ["git", "ls-files", "-z", "--deleted"],
+                    [_GIT, "ls-files", "-z", "--deleted"],
                     cwd=repo,
                     timeout=30,
                     check=True,

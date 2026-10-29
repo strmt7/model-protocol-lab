@@ -36,6 +36,7 @@ _LLAMA3 = Format(
 
 
 def _fixtures(count: int = 12) -> tuple[Fixture, ...]:
+    """Build the frozen history-frame fixture tuples."""
     return tuple(
         Fixture(
             id=f"fx-{i:02d}",
@@ -67,6 +68,7 @@ class _WordBackend:
         self.rev: dict[int, str] = {}
 
     def encode(self, text):
+        """Encode text as word ids over the frozen test vocabulary."""
         ids = []
         for token in text.replace("\n", " \n ").split(" "):
             if not token:
@@ -78,9 +80,11 @@ class _WordBackend:
         return tuple(ids)
 
     def decode(self, ids):
+        """Decode word ids back to text, rendering unknown ids as '?'."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+        """Scripted generate: answer from the decoded prompt per the mode; 'explode' raises."""
         self.calls += 1
         if self.mode == "explode":
             raise RuntimeError("boom")
@@ -108,6 +112,7 @@ def _payload(
     primary=None,
     **stage_kwargs,
 ):
+    """Run the history-frame stage over the scripted formats and return the payload."""
     backend = backend if backend is not None else _WordBackend()
     fixtures = fixtures if fixtures is not None else _fixtures()
     stage_kwargs.setdefault("max_context", 8192)
@@ -123,6 +128,7 @@ def _payload(
 
 
 def _cell(verdict: bool, boundary: bool = True, digest: str = "BLUE"):
+    """Build one record cell dict for the synthetic aggregate fixtures."""
     return {
         "verdict": verdict,
         "boundary_found": boundary,
@@ -143,7 +149,8 @@ def _record(
     donor_bos: str = "",
 ) -> dict:
     """One synthetic record for aggregate-level tests. Cells
-    for the two arms not under test are completed passes."""
+    for the two arms not under test are completed passes.
+    """
     own_digest = hf.digest_text(f"ids-{fixture}-own")
     foreign_digest = own_digest if ids_identical else hf.digest_text(f"ids-{fixture}-fx")
     seg_own = hf.digest_text(f"seg-{fixture}-own")
@@ -182,9 +189,11 @@ def _record(
 
 class FrozenMaterialTests(unittest.TestCase):
     """Design section 6.1-6.4 + A5: frozen arms, donors,
-    prepend, and construction pins."""
+    prepend, and construction pins.
+    """
 
     def test_arm_and_donor_freeze(self):
+        """The arm set, donor families and six-turn history equal the frozen constants."""
         self.assertEqual(
             hf.ARM_KEYS, ("own", "foreign_chatml", "foreign_llama3", "verbatim_chatml")
         )
@@ -199,6 +208,7 @@ class FrozenMaterialTests(unittest.TestCase):
         # A5: the built fixtures' namespaced ids
         # (synthhistory/history_6/<id>) are never stage ids --
         # they would change every cell's request seed (A10).
+        """stage_fixtures rewraps the fixtures keeping their original ids."""
         original = _fixtures(2)
         staged = hf.stage_fixtures(original)
         self.assertEqual([c.id for c in staged], ["fx-00", "fx-01"])
@@ -207,6 +217,7 @@ class FrozenMaterialTests(unittest.TestCase):
         self.assertTrue(all(len(c.messages) == 7 for c in staged))
 
     def test_protocol_binds_donor_pair_and_fixture_set(self):
+        """protocol_object binds the donor pair, the history length and the fixture set."""
         protocol = hf.protocol_object(3, "fp", ["a", "b"])
         self.assertEqual(protocol["donor_families"], hf.DONOR_FAMILIES)
         self.assertEqual(protocol["history_turns"], 6)
@@ -227,9 +238,13 @@ class FrozenMaterialTests(unittest.TestCase):
 class SpliceIdentityTests(unittest.TestCase):
     """Design section 6.3 + A9: the segment/hybrid semantics
     reproduce Format.render under A == B and satisfy the
-    per-arm slice-swap identity; the seam mutant dies."""
+    per-arm slice-swap identity; the seam mutant dies.
+    """
 
     def test_hybrid_reproduces_render_for_catalog_and_repairs(self):
+        """The hybrid splice reproduces Format.render byte-identically across the catalog and local
+        repairs.
+        """
         from model_protocol_lab.core import local_repairs
 
         formats = list(CATALOG.values())
@@ -272,6 +287,7 @@ class SpliceIdentityTests(unittest.TestCase):
         # history segment lacks one. The diagonal-only screen
         # (round-1 S1) passed it for 51 candidates; the
         # per-arm slice-swap identity must not.
+        """A seam mutant makes the splice identity check fail."""
         fmt = _LLAMA3
         case = hf.stage_fixtures(_fixtures(1))[0]
         native = fmt.render(case.messages)
@@ -293,6 +309,7 @@ class SpliceIdentityTests(unittest.TestCase):
         # A1: a repeat_bos candidate carries internal bos
         # occurrences; the verbatim construction removes the
         # leading one only.
+        """The verbatim arm removes only the leading BOS token, even with repeat_bos."""
         fmt = Format("rb", "<B>", "u:", "a:", "\n", repeat_bos=True)
         case = hf.stage_fixtures(_fixtures(1))[0]
         donor = hf.donor_format("foreign_llama3")
@@ -305,9 +322,11 @@ class SpliceIdentityTests(unittest.TestCase):
 
 class ClassificationTests(unittest.TestCase):
     """Design section 6.6: the classification is a total
-    function; floors exercised on both sides."""
+    function; floors exercised on both sides.
+    """
 
     def test_classification_table(self):
+        """classify_history_frame reproduces the frozen classification table."""
         cases = [
             ((9, 9, 0), "insufficient"),  # n floor binds first
             ((10, 0, 0), "no_discordance_observed"),
@@ -325,6 +344,7 @@ class ClassificationTests(unittest.TestCase):
         # Fresh-review exact enumeration, three parties: the
         # module's enumeration must reproduce the tabulated
         # rows (A2's corrected constants derive from these).
+        """The exact random-labeller fire rates reproduce the design table across panel sizes."""
         for n, want in ((16, 0.0196), (24, 0.0243), (30, 0.0278), (50, 0.0296), (100, 0.0367)):
             self.assertAlmostEqual(hf.random_labeller_fire_rate(n), want, delta=0.0005)
         self.assertEqual(hf.random_labeller_fire_rate(9), 0.0)
@@ -333,6 +353,7 @@ class ClassificationTests(unittest.TestCase):
         # A2: at uniform n=100 over 48 decisions the computed
         # expectation is 1.76 / P 0.83 -- the printed 1.44 /
         # 0.77 of the candidate text was 48 x a rounded rate.
+        """The family-wise expectation is computed from the per-decision rates, not frozen."""
         rates = [hf.random_labeller_fire_rate(100)] * 48
         fw = hf.familywise_expectation(rates)
         self.assertEqual(fw["decisions"], 48)
@@ -344,6 +365,7 @@ class ClassificationTests(unittest.TestCase):
         # split is 8 (one concordant pass); the floor stands
         # at 10 regardless -- n=8 and n=9 classify
         # insufficient even at a unanimous split.
+        """Below the n floor the classification stays insufficient regardless of discordance."""
         self.assertEqual(hf.classify_history_frame(8, 6, 0), "insufficient")
         self.assertEqual(hf.classify_history_frame(9, 6, 0), "insufficient")
 
@@ -352,6 +374,9 @@ class DecompositionTests(unittest.TestCase):
     """Design section 6.6 decomposition of discordant pairs."""
 
     def test_decomposition_classes(self):
+        """Paired decomposition separates same-digest/no-boundary cells from other-digest/boundary
+        cells.
+        """
         own = _cell(True, True, "BLUE")
         same_digest_no_boundary = _cell(False, False, "BLUE")
         other_digest_boundary = _cell(False, True, "GREEN")
@@ -364,12 +389,16 @@ class DecompositionTests(unittest.TestCase):
 class AggregateTests(unittest.TestCase):
     """Design sections 6.5/6.6 + A1/A4: eligibility and
     divergence accounting are derived from the recorded
-    digests."""
+    digests.
+    """
 
     def _records(self, count: int, **kwargs):
+        """Build synthetic records with per-record cell kwargs."""
+        # skipcq: PYL-E1125 - 'own'/'foreign' arrive via the **kwargs unpacking
         return [_record(f"fx-{i:02d}", **kwargs) for i in range(count)]
 
     def test_render_identical_contrast_is_inapplicable(self):
+        """A render-identical contrast is marked inapplicable."""
         records = self._records(12, own=_cell(True), foreign=_cell(True), render_divergent=False)
         block = hf.aggregate_candidate(records)["contrasts"]["foreign_chatml"]
         self.assertFalse(block["applicable"])
@@ -377,6 +406,7 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(block["n_render_identical"], 12)
 
     def test_ids_identical_cases_are_excluded_and_flips_counted(self):
+        """Ids-identical cases are excluded from the contrast; their flips are counted."""
         records = self._records(
             12, own=_cell(True), foreign=_cell(False, digest="GREEN"), ids_identical=True
         )
@@ -388,6 +418,7 @@ class AggregateTests(unittest.TestCase):
     def test_equal_token_counts_do_not_fake_ids_identity(self):
         # A4: equal counts with different id digests are NOT
         # ids-identical -- the gate reads digests, not counts.
+        """Equal token counts across arms do not count as ids-identical; the digests decide."""
         records = self._records(12, own=_cell(True), foreign=_cell(False, digest="GREEN"))
         block = hf.aggregate_candidate(records)["contrasts"]["foreign_chatml"]
         self.assertEqual(block["n_ids_identical"], 0)
@@ -396,6 +427,7 @@ class AggregateTests(unittest.TestCase):
         self.assertTrue(block["falsification"])
 
     def test_ungated_sensitivity_counts_all_completed_pairs(self):
+        """The ungated sensitivity readout counts all completed pairs."""
         records = self._records(
             12, own=_cell(True), foreign=_cell(False, digest="GREEN"), render_divergent=False
         )
@@ -406,12 +438,14 @@ class AggregateTests(unittest.TestCase):
     def test_verbatim_inapplicable_when_bos_matches(self):
         # A1: own bos == chatml bos ("") -> inapplicable,
         # counted and never pooled.
+        """The verbatim arm is inapplicable when the donor BOS matches the own BOS."""
         records = self._records(4, own=_cell(True), foreign=_cell(True), own_bos="", donor_bos="")
         verbatim = hf.aggregate_candidate(records)["verbatim"]
         self.assertFalse(verbatim["applicable"])
         self.assertEqual(verbatim["n_paired"], 0)
 
     def test_verbatim_applicable_counts_bos_share(self):
+        """When applicable, the verbatim block counts the BOS share across records."""
         records = self._records(4, own=_cell(True), foreign=_cell(True))
         for record in records:
             record["cells"]["verbatim_chatml"] = _cell(False, digest="GREEN")
@@ -423,9 +457,11 @@ class AggregateTests(unittest.TestCase):
 
 class SelectionTests(unittest.TestCase):
     """Design section 6.6: per-arm selection on the common
-    completed set + canonical-form winner headlines."""
+    completed set + canonical-form winner headlines.
+    """
 
     def _two_candidates(self):
+        """Build two candidates whose records make cand-a the winner and cand-b the loser."""
         winner_records = [
             _record(f"fx-{i:02d}", own=_cell(True), foreign=_cell(True)) for i in range(3)
         ]
@@ -436,6 +472,7 @@ class SelectionTests(unittest.TestCase):
         return {"cand-a": winner_records, "cand-b": loser_records}
 
     def test_arm_selection_and_winner_headline(self):
+        """arm_selection picks the winner per arm and the headline reports it."""
         by_candidate = self._two_candidates()
         own = hf.arm_selection(by_candidate, "own")
         foreign = hf.arm_selection(by_candidate, "foreign_chatml")
@@ -446,6 +483,7 @@ class SelectionTests(unittest.TestCase):
         self.assertFalse(headline["winner_changed"])
 
     def test_winner_changed_requires_two_different_winners(self):
+        """winner_changed requires two selected, different winners."""
         baseline = {"decision": "selected", "winner": "cand-a", "withheld": False}
         other = {"decision": "selected", "winner": "cand-b", "withheld": False}
         self.assertEqual(hf.winner_headline(baseline, other)["headline"], "winner_changed")
@@ -460,6 +498,7 @@ class SelectionTests(unittest.TestCase):
         # set, one candidate's completed set for the arm is
         # smaller (an uncompleted cell) -> the restricted
         # completed sets differ -> withheld.
+        """Selection is withheld when the candidates' completed sets mismatch."""
         by_candidate = self._two_candidates()
         by_candidate["cand-b"][1]["cells"]["own"] = None
         selection = hf.arm_selection(by_candidate, "own")
@@ -467,6 +506,7 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(selection["detail"], "selection_withheld_mismatched_sets")
 
     def test_primary_flips_use_the_synhistory_mapping(self):
+        """Primary flips are computed through the synth-history condition mapping."""
         conditions = {
             "own": {"decision": "selected", "winner": "cand-a", "withheld": False},
             "foreign_chatml": {"decision": "selected", "winner": "cand-b", "withheld": False},
@@ -481,9 +521,11 @@ class SelectionTests(unittest.TestCase):
 
 class StageTests(unittest.TestCase):
     """Design sections 6.2/6.4 + A5/A9/A10: stage behaviour
-    end to end on scripted backends."""
+    end to end on scripted backends.
+    """
 
     def test_perfect_backend_no_discordance_and_diagonal_inapplicable(self):
+        """A perfect backend yields no discordance and an inapplicable diagonal contrast."""
         payload = _payload()
         self.assertTrue(payload["available"])
         chatml = payload["candidates"]["chatml"]
@@ -500,6 +542,7 @@ class StageTests(unittest.TestCase):
         self.assertTrue(llama3["verbatim"]["applicable"])
 
     def test_frame_drop_fires_asymmetric(self):
+        """A frame drop fires asymmetrically: 12 own-only discordants and no foreign-only ones."""
         payload = _payload(_WordBackend("frame_drop"))
         block = payload["candidates"]["chatml"]["contrasts"]["foreign_llama3"]
         self.assertEqual((block["own_only"], block["foreign_only"]), (12, 0))
@@ -508,6 +551,7 @@ class StageTests(unittest.TestCase):
 
     def test_records_carry_id_digests_for_every_arm(self):
         # A4: per-arm token-id digests in every record.
+        """Every stage record carries per-arm token-id digests."""
         payload = _payload()
         for entry in payload["candidates"].values():
             for record in entry["records"]:
@@ -518,6 +562,7 @@ class StageTests(unittest.TestCase):
         # A5/A10: cells are requested under the fixtures'
         # original ids (request-seed identity), never the
         # synthhistory namespaced ids.
+        """The stage records the original fixture ids and the frozen fixture group."""
         payload = _payload()
         for entry in payload["candidates"].values():
             self.assertEqual(
@@ -527,6 +572,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(payload["protocol"]["fixture_ids"], [f"fx-{i:02d}" for i in range(12)])
 
     def test_small_panel_classifies_insufficient(self):
+        """A two-fixture panel classifies insufficient."""
         payload = _payload(fixtures=_fixtures(2))
         block = payload["candidates"]["chatml"]["contrasts"]["foreign_llama3"]
         self.assertEqual(block["classification"], "insufficient")
@@ -535,10 +581,12 @@ class StageTests(unittest.TestCase):
         # A9 at stage level: corrupt the foreign hybrid at the
         # seam and the S1 slice-swap screen must fail the
         # stage closed with zero generations spent.
+        """A seam mutant fails the whole stage before any generation happens."""
         backend = _WordBackend()
         original = hf.hybrid_text
 
         def mutant(hist_fmt, final_fmt, messages):
+            """Mutate hybrid_text to corrupt the seam between the history and final formats."""
             text = original(hist_fmt, final_fmt, messages)
             if hist_fmt is not final_fmt:
                 seam = len(final_fmt.bos) + len(hf.history_segment(hist_fmt, messages))
@@ -562,6 +610,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(backend.calls, 0)
 
     def test_budget_exceeded_fails_closed(self):
+        """More candidates than the generation budget fails the stage closed."""
         formats = tuple(Format(f"cand-{i:02d}", "", "u:", "a:", "\n") for i in range(25))
         backend = _WordBackend()
         stage = experiments.history_frame_stage(
@@ -577,6 +626,7 @@ class StageTests(unittest.TestCase):
         self.assertEqual(backend.calls, 0)
 
     def test_exploding_backend_yields_evaluation_failed_cells(self):
+        """An exploding backend yields evaluation-failed cells while the payload stays available."""
         payload = _payload(_WordBackend("explode"))
         self.assertTrue(payload["available"])
         arm = payload["candidates"]["chatml"]["arms"]["own"]
@@ -584,11 +634,13 @@ class StageTests(unittest.TestCase):
         self.assertEqual(arm["n_completed"], 0)
 
     def test_context_exceeded_cells(self):
+        """A tiny max_context marks all 12 own-arm cells context-exceeded."""
         payload = _payload(max_context=10)
         arm = payload["candidates"]["chatml"]["arms"]["own"]
         self.assertEqual(arm["n_context_exceeded"], 12)
 
     def test_cancelled_stage(self):
+        """A pre-set cancel event yields the cancelled, unavailable payload."""
         import threading
 
         cancel = threading.Event()
@@ -609,9 +661,11 @@ class StageTests(unittest.TestCase):
 
 class StratumTests(unittest.TestCase):
     """Design section 6.5: the encoding stratum is a run-time
-    measurement over the donor's framing literals."""
+    measurement over the donor's framing literals.
+    """
 
     def test_stratum_labels(self):
+        """encoding_stratum labels the backend/donor pair with a frozen stratum label."""
         backend = _WordBackend()
         # Word backend: multi-word literals fragment; the
         # llama3 bos token is a single word-token.
@@ -620,6 +674,7 @@ class StratumTests(unittest.TestCase):
         self.assertTrue(stratum["literals"]["<|begin_of_text|>"])
 
     def test_stratum_block_in_payload(self):
+        """The payload's stratum block covers exactly the frozen contrasts."""
         payload = _payload()
         self.assertEqual(set(payload["stratum"]), set(hf.CONTRASTS))
         for block in payload["stratum"].values():
@@ -631,9 +686,11 @@ _PRIMARY = {"decision": "compatible_on_fixture_set", "winner": "chatml"}
 
 class ValidatorTests(unittest.TestCase):
     """Design section 6.7 + A4: the diffreports validator
-    recomputes the aggregates from the records."""
+    recomputes the aggregates from the records.
+    """
 
     def test_real_payload_validates_and_self_diff_is_unchanged(self):
+        """A real payload validates under the mirror and its self-diff is unchanged."""
         payload = _payload(_WordBackend("frame_drop"), primary=dict(_PRIMARY))
         self.assertTrue(diffreports._valid_history_frame(payload))
         diff = diffreports.diff_history_frame(payload, payload)
@@ -641,6 +698,7 @@ class ValidatorTests(unittest.TestCase):
         self.assertFalse(diff["changed"])
 
     def test_forged_classification_is_rejected(self):
+        """A forged contrast classification is rejected by the mirror."""
         payload = _payload(_WordBackend("frame_drop"))
         forged = copy.deepcopy(payload)
         forged["candidates"]["chatml"]["contrasts"]["foreign_llama3"]["classification"] = (
@@ -654,6 +712,7 @@ class ValidatorTests(unittest.TestCase):
         # carried flag. Here the gate is digest-derived, so
         # the forgery must flip digests in the records --
         # which changes the recompute and is caught.
+        """A forged per-arm token-id digest (amendment A4) is rejected by the mirror."""
         payload = _payload(_WordBackend("frame_drop"))
         forged = copy.deepcopy(payload)
         for record in forged["candidates"]["chatml"]["records"]:
@@ -663,12 +722,14 @@ class ValidatorTests(unittest.TestCase):
     def test_bos_pair_inconsistency_is_rejected(self):
         # A4's constancy pin: one record carrying a different
         # own-bos digest than its candidate's other records.
+        """An inconsistent BOS digest pair is rejected by the mirror."""
         payload = _payload()
         forged = copy.deepcopy(payload)
         forged["candidates"]["llama3"]["records"][0]["own_bos_digest"] = hf.digest_text("x")
         self.assertFalse(diffreports._valid_history_frame(forged))
 
     def test_cell_verdict_tamper_is_rejected(self):
+        """A tampered cell verdict is rejected by the mirror."""
         payload = _payload()
         forged = copy.deepcopy(payload)
         cell = forged["candidates"]["llama3"]["records"][0]["cells"]["own"]
@@ -678,6 +739,7 @@ class ValidatorTests(unittest.TestCase):
     def test_familywise_tamper_is_rejected(self):
         # A2: the family-wise figures are recomputed from the
         # applicable contrasts' own rates, never carried.
+        """A tampered family-wise expectation is rejected by the mirror."""
         payload = _payload()
         forged = copy.deepcopy(payload)
         forged["familywise"]["expected_false_labels"] = 1.44
@@ -687,6 +749,7 @@ class ValidatorTests(unittest.TestCase):
         # Sibling convention (instruction-distance): the
         # wrapper's failure payload is not a valid diff side;
         # the diff reports the asymmetry plainly.
+        """An unavailable payload is not a valid diff side."""
         unavailable = {"available": False, "detail": "historyframe_unavailable"}
         self.assertFalse(diffreports._valid_history_frame(unavailable))
         diff = diffreports.diff_history_frame(unavailable, _payload())
@@ -694,6 +757,7 @@ class ValidatorTests(unittest.TestCase):
         self.assertFalse(diff["changed"])
 
     def test_drift_between_runs_is_detected(self):
+        """Diffing perfect against frame-drop payloads detects the drift."""
         perfect = _payload(_WordBackend("perfect"))
         dropped = _payload(_WordBackend("frame_drop"))
         diff = diffreports.diff_history_frame(perfect, dropped)
@@ -709,6 +773,7 @@ class ValidatorTests(unittest.TestCase):
         )
 
     def test_protocol_drift_is_detected(self):
+        """Diffing payloads over different fixture sets detects protocol drift."""
         one = _payload()
         two = _payload(fixtures=_fixtures(10))
         diff = diffreports.diff_history_frame(one, two)
@@ -720,9 +785,11 @@ class ReportingTests(unittest.TestCase):
     """Design section 6.8 + A1/A2/A6/A8: the section prints
     the disclosure, the corrected family-wise figures, the
     jitter grid, the named residual channels, and the
-    inapplicable accounting."""
+    inapplicable accounting.
+    """
 
     def test_section_renders_disclosures_and_amendments(self):
+        """The section renders with the prepend disclosure and the amendment readouts."""
         html = reporting.render_html({"history_frame": _payload(_WordBackend("frame_drop"))})
         self.assertIn('<section class="card" id="history-frame">', html)
         # Naming condition: first-sentence prepend disclosure.
@@ -746,6 +813,7 @@ class ReportingTests(unittest.TestCase):
         self.assertIn("discordant_asymmetric", html)
 
     def test_section_absent_without_payload(self):
+        """The history-frame section is absent when the payload is missing."""
         html = reporting.render_html({})
         self.assertNotIn('id="history-frame"', html)
 
@@ -753,9 +821,11 @@ class ReportingTests(unittest.TestCase):
 class CliTests(unittest.TestCase):
     """Cycle 218 argparse rule + naming condition: the help
     renders (no bare percent) and carries the prepend
-    disclosure in its first sentence."""
+    disclosure in its first sentence.
+    """
 
     def test_flag_parses_and_help_renders(self):
+        """The --history-frame flag parses and its help renders with the prepend disclosure."""
         from model_protocol_lab.cli import build_parser
 
         parser = build_parser()
@@ -790,13 +860,16 @@ if __name__ == "__main__":
 class GapModuleTests(unittest.TestCase):
     """Gap pass (cycle-174 rule): the full-suite coverage
     run's missing lines in historyframe.py, each closed by
-    the smallest test that moves it."""
+    the smallest test that moves it.
+    """
 
     def test_donor_format_rejects_unknown_arm(self):
+        """donor_format rejects an unknown arm with ValueError."""
         with self.assertRaises(ValueError):
             hf.donor_format("foreign_gemma")
 
     def test_history_segment_digest_matches_digest_of_segment(self):
+        """The history-segment digest equals the digest of the segment text."""
         case = hf.stage_fixtures(_fixtures(1))[0]
         self.assertEqual(
             hf.history_segment_digest(_CHATML, case.messages),
@@ -807,16 +880,22 @@ class GapModuleTests(unittest.TestCase):
         # The identities' guard branch: a native text that
         # does not start with bos + native segment is not a
         # slice-swap of anything.
+        """The slice-swap identity check fails on a prefix mismatch."""
         self.assertFalse(hf.slice_swap_identity("unrelated text", "hybrid", "seg", "armseg", "<B>"))
         self.assertFalse(
             hf.verbatim_slice_identity("unrelated text", "verb", "seg", "armseg", "<B>", "<A>")
         )
 
     def test_stratum_all_single_and_empty(self):
+        """A one-id backend yields the all_single stratum, including the empty-text case."""
+
         class _OneIdBackend:
+            """Backend encoding every non-empty text to the single token id 1."""
+
             fingerprint = "sha256:test-one-id"
 
             def encode(self, text):
+                """Encode any non-empty text to (1,) and empty text to ()."""
                 return (1,) if text else ()
 
         stratum = hf.encoding_stratum(_OneIdBackend(), hf.donor_format("foreign_chatml"))
@@ -827,6 +906,7 @@ class GapModuleTests(unittest.TestCase):
         self.assertEqual(stratum["literals"], {})
 
     def test_aggregate_tolerates_malformed_record_shapes(self):
+        """The aggregate tolerates records whose cells are not dicts."""
         record = _record("fx-00", own=_cell(True), foreign=_cell(True))
         record["cells"] = ["not", "a", "dict"]
         record["cell_details"] = "nope"
@@ -834,6 +914,7 @@ class GapModuleTests(unittest.TestCase):
         self.assertEqual(aggregate["arms"]["own"]["n_completed"], 0)
 
     def test_ungated_foreign_only_counts(self):
+        """The ungated readout counts foreign-only discordants."""
         records = self._records(3) if hasattr(self, "_records") else None
         records = [
             _record(f"fx-{i:02d}", own=_cell(False, digest="GREEN"), foreign=_cell(True))
@@ -844,6 +925,7 @@ class GapModuleTests(unittest.TestCase):
         self.assertEqual(block["ungated_own_only"], 0)
 
     def test_paired_decomposition_counts_through_aggregate(self):
+        """The paired decomposition counts boundary-only pairs through the aggregate."""
         records = [
             _record(
                 f"fx-{i:02d}",
@@ -857,11 +939,13 @@ class GapModuleTests(unittest.TestCase):
         self.assertEqual(block["n_paired"], 12)
 
     def test_shared_fixtures_empty_population(self):
+        """Empty candidate sets share no fixtures and selection is withheld."""
         self.assertEqual(hf.shared_fixtures({}), frozenset())
         selection = hf.arm_selection({}, "own")
         self.assertTrue(selection["withheld"])
 
     def test_selection_no_candidate(self):
+        """Selection over records with no eligible candidate returns no_candidate."""
         records = {
             "cand-a": [
                 _record(f"fx-{i:02d}", own=_cell(False, digest="GREEN"), foreign=_cell(True))
@@ -877,6 +961,7 @@ class GapModuleTests(unittest.TestCase):
         self.assertIsNone(selection["winner"])
 
     def test_winner_headline_missing_and_stable(self):
+        """winner_headline reports a missing selection and a stable winner correctly."""
         missing = hf.winner_headline(None, {"decision": "selected", "winner": "a"})
         self.assertEqual(missing["detail"], "selection_missing")
         self.assertIsNone(missing["winner_changed"])
@@ -887,6 +972,7 @@ class GapModuleTests(unittest.TestCase):
         self.assertFalse(stable["winner_changed"])
 
     def test_primary_flips_verbatim_decision_and_empty_decision(self):
+        """Primary flips cover the verbatim decision and the empty-decision case."""
         conditions = {
             "own": {"decision": "selected", "winner": "cand-a", "withheld": False},
             "foreign_chatml": {"decision": "selected", "winner": "cand-a", "withheld": False},
@@ -902,9 +988,11 @@ class GapModuleTests(unittest.TestCase):
 
 class GapStageTests(unittest.TestCase):
     """Gap pass: stage validation, screen, and cancellation
-    branches the happy-path tests do not reach."""
+    branches the happy-path tests do not reach.
+    """
 
     def test_stage_argument_validation(self):
+        """The stage rejects invalid arguments with ValueError."""
         backend = _WordBackend()
         boundary = tuple(backend.encode("endmark"))
         with self.assertRaises(ValueError):
@@ -945,6 +1033,7 @@ class GapStageTests(unittest.TestCase):
         # S2's findings branch: the frozen texts are fixed, so
         # the guard is proven with a stubbed audit (the
         # cycle-171 stub-proves-the-guard pattern).
+        """A stubbed special-token audit failure fails the stage screen closed."""
         from model_protocol_lab import fixtures as fixtures_module
 
         backend = _WordBackend()
@@ -966,12 +1055,16 @@ class GapStageTests(unittest.TestCase):
         self.assertEqual(backend.calls, 0)
 
     def test_cancel_set_during_generation_cancels_the_stage(self):
+        """A cancel event set during generation cancels the stage."""
         import threading
 
         cancel = threading.Event()
 
         class _CancellingBackend(_WordBackend):
+            """Scripted backend whose generate sets the cancel event after delegating."""
+
             def generate(self, input_ids, **kwargs):
+                """Generate via the scripted backend, then set the cancel event."""
                 out = super().generate(input_ids, **kwargs)
                 cancel.set()
                 return out
@@ -989,6 +1082,7 @@ class GapStageTests(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_analysis_unavailable_passthrough_and_candidate(self):
+        """The analysis passes unavailable stage and candidate states through unchanged."""
         backend = _WordBackend()
         stage = experiments.history_frame_stage(
             backend,
@@ -1022,17 +1116,21 @@ class GapStageTests(unittest.TestCase):
 
 class GapValidatorBatteryTests(unittest.TestCase):
     """Gap pass: one broken identity at a time against the
-    diffreports mirror (the cycle-174 validator battery)."""
+    diffreports mirror (the cycle-174 validator battery).
+    """
 
     def setUp(self):
+        """Build the shared frame-drop payload used by the battery."""
         self.payload = _payload(_WordBackend("frame_drop"), primary=dict(_PRIMARY))
 
     def _assert_invalid(self, mutate):
+        """Assert the mirror rejects the shared payload after the given forgery."""
         forged = copy.deepcopy(self.payload)
         mutate(forged)
         self.assertFalse(diffreports._valid_history_frame(forged))
 
     def test_battery(self):
+        """Every forgery in the battery makes the mirror reject the payload."""
         cases = [
             ("seed type", lambda p: p["protocol"].__setitem__("seed", "0")),
             (
@@ -1123,6 +1221,7 @@ class GapValidatorBatteryTests(unittest.TestCase):
                 self._assert_invalid(mutate)
 
     def test_candidate_cap_rejected(self):
+        """A candidate set past the cap is rejected."""
         forged = copy.deepcopy(self.payload)
         entry = forged["candidates"]["chatml"]
         for i in range(24):
@@ -1135,6 +1234,7 @@ class GapValidatorBatteryTests(unittest.TestCase):
         del entry
 
     def test_diff_candidates_added_removed_and_stratum_drift(self):
+        """Diffing detects added and removed candidates and stratum drift."""
         one = _payload(_WordBackend("perfect"), formats=(_CHATML,))
         two = _payload(_WordBackend("perfect"), formats=(_CHATML, _LLAMA3))
         diff = diffreports.diff_history_frame(one, two)
@@ -1155,6 +1255,7 @@ class GapValidatorBatteryTests(unittest.TestCase):
         self.assertTrue(drift["changed"])
 
     def test_diff_status_drift(self):
+        """Diffing detects candidate status drift between the stage and analysis payloads."""
         backend = _WordBackend("perfect")
         stage = experiments.history_frame_stage(
             backend,
@@ -1182,14 +1283,17 @@ class GapValidatorBatteryTests(unittest.TestCase):
 class GapReportingTests(unittest.TestCase):
     """Gap pass: section branches -- n/a fallbacks, the
     unavailable-candidate row, withheld conditions, and a
-    nonempty flips list."""
+    nonempty flips list.
+    """
 
     def test_section_with_attrition_and_primary_flips(self):
+        """The section renders with attrition (n/a cells) and primary flips."""
         payload = _payload(_WordBackend("explode"), primary=dict(_PRIMARY))
         html = reporting.render_html({"history_frame": payload})
         self.assertIn("n/a", html)  # zero-completion arms have no rate
 
     def test_section_unavailable_candidate_and_withheld(self):
+        """The section renders an unavailable candidate and a withheld selection."""
         payload = _payload(_WordBackend("perfect"))
         forged = copy.deepcopy(payload)
         forged["candidates"]["ghost"] = {
@@ -1209,6 +1313,7 @@ class GapReportingTests(unittest.TestCase):
         self.assertIn("selection withheld (mismatched or empty completed sets)", html)
 
     def test_section_prints_flips_against_primary(self):
+        """The section prints the flips against the primary selection."""
         payload = _payload(_WordBackend("frame_drop"), primary=dict(_PRIMARY))
         self.assertTrue(payload["flips"])
         html = reporting.render_html({"history_frame": payload})

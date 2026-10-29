@@ -375,15 +375,17 @@ bump must re-decide the license posture rather than inherit it).
 
 The [DeepSource GitHub integration](https://app.deepsource.com/gh/strmt7/model-protocol-lab)
 analyzes commits and pull requests through the `deepsource-io` GitHub
-App. There is no DeepSource config file in this repo — the connection
-is app-only, and analyzer settings live in the DeepSource dashboard.
-That shape is deliberate: it is exactly how the reference integration
-was already running, and inventing a local config to look equivalent
-would be theatre, not parity. Do not copy another repository's
-analyzer set into this repo's docs or audits: the enabled set for
-this repo is whatever its own DeepSource configuration says, and the
-inventory tool below surfaces that configuration (`configJson`) with
-every capture. Read it before asserting coverage.
+App. The connection is app-only. Through cycle 221 there was no
+DeepSource config file in this repo and analyzer settings lived in
+the DeepSource dashboard; since cycle 222 the repo carries a
+`.deepsource.toml`, but it holds only the few settings the
+remediation below adjudicated — an exclusion for two prose files
+and two analyzer meta pins, each justified in the file itself. It is
+not a copied configuration: do not copy another repository's
+analyzer set into this repo's docs or audits. The enabled set for
+this repo is whatever its own DeepSource configuration says, and
+the inventory tool below surfaces that configuration (`configJson`)
+with every capture. Read it before asserting coverage.
 
 Retrieve the complete active default-branch inventory with
 `tools/deepsource_inventory.py`, ported verbatim from the reference
@@ -425,6 +427,65 @@ does. When the credential is absent, the guard reports
 NOT-CONFIGURED explicitly and fails closed; that is a missing input,
 not a passing check, and the input is the `DEEPSOURCE_TOKEN` secret
 in the repo's Actions settings.
+
+### DeepSource remediation (cycle 222)
+
+Cycle 222 drove the active DeepSource inventory to zero and recorded
+the adjudication of every occurrence. The working baseline was the
+complete inventory at `4cf8e0f5` (3,546 occurrences, 64 rules),
+independently cross-checked before any fix: manifest integrity and
+the recount reproduced exactly, and a 105-occurrence source sample
+verified 102 citations and refuted 3 analyzer claims. The cycle's
+Phase-0 capture at the cycle-221 head (`0e4ee685`) reported 3,775
+occurrences; the delta was the new record-notation surface plus
+line-shifted occurrences of the same rules — no rule appeared or
+vanished. Both analysis runs ended in the provider's FAILURE status
+(partial analysis); the captures are complete traversals of what
+the provider reported for those commits, and the zero below is
+stated against the final head's complete capture on the same terms.
+
+Every occurrence was adjudicated into exactly one class:
+
+- **Fixed in code.** The bulk: missing docstrings inserted,
+  docstring formatting normalized, methods that never use their
+  instance converted to static methods file by file, explicit
+  `check=False` on subprocess calls whose sites inspect the return
+  code themselves, unused names renamed to discards after per-site
+  verification, overlapping except-tuple entries removed, type
+  annotations completed in `tools/` and `examples/`, and two
+  security items hardened (the findings guard now asserts its API
+  URL stays on the fixed `https://api.github.com/` host before
+  opening it; the CocoIndex tool resolves `git` to an absolute path
+  once instead of starting it from a partial path).
+- **Configured, with the justification in the repo.** Used only
+  where a rule's premise does not apply to a deliberate pattern of
+  this codebase. The `.deepsource.toml` excludes the two prose
+  files named there (the secrets analyzer's only hits were prose
+  fragments, not credentials), pins the repo's own 100-character
+  line-length standard, and sets the complexity threshold to the
+  provider's `critical` band — in this codebase branch count is
+  specification count, and the remaining above-band functions carry
+  per-site comments. Per-site `# skipcq` comments with reasons cover
+  the rest: function-local imports that keep validator mirrors
+  self-contained and the import graph acyclic, single-element tuple
+  unpacks that are the assertion being tested, `next()` calls in
+  tests whose `StopIteration` is the intended failure, the
+  mutation-gate `exec` sites (the gates execute this repo's own
+  module source, mutated in memory, never external input), and
+  deliberate test-fixture patterns.
+- **Proven false positives.** A small set of analyzer claims the
+  source refutes — imports reported unused that are used on the
+  following lines, a dict reported as a list append, keyword
+  arguments reported missing or duplicated that arrive through
+  `**` unpacking, a SQL-expression rule fired on a repo with no
+  SQLAlchemy. Each carries a per-site comment stating the refutation
+  in one line; the full proofs were established by the independent
+  cross-check and the remediation plan before the cycle started.
+  None of these was "fixed" by changing correct code.
+
+The end state is proven the same way the baseline was: a complete
+inventory capture at the cycle's final head, read with the tool
+above, reporting zero occurrences.
 
 ## Reporting defects
 

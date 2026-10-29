@@ -54,7 +54,8 @@ class _ScriptedBackend:
     """Answers from the prompt: operator fixtures get their
     expected answer plus a compliant line on treated prompts;
     generated cases are parsed (knowable -> stated value at 95,
-    donor-key control -> "unknown" at the configured level)."""
+    donor-key control -> "unknown" at the configured level).
+    """
 
     def __init__(self, *, control_confidence=5, fingerprint="sha256:confidence-test"):
         self.control_confidence = control_confidence
@@ -233,11 +234,13 @@ class TestParserBattery(unittest.TestCase):
 def _load_confidence_variant(source: str) -> dict:
     """Exec a (possibly mutated) confidence.py source under the
     package namespace so its relative imports resolve (the
-    cycle-169 standalone-exec rule)."""
+    cycle-169 standalone-exec rule).
+    """
     import types
 
     module = types.ModuleType("model_protocol_lab.confidence_variant")
     module.__package__ = "model_protocol_lab"
+    # skipcq: PYL-W0122 - gate execs own module source mutated in memory only
     exec(compile(source, "confidence_variant", "exec"), module.__dict__)  # noqa: S102 -- the gate execs this repo's own module source, mutated in memory only
     return module.__dict__
 
@@ -245,7 +248,8 @@ def _load_confidence_variant(source: str) -> dict:
 class TestParserMutationGate(unittest.TestCase):
     """Each mutant is a plausible implementation slip; each must
     change the named killer case's classification. The control
-    (unmutated source) must pass the whole battery."""
+    (unmutated source) must pass the whole battery.
+    """
 
     @classmethod
     def setUpClass(cls):
@@ -392,7 +396,7 @@ class TestScreensAndSurgery(unittest.TestCase):
                 confidence.text_digest(ct.messages[0].content),
             )
             # The control binds the donor key, never the asked key.
-            key, value = confidence.case_material(5)[int(entry["id"].rsplit("-", 1)[1])]
+            key, _value = confidence.case_material(5)[int(entry["id"].rsplit("-", 1)[1])]
             donor_key, donor_value = confidence.case_material(5)[
                 (int(entry["id"].rsplit("-", 1)[1]) + 1) % confidence.CASE_COUNT
             ]
@@ -499,7 +503,8 @@ class TestStage(unittest.TestCase):
 
 class TestValidatorTamper(unittest.TestCase):
     """One break at a time over a real stage payload; the control
-    payload must validate and every tampered one must not."""
+    payload must validate and every tampered one must not.
+    """
 
     @classmethod
     def setUpClass(cls):

@@ -853,6 +853,7 @@ def _exec_variant(original: str, mutant: str, tag: str):  # type: ignore[no-unty
     module.__package__ = "model_protocol_lab"
     sys.modules[name] = module
     try:
+        # skipcq: PYL-W0122 - gate execs own module source mutated in memory only
         exec(  # noqa: S102 -- the gate's whole point: run a mutated copy of our own module
             compile(source.replace(original, mutant), f"<mutant {tag}>", "exec"),
             module.__dict__,
