@@ -7711,6 +7711,360 @@ def _instruction_distance_section(result: dict[str, Any]) -> str:
     )
 
 
+def _history_frame_section(result: dict[str, Any]) -> str:
+    """History-frame probe: a frozen synthetic history segment
+    reframed in two foreign chat-template framings.
+
+    Renders the ``history_frame`` payload (see
+    experiments.history_frame_analysis). The first sentence is
+    the naming audit's disclosure: only the prepended frozen
+    synthetic segment is reframed; the fixtures' own messages
+    are never reframed. Per candidate: per-arm pass rates with
+    attrition, the two headline contrasts (paired counts,
+    decomposition, classification with its exact at-n
+    random-labeller fire rate, id-divergence readout, ungated
+    sensitivity), the descriptive verbatim readout with its
+    inapplicable accounting, and the encoding stratum beside
+    every classification. After the table: per-arm selection
+    conditions, winner headlines per contrast, the flips
+    against the primary run (labelled as pooling history
+    presence with frame), and the operating-characteristics
+    paragraph with the computed family-wise expectation, the
+    jitter grid, and the named residual channels. Counts and
+    rates only; no prompt, history, or answer text is
+    rendered. Every payload-derived value below goes through
+    _escape_text, never bare escape().
+    """
+    probe: Any = result.get("history_frame")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return _escape_text(f"{float(value):.3f}")
+        return "n/a"
+
+    def _pct(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return _escape_text(f"{100.0 * float(value):.2f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return _escape_text(str(value)) if type(value) is int else "n/a"
+
+    def _arm_line(name: str, arm: dict[str, Any]) -> str:
+        return (
+            "<div>"
+            + _escape_text(name)
+            + " pass rate "
+            + _rate(arm.get("rate"))
+            + " ("
+            + _count(arm.get("n_pass"))
+            + " of "
+            + _count(arm.get("n_completed"))
+            + " completed), "
+            + _count(arm.get("n_context_exceeded"))
+            + " context-exceeded, "
+            + _count(arm.get("n_evaluation_failed"))
+            + " evaluation-failed.</div>"
+        )
+
+    stratum = probe.get("stratum")
+    stratum_bits: dict[str, str] = {}
+    if type(stratum) is dict:
+        for arm_name in ("foreign_chatml", "foreign_llama3"):
+            block = stratum.get(arm_name)
+            if type(block) is dict:
+                label = block.get("label")
+                stratum_text = "Encoding stratum " + _escape_text(str(label)) + "."
+                literals = block.get("literals")
+                if label == "mixed" and type(literals) is dict:
+                    stratum_text += (
+                        " Per-literal token-real: "
+                        + ", ".join(
+                            _escape_text(str(lit)) + " " + ("yes" if real else "no")
+                            for lit, real in sorted(literals.items(), key=lambda kv: str(kv[0]))
+                        )
+                        + "."
+                    )
+                stratum_bits[arm_name] = stratum_text
+
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + _escape_text(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        arms = entry.get("arms")
+        if type(arms) is dict:
+            for arm_name in ("own", "foreign_chatml", "foreign_llama3", "verbatim_chatml"):
+                arm = arms.get(arm_name)
+                if type(arm) is dict:
+                    bits.append(_arm_line(arm_name, arm))
+        contrasts = entry.get("contrasts")
+        if type(contrasts) is dict:
+            for arm_name in ("foreign_chatml", "foreign_llama3"):
+                block = contrasts.get(arm_name)
+                if type(block) is not dict:
+                    continue
+                if block.get("applicable") is not True:
+                    bits.append(
+                        "<div>"
+                        + _escape_text(arm_name)
+                        + ": inapplicable for this candidate — the foreign "
+                        "history segment is render-identical to the own "
+                        "segment on every fixture ("
+                        + _count(block.get("n_render_identical"))
+                        + " render-identical), so no classification is "
+                        "emitted; an inapplicable contrast is never a "
+                        "robustness reading.</div>"
+                    )
+                    continue
+                decomp = block.get("decomposition")
+                decomp_bits = ""
+                if type(decomp) is dict:
+                    decomp_bits = (
+                        " Decomposition of the discordant pairs — "
+                        "boundary-only "
+                        + _count(decomp.get("boundary_only"))
+                        + ", exact-only "
+                        + _count(decomp.get("exact_only"))
+                        + ", mixed "
+                        + _count(decomp.get("mixed"))
+                        + "."
+                    )
+                deltas = block.get("id_length_delta")
+                delta_text = ", ".join(_count(d) for d in deltas) if type(deltas) is list else "n/a"
+                bits.append(
+                    "<div>"
+                    + _escape_text(arm_name)
+                    + " vs own: n "
+                    + _count(block.get("n_paired"))
+                    + " paired ("
+                    + _count(block.get("n_render_identical"))
+                    + " render-identical excluded, "
+                    + _count(block.get("n_ids_identical"))
+                    + " ids-identical excluded, "
+                    + _count(block.get("n_same_ids_flips"))
+                    + " same-ids verdict flips recorded as determinism "
+                    "findings), own-only passes "
+                    + _count(block.get("own_only"))
+                    + ", foreign-only passes "
+                    + _count(block.get("foreign_only"))
+                    + ", discordant "
+                    + _count(block.get("discordant"))
+                    + ", paired rates own "
+                    + _rate(block.get("paired_rate_own"))
+                    + " / foreign "
+                    + _rate(block.get("paired_rate_foreign"))
+                    + ", McNemar p "
+                    + _rate(block.get("mcnemar_p"))
+                    + ", classification "
+                    + _escape_text(str(block.get("classification", "")))
+                    + ". Exact random-labeller fire rate at this n: "
+                    + _pct(block.get("random_fire_rate"))
+                    + " percent. Ungated sensitivity (all paired "
+                    "completed fixtures, before divergence exclusions): n "
+                    + _count(block.get("ungated_n"))
+                    + ", own-only "
+                    + _count(block.get("ungated_own_only"))
+                    + ", foreign-only "
+                    + _count(block.get("ungated_foreign_only"))
+                    + ". Id-length deltas (own minus foreign, fixture "
+                    "order): "
+                    + delta_text
+                    + ". Max abs id delta "
+                    + _count(block.get("max_abs_id_delta"))
+                    + "."
+                    + decomp_bits
+                    + " "
+                    + stratum_bits.get(arm_name, "")
+                    + "</div>"
+                )
+        verbatim = entry.get("verbatim")
+        if type(verbatim) is dict:
+            if verbatim.get("applicable") is True:
+                bits.append(
+                    "<div>verbatim_chatml (descriptive only): applicable "
+                    "— paired "
+                    + _count(verbatim.get("n_paired"))
+                    + " fixtures completed in both chatml arms, "
+                    "foreign-only passes "
+                    + _count(verbatim.get("twin_only"))
+                    + ", verbatim-only passes "
+                    + _count(verbatim.get("verbatim_only"))
+                    + "; that discordance is the bos-substitution share "
+                    "of the foreign_chatml contrast, never a decision "
+                    "input.</div>"
+                )
+            else:
+                bits.append(
+                    "<div>verbatim_chatml (descriptive only): "
+                    "inapplicable for this candidate — the candidate's "
+                    "bos equals chatml's, so the arm is byte-identical "
+                    "to foreign_chatml; its discordance is never pooled "
+                    "and never read as a bos share of zero.</div>"
+                )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + _escape_text(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+
+    tail: list[str] = []
+    conditions = probe.get("conditions")
+    selection = probe.get("selection")
+    if type(conditions) is dict:
+        cond_bits: list[str] = []
+        for arm_name in ("own", "foreign_chatml", "foreign_llama3"):
+            block = conditions.get(arm_name)
+            if type(block) is not dict:
+                continue
+            if block.get("withheld") is True:
+                cond_bits.append(
+                    _escape_text(arm_name)
+                    + " selection withheld (mismatched or empty completed sets)"
+                )
+            else:
+                winner = block.get("winner")
+                cond_bits.append(
+                    _escape_text(arm_name)
+                    + " selection "
+                    + _escape_text(str(block.get("decision", "")))
+                    + ((" — winner " + _escape_text(str(winner))) if winner else "")
+                )
+        if cond_bits:
+            tail.append(
+                "<p>Per-arm selection on the common completed set: "
+                + "; ".join(cond_bits)
+                + ".</p>"
+            )
+    if type(selection) is dict:
+        sel_bits: list[str] = []
+        for arm_name in ("foreign_chatml", "foreign_llama3"):
+            block = selection.get(arm_name)
+            if type(block) is dict:
+                sel_bits.append(
+                    _escape_text(arm_name)
+                    + " winner headline "
+                    + _escape_text(str(block.get("headline", "")))
+                )
+        if sel_bits:
+            tail.append("<p>" + "; ".join(sel_bits) + ".</p>")
+    flips = probe.get("flips")
+    if type(flips) is list:
+        if flips:
+            flip_bits = ", ".join(
+                _escape_text(str(f.get("arm", "")))
+                + " ("
+                + _escape_text(str(f.get("decision_from", "")))
+                + " -> "
+                + _escape_text(str(f.get("decision_to", "")))
+                + ")"
+                for f in flips
+                if type(f) is dict
+            )
+            tail.append(
+                "<p>Flips against the primary run: "
+                + flip_bits
+                + ". These flips pool history presence with frame and "
+                "are printed for context only — never the headline.</p>"
+            )
+        else:
+            tail.append("<p>No per-arm selection flips against the primary run.</p>")
+    familywise = probe.get("familywise")
+    fw_bits = ""
+    if type(familywise) is dict:
+        fw_bits = (
+            " Family-wise over this run's "
+            + _count(familywise.get("decisions"))
+            + " classifications: the computed expectation is "
+            + _rate(familywise.get("expected_false_labels"))
+            + " false labels with probability "
+            + _rate(familywise.get("p_at_least_one"))
+            + " of at least one, summed from the exact at-n "
+            "random-labeller rates printed beside each classification "
+            "(at n = 100 over 48 decisions that expectation is 1.76 "
+            "with probability 0.83) — read any single fire against "
+            "the panel it sits in."
+        )
+    tail.append(
+        "<p>Operating characteristics of the frozen rule (n at "
+        "least 10 paired, discordant at least 6, two-sided exact "
+        "McNemar p below 0.05): asymmetric fire is at most 3.6 "
+        "percent on the random-labeller null and at most 3.1 "
+        "percent on competent nulls at every tabulated panel size; "
+        "the exact rate at each classification's own n prints "
+        "beside it. Under symmetric two-arm jitter the fire rate "
+        "is 0.04 percent at epsilon 0.01, 0.48 percent at 0.02, "
+        "and 2.13 percent at 0.05 (D-invariant under the symmetric "
+        "model, the model matching this stage, where both arms "
+        "are freshly generated in one run); one-sided jitter "
+        "variants are arm-asymmetric perturbations — inside the "
+        "alternative, not the null. Power at a 25-point drop is "
+        "0.99 at n = 100 but a coin flip (0.52) at n = 30, so on "
+        "small fixture sets below_threshold is weak evidence, "
+        "never invariance, and insufficient is the honest verdict "
+        "when the panel cannot speak."
+        + fw_bits
+        + " Residual channels, named so the label is never read "
+        "as a mechanism certificate: token length and marker "
+        "encoding are consequences of the framing strings and "
+        "move with the treatment by construction, and arm-level "
+        "directional channels — batch composition and numerics "
+        "correlated with the foreign prompts' length — lie "
+        "inside the string-scoped claim. The label certifies "
+        "string-level discordance for these named framings and "
+        "this frozen history, on this checkpoint, and nothing "
+        "about histories, migrations, or templates in "
+        "general.</p>"
+    )
+    return (
+        '<section class="card" id="history-frame">'
+        "<h2>History frame (foreign framing of the prepended history)</h2>"
+        "<p>This probe prepends the frozen six-turn synthetic "
+        "history to every search fixture and reframes only that "
+        "prepended segment — the fixture's own messages are never "
+        "reframed. Per candidate, the prepended segment is "
+        "rendered under four arms: own (the candidate's own "
+        "framing), foreign_chatml and foreign_llama3 (the frozen "
+        "chatml / llama3 framings of the history segment only), "
+        "and a descriptive verbatim_chatml arm differing from "
+        "foreign_chatml only in the leading bos string. The tail, "
+        "the prompt-initial bos, and the open suffix are always "
+        "the candidate's own. The own arm is byte-identical to "
+        "the synth-history history_6 render of the same messages; "
+        "verdict-identity with the synth-history stage is not "
+        "claimed, because that stage runs namespaced ids and "
+        "hence different request seeds — this stage's baseline "
+        "is its own arm. The scorer is byte-exact conjoined with "
+        "boundary presence; no stripping or normalisation is "
+        "added. The frozen history texts and framing literals "
+        "are screened for special-token literals before any "
+        "generation; user fixture contents are deliberately not "
+        "screened, because they are byte-identical across arms "
+        "and cannot manufacture a frame contrast. The verbatim "
+        "arm has a single donor by design: there is no "
+        "verbatim_llama3, and that asymmetry is scope, not an "
+        "omission. Each cell is one greedy generation. Records "
+        "carry digests only.</p>"
+        "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>" + "".join(tail) + "</section>"
+    )
+
+
 def _rotation_section(result: dict[str, Any]) -> str:
     """Context rotation probe: does cyclically rotating the block span move the verdict?
 
@@ -10338,6 +10692,7 @@ def render_html(result: dict[str, Any]) -> str:
     canonical_form_html = _canonical_form_section(result)
     negation_html = _negation_section(result)
     instruction_distance_html = _instruction_distance_section(result)
+    history_frame_html = _history_frame_section(result)
     choiceaudit_html = _choiceaudit_section(result)
     precision_html = _precision_section(result)
     confidence_html = _confidence_section(result)
@@ -10524,6 +10879,11 @@ def render_html(result: dict[str, Any]) -> str:
                 instruction_distance_html,
             ),
             (
+                "history-frame",
+                "History frame (foreign framing of the prepended history)",
+                history_frame_html,
+            ),
+            (
                 "choice-audit",
                 "Choice-scoring audit (second opinion)",
                 choiceaudit_html,
@@ -10651,6 +11011,7 @@ def render_html(result: dict[str, Any]) -> str:
         + canonical_form_html
         + negation_html
         + instruction_distance_html
+        + history_frame_html
         + choiceaudit_html
         + precision_html
         + confidence_html

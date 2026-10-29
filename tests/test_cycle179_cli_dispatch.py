@@ -114,6 +114,7 @@ STAGE_FLAGS = [
     ("--canonical-form", "canonical_form", None),
     ("--negation", "negation", None),
     ("--instruction-distance", "instruction_distance", None),
+    ("--history-frame", "history_frame", None),
     ("--rotate", "rotate", None),
     ("--density", "density", None),
     ("--field-order", "field_order", None),
@@ -168,6 +169,7 @@ def _call_helper(helper, result):  # noqa: ANN001, ANN202
         "demo_cases": (_FIXTURE,),
         "eval_cases": (_FIXTURE,),
         "search_fixtures": (_FIXTURE,),
+        "fixtures": (_FIXTURE,),
         "boundary": (198,),
         "boundary_map": None,
         "bf16_backend": _FakeBackend(),
@@ -314,6 +316,12 @@ HELPER_DISPATCH = [
         "instruction_distance",
         "instruction_distance_unavailable",
         ["instruction_distance_stage", "instruction_distance_analysis"],
+    ),
+    (
+        "_run_history_frame_probe",
+        "history_frame",
+        "historyframe_unavailable",
+        ["history_frame_stage", "history_frame_analysis"],
     ),
     (
         "_run_rotation_probe",

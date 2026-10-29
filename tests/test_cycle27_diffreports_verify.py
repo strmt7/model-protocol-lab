@@ -5507,6 +5507,274 @@ def oracle_diff_reports(
             return False
         return bool(value.get("n_cases") == len(generated))
 
+    def _or_historyframe_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_history_frame: exact
+        # top-level shape (the audit block shape-checked
+        # only), the protocol rebuilt through the producer
+        # module (historyframe), the encoding stratum's label
+        # re-derived from its literal table, every record
+        # checked in protocol fixture order with the
+        # candidate-constant bos pair (amendment A4), every
+        # cell's verdict re-derived from its digest identity,
+        # completed cells bound to the record's arm token
+        # count, and the aggregates, conditions, selection,
+        # flips, and family-wise expectation recomputed
+        # through the producer's own functions (whose gates
+        # derive from the recorded id digests alone). A drift
+        # in either side's constants breaks the agreement.
+        import json as _json
+        import re as _re
+
+        from model_protocol_lab import historyframe as _hfm
+
+        def _digest_ok(digest: Any) -> bool:
+            return type(digest) is str and _re.fullmatch(r"[0-9a-f]{64}", digest) is not None
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        if set(value) != {
+            "available",
+            "detail",
+            "protocol",
+            "audit",
+            "stratum",
+            "candidates",
+            "conditions",
+            "selection",
+            "primary",
+            "flips",
+            "familywise",
+            "n_candidates",
+            "n_fixtures",
+        }:
+            return False
+        if value.get("detail") != "":
+            return False
+        protocol = value.get("protocol")
+        if type(protocol) is not dict:
+            return False
+        seed = protocol.get("seed")
+        backend_fp = protocol.get("backend_fingerprint")
+        fixture_ids = protocol.get("fixture_ids")
+        if type(seed) is not int or isinstance(seed, bool):
+            return False
+        if type(backend_fp) is not str:
+            return False
+        if (
+            type(fixture_ids) is not list
+            or not fixture_ids
+            or len(fixture_ids) > 100
+            or any(type(item) is not str for item in fixture_ids)
+            or len(set(fixture_ids)) != len(fixture_ids)
+        ):
+            return False
+        n_fixtures = len(fixture_ids)
+        expected_protocol = dict(_hfm.protocol_object(seed, backend_fp, list(fixture_ids)))
+        expected_protocol["fingerprint"] = _hfm.protocol_fingerprint(
+            seed, backend_fp, list(fixture_ids)
+        )
+        if protocol != expected_protocol:
+            return False
+        audit = value.get("audit")
+        if type(audit) is not dict or set(audit) != {
+            "n_audit_excluded",
+            "by_reason",
+            "special_token_findings",
+        }:
+            return False
+        if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+            return False
+        if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+            return False
+        if type(audit["by_reason"]) is not dict:
+            return False
+        for reason, count in audit["by_reason"].items():
+            if type(reason) is not str or type(count) is not int or count < 0:
+                return False
+        stratum = value.get("stratum")
+        if type(stratum) is not dict or set(stratum) != set(_hfm.CONTRASTS):
+            return False
+        for arm in _hfm.CONTRASTS:
+            block = stratum[arm]
+            if type(block) is not dict or set(block) != {"label", "literals"}:
+                return False
+            if block["label"] not in _hfm.STRATA:
+                return False
+            literals = block["literals"]
+            if type(literals) is not dict:
+                return False
+            for literal, single in literals.items():
+                if type(literal) is not str or not literal or type(single) is not bool:
+                    return False
+            values = list(literals.values())
+            if values and all(values):
+                want = "all_single"
+            elif values and not any(values):
+                want = "all_fragmented"
+            elif values:
+                want = "mixed"
+            else:
+                want = "all_single"
+            if block["label"] != want:
+                return False
+        primary = value.get("primary")
+        if primary is not None:
+            if type(primary) is not dict or set(primary) != {"decision", "winner"}:
+                return False
+            if primary["decision"] is not None and type(primary["decision"]) is not str:
+                return False
+            if primary["winner"] is not None and type(primary["winner"]) is not str:
+                return False
+        candidates = value.get("candidates")
+        if type(candidates) is not dict or not candidates:
+            return False
+        if len(candidates) > 24:
+            return False
+        records_bytes = 0
+        total_records = 0
+        by_candidate: dict[str, list] = {}
+        rates: list[float] = []
+        for name, entry in candidates.items():
+            if type(entry) is not dict:
+                return False
+            if entry.get("status") == "unavailable":
+                if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                    return False
+                continue
+            if entry.get("status") != "available" or entry.get("detail") != "":
+                return False
+            if set(entry) != {
+                "status",
+                "detail",
+                "records",
+                "arms",
+                "contrasts",
+                "verbatim",
+                "operating_characteristics",
+                "jitter_grid",
+                "n_fixtures",
+            }:
+                return False
+            records = entry["records"]
+            if type(records) is not list or len(records) != n_fixtures:
+                return False
+            total_records += len(records)
+            records_bytes += len(
+                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            )
+            if records_bytes > _hfm.MAX_RECORDS_BYTES:
+                return False
+            own_bos = donor_bos = None
+            for record, fixture_id in zip(records, fixture_ids, strict=True):
+                if type(record) is not dict or set(record) != {
+                    "fixture",
+                    "expected_digest",
+                    "own_bos_digest",
+                    "donor_bos_digest",
+                    "segment_digests",
+                    "hybrid_digests",
+                    "arm_tokens",
+                    "id_digests",
+                    "cells",
+                    "cell_details",
+                }:
+                    return False
+                if record["fixture"] != fixture_id:
+                    return False
+                if not _digest_ok(record["expected_digest"]):
+                    return False
+                if own_bos is None:
+                    own_bos = record["own_bos_digest"]
+                    donor_bos = record["donor_bos_digest"]
+                elif record["own_bos_digest"] != own_bos or record["donor_bos_digest"] != donor_bos:
+                    return False
+                if not _digest_ok(own_bos) or not _digest_ok(donor_bos):
+                    return False
+                for mapping in (
+                    record["segment_digests"],
+                    record["hybrid_digests"],
+                    record["id_digests"],
+                ):
+                    if type(mapping) is not dict or set(mapping) != set(_hfm.ARM_KEYS):
+                        return False
+                    if any(not _digest_ok(digest) for digest in mapping.values()):
+                        return False
+                arm_tokens = record["arm_tokens"]
+                cells = record["cells"]
+                details = record["cell_details"]
+                for mapping in (arm_tokens, cells, details):
+                    if type(mapping) is not dict or set(mapping) != set(_hfm.ARM_KEYS):
+                        return False
+                for arm in _hfm.ARM_KEYS:
+                    tokens = arm_tokens[arm]
+                    if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                        return False
+                    detail = details[arm]
+                    if detail not in _hfm.CELL_DETAILS:
+                        return False
+                    cell = cells[arm]
+                    if cell is None:
+                        if detail == "":
+                            return False
+                        continue
+                    if detail != "":
+                        return False
+                    if type(cell) is not dict or set(cell) != {
+                        "verdict",
+                        "boundary_found",
+                        "boundary_text_match",
+                        "input_tokens",
+                        "answer_digest",
+                    }:
+                        return False
+                    if (
+                        type(cell["verdict"]) is not bool
+                        or type(cell["boundary_found"]) is not bool
+                    ):
+                        return False
+                    if (
+                        cell["boundary_text_match"] is not None
+                        and type(cell["boundary_text_match"]) is not bool
+                    ):
+                        return False
+                    if cell["input_tokens"] != tokens:
+                        return False
+                    digest = cell["answer_digest"]
+                    if digest is not None and not _digest_ok(digest):
+                        return False
+                    verdict = (digest == record["expected_digest"]) and cell["boundary_found"]
+                    if cell["verdict"] != verdict:
+                        return False
+            expected = _hfm.aggregate_candidate(records)
+            for key, val in expected.items():
+                if entry.get(key) != val:
+                    return False
+            if entry.get("n_fixtures") != n_fixtures:
+                return False
+            by_candidate[name] = records
+            for contrast in _hfm.CONTRASTS:
+                rate = expected["contrasts"][contrast]["random_fire_rate"]
+                if rate is not None:
+                    rates.append(rate)
+        if total_records > 2400:
+            return False
+        conditions = {arm: _hfm.arm_selection(by_candidate, arm) for arm in _hfm.HEADLINE_ARMS}
+        if value.get("conditions") != conditions:
+            return False
+        selection = {
+            contrast: _hfm.winner_headline(conditions["own"], conditions[contrast])
+            for contrast in _hfm.CONTRASTS
+        }
+        if value.get("selection") != selection:
+            return False
+        if value.get("flips") != _hfm.primary_flips(conditions, primary):
+            return False
+        if value.get("familywise") != _hfm.familywise_expectation(rates):
+            return False
+        if value.get("n_candidates") != len(candidates):
+            return False
+        return bool(value.get("n_fixtures") == n_fixtures)
+
     def _or_rotation_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_rotation: exact top-level
         # shape, the protocol rebuilt through the producer
@@ -7200,6 +7468,18 @@ def oracle_diff_reports(
         _o_idist_available = "neither"
     _o_idist_asymmetric = _o_idist_available not in ("both", "neither")
 
+    _hf_old_ok = _or_historyframe_valid(old.get("history_frame"))
+    _hf_new_ok = _or_historyframe_valid(new.get("history_frame"))
+    if _hf_old_ok and _hf_new_ok:
+        _o_hf_available = "both"
+    elif _hf_old_ok:
+        _o_hf_available = "old"
+    elif _hf_new_ok:
+        _o_hf_available = "new"
+    else:
+        _o_hf_available = "neither"
+    _o_hf_asymmetric = _o_hf_available not in ("both", "neither")
+
     _rt_old_ok = _or_rotation_valid(old.get("rotation"))
     _rt_new_ok = _or_rotation_valid(new.get("rotation"))
     if _rt_old_ok and _rt_new_ok:
@@ -7437,6 +7717,8 @@ def oracle_diff_reports(
         "canonical_form_asymmetric": _o_cform_asymmetric,
         "instruction_distance_changed": False,
         "instruction_distance_asymmetric": _o_idist_asymmetric,
+        "history_frame_changed": False,
+        "history_frame_asymmetric": _o_hf_asymmetric,
         "choice_audit_changed": False,
         "choice_audit_asymmetric": _o_ca_asymmetric,
         "precision_changed": False,
@@ -7502,6 +7784,7 @@ def oracle_diff_reports(
         "placement": {"available": _o_pl_available, "changed": False},
         "canonical_form": {"available": _o_cform_available, "changed": False},
         "instruction_distance": {"available": _o_idist_available, "changed": False},
+        "history_frame": {"available": _o_hf_available, "changed": False},
         "choice_audit": {"available": _o_ca_available, "changed": False},
         "precision": {"available": _o_pr_available, "changed": False},
         "confidence": {"available": _o_cn_available, "changed": False},

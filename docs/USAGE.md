@@ -2905,6 +2905,95 @@ expected at the shipped estimator's mean, worst case about
 the probe never affects selection, and the stage never
 fails the run.
 
+### 8.57 History frame (`run --history-frame`)
+
+```sh
+model-protocol-lab run ... --history-frame
+```
+
+This probe prepends the frozen six-turn synthetic history
+to every search fixture and reframes only that prepended
+segment — the fixture's own messages are never reframed.
+(Naming audit, cycle 219: the flag name's plain reading
+understates that construction, so this disclosure is the
+section's first sentence by design, as it is in the CLI
+help and in the report section.) A maintainer migrating a
+deployment from one template family to another learns, per
+candidate family on their local checkpoint, whether a
+conversation history still rendered in the old family's
+framing can be trusted before the final turn, or must be
+re-rendered first — and where the panel cannot distinguish
+the framings, it says so instead of guessing.
+
+Per candidate, the prepended segment is rendered in four
+arms: `own` (the candidate's own framing of the history
+segment), `foreign_chatml` and `foreign_llama3` (the
+segment in the frozen chatml / llama3 framings), and a
+descriptive `verbatim_chatml` arm that differs from
+`foreign_chatml` only in the leading bos string, so its
+discordance against `foreign_chatml` is the
+bos-substitution share. The tail, the prompt-initial bos,
+and the open suffix are always the candidate's own, and the
+own arm's render is byte-identical to the synth-history
+`history_6` render of the same messages (verdict-identity
+with the synth-history stage is not claimed: that stage
+runs namespaced ids, hence different request seeds — this
+stage's baseline is its own arm). When the candidate's bos
+equals chatml's, the verbatim arm is byte-identical to its
+twin and is recorded inapplicable for that candidate,
+counted and printed, never read as a bos share of zero;
+there is no `verbatim_llama3`, and that single-donor
+asymmetry is scope, not an omission.
+
+The scorer is the run's own verdict — byte-exact answer
+conjoined with boundary presence — per cell, one greedy
+generation per (candidate, arm, fixture) through a carrier
+format holding the reframed prompt. Per candidate per
+foreign framing, over paired completed render-divergent
+ids-divergent fixtures (render-identical fixtures are
+excluded and counted, and a contrast render-identical on
+every fixture is inapplicable for that candidate;
+ids-identical cases are likewise excluded, gated on the
+records' per-arm token-id digests, and a same-ids verdict
+flip is recorded as a determinism finding): n paired,
+a = own-only passes, b = foreign-only passes. n below 10 is
+`insufficient`, no discordance is
+`no_discordance_observed`, fewer than 6 discordant is
+`below_threshold`, an even split is `discordant_balanced`,
+and otherwise a two-sided exact McNemar p below 0.05 is
+`discordant_asymmetric` — the only falsification label.
+Discordant pairs are decomposed into boundary-only,
+exact-only, and mixed counts, and ungated discordance over
+all paired completed fixtures prints as a sensitivity. The
+exact random-labeller fire rate at the run's own n prints
+beside every classification (3.6 percent at n = 100), and
+the family-wise expectation is computed from those rates
+over the run's decisions (1.76 expected false labels over
+48 decisions at n = 100 under the random null). Under
+symmetric two-arm jitter the fire rate is 0.04 percent at
+epsilon 0.01, 0.48 percent at 0.02, and 2.13 percent at
+0.05. Power at a 25-point drop is 0.99 at n = 100 but a
+coin flip at n = 30, so on small fixture sets
+`below_threshold` is weak evidence, never invariance. The
+encoding stratum of each donor's framing literals
+(all-single-token, all-fragmented, or mixed, with the
+per-literal table when mixed) prints beside the
+classifications and is compared in diff reports. Per-arm
+conservative selection is recomputed on the common
+completed set, with winner headlines per contrast; flips
+against the primary run pool history presence with frame
+and are labelled as such, never the headline. The label
+certifies string-level discordance for these named
+framings and this frozen history, on this checkpoint — not
+a mechanism: arm-level batch composition and numerics
+channels correlated with the foreign prompts' length are
+named residuals. The full contract is in
+`docs/HISTORYFRAME_DESIGN.md`. Costs 4 generations per
+candidate per search fixture (9,600 at the legal maximum:
+24 candidates x 100 fixtures x 4; 7,200 headline).
+Informational only: the probe never affects selection,
+and the stage never fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

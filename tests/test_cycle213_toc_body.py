@@ -33,6 +33,8 @@ from tests.test_cycle212_negation import _payload as _negation_payload
 from tests.test_cycle212_negation import _WordBackend
 from tests.test_cycle218_instructiondistance import _payload as _instruction_distance_payload
 from tests.test_cycle218_instructiondistance import _WordBackend as _IdWordBackend
+from tests.test_cycle219_historyframe import _payload as _history_frame_payload
+from tests.test_cycle219_historyframe import _WordBackend as _HfWordBackend
 
 _SECTION_ID_RE = re.compile(r'<section[^>]*? id="([^"]+)"')
 
@@ -53,6 +55,7 @@ def _populated_result():
     result["canonical_form"] = _canonical_payload()
     result["negation"] = _negation_payload(_WordBackend("negation_drop"))
     result["instruction_distance"] = _instruction_distance_payload(_IdWordBackend("drop"))
+    result["history_frame"] = _history_frame_payload(_HfWordBackend("frame_drop"))
     return result
 
 
@@ -80,6 +83,16 @@ class InstructionDistanceBodyTests(unittest.TestCase):
         self.assertGreater(html.index('id="instruction-distance"'), html.index("</nav>"))
 
 
+class HistoryFrameBodyTests(unittest.TestCase):
+    def test_history_frame_body_present_in_rendered_report(self):
+        html = reporting_mod.render_html(_populated_result())
+        self.assertIn('href="#history-frame"', html)
+        self.assertIn('<section class="card" id="history-frame">', html)
+        # Body-only copy from inside the section.
+        self.assertIn("verdict-identity with the synth-history stage is not claimed", html)
+        self.assertGreater(html.index('id="history-frame"'), html.index("</nav>"))
+
+
 class TocBodyCorrespondenceTests(unittest.TestCase):
     def test_populated_sections_match_toc_exactly(self):
         html = reporting_mod.render_html(_populated_result())
@@ -89,6 +102,7 @@ class TocBodyCorrespondenceTests(unittest.TestCase):
         self.assertIn("canonical-form", hrefs)
         self.assertIn("negation", hrefs)
         self.assertIn("instruction-distance", hrefs)
+        self.assertIn("history-frame", hrefs)
         # Every link lands on a rendered section, every rendered
         # section is linked, in the same order.
         self.assertEqual(hrefs, body_ids)
