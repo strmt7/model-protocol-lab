@@ -1381,7 +1381,7 @@ class FailClosedCoverageTests(unittest.TestCase):
     """Cover fail-closed defensive paths the wave-6 verifier found uncovered."""
 
     def test_verify_protocol_rejects_tampered_hashes(self):
-        protocol, backend, fixtures = _protocol()
+        _, backend, fixtures = _protocol()
         p165 = sn.freeze_surface_noise_protocol(
             backend_fingerprint=backend.fingerprint, fixtures=fixtures
         )

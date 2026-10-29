@@ -16401,7 +16401,7 @@ class DiffreportsAuditTest(unittest.TestCase):
                 ]
             )
 
-        old, new = self._pair(change)
+        _old, new = self._pair(change)
         diff = diffreports.diff_reports(new, new)  # sanity: self-diff identical
         self.assertTrue(diff["summary"]["identical"])
         old2, new2 = self._pair()
