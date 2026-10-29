@@ -508,12 +508,14 @@ class StageTests(unittest.TestCase):
         self.assertEqual(beta["reserved"]["n_collision"], 13)
 
     def test_encode_regime_blind_configuration_is_intact(self):
-        """Test encode regime blind configuration is intact."""
+        """Test encode regime blind configuration is intact.
 
-        # R3's other regime: the boundary decodes to "<|im_end|>" but the
-        # tokenizer NEVER emits the reserved id from text (spells it in
-        # ordinals), so the detector is blind to the marker at text
-        # level and every verbatim answer survives intact.
+        R3's other regime: the boundary decodes to "<|im_end|>" but the
+        tokenizer NEVER emits the reserved id from text (spells it in
+        ordinals), so the detector is blind to the marker at text
+        level and every verbatim answer survives intact.
+        """
+
         class BlindBackend:
             """Blind backend."""
 
@@ -569,10 +571,12 @@ class StageTests(unittest.TestCase):
         self.assertFalse(profile["available"])
 
     def test_roundtrip_exclusion_axis(self):
-        """Test roundtrip exclusion axis."""
+        """Test roundtrip exclusion axis.
 
-        # R7: a lossy decode excludes fixtures from the reserved arm's
-        # denominators instead of scoring them against the detector.
+        R7: a lossy decode excludes fixtures from the reserved arm's
+        denominators instead of scoring them against the detector.
+        """
+
         class LossyBackend(OrdinalBackend):
             """Lossy backend."""
 

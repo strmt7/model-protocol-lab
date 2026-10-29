@@ -1129,10 +1129,12 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(diffreports._valid_choiceaudit(self._tampered(mutate)))
 
     def test_unmapped_primary_decision_rejected(self):
-        """Test unmapped primary decision rejected."""
+        """Test unmapped primary decision rejected.
 
-        # The stored primary values are the mapped ones; a stored
-        # "held_out_failed" recomputes to "selected" and mismatches.
+        The stored primary values are the mapped ones; a stored
+        "held_out_failed" recomputes to "selected" and mismatches.
+        """
+
         def mutate(p):
             """Mutate."""
             p["method_comparison"]["primary_decision"] = "held_out_failed"

@@ -2026,12 +2026,14 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
         self.assertGreaterEqual(calls["n"], 1)
 
     def test_stage_cancel_inside_candidate_loop(self):
-        """Test stage cancel inside candidate loop."""
+        """Test stage cancel inside candidate loop.
 
-        # The event is set by the LAST cell generation of dst-a's
-        # fx-copy case, so no per-cell check remains to catch it:
-        # the next case's loop-head check must fire. (fx-vac, the
-        # last case, is vacuous and never generates.)
+        The event is set by the LAST cell generation of dst-a's
+        fx-copy case, so no per-cell check remains to catch it:
+        the next case's loop-head check must fire. (fx-vac, the
+        last case, is vacuous and never generates.)
+        """
+
         class _LateCancelBackend(_WordBackend):
             """Late cancel backend."""
 

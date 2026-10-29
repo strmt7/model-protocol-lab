@@ -1714,11 +1714,13 @@ class CoverageGapTests2(unittest.TestCase):
         self.assertEqual(verdicts, ("abstain",) * len(fixtures))
 
     def test_evaluate_abstains_on_decode_failure(self):
-        """Test evaluate abstains on decode failure."""
+        """Test evaluate abstains on decode failure.
 
-        # The answer-decode path (not generate's internal decode): a
-        # backend whose generate avoids self.decode, but whose decode
-        # raises on the answer ids.
+        The answer-decode path (not generate's internal decode): a
+        backend whose generate avoids self.decode, but whose decode
+        raises on the answer ids.
+        """
+
         class BadAnswerDecode(sn.SelfTestBackend):
             """Bad answer decode."""
 

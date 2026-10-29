@@ -355,10 +355,12 @@ def _gen_valid_doc(rng, seq):
 
 
 def _base_doc():
-    """Base doc."""
+    """Base doc.
 
-    # Note: the two fixtures differ in every discipline dimension (id, group
-    # AND message inputs) so the base document is valid.
+    Note: the two fixtures differ in every discipline dimension (id, group
+    AND message inputs) so the base document is valid.
+    """
+
     def fixture(ident, group, content):
         """Fixture."""
         return {

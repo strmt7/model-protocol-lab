@@ -817,12 +817,14 @@ class DiffValidatorTests(unittest.TestCase):
         self.assertTrue(diff["changed"])
 
     def test_diff_reports_wires_section(self):
-        """Test diff reports wires section."""
+        """Test diff reports wires section.
 
-        # diff_reports needs the full report shape (decision,
-        # search summaries, held-out summary); the section
-        # wiring is proved by identical reports that differ in
-        # nothing, then in canonical_form only.
+        diff_reports needs the full report shape (decision,
+        search summaries, held-out summary); the section
+        wiring is proved by identical reports that differ in
+        nothing, then in canonical_form only.
+        """
+
         def _report(payload):
             """Report."""
             return {

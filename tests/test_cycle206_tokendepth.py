@@ -289,12 +289,14 @@ class TokenSweepTests(unittest.TestCase):
         self.assertEqual(result["flips_at"], [1])
 
     def test_precheck_skips_natively_failing_prompts(self) -> None:
-        """Test precheck skips natively failing prompts."""
+        """Test precheck skips natively failing prompts.
 
-        # A prompt whose encoding fails natively carries no
-        # truncation-specific fact: the pre-run check skips it (the
-        # except branch) and the minimum comes from the prompts that
-        # do encode, while the sweep itself still completes.
+        A prompt whose encoding fails natively carries no
+        truncation-specific fact: the pre-run check skips it (the
+        except branch) and the minimum comes from the prompts that
+        do encode, while the sweep itself still completes.
+        """
+
         class BoomBackend(ScriptedBackend):
             """Boom backend."""
 
@@ -328,10 +330,12 @@ class TokenSweepTests(unittest.TestCase):
         self.assertEqual(result["depths"][0]["status"], "applied")
 
     def test_suffix_count_none_when_suffix_unencodable(self) -> None:
-        """Test suffix count none when suffix unencodable."""
+        """Test suffix count none when suffix unencodable.
 
-        # The suffix annotation degrades to None, never a sweep
-        # failure, when the suffix alone does not encode.
+        The suffix annotation degrades to None, never a sweep
+        failure, when the suffix alone does not encode.
+        """
+
         class SuffixFailBackend(ScriptedBackend):
             """Suffix fail backend."""
 

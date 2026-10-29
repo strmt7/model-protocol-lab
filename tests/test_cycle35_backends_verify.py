@@ -1843,10 +1843,12 @@ class TestEmulateHfStopString(unittest.TestCase):
         self.assertTrue(calls)
 
     def test_byte_path_oov_marker_kills_walk(self):
-        """Test byte path oov marker kills walk."""
+        """Test byte path oov marker kills walk.
 
-        # stop=b"bc": [b"b", OOV, b"c"] must not fire; the OOV marker kills
-        # the walk where a transparent empty would pass through.
+        stop=b"bc": [b"b", OOV, b"c"] must not fire; the OOV marker kills
+        the walk where a transparent empty would pass through.
+        """
+
         def token_bytes(tid):
             """Token bytes."""
             if tid >= 256:

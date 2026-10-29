@@ -534,13 +534,15 @@ class Cycle15MutateTests(unittest.TestCase):
         )
 
     def test_cycle15_branch_dedup_no_collision(self) -> None:
-        """Test cycle15 branch dedup no collision."""
+        """Test cycle15 branch dedup no collision.
 
-        # Each branch open_suffix must be genuinely new -- i.e. its
-        # local_repairs dedup key must differ from every key already
-        # present, or candidates() would silently drop it. This mirrors the
-        # "cannot collide with local_repairs' dedup keys" notes in
-        # catalog.candidates().
+        Each branch open_suffix must be genuinely new -- i.e. its
+        local_repairs dedup key must differ from every key already
+        present, or candidates() would silently drop it. This mirrors the
+        "cannot collide with local_repairs' dedup keys" notes in
+        catalog.candidates().
+        """
+
         def _key(fmt: Format) -> tuple[object, ...]:
             """Key."""
             return (

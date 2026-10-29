@@ -980,11 +980,13 @@ class EdgeCaseTests(unittest.TestCase):
         self.assertEqual(rep["status"], "unavailable")
 
     def test_noise_repair_counted(self):
-        """Test noise repair counted."""
+        """Test noise repair counted.
 
-        # Backend fails baseline but a variant repairs: use a backend that
-        # answers BLUE only when the input has double spaces (whitespace
-        # variant repairs a fail baseline).
+        Backend fails baseline but a variant repairs: use a backend that
+        answers BLUE only when the input has double spaces (whitespace
+        variant repairs a fail baseline).
+        """
+
         class RepairBackend(MarkerBackend):
             """Repair backend."""
 
@@ -1011,9 +1013,11 @@ class EdgeCaseTests(unittest.TestCase):
         self.assertIsNotNone(rep["noise_repair_rate"])
 
     def test_abstain_baseline_recorded(self):
-        """Test abstain baseline recorded."""
+        """Test abstain baseline recorded.
 
-        # Mix: one fixture passes, one abstains (encode fails on its render).
+        Mix: one fixture passes, one abstains (encode fails on its render).
+        """
+
         class PartialBackend(MarkerBackend):
             """Partial backend."""
 
@@ -1955,10 +1959,12 @@ class FailClosedCoverageTests(unittest.TestCase):
         )
 
     def test_content_encode_failed_fail_baseline_branch(self):
-        """Test content encode failed fail baseline branch."""
+        """Test content encode failed fail baseline branch.
 
-        # The encode-failed handler's `if base_v == "pass"` false arc:
-        # a fail-baseline fixture is recorded without touching n_unevaluable.
+        The encode-failed handler's `if base_v == "pass"` false arc:
+        a fail-baseline fixture is recorded without touching n_unevaluable.
+        """
+
         class ContentFailBackend(MarkerBackend):
             """Content fail backend."""
 
@@ -2016,11 +2022,13 @@ class FailClosedCoverageTests(unittest.TestCase):
         self.assertEqual(rep["n_unevaluable"], 1)
 
     def test_noise_repair_empty_evaluable_branch(self):
-        """Test noise repair empty evaluable branch."""
+        """Test noise repair empty evaluable branch.
 
-        # Fail-baseline fixture whose variants are all no-ops (constant
-        # tokenizer): variant_verdicts is empty, so the `if evaluable` false
-        # arc is taken — no repair-denominator contribution.
+        Fail-baseline fixture whose variants are all no-ops (constant
+        tokenizer): variant_verdicts is empty, so the `if evaluable` false
+        arc is taken — no repair-denominator contribution.
+        """
+
         class ConstantWrongBackend(MarkerBackend):
             """Constant wrong backend."""
 

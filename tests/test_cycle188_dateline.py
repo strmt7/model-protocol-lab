@@ -575,11 +575,13 @@ class TestValidatorBattery(unittest.TestCase):
         self._break(lambda p: p["protocol"].__setitem__("extra", 1))
 
     def test_arm_table_weekday_templated(self):
-        """Test arm table weekday templated."""
+        """Test arm table weekday templated.
 
-        # The anchor-weekday attack: every weekday arm rendered
-        # with Wednesday. The validator's own calendar recompute
-        # must reject the table.
+        The anchor-weekday attack: every weekday arm rendered
+        with Wednesday. The validator's own calendar recompute
+        must reject the table.
+        """
+
         def mutate(p):
             """Mutate."""
             p["protocol"]["arm_dates"]["leap_weekday_iso"] = "Wednesday, 2028-02-29"

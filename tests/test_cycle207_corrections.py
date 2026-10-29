@@ -161,10 +161,12 @@ class NestedPrefillRefusalTests(unittest.TestCase):
         self.assertEqual(wrapped.encode("HELLO"), (72, 69, 76))
 
     def test_cyclic_inner_chain_terminates(self) -> None:
-        """Test cyclic inner chain terminates."""
+        """Test cyclic inner chain terminates.
 
-        # A pathological _inner loop must terminate construction
-        # instead of hanging it; with no prefill anywhere it constructs.
+        A pathological _inner loop must terminate construction
+        instead of hanging it; with no prefill anywhere it constructs.
+        """
+
         class Loopy:
             """Loopy."""
 

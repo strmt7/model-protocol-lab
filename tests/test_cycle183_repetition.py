@@ -822,11 +822,13 @@ class TestStage(unittest.TestCase):
         self.assertTrue(diffreports._valid_repetition(payload))
 
     def test_negative_delta_overshoot_is_unmatchable(self):
-        """Test negative delta overshoot is unmatchable."""
+        """Test negative delta overshoot is unmatchable.
 
-        # The recorded x1 is longer than the fresh x2 render (a
-        # squash tokenizer): the empty pad already overshoots the
-        # x2 length, so no filler search can match.
+        The recorded x1 is longer than the fresh x2 render (a
+        squash tokenizer): the empty pad already overshoots the
+        x2 length, so no filler search can match.
+        """
+
         class _SquashBackend(_WordBackend):
             """Squash backend."""
 

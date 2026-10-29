@@ -510,11 +510,13 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_multiturn(self._broken(mutate)))
 
     def test_record_values_forged(self):
-        """Test record values forged."""
+        """Test record values forged.
 
-        # The generator mirror regenerates the set from the
-        # seed; a stored-values forgery cannot validate (the
-        # numform F2 lesson).
+        The generator mirror regenerates the set from the
+        seed; a stored-values forgery cannot validate (the
+        numform F2 lesson).
+        """
+
         def mutate(payload):
             """Mutate."""
             record = payload["candidates"]["mt-a"]["records"][0]

@@ -777,14 +777,16 @@ class DiffReportsSweep43(LeakAsserts):
         self.assertNoCanary(render_summary(diff), "diff-reports summary (fixture-set drift)")
 
     def test_held_out_drift_carries_ids_only(self) -> None:
-        """Test held out drift carries ids only."""
+        """Test held out drift carries ids only.
 
-        # The probe run selects no winner, so held_out evidence is absent
-        # from the raw run_experiment output; fabricate it on both sides
-        # (diff_reports only reads exact_match/boundary_found verdicts,
-        # fixture ids, and summaries) with the canary planted in an
-        # observation's answer and input_ids -- the ultimate reduction
-        # proof: even raw content in an observation must not reach the diff.
+        The probe run selects no winner, so held_out evidence is absent
+        from the raw run_experiment output; fabricate it on both sides
+        (diff_reports only reads exact_match/boundary_found verdicts,
+        fixture ids, and summaries) with the canary planted in an
+        observation's answer and input_ids -- the ultimate reduction
+        proof: even raw content in an observation must not reach the diff.
+        """
+
         def with_held_out(report: dict, extra: bool) -> dict:
             """With held out."""
             observations = [

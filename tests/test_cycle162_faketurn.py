@@ -370,10 +370,12 @@ class FaketurnStageTests(unittest.TestCase):
             faketurn_stage(backend, fmts, cases, boundary=BOUNDARY, seed=-1)
 
     def test_stage_cell_degrades_not_stage(self):
-        """Test stage cell degrades not stage."""
+        """Test stage cell degrades not stage.
 
-        # A backend whose generate always errors: every cell degrades to
-        # an unsupported marker, the stage itself still returns its shape.
+        A backend whose generate always errors: every cell degrades to
+        an unsupported marker, the stage itself still returns its shape.
+        """
+
         class BrokenBackend(FakeTurnScriptedBackend):
             """Broken backend."""
 
@@ -929,9 +931,11 @@ class DiffFaketurnTests(unittest.TestCase):
         self.assertEqual(diff4["available"], "neither")
 
     def test_diff_feeds_identical(self):
-        """Test diff feeds identical."""
+        """Test diff feeds identical.
 
-        # A faketurn-only change flips identical; asymmetric probe flips it too.
+        A faketurn-only change flips identical; asymmetric probe flips it too.
+        """
+
         def report(**kwargs):
             """Report."""
             return {

@@ -181,13 +181,15 @@ class LingThinkingOffTests(unittest.TestCase):
         )
 
     def test_ling_thinking_off_dedup_no_collision(self) -> None:
-        """Test ling thinking off dedup no collision."""
+        """Test ling thinking off dedup no collision.
 
-        # The thinking-off open_suffix must be genuinely new -- i.e. its
-        # local_repairs dedup key must differ from every key already
-        # present, or candidates() would silently drop it. This mirrors the
-        # "cannot collide with local_repairs' dedup keys" note in
-        # catalog.candidates().
+        The thinking-off open_suffix must be genuinely new -- i.e. its
+        local_repairs dedup key must differ from every key already
+        present, or candidates() would silently drop it. This mirrors the
+        "cannot collide with local_repairs' dedup keys" note in
+        catalog.candidates().
+        """
+
         def _key(fmt: Format) -> tuple[object, ...]:
             """Key."""
             return (

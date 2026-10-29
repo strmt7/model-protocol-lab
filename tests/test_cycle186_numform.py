@@ -1182,14 +1182,16 @@ class TestValidatorBattery(unittest.TestCase):
         }
 
     def test_fabricated_set_rejected(self):
-        """Test fabricated set rejected."""
+        """Test fabricated set rejected.
 
-        # Cycle 187 (wave-8 F2): the validator regenerates the
-        # set from the seed. Swapping one value for a different
-        # locally-valid one in every candidate -- with aggregates
-        # recomputed and both protocol hashes recomputed the old
-        # records-derived way -- validated before the fix and
-        # must not validate now.
+        Cycle 187 (wave-8 F2): the validator regenerates the
+        set from the seed. Swapping one value for a different
+        locally-valid one in every candidate -- with aggregates
+        recomputed and both protocol hashes recomputed the old
+        records-derived way -- validated before the fix and
+        must not validate now.
+        """
+
         def swap(payload):
             """Swap."""
             for entry in payload["candidates"].values():
@@ -1211,12 +1213,14 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_numform(self._tampered(swap)))
 
     def test_seed_relabel_rejected(self):
-        """Test seed relabel rejected."""
+        """Test seed relabel rejected.
 
-        # The seed is part of the instrument binding: genuine
-        # seed-0 records relabelled as seed 999 (with the
-        # relabelled seed's true generator hash and a recomputed
-        # fingerprint) are not seed 999's payload.
+        The seed is part of the instrument binding: genuine
+        seed-0 records relabelled as seed 999 (with the
+        relabelled seed's true generator hash and a recomputed
+        fingerprint) are not seed 999's payload.
+        """
+
         def relabel(payload):
             """Relabel."""
             payload["protocol"]["seed"] = 999
@@ -1231,12 +1235,14 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertFalse(_valid_numform(self._tampered(relabel)))
 
     def test_grouping_delta_relation(self):
-        """Test grouping delta relation."""
+        """Test grouping delta relation.
 
-        # Cycle 187 (wave-8 F4): each stored delta must equal
-        # its form's mean minus the plain mean (the producer's
-        # paired-difference mean over the same operand multiset),
-        # not merely be a plausible number.
+        Cycle 187 (wave-8 F4): each stored delta must equal
+        its form's mean minus the plain mean (the producer's
+        paired-difference mean over the same operand multiset),
+        not merely be a plausible number.
+        """
+
         def inconsistent(payload):
             """Inconsistent."""
             payload["grouping"]["form_token_means"] = {
@@ -1325,13 +1331,15 @@ class TestValidatorBattery(unittest.TestCase):
         self.assertEqual(digest, produced_digest)
 
     def test_cross_candidate_answer_tokens(self):
-        """Test cross candidate answer tokens."""
+        """Test cross candidate answer tokens.
 
-        # Cycle 187 (wave-8 F4): expected_answer_tokens is
-        # measured once per run, so candidates must agree on it
-        # per record; a one-candidate edit (with that candidate's
-        # aggregates honestly recomputed) is a construction
-        # disagreement, not a per-candidate fact.
+        Cycle 187 (wave-8 F4): expected_answer_tokens is
+        measured once per run, so candidates must agree on it
+        per record; a one-candidate edit (with that candidate's
+        aggregates honestly recomputed) is a construction
+        disagreement, not a per-candidate fact.
+        """
+
         def mismatch(payload):
             """Mismatch."""
             names = sorted(payload["candidates"])

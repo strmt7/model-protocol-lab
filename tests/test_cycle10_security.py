@@ -254,12 +254,14 @@ class StopTextBoundTests(unittest.TestCase):
         self.assertEqual(str(ctx.exception), "stop_text_too_long")
 
     def test_second_hop_hostile_decode_covered(self) -> None:
-        """Test second hop hostile decode covered."""
+        """Test second hop hostile decode covered.
 
-        # cli.py's diagnosis path passes backend.decode(winner_boundary)
-        # into divergence_section_data as the stop text; a hostile
-        # tokenizer returning a huge string must hit the same validation
-        # (the call site degrades to "section omitted", never hangs).
+        cli.py's diagnosis path passes backend.decode(winner_boundary)
+        into divergence_section_data as the stop text; a hostile
+        tokenizer returning a huge string must hit the same validation
+        (the call site degrades to "section omitted", never hangs).
+        """
+
         class HostileDecodeBackend(LinearStubBackend):
             """Hostile decode backend."""
 
