@@ -704,14 +704,16 @@ class TestStage(unittest.TestCase):
         self.assertEqual(stage["detail"], "cancelled")
 
     def test_cell_returning_neither_is_tolerated(self):
-        """Test cell returning neither is tolerated."""
+        """Test cell returning neither is tolerated.
 
-        # _placement_cell's contract sets exactly one of
-        # (detail, cell); the stage's elif structure is the
-        # defensive mirror of the needle stage, proven with
-        # the cell stubbed to return neither -- the record
-        # keeps an empty cell the validator then rejects,
-        # which is the fail-closed division of labour.
+        _placement_cell's contract sets exactly one of
+        (detail, cell); the stage's elif structure is the
+        defensive mirror of the needle stage, proven with
+        the cell stubbed to return neither -- the record
+        keeps an empty cell the validator then rejects,
+        which is the fail-closed division of labour.
+        """
+
         def neither(*args, **kwargs):
             """Neither."""
             return None, None

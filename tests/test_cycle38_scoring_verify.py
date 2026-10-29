@@ -1021,9 +1021,11 @@ class TestProviderCode(unittest.TestCase):
                 self.assertEqual(_provider_code(ValueError(*args)), "forward_failed")
 
     def test_str_subclass_code_does_not_pass(self) -> None:
-        """Test str subclass code does not pass."""
+        """Test str subclass code does not pass.
 
-        # Conservative: only exact-str codes pass, never subclasses.
+        Conservative: only exact-str codes pass, never subclasses.
+        """
+
         class SneakyStr(str):
             """Sneaky str."""
 

@@ -1402,10 +1402,12 @@ class RoundTwoFixTests(unittest.TestCase):
             run_experiment(backend, (BASE,), split(), boundary=ids("|"), cancel=123)
 
     def test_run_experiment_rejects_non_string_fingerprint(self):
-        """Test run experiment rejects non string fingerprint."""
+        """Test run experiment rejects non string fingerprint.
 
-        # A protocol-violating backend must fail fast, before any compute,
-        # instead of exploding in json.dumps inside save_report.
+        A protocol-violating backend must fail fast, before any compute,
+        instead of exploding in json.dumps inside save_report.
+        """
+
         class BadFingerprintBackend(FakeBackend):
             """Bad fingerprint backend."""
 
@@ -1598,10 +1600,12 @@ class RoundThreeFixTests(unittest.TestCase):
             self.assertEqual(_read_json(good), {"a": 1})
 
     def test_run_experiment_rejects_backend_missing_fingerprint(self):
-        """Test run experiment rejects backend missing fingerprint."""
+        """Test run experiment rejects backend missing fingerprint.
 
-        # A backend with no fingerprint attribute at all raised a raw
-        # AttributeError; it must fail fast with the documented ValueError.
+        A backend with no fingerprint attribute at all raised a raw
+        AttributeError; it must fail fast with the documented ValueError.
+        """
+
         class NoFingerprint:
             """No fingerprint."""
 

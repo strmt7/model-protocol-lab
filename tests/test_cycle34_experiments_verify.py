@@ -1206,9 +1206,11 @@ class TestBudgetFrontier(unittest.TestCase):
             X.budget_frontier(search + other, **good)
 
     def test_tie_is_ambiguous_not_first_winner(self):
-        """Test tie is ambiguous not first winner."""
+        """Test tie is ambiguous not first winner.
 
-        # Two identical all-pass candidates: the conservative rule abstains.
+        Two identical all-pass candidates: the conservative rule abstains.
+        """
+
         def entry(name):
             """Entry."""
             return {

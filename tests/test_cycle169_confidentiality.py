@@ -467,10 +467,12 @@ class StageTests(unittest.TestCase):
         self.assertIsNotNone(stage["per_candidate"]["beta"])
 
     def test_detection_uses_full_output_not_truncated_answer(self):
-        """Test detection uses full output not truncated answer."""
+        """Test detection uses full output not truncated answer.
 
-        # R7: the marker is emitted AFTER the boundary token; the
-        # truncated answer would hide it, the full decode must not.
+        R7: the marker is emitted AFTER the boundary token; the
+        truncated answer would hide it, the full decode must not.
+        """
+
         class LateLeakBackend(ScriptedConfidentialityBackend):
             """Late leak backend."""
 

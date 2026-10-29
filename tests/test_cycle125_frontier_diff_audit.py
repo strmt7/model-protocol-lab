@@ -118,12 +118,14 @@ class TestDiffFrontiers(unittest.TestCase):
         )
 
     def test_adjacent_spans_merge(self) -> None:
-        """Test adjacent spans merge."""
+        """Test adjacent spans merge.
 
-        # Mutation-gate pin: _diff_spans must merge adjacent differing
-        # spans whose (old, new) values agree. The `budget - 2` mutant
-        # breaks the adjacency check, leaving two spans [2, 2] and
-        # [3, 3] instead of the merged [2, 3].
+        Mutation-gate pin: _diff_spans must merge adjacent differing
+        spans whose (old, new) values agree. The `budget - 2` mutant
+        breaks the adjacency check, leaving two spans [2, 2] and
+        [3, 3] instead of the merged [2, 3].
+        """
+
         def old_at(budget: int) -> str:
             """Old at."""
             return "a"

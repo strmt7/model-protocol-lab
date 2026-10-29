@@ -1046,11 +1046,13 @@ class TestScreeningAndConditions(unittest.TestCase):
         self.assertEqual(rotation.shared_live_fixtures({}), frozenset())
 
     def test_selection_withheld_on_mismatched_exactness(self):
-        """Test selection withheld on mismatched exactness."""
+        """Test selection withheld on mismatched exactness.
 
-        # The per-arm exactness gate: if one candidate's rot_2
-        # renders are not token-exact, the rot_2 selection is
-        # withheld for the whole run while rot_0 still selects.
+        The per-arm exactness gate: if one candidate's rot_2
+        renders are not token-exact, the rot_2 selection is
+        withheld for the whole run while rot_0 still selects.
+        """
+
         def rec(fixture, verdict, exact=True):
             """Rec."""
             record = _record(fixture, _all_arms(verdict), exact=exact)
@@ -1559,11 +1561,13 @@ class TestStageGapBranches(unittest.TestCase):
     """Stage branches the main stage tests did not reach."""
 
     def test_boundary_decode_failure_screens_nothing(self):
-        """Test boundary decode failure screens nothing."""
+        """Test boundary decode failure screens nothing.
 
-        # A boundary that will not decode (singleton id) falls
-        # back to an empty boundary text: the screen is inert,
-        # the stage stays available, nothing is screened.
+        A boundary that will not decode (singleton id) falls
+        back to an empty boundary text: the screen is inert,
+        the stage stays available, nothing is screened.
+        """
+
         class _SingletonUndecodable(_WordBackend):
             """Singleton undecodable."""
 

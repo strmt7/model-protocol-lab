@@ -267,10 +267,12 @@ class EncodingPairTests(unittest.TestCase):
         )
 
     def test_none_when_chunk_encode_fails(self):
-        """Test none when chunk encode fails."""
+        """Test none when chunk encode fails.
 
-        # The full marker encodes fine, but every chunk-split encode
-        # raises: pair discovery fails closed via _encode_ids_or_none.
+        The full marker encodes fine, but every chunk-split encode
+        raises: pair discovery fails closed via _encode_ids_or_none.
+        """
+
         def flaky_encode(text):
             """Flaky encode."""
             if text != MARKERS[0]:
@@ -1262,10 +1264,12 @@ class DiffDeliforgeTests(unittest.TestCase):
         self.assertNotIn("\x1b", joined)
 
     def test_diff_feeds_identical(self):
-        """Test diff feeds identical."""
+        """Test diff feeds identical.
 
-        # A deliforge-only change flips identical; asymmetric probe
-        # flips it too.
+        A deliforge-only change flips identical; asymmetric probe
+        flips it too.
+        """
+
         def report(gaps):
             """Report."""
             return {

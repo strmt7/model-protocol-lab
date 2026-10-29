@@ -212,11 +212,13 @@ class EmissionGapTests(unittest.TestCase):
         )
 
     def test_subword_emission_invalid_ids(self):
-        """Test subword emission invalid ids."""
+        """Test subword emission invalid ids.
 
-        # The pair lookup succeeds (splits of the marker encode to
-        # ordinary ordinals), but re-encoding the chunk " now" yields a
-        # negative id: the construction refuses it fail-closed.
+        The pair lookup succeeds (splits of the marker encode to
+        ordinary ordinals), but re-encoding the chunk " now" yields a
+        negative id: the construction refuses it fail-closed.
+        """
+
         def bad_encode(text):
             """Bad encode."""
             if text == "<|im_end|>":
@@ -232,11 +234,13 @@ class EmissionGapTests(unittest.TestCase):
         )
 
     def test_subword_emission_reserved_id_in_control_arm(self):
-        """Test subword emission reserved id in control arm."""
+        """Test subword emission reserved id in control arm.
 
-        # A vocabulary collision: the chunk " then Q done" also encodes
-        # through the reserved id 7, so the control arm would contain
-        # the very id it controls for -- construction refuses it.
+        A vocabulary collision: the chunk " then Q done" also encodes
+        through the reserved id 7, so the control arm would contain
+        the very id it controls for -- construction refuses it.
+        """
+
         def colliding_encode(text):
             """Colliding encode."""
             if text == "<|im_end|>":
@@ -298,15 +302,17 @@ class StageGapTests(unittest.TestCase):
     """Stage gap tests."""
 
     def test_repeat_decode_failure_splits_failed_and_anomalous(self):
-        """Test repeat decode failure splits failed and anomalous."""
+        """Test repeat decode failure splits failed and anomalous.
 
-        # A stateful backend whose decode raises on the SECOND call with
-        # the same id tuple: emissions verify fine the first time, then
-        # (a) intact fixtures fail inside evaluate's answer decode
-        # (status != completed -> the fixture is skipped), and
-        # (b) colliding fixtures complete in evaluate (their answer ids
-        # differ from the full emission) but the stage's full-output
-        # decode raises -> anomalous, never intact.
+        A stateful backend whose decode raises on the SECOND call with
+        the same id tuple: emissions verify fine the first time, then
+        (a) intact fixtures fail inside evaluate's answer decode
+        (status != completed -> the fixture is skipped), and
+        (b) colliding fixtures complete in evaluate (their answer ids
+        differ from the full emission) but the stage's full-output
+        decode raises -> anomalous, never intact.
+        """
+
         class RepeatDecodeBackend(OrdinalBackend):
             """Repeat decode backend."""
 

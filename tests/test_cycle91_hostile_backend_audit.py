@@ -507,10 +507,12 @@ class HostileDecodeTest(unittest.TestCase):
         assert len(report.observations[0].answer) == 10_000_000
 
     def test_decode_failing_only_on_boundary_degrades_diagnostic(self) -> None:
-        """Test decode failing only on boundary degrades diagnostic."""
+        """Test decode failing only on boundary degrades diagnostic.
 
-        # The main answer decode succeeds; only the boundary-text diagnostic
-        # decode fails -> boundary_text_match degrades to None, run completes.
+        The main answer decode succeeds; only the boundary-text diagnostic
+        decode fails -> boundary_text_match degrades to None, run completes.
+        """
+
         def decode(tids: tuple[int, ...]) -> str:
             """Decode."""
             if tuple(tids) == _BOUNDARY:
@@ -761,12 +763,14 @@ class MixedHostileTaxonomyTest(unittest.TestCase):
 
     @staticmethod
     def test_counts_sum_with_no_double_counting_or_loss() -> None:
-        """Test counts sum with no double counting or loss."""
+        """Test counts sum with no double counting or loss.
 
-        # One scheduled backend, hostile only for cand-b (keyed on its "<b>"
-        # BOS marker): cand-a runs all four fixtures well-behaved, cand-b
-        # fails on its first fixture and terminates. Both candidates'
-        # taxonomy counts must sum exactly to their non-passing observations.
+        One scheduled backend, hostile only for cand-b (keyed on its "<b>"
+        BOS marker): cand-a runs all four fixtures well-behaved, cand-b
+        fails on its first fixture and terminates. Both candidates'
+        taxonomy counts must sum exactly to their non-passing observations.
+        """
+
         class Scheduled(HostileBackend):
             """Scheduled."""
 

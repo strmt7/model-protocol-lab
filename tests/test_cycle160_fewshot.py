@@ -1370,9 +1370,11 @@ class DiffFewshotTests(unittest.TestCase):
                 self.assertFalse(diffreports._valid_fewshot(payload))
 
     def test_diff_feeds_identical(self):
-        """Test diff feeds identical."""
+        """Test diff feeds identical.
 
-        # A fewshot-only change flips identical; asymmetric probe flips it too.
+        A fewshot-only change flips identical; asymmetric probe flips it too.
+        """
+
         def report(**kwargs):
             """Report."""
             return {
