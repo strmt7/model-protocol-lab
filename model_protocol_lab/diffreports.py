@@ -728,6 +728,7 @@ def diff_reports(
         old.get("instruction_distance"), new.get("instruction_distance")
     )
     history_frame_diff = diff_history_frame(old.get("history_frame"), new.get("history_frame"))
+    prune_sweep_diff = diff_prune_sweep(old.get("prune_sweep"), new.get("prune_sweep"))
     choiceaudit_diff = diff_choiceaudit(old.get("choice_audit"), new.get("choice_audit"))
     precision_diff = diff_precision(old.get("precision"), new.get("precision"))
     confidence_diff = diff_confidence(old.get("confidence"), new.get("confidence"))
@@ -814,6 +815,10 @@ def diff_reports(
         "neither",
     )
     history_frame_asymmetric = history_frame_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    prune_sweep_asymmetric = prune_sweep_diff["available"] not in (
         "both",
         "neither",
     )
@@ -938,6 +943,8 @@ def diff_reports(
         and not instruction_distance_asymmetric
         and not history_frame_diff["changed"]
         and not history_frame_asymmetric
+        and not prune_sweep_diff["changed"]
+        and not prune_sweep_asymmetric
         and not choiceaudit_diff["changed"]
         and not choiceaudit_asymmetric
         and not precision_diff["changed"]
@@ -1040,6 +1047,8 @@ def diff_reports(
         "instruction_distance_asymmetric": instruction_distance_asymmetric,
         "history_frame_changed": history_frame_diff["changed"],
         "history_frame_asymmetric": history_frame_asymmetric,
+        "prune_sweep_changed": prune_sweep_diff["changed"],
+        "prune_sweep_asymmetric": prune_sweep_asymmetric,
         "choice_audit_changed": choiceaudit_diff["changed"],
         "choice_audit_asymmetric": choiceaudit_asymmetric,
         "precision_changed": precision_diff["changed"],
@@ -1096,6 +1105,7 @@ def diff_reports(
         "canonical_form": canonical_form_diff,
         "instruction_distance": instruction_distance_diff,
         "history_frame": history_frame_diff,
+        "prune_sweep": prune_sweep_diff,
         "choice_audit": choiceaudit_diff,
         "precision": precision_diff,
         "confidence": confidence_diff,
@@ -13280,6 +13290,997 @@ def diff_history_frame(old: Any, new: Any) -> dict[str, Any]:
         or hf_protocol_drift
         or hf_generator_drift
         or hf_backend_drift
+    )
+    return result
+
+
+_PRUNESWEEP_ARM_KEYS = ("dose0", "dose18", "dose36", "dose72", "tail72", "closed_book")
+_PRUNESWEEP_HEADLINE_ARMS = ("dose0", "dose18", "dose36", "dose72")
+_PRUNESWEEP_DESCRIPTIVE_ARM = "tail72"
+_PRUNESWEEP_SCREEN_ARM = "closed_book"
+_PRUNESWEEP_DOSES = (0, 18, 36, 72)
+_PRUNESWEEP_CASE_COUNT = 24
+_PRUNESWEEP_CONTEXT_SENTENCES = 16
+_PRUNESWEEP_WORDS_PER_SENTENCE = 9
+_PRUNESWEEP_ELIGIBLE_WORDS = _PRUNESWEEP_CONTEXT_SENTENCES * _PRUNESWEEP_WORDS_PER_SENTENCE
+_PRUNESWEEP_FACT_CONTEXT_SLOTS = 8
+_PRUNESWEEP_MIN_C = 12
+_PRUNESWEEP_MIN_A = 5
+_PRUNESWEEP_INSTRUCTION = "Read the passage and answer the question."
+_PRUNESWEEP_FACT_TEMPLATE = "The {topic} code is {value}."
+_PRUNESWEEP_QUESTION_TEMPLATE = "What is the {topic} code? Reply with only the code word."
+_PRUNESWEEP_TOPICS = (
+    "harbor light",
+    "summit trail",
+    "quarry gate",
+    "tundra post",
+    "granite arch",
+    "willow ford",
+    "copper mill",
+    "saddle pass",
+)
+_PRUNESWEEP_VALUES = (
+    "amber",
+    "birch",
+    "cobalt",
+    "dune",
+    "ember",
+    "flint",
+    "garnet",
+    "hazel",
+    "ivory",
+    "jasper",
+    "kelvin",
+    "linden",
+    "magnet",
+    "nickel",
+    "onyx",
+    "pepper",
+    "quartz",
+    "rowan",
+    "saffron",
+    "timber",
+    "umber",
+    "violet",
+    "walnut",
+    "yonder",
+)
+_PRUNESWEEP_SUBJECTS = (
+    "archive",
+    "ledger",
+    "cabinet",
+    "chapel",
+    "meadow",
+    "workshop",
+    "station",
+    "garden",
+    "library",
+    "market",
+    "office",
+    "depot",
+)
+_PRUNESWEEP_OBJECTS = (
+    "forms",
+    "letters",
+    "tools",
+    "charts",
+    "samples",
+    "records",
+    "parcels",
+    "volumes",
+    "tickets",
+    "bundles",
+    "reports",
+    "crates",
+)
+_PRUNESWEEP_PLACES = (
+    "annex",
+    "attic",
+    "cellar",
+    "landing",
+    "terrace",
+    "alcove",
+    "gallery",
+    "storeroom",
+    "corridor",
+    "balcony",
+    "vestibule",
+    "loft",
+)
+_PRUNESWEEP_TIMES = (
+    "morning",
+    "midday",
+    "evening",
+    "weekdays",
+    "season",
+    "harvest",
+    "holiday",
+    "weekend",
+    "noon",
+    "dusk",
+    "dawn",
+    "closing",
+)
+_PRUNESWEEP_TEMPLATES = (
+    "The {subject} holds {object} inside the {place} each {time}.",
+    "A {subject} keeps {object} near the {place} during {time}.",
+    "Workers quietly move {object} past the {place} during {time}.",
+    "Each {time} the {subject} stores {object} under the {place}.",
+)
+_PRUNESWEEP_NEGATION_WORDS = frozenset(
+    {
+        "no",
+        "not",
+        "never",
+        "none",
+        "cannot",
+        "without",
+        "neither",
+        "nor",
+        "nothing",
+        "nobody",
+        "nowhere",
+        "hardly",
+        "barely",
+        "scarcely",
+    }
+)
+_PRUNESWEEP_MAX_CANDIDATES = 24
+_PRUNESWEEP_MAX_GROUND_RECORDS = _PRUNESWEEP_MAX_CANDIDATES * _PRUNESWEEP_CASE_COUNT
+_PRUNESWEEP_GENERATION_BUDGET = len(_PRUNESWEEP_ARM_KEYS) * _PRUNESWEEP_MAX_GROUND_RECORDS
+_PRUNESWEEP_HEADLINE_GENERATIONS = len(_PRUNESWEEP_HEADLINE_ARMS) * _PRUNESWEEP_MAX_GROUND_RECORDS
+_PRUNESWEEP_MAX_RECORDS_BYTES = 12 * 1024 * 1024
+_PRUNESWEEP_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+}
+_PRUNESWEEP_DETAILS = ("arm_context_exceeded", "arm_evaluation_failed")
+_PRUNESWEEP_DECISIONS = (
+    "insufficient",
+    "prune_drop_observed",
+    "below_threshold",
+)
+_PRUNESWEEP_DECOMPOSITION_CLASSES = (
+    "exact_pass",
+    "boundary_only",
+    "wrong_value",
+    "non_value",
+)
+_PRUNESWEEP_OPERATING_CHARACTERISTICS: dict[str, Any] = {
+    "null_random_stated": 0.0121,
+    "null_competent_stated": 0.0143,
+    "null_jitter_stated": 0.000005,
+    "null_competent_exchangeable_v09": 0.003,
+    "null_competent_exchangeable_v05": 0.0004,
+    "null_competent_exchangeable_v02": 0.000004,
+    "power_q25": 0.3969,
+    "power_q50": 0.9601,
+    "power_q75": 0.9996,
+    "familywise_expected_stated": 0.34,
+    "familywise_any_stated": 0.29,
+    "familywise_expected_exchangeable": 0.07,
+    "familywise_any_exchangeable": 0.07,
+    "shape_returns_cap_graded": 0.094,
+    "shape_intermediate_support_threshold": 0.0,
+}
+_PRUNESWEEP_AGGREGATE_KEYS = {
+    "arms",
+    "headline",
+    "shape",
+    "tail_contrast",
+    "ids",
+    "dropped_shares",
+    "operating_characteristics",
+    "n_cases",
+    "n_incomplete",
+}
+
+
+def _prunesweep_digest(text: str) -> str:
+    import hashlib as _hashlib
+
+    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _prunesweep_digest_ok(value: Any) -> bool:
+    import re as _re
+
+    return type(value) is str and _re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def _prunesweep_value_digests() -> frozenset[str]:
+    return frozenset(_prunesweep_digest(value) for value in _PRUNESWEEP_VALUES)
+
+
+def _prunesweep_draw_sentence(seed: int, case_id: str, slot: int, seen: set[str]) -> str:
+    """Mirror of prunesweep._draw_sentence."""
+    template = _PRUNESWEEP_TEMPLATES[slot % len(_PRUNESWEEP_TEMPLATES)]
+    counter = 0
+    while counter < 10000:
+        digest = _prunesweep_digest(f"{seed}:{case_id}:slot:{slot}:{counter}")
+        text = template.format(
+            subject=_PRUNESWEEP_SUBJECTS[int(digest[0:8], 16) % len(_PRUNESWEEP_SUBJECTS)],
+            object=_PRUNESWEEP_OBJECTS[int(digest[8:16], 16) % len(_PRUNESWEEP_OBJECTS)],
+            place=_PRUNESWEEP_PLACES[int(digest[16:24], 16) % len(_PRUNESWEEP_PLACES)],
+            time=_PRUNESWEEP_TIMES[int(digest[24:32], 16) % len(_PRUNESWEEP_TIMES)],
+        )
+        if text not in seen:
+            return text
+        counter += 1
+    raise ValueError("prune-sweep sentence draw did not terminate")
+
+
+def _prunesweep_generate(seed: int) -> list[dict[str, Any]]:
+    """Mirror of prunesweep.generate_cases: the frozen case
+    set for a seed, regenerated from the protocol's own seed
+    so a fabricated set is rejected (the numform F2 lesson)."""
+    cases: list[dict[str, Any]] = []
+    for index in range(_PRUNESWEEP_CASE_COUNT):
+        case_id = f"prune-{index:02d}"
+        topic = _PRUNESWEEP_TOPICS[index % len(_PRUNESWEEP_TOPICS)]
+        value = _PRUNESWEEP_VALUES[index]
+        seen: set[str] = set()
+        sentences: list[str] = []
+        for slot in range(_PRUNESWEEP_CONTEXT_SENTENCES):
+            text = _prunesweep_draw_sentence(seed, case_id, slot, seen)
+            seen.add(text)
+            sentences.append(text)
+        cases.append(
+            {
+                "fixture_id": case_id,
+                "topic": topic,
+                "value": value,
+                "expected": value,
+                "context_sentences": sentences,
+                "fact_sentence": _PRUNESWEEP_FACT_TEMPLATE.format(topic=topic, value=value),
+            }
+        )
+    return cases
+
+
+def _prunesweep_drop_order(seed: int, case_id: str) -> tuple[int, ...]:
+    """Mirror of prunesweep.drop_order (amendment E: the
+    position is the eligible-list index in passage order)."""
+    return tuple(
+        sorted(
+            range(_PRUNESWEEP_ELIGIBLE_WORDS),
+            key=lambda position: _prunesweep_digest(f"{seed}:{case_id}:{position}"),
+        )
+    )
+
+
+def _prunesweep_dropped_positions(case_id: str, arm: str, seed: int) -> frozenset[int]:
+    """Mirror of prunesweep.dropped_positions."""
+    if arm == _PRUNESWEEP_DESCRIPTIVE_ARM:
+        return frozenset(range(_PRUNESWEEP_ELIGIBLE_WORDS // 2, _PRUNESWEEP_ELIGIBLE_WORDS))
+    dose = {"dose0": 0, "dose18": 18, "dose36": 36, "dose72": 72}.get(arm)
+    if dose is None:
+        return frozenset()
+    return frozenset(_prunesweep_drop_order(seed, case_id)[:dose])
+
+
+def _prunesweep_arm_content(case: dict[str, Any], arm: str, seed: int) -> str:
+    """Mirror of prunesweep.arm_content."""
+    question = _PRUNESWEEP_QUESTION_TEMPLATE.format(topic=case["topic"])
+    if arm == _PRUNESWEEP_SCREEN_ARM:
+        return f"{_PRUNESWEEP_INSTRUCTION}\n{question}"
+    dropped = _prunesweep_dropped_positions(str(case["fixture_id"]), arm, seed)
+    kept: dict[int, str] = {}
+    for slot, sentence in enumerate(case["context_sentences"]):
+        words = sentence.split(" ")
+        surviving = [
+            word
+            for offset, word in enumerate(words)
+            if slot * _PRUNESWEEP_WORDS_PER_SENTENCE + offset not in dropped
+        ]
+        if surviving:
+            kept[slot] = " ".join(surviving)
+    sentences = [kept[slot] for slot in range(_PRUNESWEEP_FACT_CONTEXT_SLOTS) if slot in kept]
+    sentences.append(str(case["fact_sentence"]))
+    sentences.extend(
+        kept[slot]
+        for slot in range(_PRUNESWEEP_FACT_CONTEXT_SLOTS, _PRUNESWEEP_CONTEXT_SENTENCES)
+        if slot in kept
+    )
+    passage = " ".join(sentences)
+    return f"{_PRUNESWEEP_INSTRUCTION}\n{passage}\n{question}"
+
+
+def _prunesweep_dropped_shares(case: dict[str, Any], seed: int) -> dict[str, Any]:
+    """Mirror of prunesweep.dropped_set_shares."""
+    words = [word for sentence in case["context_sentences"] for word in sentence.split(" ")]
+
+    def _classes(word: str) -> tuple[bool, bool]:
+        bare = (word[:-1] if word.endswith(".") else word).lower()
+        return any(char.isdigit() for char in bare), bare in _PRUNESWEEP_NEGATION_WORDS
+
+    shares: dict[str, Any] = {}
+    for arm in (*_PRUNESWEEP_HEADLINE_ARMS[1:], _PRUNESWEEP_DESCRIPTIVE_ARM):
+        dropped = _prunesweep_dropped_positions(str(case["fixture_id"]), arm, seed)
+        numeral = negation = 0
+        for position in dropped:
+            is_numeral, is_negation = _classes(words[position])
+            numeral += 1 if is_numeral else 0
+            negation += 1 if is_negation else 0
+        total = len(dropped)
+        shares[arm] = {
+            "numeral": numeral / total if total else 0.0,
+            "negation": negation / total if total else 0.0,
+        }
+    return shares
+
+
+def _prunesweep_case_material_sha256() -> str:
+    """Mirror of prunesweep.case_material_sha256."""
+    import json as _json
+
+    material = {
+        "instruction": _PRUNESWEEP_INSTRUCTION,
+        "fact_template": _PRUNESWEEP_FACT_TEMPLATE,
+        "question_template": _PRUNESWEEP_QUESTION_TEMPLATE,
+        "topics": list(_PRUNESWEEP_TOPICS),
+        "values": list(_PRUNESWEEP_VALUES),
+        "subjects": list(_PRUNESWEEP_SUBJECTS),
+        "objects": list(_PRUNESWEEP_OBJECTS),
+        "places": list(_PRUNESWEEP_PLACES),
+        "times": list(_PRUNESWEEP_TIMES),
+        "templates": list(_PRUNESWEEP_TEMPLATES),
+        "negation_words": sorted(_PRUNESWEEP_NEGATION_WORDS),
+        "doses": list(_PRUNESWEEP_DOSES),
+    }
+    canonical = _json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return _prunesweep_digest(canonical)
+
+
+def _prunesweep_ground_sha256(seed: int) -> str:
+    """Mirror of prunesweep.ground_sha256."""
+    import json as _json
+
+    rows = [
+        [
+            case["fixture_id"],
+            case["topic"],
+            case["value"],
+            list(case["context_sentences"]),
+            case["fact_sentence"],
+        ]
+        for case in _prunesweep_generate(seed)
+    ]
+    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _prunesweep_digest(canonical)
+
+
+def _prunesweep_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    """The prune-sweep protocol rebuilt from this module's
+    own literals plus the payload's seed and backend
+    fingerprint, fingerprint included (compared whole)."""
+    import json as _json
+
+    protocol: dict[str, Any] = {
+        "version": 1,
+        "arm_keys": list(_PRUNESWEEP_ARM_KEYS),
+        "headline_arms": list(_PRUNESWEEP_HEADLINE_ARMS),
+        "descriptive_arm": _PRUNESWEEP_DESCRIPTIVE_ARM,
+        "screen_arm": _PRUNESWEEP_SCREEN_ARM,
+        "doses": list(_PRUNESWEEP_DOSES),
+        "case_count": _PRUNESWEEP_CASE_COUNT,
+        "eligible_words": _PRUNESWEEP_ELIGIBLE_WORDS,
+        "case_material_sha256": _prunesweep_case_material_sha256(),
+        "ground_sha256": _prunesweep_ground_sha256(seed),
+        "min_c": _PRUNESWEEP_MIN_C,
+        "min_a": _PRUNESWEEP_MIN_A,
+        "generation_budget": _PRUNESWEEP_GENERATION_BUDGET,
+        "headline_generations": _PRUNESWEEP_HEADLINE_GENERATIONS,
+        "max_ground_records": _PRUNESWEEP_MAX_GROUND_RECORDS,
+        "max_records_bytes": _PRUNESWEEP_MAX_RECORDS_BYTES,
+        "max_candidates": _PRUNESWEEP_MAX_CANDIDATES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _prunesweep_digest(canonical)
+    return protocol
+
+
+def _prunesweep_mcnemar_p(a: int, b: int) -> float | None:
+    """Two-sided exact McNemar p (the confidentiality formula,
+    local, as in the sibling mirrors)."""
+    import math as _math
+
+    n = a + b
+    if n == 0:
+        return None
+    k = min(a, b)
+    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    result: float = min(1.0, 2.0 * tail)
+    return result
+
+
+def _prunesweep_classify(direct_passes: int, drop_cases: int, reverse: int) -> str:
+    """Mirror of prunesweep.classify_decision."""
+    if direct_passes < _PRUNESWEEP_MIN_C:
+        return "insufficient"
+    p = _prunesweep_mcnemar_p(drop_cases, reverse)
+    if drop_cases >= _PRUNESWEEP_MIN_A and p is not None and p < 0.05:
+        return "prune_drop_observed"
+    return "below_threshold"
+
+
+def _prunesweep_decompose(cell: dict[str, Any], expected_digest: str) -> str:
+    """Mirror of prunesweep.decompose_cell: the class from
+    the recorded digest alone, in the frozen order
+    (exact_pass, boundary_only, wrong_value, non_value --
+    amendment B)."""
+    if cell.get("verdict") is True:
+        return "exact_pass"
+    digest = cell.get("answer_digest")
+    if digest is not None and digest == expected_digest:
+        return "boundary_only"
+    if digest is not None and digest in _prunesweep_value_digests():
+        return "wrong_value"
+    return "non_value"
+
+
+def _prunesweep_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(key)
+    return cell if isinstance(cell, dict) else None
+
+
+def _prunesweep_detail_get(record: dict[str, Any], key: str) -> str:
+    details = record.get("cell_details")
+    if not isinstance(details, dict):
+        return ""
+    detail = details.get(key, "")
+    return detail if type(detail) is str else ""
+
+
+def _prunesweep_verdict(record: dict[str, Any], key: str) -> bool:
+    cell = _prunesweep_cell_get(record, key)
+    return bool(cell is not None and cell["verdict"])
+
+
+def _prunesweep_screened(record: dict[str, Any]) -> bool:
+    cell = _prunesweep_cell_get(record, _PRUNESWEEP_SCREEN_ARM)
+    return bool(cell is not None and cell["verdict"])
+
+
+def _prunesweep_ids_identical(record: dict[str, Any]) -> bool:
+    """Mirror of prunesweep._ids_identical: derived from the
+    recorded id digests alone."""
+    digests = record.get("id_digests")
+    if not isinstance(digests, dict):
+        return False
+    return digests.get("dose0") is not None and digests.get("dose0") == digests.get("dose72")
+
+
+def _prunesweep_first_flip(record: dict[str, Any]) -> str:
+    for arm in _PRUNESWEEP_HEADLINE_ARMS[1:]:
+        if not _prunesweep_verdict(record, arm):
+            return arm
+    return "never"
+
+
+def _prunesweep_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Mirror of prunesweep.aggregate_candidate."""
+    arms: dict[str, Any] = {}
+    for key in _PRUNESWEEP_ARM_KEYS:
+        n_completed = 0
+        n_pass = 0
+        n_context = 0
+        n_failed = 0
+        decomposition = dict.fromkeys(_PRUNESWEEP_DECOMPOSITION_CLASSES, 0)
+        for record in records:
+            detail = _prunesweep_detail_get(record, key)
+            if detail == "arm_context_exceeded":
+                n_context += 1
+            elif detail == "arm_evaluation_failed":
+                n_failed += 1
+            cell = _prunesweep_cell_get(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell["verdict"]:
+                n_pass += 1
+            decomposition[_prunesweep_decompose(cell, str(record.get("expected_digest", "")))] += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": (n_pass / n_completed) if n_completed else None,
+            "n_context_exceeded": n_context,
+            "n_evaluation_failed": n_failed,
+            "decomposition": decomposition,
+        }
+    complete = [
+        record
+        for record in records
+        if all(_prunesweep_cell_get(record, arm) is not None for arm in _PRUNESWEEP_HEADLINE_ARMS)
+    ]
+    screened = [record for record in complete if _prunesweep_screened(record)]
+    unscreened = [record for record in complete if not _prunesweep_screened(record)]
+    ids_excluded = [record for record in unscreened if _prunesweep_ids_identical(record)]
+    population = [record for record in unscreened if not _prunesweep_ids_identical(record)]
+    direct = [record for record in population if _prunesweep_verdict(record, "dose0")]
+    drop_cases = 0
+    boundary_attrition = 0
+    a_by_first_flip = dict.fromkeys(_PRUNESWEEP_HEADLINE_ARMS[1:], 0)
+    for record in direct:
+        cell72 = _prunesweep_cell_get(record, "dose72")
+        if cell72 is None or cell72["verdict"]:
+            continue
+        klass = _prunesweep_decompose(cell72, str(record.get("expected_digest", "")))
+        if klass == "boundary_only":
+            boundary_attrition += 1
+        elif klass in ("wrong_value", "non_value"):
+            drop_cases += 1
+            a_by_first_flip[_prunesweep_first_flip(record)] += 1
+    reverse = sum(
+        1
+        for record in population
+        if not _prunesweep_verdict(record, "dose0") and _prunesweep_verdict(record, "dose72")
+    )
+    headline = {
+        "n_population": len(population),
+        "n_headline_incomplete": len(records) - len(complete),
+        "n_screened": len(screened),
+        "n_closed_book_incomplete": sum(
+            1 for record in records if _prunesweep_cell_get(record, _PRUNESWEEP_SCREEN_ARM) is None
+        ),
+        "n_ids_identical": len(ids_excluded),
+        "direct_passes": len(direct),
+        "drop_cases": drop_cases,
+        "boundary_attrition": boundary_attrition,
+        "reverse": reverse,
+        "decision": _prunesweep_classify(len(direct), drop_cases, reverse),
+        "a_by_first_flip": a_by_first_flip,
+    }
+    histogram = dict.fromkeys(_PRUNESWEEP_HEADLINE_ARMS[1:], 0)
+    histogram["never"] = 0
+    returns = 0
+    for record in direct:
+        histogram[_prunesweep_first_flip(record)] += 1
+        if (
+            not _prunesweep_verdict(record, "dose18") or not _prunesweep_verdict(record, "dose36")
+        ) and _prunesweep_verdict(record, "dose72"):
+            returns += 1
+    shape = {
+        "first_flip_histogram": histogram,
+        "returns": returns,
+        "dose_pass_rates": {
+            arm: (
+                (
+                    sum(1 for record in population if _prunesweep_verdict(record, arm))
+                    / len(population)
+                )
+                if population
+                else None
+            )
+            for arm in _PRUNESWEEP_HEADLINE_ARMS
+        },
+    }
+    n_compared = 0
+    dose72_fails = 0
+    tail72_fails = 0
+    dose72_only = 0
+    tail72_only = 0
+    for record in population:
+        if _prunesweep_cell_get(record, _PRUNESWEEP_DESCRIPTIVE_ARM) is None:
+            continue
+        n_compared += 1
+        fail72 = not _prunesweep_verdict(record, "dose72")
+        fail_tail = not _prunesweep_verdict(record, _PRUNESWEEP_DESCRIPTIVE_ARM)
+        dose72_fails += 1 if fail72 else 0
+        tail72_fails += 1 if fail_tail else 0
+        if fail72 and not fail_tail:
+            dose72_only += 1
+        elif fail_tail and not fail72:
+            tail72_only += 1
+    p_tail = _prunesweep_mcnemar_p(dose72_only, tail72_only)
+    rival = dose72_fails > 0 and (
+        dose72_only + tail72_only == 0 or (p_tail is not None and p_tail >= 0.05)
+    )
+    tail_contrast = {
+        "n_compared": n_compared,
+        "dose72_fails": dose72_fails,
+        "tail72_fails": tail72_fails,
+        "dose72_only": dose72_only,
+        "tail72_only": tail72_only,
+        "rival_reading": rival,
+    }
+    ids: dict[str, Any] = {}
+    for arm in (*_PRUNESWEEP_HEADLINE_ARMS[1:], _PRUNESWEEP_DESCRIPTIVE_ARM):
+        deltas: list[int] = []
+        n_ids_identical = 0
+        n_same_ids_flips = 0
+        for record in records:
+            tokens = record.get("arm_tokens")
+            tokens = tokens if isinstance(tokens, dict) else {}
+            digests = record.get("id_digests")
+            digests = digests if isinstance(digests, dict) else {}
+            treated = tokens.get(arm)
+            baseline = tokens.get("dose0")
+            if type(treated) is int and type(baseline) is int:
+                deltas.append(treated - baseline)
+            else:
+                deltas.append(0)
+            base_digest = digests.get("dose0")
+            if type(base_digest) is str and base_digest != "" and base_digest == digests.get(arm):
+                n_ids_identical += 1
+                base_cell = _prunesweep_cell_get(record, "dose0")
+                arm_cell = _prunesweep_cell_get(record, arm)
+                if (
+                    base_cell is not None
+                    and arm_cell is not None
+                    and base_cell["verdict"] != arm_cell["verdict"]
+                ):
+                    n_same_ids_flips += 1
+        ids[arm] = {
+            "id_length_delta_by_case": deltas,
+            "max_abs_id_delta": max((abs(delta) for delta in deltas), default=0),
+            "n_ids_identical": n_ids_identical,
+            "n_same_ids_flips": n_same_ids_flips,
+        }
+    share_arms = (*_PRUNESWEEP_HEADLINE_ARMS[1:], _PRUNESWEEP_DESCRIPTIVE_ARM)
+    dropped_shares: dict[str, Any] = {}
+    for arm in share_arms:
+        numeral_total = 0.0
+        negation_total = 0.0
+        counted = 0
+        for record in records:
+            shares = record.get("dropped_shares")
+            if not isinstance(shares, dict) or not isinstance(shares.get(arm), dict):
+                continue
+            numeral_total += float(shares[arm].get("numeral", 0.0))
+            negation_total += float(shares[arm].get("negation", 0.0))
+            counted += 1
+        dropped_shares[arm] = {
+            "numeral": numeral_total / counted if counted else 0.0,
+            "negation": negation_total / counted if counted else 0.0,
+        }
+    return {
+        "arms": arms,
+        "headline": headline,
+        "shape": shape,
+        "tail_contrast": tail_contrast,
+        "ids": ids,
+        "dropped_shares": dropped_shares,
+        "operating_characteristics": dict(_PRUNESWEEP_OPERATING_CHARACTERISTICS),
+        "n_cases": len(records),
+        "n_incomplete": sum(
+            1
+            for record in records
+            if any(_prunesweep_cell_get(record, arm) is None for arm in _PRUNESWEEP_ARM_KEYS)
+        ),
+    }
+
+
+def _prunesweep_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """One cell's shape and bindings: exact field set, the
+    verdict binding ``verdict == (answer_digest ==
+    expected_digest) and boundary_found``, and the answer
+    digest's shape (None when the backend produced no
+    answer)."""
+    if type(cell) is not dict or set(cell) != _PRUNESWEEP_CELL_FIELDS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    digest = cell["answer_digest"]
+    if digest is not None and not _prunesweep_digest_ok(digest):
+        return False
+    verdict = (digest == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _prunesweep_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a prune-sweep payload from its ground
+    records.
+
+    The validator carries its own generator mirror, frozen
+    texts, drop permutation, and aggregators (no imports
+    from prunesweep.py): the protocol is rebuilt from frozen
+    literals plus the payload's seed and backend fingerprint
+    and compared whole; the case set is regenerated from the
+    seed and every record is checked against it in protocol
+    order; every record's per-arm content digests are
+    rebound to the regenerated arm contents, so the drop
+    sets, the protected parts, and the closed-book content
+    are all re-derived; the record's ids_identical flag must
+    equal the derivation from its recorded id digests; the
+    dropped-set class shares must equal the regenerated
+    cases' shares; every cell's verdict is re-derived from
+    its digest identity and bound to the record's arm token
+    count; the decomposition, the headline decision, the
+    shape readout, and the tail contrast are recomputed
+    from the recorded digests alone; the aggregates are
+    recomputed and compared.
+    """
+    import json as _json
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
+        return None
+    if not _recomputed_equal(protocol, _prunesweep_protocol(seed, backend_fingerprint)):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    if len(candidates) > _PRUNESWEEP_MAX_CANDIDATES:
+        return None
+    generated = _prunesweep_generate(seed)
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _PRUNESWEEP_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _PRUNESWEEP_MAX_RECORDS_BYTES:
+            return None
+        expected_shares = [_prunesweep_dropped_shares(case, seed) for case in generated]
+        for record, case, case_shares in zip(records, generated, expected_shares, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "arm_tokens",
+                "id_digests",
+                "ids_identical",
+                "content_digests",
+                "dropped_shares",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                return None
+            expected_digest = _prunesweep_digest(str(case["value"]))
+            if record["expected_digest"] != expected_digest:
+                return None
+            arm_tokens = record["arm_tokens"]
+            id_digests = record["id_digests"]
+            content_digests = record["content_digests"]
+            cells = record["cells"]
+            details = record["cell_details"]
+            for mapping in (arm_tokens, id_digests, content_digests, cells, details):
+                if type(mapping) is not dict or set(mapping) != set(_PRUNESWEEP_ARM_KEYS):
+                    return None
+            if record["ids_identical"] is not (id_digests["dose0"] == id_digests["dose72"]):
+                return None
+            if not _recomputed_equal(record["dropped_shares"], case_shares):
+                return None
+            for arm in _PRUNESWEEP_ARM_KEYS:
+                tokens = arm_tokens[arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                    return None
+                if not _prunesweep_digest_ok(id_digests[arm]):
+                    return None
+                if content_digests[arm] != _prunesweep_digest(
+                    _prunesweep_arm_content(case, arm, seed)
+                ):
+                    return None
+                cell = cells[arm]
+                detail = details[arm]
+                if detail not in ("", *_PRUNESWEEP_DETAILS):
+                    return None
+                if cell is None:
+                    if detail == "":
+                        return None
+                    continue
+                if detail != "":
+                    return None
+                if not _prunesweep_cell_ok(cell, expected_digest):
+                    return None
+                if cell["input_tokens"] != tokens:
+                    return None
+        aggregates[name] = _prunesweep_aggregate(records)
+    if total_records > _PRUNESWEEP_MAX_GROUND_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    return {
+        "aggregates": aggregates,
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _valid_prune_sweep(payload: Any) -> bool:
+    """Structural check for a ``prune_sweep`` payload
+    (recompute standard). The audit block is shape-checked
+    only: its counts are stage observations (special-token
+    findings against the run's own formats), not recomputable
+    from records."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    audit = payload.get("audit")
+    if type(audit) is not dict or set(audit) != {
+        "n_audit_excluded",
+        "by_reason",
+        "special_token_findings",
+    }:
+        return False
+    if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+        return False
+    if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+        return False
+    by_reason = audit["by_reason"]
+    if type(by_reason) is not dict:
+        return False
+    for key, count in by_reason.items():
+        if type(key) is not str or type(count) is not int or count < 0:
+            return False
+    recomputed = _prunesweep_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, value in expected.items():
+            if not _recomputed_equal(entry.get(key), value):
+                return False
+    if not _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
+        return False
+    return _recomputed_equal(payload.get("n_cases"), recomputed["n_cases"])
+
+
+def diff_prune_sweep(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``prune_sweep`` probe payloads;
+    deterministic.
+
+    Answers "did the prune-sweep story change between
+    runs?": per-candidate headline drift (decision with the
+    C / A / B counts and boundary attrition that carry it),
+    the tail72 contrast drift with the rival-reading flag,
+    the same-ids flip drift on dose72, candidates
+    added/removed, and protocol / generator / backend drift
+    (any of which marks the comparison not comparable, with
+    the drift still listed -- the generated panel is the
+    treatment, so a changed generator is protocol drift). A
+    side without a valid payload is reported plainly.
+    """
+    old_ok = _valid_prune_sweep(old)
+    new_ok = _valid_prune_sweep(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    ps_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    ps_generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    ) or old["protocol"].get("case_material_sha256") != new["protocol"].get("case_material_sha256")
+    ps_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    ps_comparable = not ps_protocol_drift and not ps_generator_drift and not ps_backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    ps_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    ps_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    ps_candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                ps_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        ps_metrics: list[tuple[str, Any, Any]] = [
+            ("decision", old_entry["headline"]["decision"], new_entry["headline"]["decision"]),
+            (
+                "direct_passes",
+                old_entry["headline"]["direct_passes"],
+                new_entry["headline"]["direct_passes"],
+            ),
+            (
+                "drop_cases",
+                old_entry["headline"]["drop_cases"],
+                new_entry["headline"]["drop_cases"],
+            ),
+            (
+                "boundary_attrition",
+                old_entry["headline"]["boundary_attrition"],
+                new_entry["headline"]["boundary_attrition"],
+            ),
+            ("reverse", old_entry["headline"]["reverse"], new_entry["headline"]["reverse"]),
+            (
+                "n_population",
+                old_entry["headline"]["n_population"],
+                new_entry["headline"]["n_population"],
+            ),
+            (
+                "dose72_only",
+                old_entry["tail_contrast"]["dose72_only"],
+                new_entry["tail_contrast"]["dose72_only"],
+            ),
+            (
+                "tail72_only",
+                old_entry["tail_contrast"]["tail72_only"],
+                new_entry["tail_contrast"]["tail72_only"],
+            ),
+            (
+                "rival_reading",
+                old_entry["tail_contrast"]["rival_reading"],
+                new_entry["tail_contrast"]["rival_reading"],
+            ),
+            (
+                "n_same_ids_flips_dose72",
+                old_entry["ids"]["dose72"]["n_same_ids_flips"],
+                new_entry["ids"]["dose72"]["n_same_ids_flips"],
+            ),
+        ]
+        for metric, old_value, new_value in ps_metrics:
+            if old_value != new_value:
+                ps_candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    result["candidate_drift"] = ps_candidate_drift
+    result["candidates_added"] = ps_candidates_added
+    result["candidates_removed"] = ps_candidates_removed
+    result["protocol_drift"] = ps_protocol_drift
+    result["generator_drift"] = ps_generator_drift
+    result["backend_drift"] = ps_backend_drift
+    result["comparable"] = ps_comparable
+    result["changed"] = bool(
+        ps_candidate_drift
+        or ps_candidates_added
+        or ps_candidates_removed
+        or ps_protocol_drift
+        or ps_generator_drift
+        or ps_backend_drift
     )
     return result
 

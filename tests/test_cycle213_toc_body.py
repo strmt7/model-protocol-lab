@@ -35,6 +35,8 @@ from tests.test_cycle218_instructiondistance import _payload as _instruction_dis
 from tests.test_cycle218_instructiondistance import _WordBackend as _IdWordBackend
 from tests.test_cycle219_historyframe import _payload as _history_frame_payload
 from tests.test_cycle219_historyframe import _WordBackend as _HfWordBackend
+from tests.test_cycle220_prunesweep import _payload as _prune_sweep_payload
+from tests.test_cycle220_prunesweep import _WordBackend as _PsWordBackend
 
 _SECTION_ID_RE = re.compile(r'<section[^>]*? id="([^"]+)"')
 
@@ -56,6 +58,7 @@ def _populated_result():
     result["negation"] = _negation_payload(_WordBackend("negation_drop"))
     result["instruction_distance"] = _instruction_distance_payload(_IdWordBackend("drop"))
     result["history_frame"] = _history_frame_payload(_HfWordBackend("frame_drop"))
+    result["prune_sweep"] = _prune_sweep_payload(_PsWordBackend("dose72_drop"))
     return result
 
 
@@ -93,6 +96,16 @@ class HistoryFrameBodyTests(unittest.TestCase):
         self.assertGreater(html.index('id="history-frame"'), html.index("</nav>"))
 
 
+class PruneSweepBodyTests(unittest.TestCase):
+    def test_prune_sweep_body_present_in_rendered_report(self):
+        html = reporting_mod.render_html(_populated_result())
+        self.assertIn('href="#prune-sweep"', html)
+        self.assertIn('<section class="card" id="prune-sweep">', html)
+        # Body-only copy from inside the section.
+        self.assertIn("partially broken at dose72", html)
+        self.assertGreater(html.index('id="prune-sweep"'), html.index("</nav>"))
+
+
 class TocBodyCorrespondenceTests(unittest.TestCase):
     def test_populated_sections_match_toc_exactly(self):
         html = reporting_mod.render_html(_populated_result())
@@ -103,6 +116,7 @@ class TocBodyCorrespondenceTests(unittest.TestCase):
         self.assertIn("negation", hrefs)
         self.assertIn("instruction-distance", hrefs)
         self.assertIn("history-frame", hrefs)
+        self.assertIn("prune-sweep", hrefs)
         # Every link lands on a rendered section, every rendered
         # section is linked, in the same order.
         self.assertEqual(hrefs, body_ids)

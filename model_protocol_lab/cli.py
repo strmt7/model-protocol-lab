@@ -796,6 +796,68 @@ def build_parser() -> argparse.ArgumentParser:
         "selection. The stage never fails the run.",
     )
     run.add_argument(
+        "--prune-sweep",
+        action="store_true",
+        help="Prune-sweep probe (cycle 220, research wave-11 rank "
+        "4): this probe prunes passage words -- seeded interior "
+        "words of a frozen generated passage -- at exact word "
+        "doses, and classifies the verdict drop per candidate. "
+        "Each of the 24 generated cases is one user message: a "
+        "frozen instruction, a 17-sentence passage (16 context "
+        "sentences of exactly nine words carrying 144 eligible "
+        "words, with the six-word answer-bearing fact sentence "
+        "at passage position 9, never pruned), and a frozen "
+        "question; the instruction and question are never "
+        "pruned either. Arms per candidate: dose0 / dose18 / "
+        "dose36 / dose72 (the first 0 / 18 / 36 / 72 words of "
+        "the case's frozen sha256 drop order over the eligible "
+        "positions, nested, so 72 words is half the eligible "
+        "words), the descriptive tail72 displaced control "
+        "(drops exactly the eligible words of the passage's "
+        "last eight context sentences -- the dose-matched tail "
+        "loss), and the closed_book screen arm (no passage; a "
+        "case passed closed-book is screened out of the "
+        "headline). Scoring is byte-exact with boundary, every "
+        "arm a fixture with the same id, so request seeds are "
+        "identical across arms. Headline, per candidate over "
+        "cases completed in all four dose arms, not screened, "
+        "and not ids-identical between dose0 and dose72: C = "
+        "dose0 passes; A = cases in C whose dose72 answer "
+        "digest is a wrong pool value or a non-value (a dose72 "
+        "failure whose digest still equals the expected one is "
+        "boundary attrition, printed beside A, never counted "
+        "in it); B = reverse discordants. C below 12 is "
+        "insufficient; otherwise A of at least 5 with a "
+        "two-sided exact McNemar p below 0.05 is "
+        "prune_drop_observed -- the only falsification label -- "
+        "and anything else is below_threshold. The McNemar "
+        "conjunct is load-bearing: (5, 0) gives p = 0.0625 and "
+        "does not fire; (6, 0) fires. Exact-enumeration fire "
+        "rates print beside every decision: under the stated "
+        "conditional null the random labeller fires 0.0121 and "
+        "the competent no-effect panel 0.0143 per decision "
+        "(family-wise 0.34 expected false labels over a "
+        "24-candidate panel), and power reaches only 0.40 at a "
+        "25 percent top-dose drop, so below_threshold is weak "
+        "evidence, never invariance. The label attributes the "
+        "drop to the word-loss treatment as a bundle -- "
+        "information loss, prompt shortening, fact-position "
+        "shift (mean 36 words earlier at dose72, exactly 0 "
+        "under tail72), and sentence breakage move together; "
+        "when the tail72 discordance is within noise of "
+        "dose72's, the section prints the word-count-loss "
+        "reading in words. Shape is a readout, never a gate: "
+        "the word sweep denotes the dose ladder, never a curve "
+        "shape. No winner readout and no selection over the "
+        "generated panel. Monday morning: 'may our trimming "
+        "pipeline delete half the non-answer-bearing words of "
+        "a retrieved passage before verdicts start dropping?' "
+        "Costs 6 generations per candidate per case (3,456 at "
+        "the legal maximum: 24 candidates x 24 cases x 6; "
+        "2,304 headline). Informational only; never touches "
+        "selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--rotate",
         action="store_true",
         help="Context rotation probe (cycle 203, research wave-9 "
@@ -2273,6 +2335,49 @@ def _run_history_frame_probe(
         result["history_frame"] = {
             "available": False,
             "detail": "historyframe_unavailable",
+        }
+
+
+def _run_prune_sweep_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the prune-sweep probe; never raises.
+
+    The probe is self-contained: its cases are generated from
+    the run seed, so it consults neither the recorded search
+    nor the primary decision, and a failed user run cannot
+    silently suppress it. The run's cancel event is threaded
+    dispatch -> wrapper -> stage -> evaluate, so SIGINT/
+    SIGTERM stop the stage cooperatively.
+    """
+    try:
+        from .experiments import prune_sweep_analysis, prune_sweep_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = prune_sweep_stage(
+            backend,
+            formats,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["prune_sweep"] = prune_sweep_analysis(stage, names)
+    except Exception:  # noqa: BLE001 -- prune-sweep must not fail the run
+        result["prune_sweep"] = {
+            "available": False,
+            "detail": "prune_unavailable",
         }
 
 
@@ -4306,6 +4411,27 @@ def main(argv: list[str] | None = None) -> int:
                         formats,
                         result,
                         fixtures=tuple(split.search),
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Prune-sweep probe (cycle 220, research
+                # wave-11 rank 4): generated 24-case panel
+                # whose passage context sentences lose seeded
+                # interior words at exact doses 0/18/36/72,
+                # with the dose-matched tail72 displaced
+                # control and the closed_book screen arm, the
+                # run's cancel event threaded into the stage
+                # loop. Informational only -- never changes
+                # selection. Never fails the run.
+                if args.prune_sweep:
+                    _run_prune_sweep_probe(
+                        backend,
+                        formats,
+                        result,
                         boundary=args.boundary_ids,
                         boundary_map=boundary_map,
                         max_new_tokens=args.max_new_tokens,

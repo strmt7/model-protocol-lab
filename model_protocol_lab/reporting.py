@@ -8065,6 +8065,360 @@ def _history_frame_section(result: dict[str, Any]) -> str:
     )
 
 
+def _prune_sweep_section(result: dict[str, Any]) -> str:
+    """Prune-sweep probe: seeded interior word loss from a
+    frozen generated passage, classified per candidate.
+
+    Renders the ``prune_sweep`` payload (see
+    experiments.prune_sweep_analysis). The first sentence is
+    the naming audit's disclosure: the probe prunes passage
+    words. Per candidate, in the design's printed order:
+    per-arm pass rates with attrition; the digest
+    decomposition split per arm with the boundary-only count;
+    C, A, B, and the decision, with A split by first-flip
+    dose; the descriptive shape readout; the tail72
+    displaced-control contrast with the word-count-loss
+    reading when the two arms are within noise; the
+    id-length report with the exclusion counts; and the
+    dropped-set class shares. After the table: the
+    operating-characteristics paragraph (exact enumerations,
+    amendment A), the bundle fencing (amendment F), and the
+    printed limitations. Counts and rates only; no passage,
+    prompt, or answer text is rendered. Every payload-derived
+    value below goes through _escape_text, never bare
+    escape().
+    """
+    probe: Any = result.get("prune_sweep")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return _escape_text(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return _escape_text(str(value)) if type(value) is int else "n/a"
+
+    arm_names = ("dose0", "dose18", "dose36", "dose72", "tail72", "closed_book")
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + _escape_text(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        arms = entry.get("arms")
+        if type(arms) is dict:
+            for arm_name in arm_names:
+                arm = arms.get(arm_name)
+                if type(arm) is not dict:
+                    continue
+                bits.append(
+                    "<div>"
+                    + _escape_text(arm_name)
+                    + " pass rate "
+                    + _rate(arm.get("rate"))
+                    + " ("
+                    + _count(arm.get("n_pass"))
+                    + " of "
+                    + _count(arm.get("n_completed"))
+                    + " completed), "
+                    + _count(arm.get("n_context_exceeded"))
+                    + " context-exceeded, "
+                    + _count(arm.get("n_evaluation_failed"))
+                    + " evaluation-failed.</div>"
+                )
+            for arm_name in arm_names:
+                arm = arms.get(arm_name)
+                if type(arm) is not dict:
+                    continue
+                decomp = arm.get("decomposition")
+                if type(decomp) is not dict:
+                    continue
+                bits.append(
+                    "<div>"
+                    + _escape_text(arm_name)
+                    + " decomposition of completed cells — exact_pass "
+                    + _count(decomp.get("exact_pass"))
+                    + ", wrong_value "
+                    + _count(decomp.get("wrong_value"))
+                    + ", non_value "
+                    + _count(decomp.get("non_value"))
+                    + ", boundary-only "
+                    + _count(decomp.get("boundary_only"))
+                    + " (the answer digest still equals the expected "
+                    "one; the boundary event alone failed).</div>"
+                )
+        headline = entry.get("headline")
+        if type(headline) is dict:
+            by_flip = headline.get("a_by_first_flip")
+            flip_bits = ""
+            if type(by_flip) is dict:
+                flip_bits = (
+                    " A by first-flip dose — dose18 "
+                    + _count(by_flip.get("dose18"))
+                    + ", dose36 "
+                    + _count(by_flip.get("dose36"))
+                    + ", dose72 "
+                    + _count(by_flip.get("dose72"))
+                    + "."
+                )
+            bits.append(
+                "<div>Headline over "
+                + _count(headline.get("n_population"))
+                + " cases (completed in all four dose arms, not "
+                "closed-book screened, not ids-identical between "
+                "dose0 and dose72): C (dose0 passes) "
+                + _count(headline.get("direct_passes"))
+                + ", A (dose72 wrong_value or non_value failures "
+                "among C) "
+                + _count(headline.get("drop_cases"))
+                + ", boundary attrition beside A (dose72 "
+                "boundary-only failures among C, never counted "
+                "in A) "
+                + _count(headline.get("boundary_attrition"))
+                + ", B (reverse discordants) "
+                + _count(headline.get("reverse"))
+                + ", decision "
+                + _escape_text(str(headline.get("decision", "")))
+                + "."
+                + flip_bits
+                + "</div>"
+            )
+        shape = entry.get("shape")
+        if type(shape) is dict:
+            hist = shape.get("first_flip_histogram")
+            hist_bits = ""
+            if type(hist) is dict:
+                hist_bits = (
+                    "first-flip histogram over C — dose18 "
+                    + _count(hist.get("dose18"))
+                    + ", dose36 "
+                    + _count(hist.get("dose36"))
+                    + ", dose72 "
+                    + _count(hist.get("dose72"))
+                    + ", never "
+                    + _count(hist.get("never"))
+                    + "; "
+                )
+            rates = shape.get("dose_pass_rates")
+            rate_bits = ""
+            if type(rates) is dict:
+                rate_bits = (
+                    "per-dose pass rates over the headline "
+                    "population — dose0 "
+                    + _rate(rates.get("dose0"))
+                    + ", dose18 "
+                    + _rate(rates.get("dose18"))
+                    + ", dose36 "
+                    + _rate(rates.get("dose36"))
+                    + ", dose72 "
+                    + _rate(rates.get("dose72"))
+                    + "."
+                )
+            bits.append(
+                "<div>Shape readout (descriptive only — no shape "
+                "is claimed or gated): "
+                + hist_bits
+                + "returns R (fail at dose18 or dose36, pass at "
+                "dose72) " + _count(shape.get("returns")) + "; " + rate_bits + "</div>"
+            )
+        tail = entry.get("tail_contrast")
+        if type(tail) is dict:
+            rival_bits = ""
+            if tail.get("rival_reading") is True:
+                rival_bits = (
+                    " The two arms' discordance is within noise "
+                    "of each other, so the honest reading of this "
+                    "panel is word-count loss at 50 percent of "
+                    "the eligible words, not interior placement."
+                )
+            bits.append(
+                "<div>Displaced control, tail72 vs dose72 over "
+                + _count(tail.get("n_compared"))
+                + " compared cases: dose72 fails "
+                + _count(tail.get("dose72_fails"))
+                + ", tail72 fails "
+                + _count(tail.get("tail72_fails"))
+                + ", dose72-only failures "
+                + _count(tail.get("dose72_only"))
+                + ", tail72-only failures "
+                + _count(tail.get("tail72_only"))
+                + "."
+                + rival_bits
+                + "</div>"
+            )
+        ids = entry.get("ids")
+        if type(ids) is dict:
+            id_bits: list[str] = []
+            for arm_name in ("dose18", "dose36", "dose72", "tail72"):
+                block = ids.get(arm_name)
+                if type(block) is not dict:
+                    continue
+                deltas = block.get("id_length_delta_by_case")
+                delta_text = ", ".join(_count(d) for d in deltas) if type(deltas) is list else "n/a"
+                id_bits.append(
+                    _escape_text(arm_name)
+                    + " id-length deltas (vs dose0, case order): "
+                    + delta_text
+                    + "; max abs id delta "
+                    + _count(block.get("max_abs_id_delta"))
+                    + ", ids-identical "
+                    + _count(block.get("n_ids_identical"))
+                    + ", same-ids verdict flips "
+                    + _count(block.get("n_same_ids_flips"))
+                )
+            if id_bits:
+                exclusion_bits = ""
+                if type(headline) is dict:
+                    exclusion_bits = (
+                        " Exclusions from the headline population: "
+                        + _count(headline.get("n_ids_identical"))
+                        + " ids-identical (dose0 vs dose72), "
+                        + _count(headline.get("n_screened"))
+                        + " closed-book screened, "
+                        + _count(headline.get("n_closed_book_incomplete"))
+                        + " closed-book incomplete (kept in), "
+                        + _count(headline.get("n_headline_incomplete"))
+                        + " incomplete in a headline arm."
+                    )
+                bits.append("<div>" + "; ".join(id_bits) + "." + exclusion_bits + "</div>")
+        shares = entry.get("dropped_shares")
+        if type(shares) is dict:
+            share_bits: list[str] = []
+            for arm_name in ("dose18", "dose36", "dose72", "tail72"):
+                block = shares.get(arm_name)
+                if type(block) is dict:
+                    share_bits.append(
+                        _escape_text(arm_name)
+                        + " numeral "
+                        + _rate(block.get("numeral"))
+                        + " / negation "
+                        + _rate(block.get("negation"))
+                    )
+            if share_bits:
+                bits.append(
+                    "<div>Dropped-set shares by class (expected 0 "
+                    "under the screens): " + "; ".join(share_bits) + ".</div>"
+                )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + _escape_text(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+
+    tail_paragraphs = [
+        "<p>Operating characteristics of the frozen rule (C at "
+        "least 12, A at least 5, two-sided exact McNemar p below "
+        "0.05), by exact enumeration — no Monte Carlo figures. "
+        "Stated conditional basis (dose0 pass Bernoulli p0; "
+        "dose72 failure given a dose0 pass with probability q; "
+        "dose72 pass given a dose0 failure with probability r; "
+        "arms conditionally independent): the random labeller "
+        "(p0 0.5, q and r 0.5) fires 0.0121 per decision, the "
+        "competent no-effect panel (p0 0.9, q and r 0.1) fires "
+        "0.0143, and jitter (p0 0.97, q and r 0.02) fires "
+        "0.000005; family-wise over a 24-candidate panel that "
+        "basis expects 0.34 false labels with probability 0.29 "
+        "of at least one. Exchangeable basis (per-case joint: "
+        "pass/pass = m - v, pass/fail = fail/pass = v, "
+        "fail/fail = 1 - m - v, v the per-direction "
+        "discordance): the competent panel at m 0.9 fires "
+        "0.0030 at v 0.09, 0.0004 at v 0.05, and 0.000004 at "
+        "v 0.02, and the random labeller agrees with the "
+        "stated row at 0.0121; family-wise expectation 0.07 "
+        "with probability 0.07 of at least one. Power (stated "
+        "basis, r 0.1): a 25 percent top-dose drop is detected "
+        "0.3969 of the time, a 50 percent drop 0.9601, a 75 "
+        "percent drop 0.9996 — graded and threshold-at-72 "
+        "shapes are one computation, because the rule reads "
+        "only dose0 and dose72. The rule is therefore powered "
+        "for large drops only: a below_threshold is weak "
+        "evidence, never invariance, and an insufficient is "
+        "withheld, never an acquittal. The enumerations are "
+        "computed on the population the rule conditions on — "
+        "cases completed in all four headline arms and not "
+        "screened or ids-identical — so they take completion "
+        "as given; per-arm attrition prints beside every rate "
+        "above, and closed-book screening only shrinks the "
+        "population (stated basis: the competent rate falls "
+        "from 0.0143 at 24 cases to 0.0017 at 16; the random "
+        "rate from 0.0121 to 0.0072 at 17 and 0.0019 at "
+        "14).</p>",
+        "<p>What the label attributes: the drop is attributed "
+        "to the named word-loss treatment as a bundle — "
+        "information loss, prompt shortening, fact-position "
+        "shift, and sentence breakage move together under the "
+        "scattered operator. At dose72 the fact sentence "
+        "shifts earlier by a mean of 36.0 words (hypergeometric "
+        "sd 3.01) against exactly 0 under tail72, and an "
+        "expected 15.95 of the 16 context sentences are "
+        "partially broken at dose72 (0.02 removed whole, 0.02 "
+        "intact) against 0 broken under tail72, which instead "
+        "relocates the fact to passage-final position. The "
+        "tail72 contrast therefore separates scatter-vs-block "
+        "jointly with fact position, never either alone; read "
+        "any prune_drop_observed with its tail72 row. Two "
+        "shape gates were executed and rejected, so no shape "
+        "is gated: a returns cap collapses graded 50 percent "
+        "power from 0.9601 to 0.0941 under the printed "
+        "interpolation (per-dose failure probability linear "
+        "in dose), and an intermediate-support requirement "
+        "collapses threshold-at-72 power to exactly 0.</p>",
+        "<p>Printed limitations: the answer-bearing sentence "
+        "is never pruned, so this instrument decides nothing "
+        "about trims that can delete the answer itself — real "
+        "summarisers can, and that failure mode is out of "
+        "scope by construction. Doses are word counts: a "
+        "checkpoint whose tokenizer splits the passage's words "
+        "unevenly realises a different token dose per family "
+        "at the same word dose, and the id-length deltas above "
+        "are the printed evidence of that. There is no winner "
+        "readout and no selection over this generated panel. "
+        "The claim is scoped to this frozen panel, this "
+        "checkpoint, and the named seeded interior word-loss "
+        "treatment — nothing about truncation, compression, "
+        "or summarisation in general.</p>",
+    ]
+    return (
+        '<section class="card" id="prune-sweep">'
+        "<h2>Prune sweep (seeded interior word loss from a frozen passage)</h2>"
+        "<p>This probe prunes passage words: each generated "
+        "case is one user message — a frozen instruction, a "
+        "17-sentence passage whose 16 context sentences carry "
+        "144 eligible words around a six-word answer-bearing "
+        "fact sentence that is never pruned, and a frozen "
+        "question — and the treated arms delete the first 18, "
+        "36, or 72 words of the case's frozen sha256 drop "
+        "order over the eligible positions. The tail72 arm "
+        "deletes the same count from the passage tail instead, "
+        "and the closed_book arm deletes the passage entirely "
+        "as a screen. The scorer is byte-exact conjoined with "
+        "boundary presence; every arm is a fixture with the "
+        "same id, so request seeds are identical across arms. "
+        "Each cell is one greedy generation. Records carry "
+        "digests only.</p>"
+        "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        + "".join(tail_paragraphs)
+        + "</section>"
+    )
+
+
 def _rotation_section(result: dict[str, Any]) -> str:
     """Context rotation probe: does cyclically rotating the block span move the verdict?
 
@@ -10693,6 +11047,7 @@ def render_html(result: dict[str, Any]) -> str:
     negation_html = _negation_section(result)
     instruction_distance_html = _instruction_distance_section(result)
     history_frame_html = _history_frame_section(result)
+    prune_sweep_html = _prune_sweep_section(result)
     choiceaudit_html = _choiceaudit_section(result)
     precision_html = _precision_section(result)
     confidence_html = _confidence_section(result)
@@ -10884,6 +11239,11 @@ def render_html(result: dict[str, Any]) -> str:
                 history_frame_html,
             ),
             (
+                "prune-sweep",
+                "Prune sweep (seeded interior word loss from a frozen passage)",
+                prune_sweep_html,
+            ),
+            (
                 "choice-audit",
                 "Choice-scoring audit (second opinion)",
                 choiceaudit_html,
@@ -11012,6 +11372,7 @@ def render_html(result: dict[str, Any]) -> str:
         + negation_html
         + instruction_distance_html
         + history_frame_html
+        + prune_sweep_html
         + choiceaudit_html
         + precision_html
         + confidence_html

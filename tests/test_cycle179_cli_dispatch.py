@@ -115,6 +115,7 @@ STAGE_FLAGS = [
     ("--negation", "negation", None),
     ("--instruction-distance", "instruction_distance", None),
     ("--history-frame", "history_frame", None),
+    ("--prune-sweep", "prune_sweep", None),
     ("--rotate", "rotate", None),
     ("--density", "density", None),
     ("--field-order", "field_order", None),
@@ -322,6 +323,12 @@ HELPER_DISPATCH = [
         "history_frame",
         "historyframe_unavailable",
         ["history_frame_stage", "history_frame_analysis"],
+    ),
+    (
+        "_run_prune_sweep_probe",
+        "prune_sweep",
+        "prune_unavailable",
+        ["prune_sweep_stage", "prune_sweep_analysis"],
     ),
     (
         "_run_rotation_probe",
