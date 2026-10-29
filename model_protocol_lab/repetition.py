@@ -123,7 +123,8 @@ def target_content(fixture: Fixture) -> str:
 def is_vacuous(content: str) -> bool:
     """Vacuous is a content predicate, not render equality: under the
     frozen joiner an empty content's x2 render differs from x1 by the
-    joiner alone, so render comparison would miss it."""
+    joiner alone, so render comparison would miss it.
+    """
     return content.strip() == ""
 
 
@@ -166,6 +167,7 @@ def is_echo_fixture(fixture: Fixture) -> bool:
     return bool(expected) and expected in target_content(fixture)
 
 
+# skipcq: PYL-W0621 - the name mirrors the frozen payload field it consumes
 def build_arm_fixture(fixture: Fixture, arm: str, filler_text: str = "") -> Fixture:
     """A copy of ``fixture`` with the target content surgically rewritten.
 
@@ -281,6 +283,7 @@ def classify_construction(
 
 
 def _arm_verdict(record: dict[str, Any], arm: str) -> bool | None:
+    """Return the arm verdict."""
     cell = record["arms"][arm]
     if cell is None:
         return None
@@ -299,6 +302,7 @@ def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     def _contrast(
         recs: list[dict[str, Any]], arm_a: str, arm_b: str, effect_name: str
     ) -> dict[str, Any]:
+        """Return the contrast."""
         paired = [
             r
             for r in recs

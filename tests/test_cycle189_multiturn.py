@@ -245,6 +245,7 @@ class TestGenerator(unittest.TestCase):
                 self.assertEqual(len(set(values)), len(values))
                 for value in values:
                     self.assertTrue(1 <= value <= 99)
+                # skipcq: PYL-W0640 - consumed by max() in-iteration; the parameter binds per call
                 best = max(range(len(values)), key=lambda i: values[i])
                 self.assertEqual(fixture["expected"], "ABC"[best])
                 text = multiturn.JOINER.join(fixture["shards"])
@@ -365,7 +366,8 @@ class TestStage(unittest.TestCase):
 
 
 class TestAggregateClassify(unittest.TestCase):
-    def _classify(self, patterns_by_depth):
+    @staticmethod
+    def _classify(patterns_by_depth):
         records = []
         for depth, patterns in patterns_by_depth.items():
             records.extend(_depth_records(depth, patterns))
@@ -611,7 +613,8 @@ class TestGapCoverage(unittest.TestCase):
     self-history outcomes, in-turn cancel, evaluation
     failure, the record budget, the stage screen, analysis
     over an unavailable candidate, and mismatched completed
-    sets across candidates."""
+    sets across candidates.
+    """
 
     def test_seed_must_be_int(self):
         with self.assertRaises(ValueError):
@@ -732,7 +735,8 @@ class TestGapCoverage(unittest.TestCase):
 class TestMirrorBatteryAdditions(unittest.TestCase):
     """Mirror-side reject branches: mutations that pass the
     producer-shaped checks and must die inside the
-    diffreports mirror's own cell/recompute guards."""
+    diffreports mirror's own cell/recompute guards.
+    """
 
     @classmethod
     def setUpClass(cls):

@@ -674,15 +674,18 @@ class ByteBackend:
     fingerprint = "fake-byte-backend"
     vocab_size = 256
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
         if type(text) is not str:
             raise ValueError("encode needs str")
         return tuple(text.encode("utf-8"))
 
-    def decode(self, token_ids):
+    @staticmethod
+    def decode(token_ids):
         return bytes(tuple(token_ids)).decode("utf-8")
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         raise AssertionError("ByteBackend.generate must be overridden")
 
 
@@ -905,7 +908,8 @@ class TestClassifyObservation(unittest.TestCase):
 
 
 class TestFailureTaxonomy(unittest.TestCase):
-    def _random_result(self, rng):
+    @staticmethod
+    def _random_result(rng):
         boundary = (rng.randrange(1, 250),)
         eos_id = rng.choice([None, 7])
         n_candidates = rng.randrange(1, 4)
@@ -1002,7 +1006,8 @@ class TestFailureTaxonomy(unittest.TestCase):
 
 
 class TestBudgetFrontier(unittest.TestCase):
-    def _random_case(self, rng):
+    @staticmethod
+    def _random_case(rng):
         n_candidates = rng.randrange(1, 4)
         n_fixtures = rng.randrange(1, 5)
         boundary = tuple(rng.randrange(1, 250) for _ in range(rng.choice([1, 2])))
@@ -1261,7 +1266,8 @@ class TestBudgetFrontier(unittest.TestCase):
 
 
 class TestResolveBoundaries(unittest.TestCase):
-    def _formats(self, rng, n):
+    @staticmethod
+    def _formats(rng, n):
         out = []
         for i in range(n):
             out.append(
@@ -1320,7 +1326,8 @@ class TestResolveBoundaries(unittest.TestCase):
 
 
 class TestCandidateFingerprint(unittest.TestCase):
-    def _formats(self, rng):
+    @staticmethod
+    def _formats(rng):
         return Format(
             name=rng.choice(["a", "b"]),
             bos=rng.choice(["", "<s>"]),
@@ -1391,7 +1398,8 @@ class TestCandidateFingerprint(unittest.TestCase):
 
 
 class TestStopCell(unittest.TestCase):
-    def _fixture(self, expected="AB"):
+    @staticmethod
+    def _fixture(expected="AB"):
         return Fixture(
             id="f0",
             messages=(Message(role="user", content="q"),),
@@ -1461,7 +1469,8 @@ class TestStopCell(unittest.TestCase):
 
 
 class TestStopMatrix(unittest.TestCase):
-    def _fixtures(self, n):
+    @staticmethod
+    def _fixtures(n):
         return tuple(
             Fixture(
                 id=f"f{i}",
@@ -1472,7 +1481,8 @@ class TestStopMatrix(unittest.TestCase):
             for i in range(n)
         )
 
-    def _random_obs(self, rng, fid, boundary, eos_id):
+    @staticmethod
+    def _random_obs(rng, fid, boundary, eos_id):
         status = rng.choice(["completed"] * 7 + ["failed", "cancelled"])
         output = _rand_ids(rng, 0, 10)
         if status == "completed" and rng.random() < 0.5:
@@ -1668,7 +1678,8 @@ class TestStopMatrix(unittest.TestCase):
 
 
 class TestLogprobScoring(unittest.TestCase):
-    def _random_scores(self, rng, n):
+    @staticmethod
+    def _random_scores(rng, n):
         scores = []
         for _ in range(n):
             status = rng.choice(["ok"] * 5 + ["unavailable", "ok_empty"])
@@ -1770,7 +1781,8 @@ class TestLogprobScoring(unittest.TestCase):
 
         # encode raising -> fixed encode_failed code, never an exception.
         class BoomEncode(ByteBackend):
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 raise RuntimeError("tokenizer exploded")
 
         got = X._score_expected_answer(BoomEncode(), (1, 2), "AB")
@@ -1780,7 +1792,8 @@ class TestLogprobScoring(unittest.TestCase):
 
         # encode returning a non-tuple -> same fixed code.
         class WeirdEncode(ByteBackend):
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 return [65, 66]
 
         got2 = X._score_expected_answer(WeirdEncode(), (1,), "AB")
@@ -1801,7 +1814,8 @@ class TestLogprobScoring(unittest.TestCase):
 
 
 class TestLogprobDiagnostic(unittest.TestCase):
-    def _fixtures(self):
+    @staticmethod
+    def _fixtures():
         return (
             Fixture(
                 id="f0",
@@ -1817,7 +1831,8 @@ class TestLogprobDiagnostic(unittest.TestCase):
             ),
         )
 
-    def _result(self, rng, statuses):
+    @staticmethod
+    def _result(rng, statuses):
         observations_a = []
         observations_b = []
         for i, fid in enumerate(("f0", "f1")):
@@ -1944,7 +1959,8 @@ class TestLogprobDiagnostic(unittest.TestCase):
 
 
 class TestSummaryPins(unittest.TestCase):
-    def _obs(self, **kw):
+    @staticmethod
+    def _obs(**kw):
         base = {
             "candidate": "c",
             "fixture": "f",
@@ -1961,7 +1977,8 @@ class TestSummaryPins(unittest.TestCase):
         base.update(kw)
         return Observation(**base)
 
-    def _report(self, observations, planned, status):
+    @staticmethod
+    def _report(observations, planned, status):
         return EvaluationReport(
             observations=tuple(observations), planned_count=planned, status=status
         )

@@ -439,12 +439,14 @@ def digest_text(text: str) -> str:
 
 def digest_ids(ids: tuple[int, ...]) -> str:
     """SHA-256 hex digest of a render id sequence, so records
-    carry the sequence's identity without its contents."""
+    carry the sequence's identity without its contents.
+    """
     canonical = ",".join(str(i) for i in ids)
     return hashlib.sha256(canonical.encode("ascii")).hexdigest()
 
 
 def _sha(text: str) -> str:
+    """Return the sha."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
@@ -460,7 +462,8 @@ def _draw_sentence(seed: int, case_id: str, slot: int, seen: set[str]) -> str:
     draw digests sha256(f"{seed}:{case_id}:slot:{slot}:{counter}")
     for counter 0, 1, 2, ...; four hex windows select the
     subject, object, place, and time; a sentence already in
-    ``seen`` is redrawn with the next counter."""
+    ``seen`` is redrawn with the next counter.
+    """
     template = TEMPLATES[slot % len(TEMPLATES)]
     counter = 0
     while counter < 10000:
@@ -480,7 +483,8 @@ def _draw_sentence(seed: int, case_id: str, slot: int, seen: set[str]) -> str:
 def generate_case(seed: int, index: int) -> dict[str, Any]:
     """The frozen generated case ``index`` (0-23) at ``seed``:
     16 drawn context sentences plus the fact sentence built
-    from the case's topic and value."""
+    from the case's topic and value.
+    """
     case_id = f"prune-{index:02d}"
     topic = TOPICS[index % len(TOPICS)]
     value = VALUES[index]
@@ -511,7 +515,8 @@ def drop_order(seed: int, case_id: str) -> tuple[int, ...]:
     sha256(f"{seed}:{case_id}:{position}") (amendment E --
     the position is the eligible-list index in passage
     order). Dose k drops the first k positions, so the drop
-    sets are nested by construction."""
+    sets are nested by construction.
+    """
     return tuple(
         sorted(
             range(ELIGIBLE_WORDS),
@@ -526,7 +531,8 @@ def dropped_positions(case_id: str, arm: str, seed: int) -> frozenset[int]:
     words of passage sentences 9-16); the dose arms drop the
     first ``dose`` positions of the drop order;
     ``closed_book`` drops nothing (its message has no
-    passage)."""
+    passage).
+    """
     if arm == DESCRIPTIVE_ARM:
         return frozenset(range(ELIGIBLE_WORDS // 2, ELIGIBLE_WORDS))
     dose = DOSE_BY_ARM.get(arm)
@@ -539,7 +545,8 @@ def _passage(case: dict[str, Any], dropped: frozenset[int]) -> str:
     """The passage text under a drop set: context sentences
     keep their surviving words in order, sentences that lose
     every word are omitted, and the fact sentence sits after
-    the first eight context slots, byte-identical always."""
+    the first eight context slots, byte-identical always.
+    """
     kept: dict[int, str] = {}
     for slot, sentence in enumerate(case["context_sentences"]):
         words = sentence.split(" ")
@@ -561,7 +568,8 @@ def _passage(case: dict[str, Any], dropped: frozenset[int]) -> str:
 def arm_content(case: dict[str, Any], arm: str, seed: int) -> str:
     """The full user-message content of one arm: instruction,
     passage, and question joined by newlines (the passage is
-    absent under ``closed_book``)."""
+    absent under ``closed_book``).
+    """
     question = QUESTION_TEMPLATE.format(topic=case["topic"])
     if arm == SCREEN_ARM:
         return f"{INSTRUCTION}\n{question}"
@@ -572,7 +580,8 @@ def arm_content(case: dict[str, Any], arm: str, seed: int) -> str:
 def case_material_sha256() -> str:
     """Digest over every frozen text and list the generator
     draws from, so the protocol binds the population's
-    definition, not just its seed."""
+    definition, not just its seed.
+    """
     material = {
         "instruction": INSTRUCTION,
         "fact_template": FACT_TEMPLATE,
@@ -594,7 +603,8 @@ def case_material_sha256() -> str:
 def ground_sha256(seed: int) -> str:
     """Digest over the seed's generated ground population
     (canonical rows binding fixture id, topic, value, the 16
-    context sentences, and the fact sentence of every case)."""
+    context sentences, and the fact sentence of every case).
+    """
     rows = [
         [
             case["fixture_id"],
@@ -613,7 +623,8 @@ def protocol_object(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The frozen instrument description a payload is checked
     against: arms, doses, floors, budgets, the case-material
     and ground digests, and the seed / backend identity that
-    generated the records."""
+    generated the records.
+    """
     return {
         "version": PROTOCOL_VERSION,
         "arm_keys": list(ARM_KEYS),
@@ -655,7 +666,8 @@ def _bare(word: str) -> str:
 
 def _word_classes(word: str) -> tuple[bool, bool]:
     """(is_numeral, is_negation) for one eligible word
-    (amendment D's dropped-set share classes)."""
+    (amendment D's dropped-set share classes).
+    """
     bare = _bare(word).lower()
     return any(char.isdigit() for char in bare), bare in NEGATION_WORDS
 
@@ -664,7 +676,8 @@ def dropped_set_shares(case: dict[str, Any], seed: int) -> dict[str, Any]:
     """Per drop arm, the share of dropped words in the
     numeral and negation classes (amendment D; expected 0 by
     the screens, printed and validator-mirrored, never
-    assumed)."""
+    assumed).
+    """
     words = [word for sentence in case["context_sentences"] for word in sentence.split(" ")]
     shares: dict[str, Any] = {}
     for arm in (*HEADLINE_ARMS[1:], DESCRIPTIVE_ARM):
@@ -786,7 +799,8 @@ def decompose_cell(cell: dict[str, Any], expected_digest: str) -> str:
     B): ``exact_pass`` (the verdict passed), then
     ``boundary_only`` (the digest is the expected one; the
     boundary event alone failed), then ``wrong_value`` (the
-    digest is a different pool value's), else ``non_value``."""
+    digest is a different pool value's), else ``non_value``.
+    """
     if cell.get("verdict") is True:
         return "exact_pass"
     digest = cell.get("answer_digest")
@@ -802,7 +816,8 @@ def classify_decision(direct_passes: int, drop_cases: int, reverse: int) -> str:
     ``insufficient`` (withheld, never an acquittal);
     A >= 5 with the two-sided exact McNemar p(A, B) < 0.05
     -> ``prune_drop_observed``; else ``below_threshold`` (an
-    observed null at this panel size, weak evidence)."""
+    observed null at this panel size, weak evidence).
+    """
     if direct_passes < MIN_C:
         return "insufficient"
     p = mcnemar_exact_p(drop_cases, reverse)
@@ -812,6 +827,7 @@ def classify_decision(direct_passes: int, drop_cases: int, reverse: int) -> str:
 
 
 def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the cell."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -820,6 +836,7 @@ def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
 
 
 def _detail(record: dict[str, Any], key: str) -> str:
+    """Return the detail."""
     details = record.get("cell_details")
     if not isinstance(details, dict):
         return ""
@@ -828,20 +845,23 @@ def _detail(record: dict[str, Any], key: str) -> str:
 
 
 def _rate(numerator: int, denominator: int) -> float | None:
+    """Return the rate."""
     return (numerator / denominator) if denominator else None
 
 
 def _verdict(record: dict[str, Any], key: str) -> bool:
     """One record's verdict for one arm; False when the cell
     did not complete. (On a completed-restricted set this is
-    exactly the cell's verdict.)"""
+    exactly the cell's verdict.)
+    """
     cell = _cell(record, key)
     return bool(cell is not None and cell["verdict"])
 
 
 def _screened(record: dict[str, Any]) -> bool:
     """The closed-book screen: the candidate passed the case
-    with no passage at all, so passage loss cannot move it."""
+    with no passage at all, so passage loss cannot move it.
+    """
     cell = _cell(record, SCREEN_ARM)
     return bool(cell is not None and cell["verdict"])
 
@@ -850,7 +870,8 @@ def _ids_identical(record: dict[str, Any]) -> bool:
     """The ids-identical gate, derived from the recorded
     per-arm id digests alone: the dose0 and dose72 renders
     tokenise identically, so the pair is a rendering anomaly,
-    not a measurement."""
+    not a measurement.
+    """
     digests = record.get("id_digests")
     if not isinstance(digests, dict):
         return False
@@ -859,13 +880,15 @@ def _ids_identical(record: dict[str, Any]) -> bool:
 
 def _first_flip(record: dict[str, Any]) -> str:
     """The first headline dose whose verdict fails, over
-    ("dose18", "dose36", "dose72"); "never" when none does."""
+    ("dose18", "dose36", "dose72"); "never" when none does.
+    """
     for arm in HEADLINE_ARMS[1:]:
         if not _verdict(record, arm):
             return arm
     return "never"
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-candidate aggregates over its ground records:
     per-arm completion, attrition, and decomposition; the
@@ -875,7 +898,8 @@ def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     id-length report; and the dropped-set class shares.
     Every count carries its denominator; discordance is
     never pooled across candidates -- this function sees one
-    candidate's records only."""
+    candidate's records only.
+    """
     arms: dict[str, Any] = {}
     for key in ARM_KEYS:
         n_completed = 0

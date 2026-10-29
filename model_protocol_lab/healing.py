@@ -1,4 +1,4 @@
-"""Token healing for greedy tokenization bias (research wave-2 idea 3).
+r"""Token healing for greedy tokenization bias (research wave-2 idea 3).
 
 Ports the *mechanism* of Hugging Face transformers'
 ``GenerationMixin.heal_tokens`` (``generation/utils.py``) into a
@@ -8,7 +8,7 @@ backend-agnostic, pure core:
    -- the step that repairs prompts affected by greedy tokenization bias).
 2. Take the tail token; find every vocabulary token whose token-text starts
    with the tail token's text (whitespace represented as its tokenization,
-   e.g. ``'\\u0120'`` for GPT-2 -- exactly HF's ``ExtensionsTrie`` prefix
+   e.g. ``'\u0120'`` for GPT-2 -- exactly HF's ``ExtensionsTrie`` prefix
    search, here as a deterministic linear scan).
 3. Trim the tail token and greedily generate one replacement token with a
    sequence bias of +10.0 on every extension and +1.0 on the original tail
@@ -49,10 +49,10 @@ HEAL_ORIGINAL_BIAS = 1.0
 
 
 def normalize_tail_text(tail_text: str, space_token_text: str | None) -> str:
-    """Map real spaces to their tokenization for the trie prefix search.
+    r"""Map real spaces to their tokenization for the trie prefix search.
 
     HF replaces ``" "`` with the token text of the space token (e.g.
-    ``'\\u0120'``) so the prefix search finds tokens *prefixed with a
+    ``'\u0120'``) so the prefix search finds tokens *prefixed with a
     whitespace*. No space token (or no spaces in the tail) leaves the text
     untouched. Non-string input is a programming error, not a runtime
     condition: raise.

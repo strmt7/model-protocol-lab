@@ -224,6 +224,8 @@ class FixtureSerializationAuditTests(unittest.TestCase):
 
     def setUp(self) -> None:
         import tempfile
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from pathlib import Path
 
         self._td = tempfile.TemporaryDirectory()
@@ -232,11 +234,13 @@ class FixtureSerializationAuditTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._td.cleanup()
 
-    def test_roundtrip_adversarial_split(self):
+    @staticmethod
+    def test_roundtrip_adversarial_split():
         split = _adversarial_split()
         _assert_splits_equal(split, parse_dataset(split_to_json_text(split)))
 
-    def test_roundtrip_preserves_nfd_codepoints_exactly(self):
+    @staticmethod
+    def test_roundtrip_preserves_nfd_codepoints_exactly():
         split = _adversarial_split()
         reparsed = parse_dataset(split_to_json_text(split))
         original = split.search[0].messages[0].content
@@ -245,7 +249,8 @@ class FixtureSerializationAuditTests(unittest.TestCase):
         # Stored data stays byte-exact: no NFC normalization by the round-trip.
         assert reparsed.search[0].messages[0].content == original
 
-    def test_roundtrip_max_text_boundary(self):
+    @staticmethod
+    def test_roundtrip_max_text_boundary():
         split = _adversarial_split()
         huge = split.search[2]
         assert len(huge.messages[0].content) == MAX_TEXT
@@ -253,12 +258,14 @@ class FixtureSerializationAuditTests(unittest.TestCase):
         reparsed = parse_dataset(split_to_json_text(split))
         _assert_splits_equal(split, reparsed)
 
-    def test_roundtrip_max_messages_boundary(self):
+    @staticmethod
+    def test_roundtrip_max_messages_boundary():
         split = _adversarial_split()
         assert len(split.search[3].messages) == MAX_MESSAGES
         _assert_splits_equal(split, parse_dataset(split_to_json_text(split)))
 
-    def test_roundtrip_max_cases_boundary(self):
+    @staticmethod
+    def test_roundtrip_max_cases_boundary():
         search = tuple(
             _fixture(f"s{i:03d}", "gs", "e", (f"sq{i}",)) for i in range(MAX_CASES_PER_SPLIT)
         )
@@ -268,7 +275,8 @@ class FixtureSerializationAuditTests(unittest.TestCase):
         split = Split(search, held_out)
         _assert_splits_equal(split, parse_dataset(split_to_json_text(split)))
 
-    def test_roundtrip_duplicate_looking_ids_survive(self):
+    @staticmethod
+    def test_roundtrip_duplicate_looking_ids_survive():
         split = _adversarial_split()
         reparsed = parse_dataset(split_to_json_text(split))
         assert reparsed.held_out[0].id == "DUP-LOOK"
@@ -276,7 +284,8 @@ class FixtureSerializationAuditTests(unittest.TestCase):
         assert reparsed.search[1].id == "dup-look"
         _assert_splits_equal(split, reparsed)
 
-    def test_text_byte_identical_to_independent_reconstruction(self):
+    @staticmethod
+    def test_text_byte_identical_to_independent_reconstruction():
         for split in (
             _adversarial_split(),
             Split(
@@ -286,7 +295,8 @@ class FixtureSerializationAuditTests(unittest.TestCase):
         ):
             assert split_to_json_text(split) == _expected_text(split)
 
-    def test_text_framing(self):
+    @staticmethod
+    def test_text_framing():
         split = _adversarial_split()
         text = split_to_json_text(split)
         assert text.startswith("{")
@@ -662,7 +672,8 @@ def _lone_fixture(**kwargs: Any) -> Split:
 
 
 class _FailingWriter(io.StringIO):
-    def write(self, s: str) -> int:
+    @staticmethod
+    def write(s: str) -> int:
         raise OSError("simulated write failure")
 
 

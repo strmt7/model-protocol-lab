@@ -167,7 +167,8 @@ class DiffValidatorGapTests(unittest.TestCase):
 
 
 class TemplateRobustnessValidatorGapTests(unittest.TestCase):
-    def _payload(self, old_cand, new_cand):
+    @staticmethod
+    def _payload(old_cand, new_cand):
         def _side(cand):
             return {
                 "available": True,

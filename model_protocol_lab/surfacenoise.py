@@ -87,6 +87,7 @@ _BIDI_CONTROLS = frozenset(
 
 
 def _check_prompt(prompt_text: Any) -> str:
+    """Check prompt."""
     if type(prompt_text) is not str:
         raise ValueError("prompt_text must be a string")
     if len(prompt_text) > MAX_PROMPT_CHARS:
@@ -95,6 +96,7 @@ def _check_prompt(prompt_text: Any) -> str:
 
 
 def _check_fixtures(fixtures: Any) -> tuple[Fixture, ...]:
+    """Check fixtures."""
     if type(fixtures) is not tuple or not fixtures:
         raise ValueError("fixtures must be a nonempty tuple of Fixture")
     if any(type(case) is not Fixture for case in fixtures):
@@ -113,6 +115,7 @@ def _check_fixtures(fixtures: Any) -> tuple[Fixture, ...]:
 
 
 def _check_boundary(boundary: Any) -> tuple[int, ...]:
+    """Check boundary."""
     if (
         type(boundary) is not tuple
         or not boundary
@@ -123,18 +126,21 @@ def _check_boundary(boundary: Any) -> tuple[int, ...]:
 
 
 def _check_max_new_tokens(value: Any) -> int:
+    """Check max new tokens."""
     if type(value) is not int or isinstance(value, bool) or not 1 <= value <= 4096:
         raise ValueError("max_new_tokens must be an integer between 1 and 4096")
     return value
 
 
 def _check_seed(seed: Any) -> int:
+    """Check seed."""
     if type(seed) is not int or isinstance(seed, bool) or not 0 <= seed < 2**64:
         raise ValueError("seed must be an unsigned 64-bit integer")
     return seed
 
 
 def _valid_ids(ids: Any) -> bool:
+    """Return whether ids is valid."""
     return type(ids) is tuple and all(type(t) is int and t >= 0 for t in ids)
 
 
@@ -151,6 +157,7 @@ def perturbation_code_hash() -> str:
 
 
 def _fixture_hash(fixtures: tuple[Fixture, ...]) -> str:
+    """Return the fixture hash."""
     payload = [
         {
             "id": case.id,
@@ -362,6 +369,7 @@ def token_edit_rate(a: tuple[int, ...], b: tuple[int, ...]) -> float:
 
 
 def _request_seed(seed: int, fixture_id: str) -> int:
+    """Return the request seed."""
     material = f"{seed}\0{fixture_id}".encode("utf-8", errors="surrogatepass")
     return int.from_bytes(hashlib.sha256(material).digest()[:4], "big")
 
@@ -474,10 +482,12 @@ def _enumerate_variants(prompt_text: str) -> list[tuple[str, str, dict[str, Any]
 
 
 def _operator_exact(operator: str) -> bool:
+    """Return the operator exact."""
     return operator in ("whitespace", "punctuation_strip")
 
 
 def _operator_coverage(operator: str, n: int) -> str:
+    """Return the operator coverage."""
     if operator in ("typo", "case_flip", "unicode_variant"):
         return f"{len(SEARCH_PLAN_SEEDS)} of 2**64 seeds searched (heuristic)"
     if operator == "whitespace":
@@ -491,6 +501,7 @@ def _operator_coverage(operator: str, n: int) -> str:
 def _unavailable(
     protocol: dict[str, Any], prompt_text: str, fixtures: tuple[Fixture, ...], reason: str
 ) -> dict[str, Any]:
+    """Return the unavailable."""
     return {
         "instrument": PROBE_NAME,
         "protocol_version": PROBE_VERSION,
@@ -716,6 +727,7 @@ def probe_surface_noise(
 
 
 def _lint_check(name: str, passed: bool, detail: str, rationale: str) -> dict[str, Any]:
+    """Return the lint check."""
     return {"name": name, "passed": passed, "detail": detail, "rationale": rationale}
 
 
@@ -922,12 +934,14 @@ class _ControlCalibrationBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode the complete rendered prompt into raw token IDs."""
         if type(text) is not str:
             raise ValueError("text must be a string")
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(ids: tuple[int, ...]) -> str:
+        """Decode token IDs without dropping special tokens."""
         return "".join(map(chr, ids))
 
     def generate(
@@ -938,6 +952,7 @@ class _ControlCalibrationBackend:
         seed: int,
         cancel: threading.Event | None,
     ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         if cancel is not None and cancel.is_set():
             return Generation((), "cancelled")
         prompt = self.decode(input_ids)
@@ -963,6 +978,7 @@ class SelfTestBackend:
     """
 
     def __init__(self, marker: str = "MAGICWORD"):
+        """Initialise the marker-keyed self-test backend."""
         if type(marker) is not str or not marker:
             raise ValueError("marker must be a nonempty string")
         self._marker = marker
@@ -973,12 +989,14 @@ class SelfTestBackend:
 
     @staticmethod
     def encode(text: str) -> tuple[int, ...]:
+        """Encode the complete rendered prompt into raw token IDs."""
         if type(text) is not str:
             raise ValueError("text must be a string")
         return tuple(map(ord, text))
 
     @staticmethod
     def decode(ids: tuple[int, ...]) -> str:
+        """Decode token IDs without dropping special tokens."""
         return "".join(map(chr, ids))
 
     def generate(
@@ -989,6 +1007,7 @@ class SelfTestBackend:
         seed: int,
         cancel: threading.Event | None,
     ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         if cancel is not None and cancel.is_set():
             return Generation((), "cancelled")
         prompt = self.decode(input_ids)
@@ -998,6 +1017,7 @@ class SelfTestBackend:
 
 
 def _mean_stability(operators: dict[str, Any]) -> float | None:
+    """Return the mean stability."""
     values: list[float] = [
         float(op["stability"])
         for op in operators.values()
@@ -1125,6 +1145,7 @@ def _regenerate_variant(prompt_text: str, operator: str, detail: dict[str, Any])
 
 
 def _excerpt(text: str, limit: int = 200) -> str:
+    """Return the excerpt."""
     return text if len(text) <= limit else text[:limit] + "…"
 
 
@@ -1475,6 +1496,7 @@ def build_surface_noise_parser(sub: Any) -> None:
 
 
 def _build_cli_backend(args: Any) -> Any:
+    """Build cli backend."""
     if args.backend == "selftest":
         return SelfTestBackend()
     if args.model is None:
@@ -1485,6 +1507,7 @@ def _build_cli_backend(args: Any) -> Any:
 
 
 def _load_probe_json(path: Path) -> Any:
+    """Load probe json."""
     target = Path(path)
     # Single-fd discipline (the datasets/diffreports/pack pattern):
     # O_NONBLOCK so opening a named FIFO with no writer cannot block
@@ -1512,11 +1535,11 @@ def _load_probe_json(path: Path) -> Any:
         raise ValueError(f"{path} exceeds 16 MiB")
     try:
         return json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError) as exc:
+    except ValueError as exc:
         raise ValueError(f"{path} is not valid JSON: {exc}") from exc
 
 
-def run_surface_noise(args: Any, parser: Any) -> int:
+def run_surface_noise(args: Any, _parser: Any) -> int:
     """Implement ``mpl surface-noise``; returns the process exit code.
 
     probe: JSON goes to stdout and to <output>/probe.json, the human
@@ -1967,6 +1990,7 @@ def _with_perturbed_contents(case: Fixture, perturbed: tuple[str, ...]) -> tuple
     return tuple(out)
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def probe_template_robustness(
     render: Any,
     template_name: str,
@@ -2008,6 +2032,7 @@ def probe_template_robustness(
     event = cancel if cancel is not None else threading.Event()
 
     def _cancelled(reason: str) -> dict[str, Any]:
+        """Return the cancelled."""
         return {
             "instrument": TEMPLATE_ROBUSTNESS_PROBE_NAME,
             "protocol_version": TEMPLATE_ROBUSTNESS_PROBE_VERSION,
@@ -2019,6 +2044,7 @@ def probe_template_robustness(
         }
 
     def _unavailable(reason: str) -> dict[str, Any]:
+        """Return the unavailable."""
         return {
             "instrument": TEMPLATE_ROBUSTNESS_PROBE_NAME,
             "protocol_version": TEMPLATE_ROBUSTNESS_PROBE_VERSION,
@@ -2192,7 +2218,7 @@ def probe_template_robustness(
                 if not vid.startswith(operator + "/"):
                     continue
                 v = variant_verdicts[vid]
-                if v == "abstain" or v == base_v:
+                if v in ("abstain", base_v):
                     continue
                 if base_v == "abstain":
                     # B-NEW-2: an abstain baseline has no verdict to flip

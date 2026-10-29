@@ -167,10 +167,12 @@ class SeedSpyBackend:
             self.seed_to_fid[seed] = fid
 
     # -- Backend protocol -------------------------------------------------
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         return tuple(ord(c) for c in text)
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return "".join(chr(i) for i in token_ids)
 
     def generate(
@@ -548,7 +550,8 @@ def _mixed_frontier_search() -> list[dict[str, Any]]:
 class TestBudgetFrontierOracle(unittest.TestCase):
     """Full-equality checks of budget_frontier against the hand-rolled oracle."""
 
-    def test_mixed_scenario_matches_oracle_exactly(self):
+    @staticmethod
+    def test_mixed_scenario_matches_oracle_exactly():
         search = _mixed_frontier_search()
         impl = budget_frontier(
             search,
@@ -571,7 +574,8 @@ class TestBudgetFrontierOracle(unittest.TestCase):
         # cand-Y uses the 10-id global boundary: "beta"+boundary -> cut 4 -> 14.
         assert impl["candidates"]["cand-Y"]["min_budget_per_fixture"] == [None, 14]
 
-    def test_per_candidate_boundary_token_ids_honored(self):
+    @staticmethod
+    def test_per_candidate_boundary_token_ids_honored():
         bnd = _boundary_ids()
         text = "alpha" + BOUNDARY_TEXT
         search = [
@@ -598,7 +602,8 @@ class TestBudgetFrontierOracle(unittest.TestCase):
         assert impl["candidates"]["c1"]["min_budget_per_fixture"] == [15]
         assert impl["candidates"]["c2"]["min_budget_per_fixture"] == [6]
 
-    def test_minimal_pair_boundary_shift_deltas(self):
+    @staticmethod
+    def test_minimal_pair_boundary_shift_deltas():
         search = _mixed_frontier_search()
         before = budget_frontier(
             search,
@@ -647,7 +652,8 @@ class TestBudgetFrontierOracle(unittest.TestCase):
         )
         assert after["candidates"]["cand-Y"] == before["candidates"]["cand-Y"]
 
-    def test_ambiguous_native_decision(self):
+    @staticmethod
+    def test_ambiguous_native_decision():
         search = _mixed_frontier_search()
         impl = budget_frontier(
             search,
@@ -672,7 +678,8 @@ class TestBudgetFrontierOracle(unittest.TestCase):
         assert impl["flip_ranges"] == [[1, 64]]
         assert impl["decision_steps"] == [[1, "no_candidate", None], [8, "selected", "cand-X"]]
 
-    def test_no_candidate_native_decision_is_robust(self):
+    @staticmethod
+    def test_no_candidate_native_decision_is_robust():
         search = [
             _synth_entry(
                 "c1",
@@ -700,7 +707,8 @@ class TestBudgetFrontierOracle(unittest.TestCase):
         assert impl["budget_robust"] is True
         assert impl["decision_steps"] == [[1, "no_candidate", None]]
 
-    def test_held_out_failed_native_decision(self):
+    @staticmethod
+    def test_held_out_failed_native_decision():
         search = _mixed_frontier_search()
         impl = budget_frontier(
             search,
@@ -719,7 +727,8 @@ class TestBudgetFrontierOracle(unittest.TestCase):
         assert impl["native_search_decision"] == "selected"
         assert impl["native_winner"] == "cand-X"
 
-    def test_budget_zero_and_one(self):
+    @staticmethod
+    def test_budget_zero_and_one():
         search = [
             _synth_entry(
                 "c1",
@@ -750,7 +759,8 @@ class TestBudgetFrontierOracle(unittest.TestCase):
         assert impl["flip_ranges"] == []
         assert impl["budget_robust"] is True
 
-    def test_failed_and_incomplete_observations_contribute_nothing(self):
+    @staticmethod
+    def test_failed_and_incomplete_observations_contribute_nothing():
         search = [
             _synth_entry(
                 "c1",
@@ -890,7 +900,8 @@ class TestBudgetFrontierOracle(unittest.TestCase):
 class TestBudgetFrontierFromRealRun(unittest.TestCase):
     """budget_frontier over a real run_experiment result (end of the CLI path)."""
 
-    def test_real_search_result_matches_oracle(self):
+    @staticmethod
+    def test_real_search_result_matches_oracle():
         sc = make_scenario(
             exp_seed=11,
             behavior={("cand-A", "S2"): "fail_answer", ("cand-B", "S1"): "fail_answer"},
@@ -1079,7 +1090,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
     def test_identical_logprobs_across_candidates(self):
         means = {(c, f): -3.0 for c in ("cand-A", "cand-B") for f in ("S1", "S2")}
         behavior = {("cand-A", "S1"): "fail_answer", ("cand-B", "S1"): "fail_answer"}
-        sc, result, diag = self._run(means=means, behavior=behavior)
+        _sc, _result, diag = self._run(means=means, behavior=behavior)
         assert diag["available"] is True
         agg_a, agg_b = (c["aggregate"] for c in diag["candidates"])
         assert agg_a["mean_logprob"] == agg_b["mean_logprob"]
@@ -1096,7 +1107,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
             ("cand-B", "S2"): -1.0,
         }
         behavior = {("cand-A", "S1"): "fail_answer", ("cand-B", "S1"): "fail_answer"}
-        sc, result, diag = self._run(means=means, behavior=behavior)
+        _sc, _result, diag = self._run(means=means, behavior=behavior)
         kinds = {c["name"]: c["interpretation"]["kind"] for c in diag["candidates"]}
         assert kinds == {"cand-A": "greedy_derailed", "cand-B": "indeterminate"}
 
@@ -1112,19 +1123,21 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
             ("cand-A", "S2"): "fail_answer",
             ("cand-B", "S1"): "fail_answer",
         }
-        sc, result, diag = self._run(means=means, behavior=behavior)
+        _sc, _result, diag = self._run(means=means, behavior=behavior)
         kinds = {c["name"]: c["interpretation"]["kind"] for c in diag["candidates"]}
         assert kinds["cand-A"] == "mixed"
         assert kinds["cand-B"] == "weights_dont_know"
 
     def test_minimal_pair_mean_shift_exact_delta(self):
-        sc1, result1, diag1 = self._run()
+        _sc1, _result1, diag1 = self._run()
         means2 = dict(self.MEANS)
         means2[("cand-A", "S2")] = -6.0
         sc2 = _logprob_scenario(means2, self.BEHAVIOR, exp_seed=21)
         result2 = run_search_experiment(sc2)
         diag2 = logprob_diagnostic(sc2.backend, result2, sc2.split.search)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         cand1 = next(c for c in diag1["candidates"] if c["name"] == "cand-A")
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         cand2 = next(c for c in diag2["candidates"] if c["name"] == "cand-A")
         fs1 = {s["fixture"]: s for s in cand1["fixture_scores"]}
         fs2 = {s["fixture"]: s for s in cand2["fixture_scores"]}
@@ -1137,7 +1150,9 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         assert cand1["interpretation"]["kind"] == "greedy_derailed"
         assert cand2["interpretation"]["kind"] == "weights_dont_know"
         # cand-B untouched end to end.
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         b1 = next(c for c in diag1["candidates"] if c["name"] == "cand-B")
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         b2 = next(c for c in diag2["candidates"] if c["name"] == "cand-B")
         assert b1 == b2
 
@@ -1175,7 +1190,8 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
             assert cand["aggregate"]["scored_fixtures"] == 0
             assert cand["aggregate"]["total_logprob"] is None
 
-    def test_backend_without_forward_logits_degrades(self):
+    @staticmethod
+    def test_backend_without_forward_logits_degrades():
         sc = make_scenario(exp_seed=21, behavior={("cand-A", "S2"): "fail_answer"})
         result = run_search_experiment(sc)
         assert not callable(getattr(sc.backend, "forward_logits", None))
@@ -1192,7 +1208,8 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         with self.assertRaises(ValueError):
             logprob_diagnostic(sc.backend, result, ("not", "fixtures"))
 
-    def test_aggregate_nan_defense(self):
+    @staticmethod
+    def test_aggregate_nan_defense():
         from model_protocol_lab.scoring import TargetScore
 
         bad = TargetScore(
@@ -1209,7 +1226,8 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         assert agg["total_logprob"] is None
         assert agg["mean_logprob"] is None
 
-    def test_interpretation_ignores_passing_fixtures(self):
+    @staticmethod
+    def test_interpretation_ignores_passing_fixtures():
         scores = [
             {
                 "native_pass": True,
@@ -1242,7 +1260,8 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
 
 
 class TestSensitivitySweep(unittest.TestCase):
-    def test_noop_perturbation_flags_nothing(self):
+    @staticmethod
+    def test_noop_perturbation_flags_nothing():
         sc = make_scenario(exp_seed=31, candidates=("cand-A",))
         result = run_search_experiment(sc)
         assert result["decision"] == "compatible_on_fixture_set"
@@ -1264,7 +1283,8 @@ class TestSensitivitySweep(unittest.TestCase):
         assert all(d["selected_candidate"] == "cand-A" for d in sweep["depths"])
         assert sweep["flips_at"] == []
 
-    def test_real_prompt_tail_change_is_detected(self):
+    @staticmethod
+    def test_real_prompt_tail_change_is_detected():
         sc = make_scenario(
             exp_seed=32,
             candidates=("cand-A",),
@@ -1287,7 +1307,8 @@ class TestSensitivitySweep(unittest.TestCase):
             assert depth["decision"] == "no_candidate"
             assert depth["selected_candidate"] is None
 
-    def test_winner_swap_with_same_decision_still_flagged(self):
+    @staticmethod
+    def test_winner_swap_with_same_decision_still_flagged():
         sc = make_scenario(
             exp_seed=33,
             candidates=("cand-A", "cand-B"),
@@ -1311,7 +1332,8 @@ class TestSensitivitySweep(unittest.TestCase):
             assert depth["decision"] == "compatible_on_fixture_set"
             assert depth["selected_candidate"] == "cand-B"
 
-    def test_codepoint_split_depth_records_failed_decision(self):
+    @staticmethod
+    def test_codepoint_split_depth_records_failed_decision():
         sc = make_scenario(
             exp_seed=34,
             candidates=("cand-A",),
@@ -1352,7 +1374,8 @@ class TestSensitivitySweep(unittest.TestCase):
                     seed=sc.exp_seed,
                 )
 
-    def test_sweep_result_is_json_serializable(self):
+    @staticmethod
+    def test_sweep_result_is_json_serializable():
         import json
 
         sc = make_scenario(exp_seed=36, candidates=("cand-A",))
@@ -1386,6 +1409,7 @@ class TestCliWiring(unittest.TestCase):
     @staticmethod
     def _run_options() -> dict[str, argparse.Action]:
         parser = build_parser()
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
         run_parser = sub.choices["run"]
         return {name: action for action in run_parser._actions for name in action.option_strings}
@@ -1612,6 +1636,7 @@ def _run_check(pkgdir: Path, check: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         timeout=120,
+        check=False,
     )
 
 

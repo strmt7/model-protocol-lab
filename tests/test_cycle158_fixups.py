@@ -92,7 +92,8 @@ def _number_schema(**field_kwargs):
 
 
 class SameIdsFragilityExclusionTests(unittest.TestCase):
-    def _record(self, mutation, *, n=9, divergent=0, flips=0, same=0):
+    @staticmethod
+    def _record(mutation, *, n=9, divergent=0, flips=0, same=0):
         return {
             "mutation": mutation,
             "n_fixtures": n,
@@ -161,7 +162,8 @@ class FlipFlopBackend:
 
 
 class WsCanonicalizationSameIdsEndToEndTests(unittest.TestCase):
-    def _run(self):
+    @staticmethod
+    def _run():
         from model_protocol_lab.core import evaluate
 
         names = ("chatml",)
@@ -302,7 +304,8 @@ class NonFiniteNumberTests(unittest.TestCase):
 
 
 class StructuredStageSchemaValidationTests(unittest.TestCase):
-    def _schemas(self):
+    @staticmethod
+    def _schemas():
         return {
             "s/x": {
                 "type": "object",
@@ -481,7 +484,8 @@ class FixupMutationGateTests(unittest.TestCase):
 
     # -- B1 gates ----------------------------------------------------
 
-    def _b1_scenario(self, mod):
+    @staticmethod
+    def _b1_scenario(mod):
         record = {
             "mutation": "trailing_space",
             "n_fixtures": 9,
@@ -514,7 +518,8 @@ class FixupMutationGateTests(unittest.TestCase):
             self._b1_subset_scenario,
         )
 
-    def _b1_subset_scenario(self, mod):
+    @staticmethod
+    def _b1_subset_scenario(mod):
         record = {
             "mutation": "trailing_space",
             "n_fixtures": 9,
@@ -531,7 +536,8 @@ class FixupMutationGateTests(unittest.TestCase):
 
     # -- F1 gate -----------------------------------------------------
 
-    def _f1_scenario(self, mod):
+    @staticmethod
+    def _f1_scenario(mod):
         result = mod.classify_response('{"v": NaN}', _number_schema(minimum=0))
         assert result["outcome"] == "schema_failed", result
 
@@ -548,7 +554,8 @@ class FixupMutationGateTests(unittest.TestCase):
 
     # -- F2 gate -----------------------------------------------------
 
-    def _f2_scenario(self, mod):
+    @staticmethod
+    def _f2_scenario(mod):
         fmt = _format()
         fixture = _fixture("s/x", expected='{"a": "x"}')
         try:
@@ -574,7 +581,8 @@ class FixupMutationGateTests(unittest.TestCase):
 
     # -- F3 gate -----------------------------------------------------
 
-    def _f3_scenario(self, mod):
+    @staticmethod
+    def _f3_scenario(mod):
         try:
             mod.layout_options(("a", "a", "b"), "a", condition="correct_first", seed=0)
         except ValueError:
@@ -593,7 +601,8 @@ class FixupMutationGateTests(unittest.TestCase):
 
     # -- F4 gate -----------------------------------------------------
 
-    def _f4_scenario(self, mod):
+    @staticmethod
+    def _f4_scenario(mod):
         try:
             mod.validate_field_def({"type": "string", "minimum": 3}, where="p")
         except ValueError:
@@ -613,7 +622,8 @@ class FixupMutationGateTests(unittest.TestCase):
 
     # -- F5 gate -----------------------------------------------------
 
-    def _f5_scenario(self, mod):
+    @staticmethod
+    def _f5_scenario(mod):
         payload = _structured_cell(0.0, 1.0, 1.0)
         assert mod._valid_structured(payload) is False
 

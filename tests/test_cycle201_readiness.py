@@ -113,7 +113,8 @@ class TestChangelogGate(unittest.TestCase):
 class TestSdistNormalization(unittest.TestCase):
     """normalize_sdist_bytes: deterministic, idempotent, content-preserving."""
 
-    def _synthetic_sdist(self) -> bytes:
+    @staticmethod
+    def _synthetic_sdist() -> bytes:
         buffer = io.BytesIO()
         with gzip.GzipFile(filename="x.tar.gz", mode="wb", fileobj=buffer, mtime=999) as gz:
             tar_buffer = io.BytesIO()

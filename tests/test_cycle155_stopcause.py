@@ -87,7 +87,8 @@ class ScriptedStopBackend:
     def decode(token_ids):
         return "".join(map(chr, token_ids))
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         raise AssertionError("stop_stage is post-hoc; generate must not run")
 
 
@@ -121,7 +122,8 @@ class FirstPositionTests(unittest.TestCase):
 
 
 class ClassifyCauseTests(unittest.TestCase):
-    def _kw(self, **over):
+    @staticmethod
+    def _kw(**over):
         base = {
             "output_len": 16,
             "max_new_tokens": 16,
@@ -343,7 +345,8 @@ class StopcauseHypothesisTests(unittest.TestCase):
 
 
 class StopStageTests(unittest.TestCase):
-    def _run(self, entries, backend=None, eos_id=EOS_ID, **kw):
+    @staticmethod
+    def _run(entries, backend=None, eos_id=EOS_ID, **kw):
         backend = backend or ScriptedStopBackend()
         return stop_stage(
             _result(entries),
@@ -354,7 +357,8 @@ class StopStageTests(unittest.TestCase):
             **kw,
         )
 
-    def _ids(self, text):
+    @staticmethod
+    def _ids(text):
         return tuple(map(ord, text))
 
     def test_eos_cause_and_bleed(self):
@@ -605,7 +609,8 @@ class StopCauseMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _tie_break_scenario(self, mod):
+    @staticmethod
+    def _tie_break_scenario(mod):
         # A same-step tie must classify stop_string (documented precedence).
         assert (
             mod.classify_cause(
@@ -629,7 +634,8 @@ class StopCauseMutationGateTests(unittest.TestCase):
             self._tie_break_scenario,
         )
 
-    def _fail_closed_scenario(self, mod):
+    @staticmethod
+    def _fail_closed_scenario(mod):
         assert (
             mod.classify_cause(
                 output_len=16,
@@ -651,7 +657,8 @@ class StopCauseMutationGateTests(unittest.TestCase):
             self._fail_closed_scenario,
         )
 
-    def _cause_drift_scenario(self, mod):
+    @staticmethod
+    def _cause_drift_scenario(mod):
         old = _stop_payload()
         new = _stop_payload()
         new["per_candidate"]["alpha"]["cause_rates"]["eos_id"] = 1.0
@@ -667,7 +674,8 @@ class StopCauseMutationGateTests(unittest.TestCase):
             self._cause_drift_scenario,
         )
 
-    def _aggregate_drift_scenario(self, mod):
+    @staticmethod
+    def _aggregate_drift_scenario(mod):
         old = _stop_payload()
         new = _stop_payload()
         new["per_candidate"]["alpha"]["over_generation_rate"] = 0.0

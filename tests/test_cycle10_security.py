@@ -240,7 +240,8 @@ class StopTextBoundTests(unittest.TestCase):
         # tokenizer returning a huge string must hit the same validation
         # (the call site degrades to "section omitted", never hangs).
         class HostileDecodeBackend(LinearStubBackend):
-            def decode(self, token_ids: tuple[int, ...]) -> str:
+            @staticmethod
+            def decode(token_ids: tuple[int, ...]) -> str:
                 return "y" * 10_000_000
 
         backend = HostileDecodeBackend(8)
@@ -265,13 +266,16 @@ class StopTextBoundTests(unittest.TestCase):
 class _CliStubTokenizer:
     """Minimal tokenizer stand-in for the diff-backends CLI path."""
 
-    def encode(self, text: str, **kwargs: Any) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str, **kwargs: Any) -> tuple[int, ...]:
         return tuple(min(ord(ch), 127) for ch in text[:64])
 
-    def decode(self, token_ids: list[int], **kwargs: Any) -> str:
+    @staticmethod
+    def decode(token_ids: list[int], **kwargs: Any) -> str:
         return "".join(chr(token_id) for token_id in token_ids)
 
-    def get_vocab(self) -> dict[str, int]:
+    @staticmethod
+    def get_vocab() -> dict[str, int]:
         return {chr(i): i for i in range(128)}
 
 
@@ -289,7 +293,8 @@ def _diff_cli_args(**overrides: Any) -> argparse.Namespace:
 
 
 class DiffBackendsCliBoundTests(unittest.TestCase):
-    def _run_cli(self, args: argparse.Namespace) -> tuple[int, str]:
+    @staticmethod
+    def _run_cli(args: argparse.Namespace) -> tuple[int, str]:
         parser = argparse.ArgumentParser(prog="mpl diff-backends")
         err = io.StringIO()
         with (
@@ -344,7 +349,8 @@ class LoaderFailureCodeTests(unittest.TestCase):
 
 
 class DebugLoaderSanitizationTests(unittest.TestCase):
-    def _run_debug_with_loader(self, exc: BaseException) -> tuple[int, str]:
+    @staticmethod
+    def _run_debug_with_loader(exc: BaseException) -> tuple[int, str]:
         from model_protocol_lab.core import Fixture, Message, Split
         from model_protocol_lab.fixtures import split_to_json_text
 

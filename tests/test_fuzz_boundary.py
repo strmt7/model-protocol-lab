@@ -155,7 +155,8 @@ class TestFuzzBoundary(unittest.TestCase):
     def test_utf8_incremental_decode(self, text, cuts):
         """Splitting UTF-8 bytes at arbitrary offsets and re-decoding
         incrementally (with buffering) always yields the original text --
-        even when cuts land inside multi-byte sequences."""
+        even when cuts land inside multi-byte sequences.
+        """
         raw = text.encode("utf-8")
         points = sorted({c for c in cuts if 0 < c < len(raw)})
         pieces = [raw[a:b] for a, b in zip([0, *points], [*points, len(raw)], strict=True)]
@@ -232,7 +233,8 @@ class TestFuzzBoundary(unittest.TestCase):
     @given(text=st.text(alphabet=st.sampled_from(MIXED), min_size=1, max_size=8))
     def test_byte_fallback_single_byte_chunks(self, text):
         """Byte-fallback tokens (one UTF-8 byte per chunk): a stop string
-        spanning those byte chunks still fires at the suffix."""
+        spanning those byte chunks still fires at the suffix.
+        """
         stop = text[-1:]  # nonempty suffix of the text
         byte_chunks = [bytes([b]) for b in text.encode("utf-8")]
         self.assertTrue(_hf_overhang_match(byte_chunks, stop.encode("utf-8")))
@@ -244,7 +246,8 @@ class TestFuzzBoundary(unittest.TestCase):
     )
     def test_byte_fallback_arbitrary_byte_splits(self, data, text):
         """Byte stream split at arbitrary byte offsets (cuts may land inside
-        a multi-byte sequence): a suffix stop string still fires."""
+        a multi-byte sequence): a suffix stop string still fires.
+        """
         raw = text.encode("utf-8")
         stop = text[-2:] if len(text) >= 2 else text
         if len(raw) >= 2:

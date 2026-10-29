@@ -69,6 +69,7 @@ class MCPError(Exception):
     """A JSON-RPC error carrying its numeric code to the client."""
 
     def __init__(self, code: int, message: str):
+        """Initialise the MCP error with its code and message."""
         self.code = code
         self.message = message
         super().__init__(message)
@@ -80,6 +81,7 @@ class MCPError(Exception):
 
 
 def _build_backend(spec: dict[str, Any]) -> object:
+    """Build backend."""
     if type(spec) is not dict:
         raise MCPError(-32602, "params.backend must be an object")
     kind = spec.get("kind")
@@ -105,6 +107,7 @@ def _build_backend(spec: dict[str, Any]) -> object:
 
 
 def _parse_fixtures(raw: object) -> tuple[Fixture, ...]:
+    """Parse fixtures."""
     if type(raw) is not list or not raw:
         raise MCPError(-32602, "params.fixtures must be a nonempty list")
     if len(raw) > sn.MAX_FIXTURES:
@@ -165,6 +168,7 @@ def _parse_boundary(raw: object) -> tuple[int, ...]:
     # security S-11): 1-16 IDs, each in [0, 2^31). Before the parity
     # fix, arrays of 200,000 IDs and IDs like 2**100 passed here
     # while the CLI refused them.
+    """Parse boundary."""
     if (
         type(raw) is not list
         or not raw
@@ -176,6 +180,7 @@ def _parse_boundary(raw: object) -> tuple[int, ...]:
 
 
 def _parse_prompt(raw: object) -> str:
+    """Parse prompt."""
     if type(raw) is not str or not raw.strip():
         raise MCPError(-32602, "params.prompt must be a nonempty string")
     if len(raw) > MAX_REQUEST_CHARS:
@@ -184,6 +189,7 @@ def _parse_prompt(raw: object) -> str:
 
 
 def _parse_optional_int(raw: object, name: str, lo: int, hi: int, default: int) -> int:
+    """Parse optional int."""
     if raw is None:
         return default
     if type(raw) is not int or isinstance(raw, bool) or not lo <= raw <= hi:
@@ -192,12 +198,14 @@ def _parse_optional_int(raw: object, name: str, lo: int, hi: int, default: int) 
 
 
 def _text_block(text: str) -> dict[str, Any]:
+    """Return the text block."""
     if len(text) > MAX_CONTENT_BYTES:
         text = text[:MAX_CONTENT_BYTES] + "\n…[truncated]"
     return {"type": "text", "text": text}
 
 
 def _result(content_text: str, structured: dict[str, Any]) -> dict[str, Any]:
+    """Return the result."""
     return {"content": [_text_block(content_text)], "structuredContent": structured}
 
 
@@ -233,6 +241,7 @@ def tool_probe(params: dict[str, Any]) -> dict[str, Any]:
     _has_alarm = getattr(signal, "SIGALRM", None) is not None and hasattr(signal, "setitimer")
 
     def _on_alarm(_signum: int, _frame: object) -> None:
+        """On alarm."""
         cancel.set()
 
     with _sweep_lock:
@@ -297,7 +306,7 @@ def tool_hardening_notes(params: dict[str, Any]) -> dict[str, Any]:
     return _result("\n".join(lines), notes)
 
 
-def tool_protocol_info(params: dict[str, Any]) -> dict[str, Any]:
+def tool_protocol_info(_params: dict[str, Any]) -> dict[str, Any]:
     """Return the frozen instrument descriptor (no fixtures, no scoring)."""
     descriptor = sn.describe_instrument()
     summary = (
@@ -514,6 +523,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
 
 def self_test() -> int:
     """Run one embedded probe end-to-end (offline) and exit 0 on success."""
+    # skipcq: PYL-W0404 - deferred import keeps the package import graph acyclic
     from model_protocol_lab.core import Fixture, Message
 
     backend = sn.SelfTestBackend()
@@ -555,6 +565,7 @@ MAX_LINE_CHARS = 16 * 1024 * 1024
 
 
 def _parse_error_response() -> dict[str, Any]:
+    """Parse error response."""
     return {
         "jsonrpc": "2.0",
         "id": None,
@@ -566,7 +577,8 @@ def _unique_frame_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     """Duplicate keys in a frame are a parse error (oversight
     security S-13): every JSON loader in the repo rejects duplicate
     fields; the MCP frame parser now applies the same discipline
-    instead of Python's last-wins default."""
+    instead of Python's last-wins default.
+    """
     obj = {}
     for key, value in pairs:
         if key in obj:
@@ -579,7 +591,8 @@ def _reject_frame_constant(value: str) -> NoReturn:
     """Non-finite constants are a parse error, as in every other JSON
     loader in the repo: before cycle 202 the frame parser had no
     parse_constant hook, so ``{"id": NaN}`` was accepted and the NaN
-    was echoed back in the response — invalid JSON on the wire."""
+    was echoed back in the response — invalid JSON on the wire.
+    """
     raise ValueError(f"non-finite constant {value!r}")
 
 
@@ -587,14 +600,17 @@ def _reject_frame_float(text: str) -> float:
     """Overflow float literals (``1e999``) are a parse error too:
     float() conversion reaches inf without ever calling
     parse_constant, so the constant hook alone leaves the hole open
-    (the same pair of hooks toolcall.py carries)."""
+    (the same pair of hooks toolcall.py carries).
+    """
     value = float(text)
+    # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
     if value != value or value in (float("inf"), float("-inf")):
         raise ValueError(f"non-finite float literal {text!r}")
     return value
 
 
 def _write_response(response: dict[str, Any]) -> None:
+    """Write response."""
     sys.stdout.write(json.dumps(response, default=str) + "\n")
     sys.stdout.flush()
 
@@ -640,7 +656,7 @@ def serve() -> int:
                 parse_constant=_reject_frame_constant,
                 parse_float=_reject_frame_float,
             )
-        except (json.JSONDecodeError, RecursionError, ValueError):
+        except (RecursionError, ValueError):
             _write_response(_parse_error_response())
             continue
         if type(request) is not dict:

@@ -286,6 +286,7 @@ class ScriptedBackend:
         raise AssertionError(f"bad outcome kind: {kind}")
 
 
+# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class EvaluateHarness(unittest.TestCase):
     def setUp(self) -> None:
         self.candidate = make_candidate()

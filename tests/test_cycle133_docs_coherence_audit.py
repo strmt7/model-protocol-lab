@@ -35,6 +35,7 @@ class TestCliModuleEntryPoint(unittest.TestCase):
             text=True,
             cwd=REPO_ROOT,
             timeout=120,
+            check=False,
         )
         self.assertEqual(proc.returncode, 0)
         self.assertIn("model-protocol-lab", proc.stdout)
@@ -47,6 +48,7 @@ class TestCliModuleEntryPoint(unittest.TestCase):
             text=True,
             cwd=REPO_ROOT,
             timeout=120,
+            check=False,
         )
         self.assertEqual(proc.returncode, 0)
         self.assertIn("model-protocol-lab", proc.stdout)

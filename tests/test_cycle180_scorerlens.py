@@ -376,7 +376,8 @@ class TestProfile(unittest.TestCase):
 
 def _foreign_ladder_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """A coherent foreign-ladder copy: modified ladder data with its
-    own correct digest (protocol drift, not corruption)."""
+    own correct digest (protocol drift, not corruption).
+    """
     other = copy.deepcopy(payload)
     ladder = copy.deepcopy(scorerlens.LADDER_SPEC)
     ladder["decisions"] = dict(ladder["decisions"], percent="foreign")
@@ -538,10 +539,13 @@ class TestCliProbe(unittest.TestCase):
 class TestCliDispatchEndToEnd(unittest.TestCase):
     """The --scorer-lens branch driven through the real run flow
     (cycle-179 lesson: a flag can parse and its stage be fully
-    unit-tested while the dispatch silently never runs it)."""
+    unit-tested while the dispatch silently never runs it).
+    """
 
     def test_scorer_lens_dispatches_through_main(self):
         from model_protocol_lab import backends, doctor, experiments
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab import reporting as reporting_mod
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -653,7 +657,8 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
 class TestMutationGates(unittest.TestCase):
     """Tempdir gates (cycle-179 pattern): each mutant of the
     ladder's load-bearing constructions must be killed by a named
-    scenario, and each scenario must pass on the real module."""
+    scenario, and each scenario must pass on the real module.
+    """
 
     def _run_gate(self, name, old_text, new_text, scenario):
         import importlib.util
@@ -725,7 +730,8 @@ class TestValidatorBattery(unittest.TestCase):
     """One broken identity at a time: every reject branch of
     _valid_scorerlens must fire on its named tamper (the cycle-174
     gap pattern -- a validator branch no payload exercises is a
-    claim, not a check)."""
+    claim, not a check).
+    """
 
     def setUp(self):
         self.payload = scorerlens_profile(_profile_result(), dict(_EXPECTED))

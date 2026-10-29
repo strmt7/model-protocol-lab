@@ -195,14 +195,16 @@ def _is_singleton(char: str) -> bool:
     """Whether a character is a canonical singleton: its NFD is
     a single codepoint different from itself (e.g. U+2126 OHM
     SIGN, U+212B ANGSTROM SIGN). Singletons decompose to a
-    different letter and are excluded from the v1 alphabet."""
+    different letter and are excluded from the v1 alphabet.
+    """
     decomposed = unicodedata.normalize("NFD", char)
     return len(decomposed) == 1 and decomposed != char
 
 
 def _is_hangul_syllable(char: str) -> bool:
     """Whether a character is a Hangul syllable (deferred stress
-    variant: NFD renders run ~3x the code points)."""
+    variant: NFD renders run ~3x the code points).
+    """
     return 0xAC00 <= ord(char) <= 0xD7A3
 
 
@@ -210,7 +212,8 @@ def _validate_case_text(content: str, value: str) -> None:
     """Enforce the generator's alphabet and scorer-pin rules on
     one authored case. Raises ValueError on any violation, so a
     future table edit cannot silently admit an out-of-alphabet
-    character or an accented value into the instrument."""
+    character or an accented value into the instrument.
+    """
     if not isinstance(content, str) or not content:
         raise ValueError("canonical-form case content must be nonempty text")
     # Singletons first: a singleton is never NFC-stable (its
@@ -237,7 +240,8 @@ def _derive(seed: int, index: int, slot: int, counter: int) -> int:
     meanings (0 = code word, 1 = number, 2 = first neutral
     sentence, 3 = second neutral sentence), and the redraw
     rules in :func:`generate_cases` are frozen together -- the
-    diff validator's mirror reproduces them exactly."""
+    diff validator's mirror reproduces them exactly.
+    """
     material = f"{seed}|canonicalform|{index}|{slot}|{counter}"
     return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
@@ -297,7 +301,8 @@ def generate_cases(seed: int) -> list[dict[str, Any]]:
 def form_content(case: dict[str, Any], arm: str) -> str:
     """One arm's user-turn content for a case: the authored NFC
     content, or its NFD derivation. The template is never
-    touched; only generated message text is transformed."""
+    touched; only generated message text is transformed.
+    """
     if arm not in ARM_KEYS:
         raise ValueError("unknown canonical-form arm")
     content = str(case["content"])
@@ -309,7 +314,8 @@ def form_content(case: dict[str, Any], arm: str) -> str:
 def canonical_generated_rows(seed: int) -> list[list[Any]]:
     """The canonical generated set the ground digest binds,
     including both arms' content digests so the ground digest
-    binds the treatment, not just the case skeleton."""
+    binds the treatment, not just the case skeleton.
+    """
     rows: list[list[Any]] = []
     for case in generate_cases(seed):
         rows.append(
@@ -328,7 +334,8 @@ def canonical_generated_rows(seed: int) -> list[list[Any]]:
 def ground_sha256(seed: int) -> str:
     """Digest of the canonical generated set: two runs share
     an instrument only when this matches, because the generated
-    set is the treatment."""
+    set is the treatment.
+    """
     canonical = json.dumps(canonical_generated_rows(seed), separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -337,7 +344,8 @@ def case_material_sha256() -> str:
     """Digest of the frozen case material (templates, topics,
     words, pool): the lists are bound by digest in the protocol,
     so a payload cannot quietly carry a different instrument
-    under the same version number."""
+    under the same version number.
+    """
     canonical = json.dumps(
         [FACT_TEMPLATE, QUESTION_TEMPLATE, list(TOPICS), list(WORDS), list(NEUTRAL_POOL)],
         separators=(",", ":"),
@@ -349,7 +357,8 @@ def case_material_sha256() -> str:
 def protocol_object(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The frozen instrument description a payload is checked
     against: arms, case material, floors, budgets, and the
-    seed/backend pair that generated the set."""
+    seed/backend pair that generated the set.
+    """
     return {
         "version": PROTOCOL_VERSION,
         "arm_keys": list(ARM_KEYS),
@@ -384,6 +393,7 @@ def protocol_fingerprint(seed: int, backend_fingerprint: str) -> str:
 
 
 def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the cell."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -392,6 +402,7 @@ def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
 
 
 def _verdict(record: dict[str, Any], key: str) -> bool:
+    """Return the verdict."""
     cell = _cell(record, key)
     return bool(cell is not None and cell["verdict"])
 
@@ -400,7 +411,8 @@ def _pair_block_divergent(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Discordant counts over the headline population: both
     cells completed AND the arms' render id sequences diverged.
     Ids-identical records never enter this block; they are the
-    instrument-inapplicable share, counted separately."""
+    instrument-inapplicable share, counted separately.
+    """
     n_paired = 0
     n_nfc_only = 0
     n_nfd_only = 0
@@ -468,7 +480,8 @@ def invariance_falsified(classification: str) -> bool:
     """The pre-registered falsification boolean, direction
     stated explicitly: True means the INVARIANCE claim fell
     (discordance at or above the floor), not that an effect was
-    confirmed absent."""
+    confirmed absent.
+    """
     return classification in ("discordant_balanced", "discordant_asymmetric")
 
 
@@ -554,7 +567,8 @@ def shared_fixtures(
 ) -> frozenset[str]:
     """Fixture ids recorded for every candidate: the conditions
     population. There is no closed-book screen in this probe, so
-    unlike placement the shared set is not screened by union."""
+    unlike placement the shared set is not screened by union.
+    """
     populations: list[frozenset[str]] = []
     for records in records_by_candidate.values():
         populations.append(frozenset(str(r.get("fixture")) for r in records))
@@ -571,7 +585,8 @@ def _selection_over(
     """The conservative selection for one arm restricted to
     ``fixtures``: None when any candidate's completed set on
     that restriction is empty or the restricted completed sets
-    differ across candidates."""
+    differ across candidates.
+    """
     completed_sets: list[frozenset[str]] = []
     all_pass: dict[str, bool | None] = {}
     for name, records in records_by_candidate.items():
@@ -607,7 +622,8 @@ def arm_selection(
     Withheld when the restricted completed sets differ across
     candidates or are empty; the baseline arm's own flip is
     False when not withheld, and a flip is None when either
-    side is withheld."""
+    side is withheld.
+    """
     shared = shared_fixtures(records_by_candidate)
     own = _selection_over(records_by_candidate, arm, shared)
     if own is None:
@@ -645,7 +661,8 @@ def winner_headline(conditions: dict[str, Any]) -> dict[str, Any]:
     half to ``winner_abstention_asymmetric``. ``winner_changed``
     is True only for a genuine winner change, False for a
     decided non-change, and None when either selection was
-    withheld (the comparison is then undefined, not stable)."""
+    withheld (the comparison is then undefined, not stable).
+    """
     nfc = conditions.get("nfc") if isinstance(conditions, dict) else None
     nfd = conditions.get("nfd") if isinstance(conditions, dict) else None
     if not isinstance(nfc, dict) or not isinstance(nfd, dict):

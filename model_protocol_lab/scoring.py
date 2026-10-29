@@ -214,6 +214,7 @@ def score_span_from_logits(
 
 
 def _safe_decode(backend: Backend, token_ids: tuple[int, ...]) -> str | None:
+    """Return the safe decode."""
     try:
         text = backend.decode(token_ids)
     except Exception:  # noqa: BLE001 -- decode problems become fixed codes
@@ -222,6 +223,7 @@ def _safe_decode(backend: Backend, token_ids: tuple[int, ...]) -> str | None:
 
 
 def _safe_encode(backend: Backend, text: str) -> tuple[int, ...] | None:
+    """Return the safe encode."""
     try:
         ids = backend.encode(text)
     except Exception:  # noqa: BLE001 -- encode problems become fixed codes
@@ -268,6 +270,7 @@ def check_alignment(
 
 
 def _unavailable(reason: str, target_byte_length: int, prompt_token_count: int) -> TargetScore:
+    """Return the unavailable."""
     return TargetScore(
         status=STATUS_UNAVAILABLE,
         reason=reason,

@@ -99,6 +99,7 @@ BIN_DIR = Path(sys.executable).parent
 
 
 def run_tool(name: str, *args: str, timeout: int = 300) -> subprocess.CompletedProcess[str]:
+    """Run tool."""
     exe = BIN_DIR / name
     assert exe.exists(), f"expected tool at {exe}"
     return subprocess.run(
@@ -107,27 +108,33 @@ def run_tool(name: str, *args: str, timeout: int = 300) -> subprocess.CompletedP
         capture_output=True,
         text=True,
         timeout=timeout,
+        check=False,
     )
 
 
 def cli_help(*args: str) -> str:
+    """Cli help."""
     proc = subprocess.run(
         [sys.executable, "-m", "model_protocol_lab", *args, "--help"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         timeout=120,
+        check=False,
     )
     assert proc.returncode == 0, f"help failed for {args}: {proc.stderr[-500:]}"
     return proc.stdout
 
 
 class ValidationEnvironmentTests(unittest.TestCase):
+    """Validation environment tests."""
+
     def test_python_meets_requires_python(self):
         # Doc: "Python 3.12.3, Linux x86-64" (the validated version). CI
         # also runs 3.11 and 3.13, so assert the running interpreter
         # satisfies pyproject's requires-python range instead of pinning
         # an exact version.
+        """Python meets requires python."""
         from packaging.specifiers import SpecifierSet
 
         text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
@@ -142,6 +149,7 @@ class ValidationEnvironmentTests(unittest.TestCase):
         # Doc: "torch 2.14.1+cpu" (the validated build). CI installs the
         # CUDA wheel, so compare only the base version, not the local
         # build tag.
+        """Torch version."""
         import torch
 
         self.assertEqual(torch.__version__.split("+")[0], "2.14.1")
@@ -150,6 +158,7 @@ class ValidationEnvironmentTests(unittest.TestCase):
         # Doc: "transformers 5.19.0" (the validated version). CI may resolve
         # a newer release, so assert the installed version satisfies
         # pyproject's hf-extra pin instead of an exact version.
+        """Transformers version."""
         import transformers
         from packaging.specifiers import SpecifierSet
         from packaging.version import Version
@@ -162,26 +171,33 @@ class ValidationEnvironmentTests(unittest.TestCase):
         installed = Version(transformers.__version__)
         self.assertIn(installed, spec, f"transformers {installed} not in {match.group(1)}")
 
-    def test_hypothesis_installed(self):
+    @staticmethod
+    def test_hypothesis_installed():
         # Doc: "hypothesis installed".
+        """Hypothesis installed."""
         import hypothesis  # noqa: F401
 
     def test_pytest_in_dev_extra(self):
         # Doc: "the [dev] extra now includes pytest>=9.2.0"
         # (floor raised cycle 217 to the resolved latest).
+        """Pytest in dev extra."""
         text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn("pytest>=9.2.0", text)
 
 
 class ValidationToolchainTests(unittest.TestCase):
+    """Validation toolchain tests."""
+
     def test_ruff_check_clean(self):
         # Doc: "ruff check -- clean".
+        """Ruff check clean."""
         proc = run_tool("ruff", "check")
         self.assertEqual(proc.returncode, 0, proc.stdout[-1000:])
 
     def test_ruff_format_check_clean(self):
         # Doc: "ruff format --check -- clean (66 files)". Clean, but the
         # file count is stale: the current tree formats 200 files.
+        """Ruff format check clean."""
         proc = run_tool("ruff", "format", "--check")
         self.assertEqual(proc.returncode, 0, proc.stdout[-1000:])
         match = re.search(r"(\d+) files already formatted", proc.stdout)
@@ -205,6 +221,7 @@ class ValidationToolchainTests(unittest.TestCase):
         # historyframe.py is the 67th, cycle 219;
         # prunesweep.py is the 68th, cycle 220;
         # recordnotation.py is the 69th, cycle 221.)
+        """Mypy clean 58 source files."""
         proc = run_tool("mypy", "model_protocol_lab", timeout=600)
         self.assertEqual(proc.returncode, 0, proc.stdout[-1000:])
         self.assertIn("69 source files", proc.stdout)
@@ -215,6 +232,7 @@ class ValidationToolchainTests(unittest.TestCase):
         # so bandit reports zero issues at any severity.
         # Bandit is only installed in the security-audit job, not the test
         # jobs: skip there instead of failing on a missing binary.
+        """Bandit zero issues at any severity."""
         if shutil.which("bandit") is None:
             self.skipTest("bandit binary not installed in this job")
         proc = run_tool("bandit", "-r", "model_protocol_lab/")
@@ -223,27 +241,35 @@ class ValidationToolchainTests(unittest.TestCase):
 
 
 class ValidationCliSurfaceTests(unittest.TestCase):
+    """Validation cli surface tests."""
+
     def test_debug_command(self):
+        """Debug command."""
         out = cli_help("debug")
         self.assertIn("usage: model-protocol-lab debug", out)
 
     def test_diff_backends_command(self):
+        """Diff backends command."""
         out = cli_help("diff-backends")
         self.assertIn("usage: model-protocol-lab diff-backends", out)
 
     def test_diff_reports_command(self):
+        """Diff reports command."""
         out = cli_help("diff-reports")
         self.assertIn("usage: model-protocol-lab diff-reports", out)
 
     def test_doctor_portability_matrix_option(self):
+        """Doctor portability matrix option."""
         self.assertIn("--portability-matrix", cli_help("doctor"))
 
     def test_doctor_boundary_ids_and_reference_model_options(self):
+        """Doctor boundary ids and reference model options."""
         out = cli_help("doctor")
         self.assertIn("--boundary-ids", out)
         self.assertIn("--reference-model", out)
 
     def test_run_verification_flags(self):
+        """Run verification flags."""
         out = cli_help("run")
         for flag in (
             "--boundary-map",
@@ -254,41 +280,50 @@ class ValidationCliSurfaceTests(unittest.TestCase):
             self.assertIn(flag, out)
 
     def test_fixtures_build_command(self):
+        """Fixtures build command."""
         out = cli_help("fixtures", "build")
         self.assertIn("usage: model-protocol-lab fixtures build", out)
 
     def test_catalog_command_runs(self):
+        """Catalog command runs."""
         proc = subprocess.run(
             [sys.executable, "-m", "model_protocol_lab", "catalog"],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
             timeout=120,
+            check=False,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr[-500:])
         self.assertIn("kolibri", proc.stdout)
 
     def test_inspect_example_fixtures(self):
+        """Inspect example fixtures."""
         proc = subprocess.run(
             [sys.executable, "-m", "model_protocol_lab", "inspect", "examples/fixtures.json"],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
             timeout=120,
+            check=False,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr[-500:])
 
 
 class ValidationFormatFamilyTests(unittest.TestCase):
+    """Validation format family tests."""
+
     def test_family_count_is_29_not_23(self):
         # Doc claimed 23; the catalog grew through later cycles (29 now,
         # with muse_spark added in cycle 52 and qwen38 in cycle 54).
+        """Family count is 29 not 23."""
         from model_protocol_lab.catalog import CATALOG
 
         self.assertEqual(len(CATALOG), 29)
 
     def test_six_period_families_present(self):
         # The six families the doc names as added in the period.
+        """Six period families present."""
         from model_protocol_lab.catalog import CATALOG
 
         for family in ("kolibri", "lfm25", "nemotron35", "muse_glimmer", "laguna", "ling"):
@@ -296,10 +331,13 @@ class ValidationFormatFamilyTests(unittest.TestCase):
 
 
 class ValidationConfigFileTests(unittest.TestCase):
+    """Validation config file tests."""
+
     def test_ci_yaml_four_jobs_sha_pinned(self):
         # Doc: "CI YAML (4 jobs, actions pinned to SHAs)"; the 2026-10-12
         # section pins checkout@v7.0.1 and setup-python@v7.1.0
         # (bumped cycle 217 to the latest release SHA).
+        """Ci yaml four jobs sha pinned."""
         import yaml
 
         ci_path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
@@ -320,6 +358,7 @@ class ValidationConfigFileTests(unittest.TestCase):
         # emits coverage.xml and uploads it with the pinned
         # codecov-action via OIDC, failing the job when the upload
         # itself errors. The job needs id-token:write for OIDC.
+        """Ci codecov upload shape."""
         import yaml
 
         ci_path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
@@ -349,6 +388,7 @@ class ValidationConfigFileTests(unittest.TestCase):
         self.assertTrue(with_block.get("fail_ci_if_error"))
         # The repo-side config mirrors the owner's other repos: patch
         # target holds the CI gate, tests/examples are ignored.
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import yaml as yaml2
 
         codecov = yaml2.safe_load((REPO_ROOT / ".codecov.yml").read_text(encoding="utf-8"))
@@ -361,6 +401,7 @@ class ValidationConfigFileTests(unittest.TestCase):
         # 2026-10-19: shields.io badge with label=Codecov (capital C in the
         # rendered image, unlike codecov.io's own badge.svg); preserve
         # verbatim.
+        """Readme codecov badge exact."""
         badge = (
             "[![Codecov](https://img.shields.io/codecov/c/github/strmt7/model-protocol-lab?label=Codecov&logo=codecov)]"
             "(https://codecov.io/gh/strmt7/model-protocol-lab)"
@@ -376,6 +417,7 @@ class ValidationConfigFileTests(unittest.TestCase):
 
     def test_pre_commit_ruff_rev(self):
         # Doc: "pre-commit YAML (ruff-pre-commit v0.17.1)".
+        """Pre commit ruff rev."""
         text = (REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
         self.assertIn("ruff-pre-commit", text)
         self.assertIn("rev: v0.17.1", text)
@@ -385,6 +427,7 @@ class ValidationConfigFileTests(unittest.TestCase):
         # Cycle 217 added a second pip entry (tools/requirements for
         # the hash-pinned workflow installs), so four updates cover
         # three ecosystem names; the two pip directories must differ.
+        """Dependabot ecosystems."""
         import yaml
 
         doc = yaml.safe_load((REPO_ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
@@ -395,32 +438,40 @@ class ValidationConfigFileTests(unittest.TestCase):
 
     def test_citation_cff_title_and_authors(self):
         # Doc: "CITATION.cff (title/authors present)".
+        """Citation cff title and authors."""
         text = (REPO_ROOT / "CITATION.cff").read_text(encoding="utf-8")
         self.assertIn("title:", text)
         self.assertIn("authors:", text)
 
 
 class ValidationDocsTests(unittest.TestCase):
+    """Validation docs tests."""
+
     def test_faq_has_20_qas_not_12(self):
         # Doc claims 12 Q&As; the file grew to 15 by cycle 44 and to
         # 20 in cycle 178 (docs-currency backfill entries).
+        """Faq has 20 qas not 12."""
         lines = (REPO_ROOT / "docs" / "FAQ.md").read_text(encoding="utf-8").splitlines()
         headings = [line for line in lines if line.startswith("## ")]
         self.assertEqual(len(headings), 20)
 
     def test_usage_stop_isolation_matrix_section(self):
+        """Usage stop isolation matrix section."""
         text = (REPO_ROOT / "docs" / "USAGE.md").read_text(encoding="utf-8")
         self.assertIn("### 8.2 Stop-behavior isolation matrix", text)
 
     def test_usage_documents_llamacpp_cell_killed(self):
+        """Usage documents llamacpp cell killed."""
         text = (REPO_ROOT / "docs" / "USAGE.md").read_text(encoding="utf-8")
         self.assertIn("Why no llama.cpp cell", text)
 
     def test_usage_documents_local_context_limit_code(self):
+        """Usage documents local context limit code."""
         text = (REPO_ROOT / "docs" / "USAGE.md").read_text(encoding="utf-8")
         self.assertIn("local_context_limit_exceeds_declared_window", text)
 
     def test_usage_documents_nfc_normalization(self):
+        """Usage documents nfc normalization."""
         text = (REPO_ROOT / "docs" / "USAGE.md").read_text(encoding="utf-8")
         self.assertIn("NFC", text)
 
@@ -429,6 +480,7 @@ class ValidationDocsTests(unittest.TestCase):
         # M1 unbounded stop texts -> length/count bounds, L1 hostile
         # terminal text -> fixed vocabulary) plus the two follow-up
         # diffreports passes must be recorded.
+        """Research log contains redteam fix rounds."""
         text = (REPO_ROOT / "docs" / "RESEARCH_LOG.md").read_text(encoding="utf-8")
         flat = re.sub(r"\s+", " ", text)
         self.assertIn("## 2026-10-15 -- Red-team fix round: H1/M1/L1", flat)
@@ -440,6 +492,7 @@ class ValidationDocsTests(unittest.TestCase):
         self.assertIn("finding 6 documented in a code comment with no behavior change", flat)
 
     def test_teacher_forced_logprob_diagnostic_present(self):
+        """Teacher forced logprob diagnostic present."""
         text = (REPO_ROOT / "model_protocol_lab" / "experiments.py").read_text(encoding="utf-8")
         cli_text = (REPO_ROOT / "model_protocol_lab" / "cli.py").read_text(encoding="utf-8")
         self.assertIn("Teacher-forced log-likelihood", cli_text)
@@ -447,9 +500,12 @@ class ValidationDocsTests(unittest.TestCase):
 
 
 class ValidationHonestyTests(unittest.TestCase):
+    """Validation honesty tests."""
+
     def test_no_browser_automation_dependencies(self):
         # Doc: "No browser rendering check of report.html". The repo must
         # not depend on browser automation at all.
+        """No browser automation dependencies."""
         tree = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8").lower()
         for dep in ("selenium", "playwright", "pyppeteer"):
             self.assertNotIn(dep, tree)
@@ -465,6 +521,7 @@ class ValidationHonestyTests(unittest.TestCase):
     def test_model_loading_is_local_only(self):
         # Doc: "No real (non-synthetic) model run has been performed". The
         # only from_pretrained call site must be explicitly local-only.
+        """Model loading is local only."""
         text = (REPO_ROOT / "model_protocol_lab" / "backends.py").read_text(encoding="utf-8")
         call_sites = [m.start() for m in re.finditer(r"from_pretrained\(", text)]
         self.assertGreater(len(call_sites), 0)
@@ -478,6 +535,7 @@ class ValidationHonestyTests(unittest.TestCase):
     def test_not_established_section_retained(self):
         # The release-gate discipline: the honest "not established" list
         # must not have been weakened into assertions.
+        """Not established section retained."""
         text = (REPO_ROOT / "VALIDATION.md").read_text(encoding="utf-8")
         section = text.split("## Not established", 1)[1].split("## Important limitations", 1)[0]
         for item in (
@@ -492,6 +550,7 @@ class ValidationHonestyTests(unittest.TestCase):
     def test_weekly_schedule_and_dependabot_exist(self):
         # The honest framing ("schedule and Dependabot have not yet
         # executed on GitHub") requires the infrastructure to exist.
+        """Weekly schedule and dependabot exist."""
         ci = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("schedule:", ci)
         self.assertTrue((REPO_ROOT / ".github" / "dependabot.yml").exists())
@@ -499,6 +558,7 @@ class ValidationHonestyTests(unittest.TestCase):
     def test_suite_count_meets_documented_floor(self):
         # The doc's "1001 tests" is a floor the grown suite must exceed;
         # the exact pin lives in test_cycle4.py against the README.
+        """Suite count meets documented floor."""
         proc = subprocess.run(
             [
                 sys.executable,
@@ -514,6 +574,7 @@ class ValidationHonestyTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=180,
+            check=False,
         )
         self.assertEqual(proc.returncode, 0, (proc.stderr or proc.stdout)[-1000:])
         match = re.search(r"(\d+) tests collected", proc.stdout)

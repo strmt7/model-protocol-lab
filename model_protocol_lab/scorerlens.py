@@ -153,6 +153,7 @@ def _norm_r1(text: str) -> str:
 
 
 def _nfc(text: str) -> str:
+    """Return the nfc."""
     return unicodedata.normalize("NFC", text)
 
 

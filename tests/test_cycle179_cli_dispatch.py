@@ -150,19 +150,23 @@ class _Sentinel(dict):
     """Stage/profile stand-in: any key lookup yields the sentinel."""
 
     def __missing__(self, key):  # noqa: ANN001, ANN202
+        """Missing  ."""
         return self
 
 
 class _FakeBackend:
     """Scripted backend for helper dispatch: encodes anything."""
 
-    def encode(self, text):  # noqa: ANN001, ANN202
+    @staticmethod
+    def encode(text):  # noqa: ANN001, ANN202
+        """Encode."""
         return (7, 8)
 
 
 def _call_helper(helper, result):  # noqa: ANN001, ANN202
     """Call a probe helper with the shared input pool, filtered to
-    the parameters its signature actually declares."""
+    the parameters its signature actually declares.
+    """
     pool = {
         "backend": _FakeBackend(),
         "formats": (_FORMAT,),
@@ -404,7 +408,10 @@ HELPER_DISPATCH = [
 
 
 class TestFlagParsing(unittest.TestCase):
+    """Test flag parsing."""
+
     def test_every_stage_flag_sets_its_dest(self):
+        """Every stage flag sets its dest."""
         parser = cli_module.build_parser()
         for flag, dest, value in STAGE_FLAGS:
             with self.subTest(flag=flag):
@@ -416,7 +423,10 @@ class TestFlagParsing(unittest.TestCase):
 
 
 class TestHelperDispatch(unittest.TestCase):
+    """Test helper dispatch."""
+
     def test_helper_attaches_payload(self):
+        """Helper attaches payload."""
         for helper_name, key, detail, exp_names in HELPER_DISPATCH:
             with self.subTest(helper=helper_name):
                 helper = getattr(cli_module, helper_name)
@@ -436,6 +446,7 @@ class TestHelperDispatch(unittest.TestCase):
                 self.assertNotEqual(result[key], {"available": False, "detail": detail})
 
     def test_helper_never_raises(self):
+        """Helper never raises."""
         for helper_name, key, detail, exp_names in HELPER_DISPATCH:
             with self.subTest(helper=helper_name):
                 helper = getattr(cli_module, helper_name)
@@ -457,6 +468,7 @@ class _FakeHFBackend:
     """Stand-in for LocalHFBackend in the run flow: no weights."""
 
     def __init__(self, model, device=None, max_context=None, dtype=None):
+        """Init  ."""
         self.model = model
         self.device = device
         self.max_context = max_context
@@ -466,6 +478,7 @@ class _FakeHFBackend:
 
 
 def _run_cli(argv):
+    """Run cli."""
     out, err = io.StringIO(), io.StringIO()
     try:
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
@@ -476,6 +489,7 @@ def _run_cli(argv):
 
 
 def _write_fixture_file(directory):
+    """Write fixture file."""
     path = Path(directory) / "fixture.json"
     path.write_text(
         json.dumps(
@@ -505,9 +519,12 @@ def _write_fixture_file(directory):
 
 class TestInlineDispatch(unittest.TestCase):
     """The five inline flags, driven through the real run flow with
-    the stage layer stubbed (cycle-31 harness pattern)."""
+    the stage layer stubbed (cycle-31 harness pattern).
+    """
 
-    def _run_with(self, argv_extra, exp_patches):
+    @staticmethod
+    def _run_with(argv_extra, exp_patches):
+        """Run with."""
         with tempfile.TemporaryDirectory() as tmp:
             fixture = _write_fixture_file(tmp)
             outdir = Path(tmp) / "report"
@@ -551,6 +568,7 @@ class TestInlineDispatch(unittest.TestCase):
                     stack.enter_context(mock.patch.object(experiments, name, return_value=sentinel))
 
                 def fake_prepare(path):
+                    """Fake prepare."""
                     Path(path).mkdir(parents=True, exist_ok=False)
                     return Path(path)
 
@@ -577,6 +595,7 @@ class TestInlineDispatch(unittest.TestCase):
             return outcome, result_doc, sentinel
 
     def test_perturb_dispatches(self):
+        """Perturb dispatches."""
         (kind, code, _out, _err), result_doc, sentinel = self._run_with(
             ["--perturb", "2"],
             ["perturbation_stage", "perturbation_robustness"],
@@ -585,6 +604,7 @@ class TestInlineDispatch(unittest.TestCase):
         self.assertIs(result_doc["perturbation"], sentinel)
 
     def test_token_healing_dispatches(self):
+        """Token healing dispatches."""
         (kind, code, _out, _err), result_doc, sentinel = self._run_with(
             ["--token-healing"],
             ["healing_stage", "native_search_outcomes", "healing_delta"],
@@ -593,6 +613,7 @@ class TestInlineDispatch(unittest.TestCase):
         self.assertIs(result_doc["token_healing"], sentinel)
 
     def test_transfer_dispatches(self):
+        """Transfer dispatches."""
         (kind, code, _out, _err), result_doc, sentinel = self._run_with(
             ["--transfer-model", "ckpt2"],
             ["transfer_stage", "transfer_portability"],
@@ -601,6 +622,7 @@ class TestInlineDispatch(unittest.TestCase):
         self.assertIs(result_doc["transfer"], sentinel)
 
     def test_logprob_dispatches(self):
+        """Logprob dispatches."""
         (kind, code, _out, _err), result_doc, sentinel = self._run_with(
             ["--logprob-diagnostic"],
             ["logprob_diagnostic"],
@@ -609,6 +631,7 @@ class TestInlineDispatch(unittest.TestCase):
         self.assertIs(result_doc["logprob_diagnostic"], sentinel)
 
     def test_density_dispatches(self):
+        """Density dispatches."""
         (kind, code, _out, _err), result_doc, sentinel = self._run_with(
             ["--density"],
             ["density_stage", "density_analysis"],
@@ -617,6 +640,7 @@ class TestInlineDispatch(unittest.TestCase):
         self.assertIs(result_doc["density"], sentinel)
 
     def test_field_order_dispatches(self):
+        """Field order dispatches."""
         (kind, code, _out, _err), result_doc, sentinel = self._run_with(
             ["--field-order"],
             ["fieldorder_stage", "fieldorder_analysis"],
@@ -625,6 +649,7 @@ class TestInlineDispatch(unittest.TestCase):
         self.assertIs(result_doc["field_order"], sentinel)
 
     def test_sensitivity_sweep_dispatches(self):
+        """Sensitivity sweep dispatches."""
         (kind, code, _out, _err), result_doc, sentinel = self._run_with(
             ["--sensitivity-sweep"],
             ["prompt_sensitivity_sweep"],
@@ -636,9 +661,11 @@ class TestInlineDispatch(unittest.TestCase):
 class AblationMutationGateTests(unittest.TestCase):
     """Tempdir mutation gates on ablation.py's exactness-critical
     lines (cycle-169 pattern: the scenario passes on the real module
-    and must raise AssertionError on the mutant)."""
+    and must raise AssertionError on the mutant).
+    """
 
     def _run_gate(self, name, old_text, new_text, scenario):
+        """Run gate."""
         import importlib.util
 
         mod = __import__("model_protocol_lab.ablation", fromlist=["x"])
@@ -665,7 +692,9 @@ class AblationMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _swap_scenario(self, mod):
+    @staticmethod
+    def _swap_scenario(mod):
+        """Swap scenario."""
         base = Format(
             name="x",
             bos="<s>",
@@ -678,6 +707,7 @@ class AblationMutationGateTests(unittest.TestCase):
         assert ablated.user_prefix == "u:"  # only the named field moves
 
     def test_mutant_swap_dropped_caught(self):
+        """Mutant swap dropped caught."""
         self._run_gate(
             "swap_dropped",
             "return dataclasses.replace(base, **{field: neutral})",
@@ -685,7 +715,9 @@ class AblationMutationGateTests(unittest.TestCase):
             self._swap_scenario,
         )
 
-    def _noop_arm_scenario(self, mod):
+    @staticmethod
+    def _noop_arm_scenario(mod):
+        """Noop arm scenario."""
         base = Format(
             name="x",
             bos="",
@@ -698,6 +730,7 @@ class AblationMutationGateTests(unittest.TestCase):
         assert "user_prefix" in fields
 
     def test_mutant_noop_arm_included_caught(self):
+        """Mutant noop arm included caught."""
         self._run_gate(
             "noop_arm",
             "if original != NEUTRAL_VALUES[field]:",
@@ -705,13 +738,16 @@ class AblationMutationGateTests(unittest.TestCase):
             self._noop_arm_scenario,
         )
 
-    def _flip_scenario(self, mod):
+    @staticmethod
+    def _flip_scenario(mod):
+        """Flip scenario."""
         summary = mod.summarize_arm((True,), (False,), ("f1",))
         assert summary["pass_to_fail"] == 1
         assert summary["fail_to_pass"] == 0
         assert summary["flipped_fixture_ids"] == ("f1",)
 
     def test_mutant_flip_direction_swapped_caught(self):
+        """Mutant flip direction swapped caught."""
         self._run_gate(
             "flip_swapped",
             '"pass_to_fail": pass_to_fail,',
@@ -719,11 +755,14 @@ class AblationMutationGateTests(unittest.TestCase):
             self._flip_scenario,
         )
 
-    def _bar_scenario(self, mod):
+    @staticmethod
+    def _bar_scenario(mod):
+        """Bar scenario."""
         summary = mod.summarize_arm((True, True), (True, False), ("f1", "f2"))
         assert summary["selection_bar_held"] is False
 
     def test_mutant_selection_bar_weakened_caught(self):
+        """Mutant selection bar weakened caught."""
         self._run_gate(
             "bar_any",
             '"selection_bar_held": all(arm_verdicts),',
@@ -731,7 +770,9 @@ class AblationMutationGateTests(unittest.TestCase):
             self._bar_scenario,
         )
 
-    def _inapplicable_scenario(self, mod):
+    @staticmethod
+    def _inapplicable_scenario(mod):
+        """Inapplicable scenario."""
         base = Format(
             name="x",
             bos="",
@@ -743,6 +784,7 @@ class AblationMutationGateTests(unittest.TestCase):
         assert "user_prefix" not in mod.inapplicable_fields(base)
 
     def test_mutant_inapplicable_inverted_caught(self):
+        """Mutant inapplicable inverted caught."""
         self._run_gate(
             "inapplicable_inverted",
             "getattr(base, field) == NEUTRAL_VALUES[field]",

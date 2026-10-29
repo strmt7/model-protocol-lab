@@ -181,14 +181,15 @@ class ConcatBackend:
     def __init__(self, texts: dict[int, str]) -> None:
         self._texts = dict(texts)
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         raise AssertionError("encode unused in sglang differential tests")
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
         return "".join(self._texts[token] for token in token_ids)
 
+    @staticmethod
     def generate(
-        self,
         input_ids: tuple[int, ...],
         *,
         max_new_tokens: int,
@@ -207,7 +208,8 @@ class _NonStrDecodeBackend(ConcatBackend):
 
     fingerprint = "cycle14-sglang-nonstr-decode-not-a-model"
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:  # type: ignore[override]
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:  # type: ignore[override]
         return None  # type: ignore[return-value]
 
 
@@ -270,7 +272,8 @@ _ADVERSARIAL_MULTI: tuple[tuple[str, list[str], list[str], bool], ...] = (
 
 
 class SglangStopDifferentialTests(unittest.TestCase):
-    def _backend(self, texts: list[str]) -> tuple[Backend, tuple[int, ...]]:
+    @staticmethod
+    def _backend(texts: list[str]) -> tuple[Backend, tuple[int, ...]]:
         backend = _as_backend(ConcatBackend({i + 1: text for i, text in enumerate(texts)}))
         return backend, tuple(range(1, len(texts) + 1))
 

@@ -300,6 +300,7 @@ def find_span(render: str, logical_id: int) -> tuple[int, int] | None:
 
 
 def _common_prefix_len(a: str, b: str) -> int:
+    """Return the common prefix len."""
     lo, hi = 0, min(len(a), len(b))
     while lo < hi:
         mid = (lo + hi + 1) // 2
@@ -311,6 +312,7 @@ def _common_prefix_len(a: str, b: str) -> int:
 
 
 def _common_suffix_len(a: str, b: str, limit: int) -> int:
+    """Return the common suffix len."""
     lo, hi = 0, limit
     while lo < hi:
         mid = (lo + hi + 1) // 2
@@ -360,6 +362,7 @@ def sanitize_excerpt(text: str) -> str:
 
 
 def _finding(outcome: str, pair_id: str, message_index: int, region: str) -> dict[str, Any]:
+    """Return the finding."""
     return {
         "kind": outcome,
         "pair_id": pair_id,

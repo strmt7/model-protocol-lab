@@ -296,6 +296,7 @@ def _failure_diagnosis(result: dict[str, Any]) -> str:
 
 
 def _public_view(result: dict[str, Any], include_evidence: bool) -> dict[str, Any]:
+    """Return the public view."""
     clean: dict[str, Any] = json.loads(json.dumps(result, ensure_ascii=True, allow_nan=False))
     if not include_evidence:
         for run in clean.get("search", []):
@@ -363,6 +364,7 @@ def _strip_raw_diagnostics(clean: dict[str, Any]) -> None:
 
 
 def _short_fingerprint(value: object) -> str:
+    """Return the short fingerprint."""
     text = value if type(value) is str else ""
     short = text[:19]
     return short + "\u2026" if len(text) > 19 else short
@@ -436,6 +438,7 @@ def _conformance_section(result: dict[str, Any]) -> str:
     # cycle 202 this section used bare escape() and let ESC/NUL/BEL
     # bytes from payload strings reach report.html verbatim — the
     # exact class oversight S-14 removed elsewhere.
+    """Return the conformance section."""
     conformance = result.get("template_conformance")
     if type(conformance) is not dict:
         return ""
@@ -540,6 +543,7 @@ def _conformance_section(result: dict[str, Any]) -> str:
 
 
 def _matrix_cell_html(cell: dict[str, Any] | None) -> str:
+    """Return the matrix cell html."""
     if type(cell) is not dict or not cell.get("available"):
         detail = cell.get("detail", "unavailable") if type(cell) is dict else "unavailable"
         return '<span class="badge neutral">n/a</span> ' + escape(f"({detail})")
@@ -553,6 +557,7 @@ def _matrix_cell_html(cell: dict[str, Any] | None) -> str:
 
 
 def _stop_matrix_section(result: dict[str, Any]) -> str:
+    """Return the stop matrix section."""
     matrix = result.get("stop_matrix")
     if type(matrix) is not dict:
         return ""
@@ -567,6 +572,7 @@ def _stop_matrix_section(result: dict[str, Any]) -> str:
     )
 
     def stage_table(stage: str, rows: object) -> str:
+        """Return the stage table."""
         body_rows = []
         if type(rows) is list:
             for row in rows:
@@ -833,6 +839,7 @@ def _backend_divergence_section(result: dict[str, Any]) -> str:
 
 
 def _sweep_section(result: dict[str, Any]) -> str:
+    """Return the sweep section."""
     sweep = result.get("sensitivity_sweep")
     if type(sweep) is not dict:
         return ""
@@ -1547,6 +1554,7 @@ def margin_trajectory(frontier: dict[str, Any]) -> list[tuple[int, str | None, i
         # a count revisit (e.g. 4 -> 2 -> 4) leaves duplicate valid entries
         # for one candidate, which the second-place lookup must not
         # misread as a tied lead.
+        """Return the top valid."""
         while heap:
             neg, name = heap[0]
             if name != exclude and -neg == current[name]:
@@ -1738,6 +1746,7 @@ def attach_diagnostics(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def _plural(count: int, singular: str) -> str:
+    """Return the plural."""
     return f"{count} {singular}" + ("" if count == 1 else "s")
 
 
@@ -1897,6 +1906,7 @@ def _token_overhead_section(result: dict[str, Any]) -> str:
 
 
 def _search_rows(result: dict[str, Any]) -> str:
+    """Return the search rows."""
     rows = []
     for run in result.get("search") or []:
         if type(run) is not dict:
@@ -2005,6 +2015,7 @@ def _contamination_line(contamination: Any) -> str:
 
 
 def _config_section(result: dict[str, Any]) -> str:
+    """Return the config section."""
     fingerprint = _short_fingerprint(result.get("backend_fingerprint"))
     # Per-candidate boundaries (Cycle 2): when every candidate was measured
     # with the same sequence the config shows one line, as before; when they
@@ -2222,6 +2233,7 @@ _DECISION_RIBBON_LABELS = {
 _DECISION_RIBBON_ORDER = ("selected", "ambiguous", "no_candidate")
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
     """Multi-series token-budget frontier chart as deterministic inline SVG.
 
@@ -2303,12 +2315,14 @@ def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
     denom_x = max(max_tokens - 1, 1)
 
     def x_of(budget: int) -> int:
+        """Map a budget to its x pixel coordinate."""
         return (budget - 1) * width // denom_x
 
     # One shared Y axis over the largest fixture total.
     y_total = max(total for _, total, _, _ in series)
 
     def y_of(count: int) -> int:
+        """Map a value to its y pixel coordinate."""
         return (y_total - count) * height // y_total
 
     # X ticks: up to 5 integer budgets spanning 1..max_tokens.
@@ -2633,12 +2647,14 @@ def _margin_chart_svg(frontier: dict[str, Any]) -> str:
     denom_x = max(max_tokens - 1, 1)
 
     def x_of(budget: int) -> int:
+        """Map a budget to its x pixel coordinate."""
         return (budget - 1) * width // denom_x
 
     y_max = max(margin for _, _, margin in traj)
     denom_y = max(y_max, 1)
 
     def y_of(margin: int) -> int:
+        """Map a value to its y pixel coordinate."""
         return (y_max - margin) * height // denom_y
 
     elems: list[str] = []
@@ -3578,6 +3594,7 @@ def _token_healing_section(result: dict[str, Any]) -> str:
     flipped = healing.get("flipped") is True
 
     def _name(value: Any) -> str:
+        """Return the name."""
         return "(none)" if value is None else str(value)
 
     verdict_line = (
@@ -3732,9 +3749,11 @@ def _hierarchy_section(result: dict[str, Any]) -> str:
     n_fixtures = hierarchy.get("n_fixtures")
 
     def _name(value: Any) -> str:
+        """Return the name."""
         return "(none)" if value is None else str(value)
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float):
             return f"{value:.0%}"
         return "n/a"
@@ -3842,6 +3861,7 @@ def _hierarchy_section(result: dict[str, Any]) -> str:
 
     def _as_rate(value: Any) -> float | None:
         # Strict: bools are excluded (type() check, not isinstance()).
+        """Return the as rate."""
         return float(value) if type(value) in (int, float) else None
 
     ded_rate: float | None = None
@@ -3954,14 +3974,17 @@ def _position_section(result: dict[str, Any]) -> str:
     n_fixtures = position.get("n_fixtures")
 
     def _name(value: Any) -> str:
+        """Return the name."""
         return "(none)" if value is None else str(value)
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float):
             return f"{value:.0%}"
         return "n/a"
 
     def _index(value: Any) -> str:
+        """Return the index."""
         if type(value) in (int, float):
             return f"{value:+.2f}"
         return "n/a"
@@ -4147,11 +4170,13 @@ def _stopcause_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float):
             return f"{value:.0%}"
         return "n/a"
 
     def _num(value: Any) -> str:
+        """Return the num."""
         return str(value) if type(value) is int else "n/a"
 
     rows = []
@@ -4264,11 +4289,13 @@ def _wscanonical_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float):
             return f"{value:.0%}"
         return "n/a"
 
     def _bool(value: Any) -> str:
+        """Return the bool."""
         if value is True:
             return "yes"
         if value is False:
@@ -4377,6 +4404,7 @@ def _structured_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float):
             return f"{value:.0%}"
         return "n/a"
@@ -4471,6 +4499,7 @@ def _deliforge_section(result: dict[str, Any]) -> str:
         return ""
 
     def _gap(value: Any) -> str:
+        """Return the gap."""
         if type(value) in (int, float):
             return f"{value:+.2f}"
         return "n/a"
@@ -4583,11 +4612,13 @@ def _faketurn_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float):
             return f"{value:.2f}"
         return "n/a"
 
     def _gap(value: Any) -> str:
+        """Return the gap."""
         if type(value) in (int, float):
             return f"{value:+.2f}"
         return "n/a"
@@ -4700,11 +4731,13 @@ def _toolcall_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float):
             return f"{value:.2f}"
         return "n/a"
 
     def _gap(value: Any) -> str:
+        """Return the gap."""
         if type(value) in (int, float):
             return f"{value:+.2f}"
         return "n/a"
@@ -4813,7 +4846,10 @@ def _ablation_section(result: dict[str, Any]) -> str:
     triple, and that only main effects are measured. Every interpolation
     is escaped at this boundary.
     """
+    # skipcq: PYL-W0404 - deferred import keeps the package import graph acyclic
     import re as _re
+
+    # skipcq: PYL-W0404 - deferred import keeps the package import graph acyclic
     from html import escape as _escape
 
     _control_chars = _re.compile(
@@ -4828,6 +4864,7 @@ def _ablation_section(result: dict[str, Any]) -> str:
         return ""
 
     def _display_id(raw: Any) -> str:
+        """Return the display id."""
         return _escape(_control_chars.sub("", str(raw)))
 
     blocks: list[str] = []
@@ -4923,7 +4960,10 @@ def _template_robustness_section(result: dict[str, Any]) -> str:
     observed flips are upper bounds. Every interpolation is escaped at this
     boundary.
     """
+    # skipcq: PYL-W0404 - deferred import keeps the package import graph acyclic
     import re as _re
+
+    # skipcq: PYL-W0404 - deferred import keeps the package import graph acyclic
     from html import escape as _escape
 
     _control_chars = _re.compile(
@@ -4938,12 +4978,14 @@ def _template_robustness_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float):
             return f"{value:.2f}"
         return "n/a"
 
     def _display_id(raw: Any) -> str:
         # Strip control characters (terminal-escape injection) then HTML-escape.
+        """Return the display id."""
         return _escape(_control_chars.sub("", str(raw)))
 
     rows: list[str] = []
@@ -5025,11 +5067,13 @@ def _verbosity_section(result: dict[str, Any]) -> str:
         return ""
 
     def _num(value: Any) -> str:
+        """Return the num."""
         if type(value) in (int, float):
             return f"{value:.1f}"
         return "n/a"
 
     def _share(value: Any) -> str:
+        """Return the share."""
         if type(value) in (int, float):
             return f"{value:.0%}"
         return "n/a"
@@ -5175,6 +5219,7 @@ def _refusals_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float):
             return f"{value:.0%}"
         return "n/a"
@@ -5316,12 +5361,14 @@ def _scorerlens_section(result: dict[str, Any]) -> str:
         return ""
 
     def _count(entry: dict[str, Any], key: str, rung: str) -> str:
+        """Return the count."""
         counts = entry.get(key)
         if type(counts) is dict and type(counts.get(rung)) is int:
             return escape(str(counts[rung]))
         return "n/a"
 
     def _share(entry: dict[str, Any]) -> str:
+        """Return the share."""
         value = entry.get("surface_failure_share")
         text = f"{value:.0%}" if type(value) in (int, float) else "n/a"
         note = entry.get("share_note")
@@ -5498,10 +5545,12 @@ def _aliasing_section(result: dict[str, Any]) -> str:
         return ""
 
     def _num(key: str) -> str:
+        """Return the num."""
         value = audit.get(key)
         return escape(str(value)) if type(value) is int else "n/a"
 
     def _names(names: Any) -> str:
+        """Return the names."""
         if type(names) is list:
             return ", ".join('<span class="mono">' + escape(str(n)) + "</span>" for n in names)
         return "n/a"
@@ -5709,11 +5758,13 @@ def _repetition_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):+.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return escape(str(value)) if type(value) is int else "n/a"
 
     arms = probe.get("arms")
@@ -5863,11 +5914,13 @@ def _distraction_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return escape(str(value)) if type(value) is int else "n/a"
 
     conditions = probe.get("conditions")
@@ -6058,11 +6111,13 @@ def _leading_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return escape(str(value)) if type(value) is int else "n/a"
 
     conditions = probe.get("conditions")
@@ -6284,11 +6339,13 @@ def _numform_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return escape(str(value)) if type(value) is int else "n/a"
 
     grouping = probe.get("grouping")
@@ -6456,11 +6513,13 @@ def _dateline_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return escape(str(value)) if type(value) is int else "n/a"
 
     n_search = probe.get("n_search_fixtures")
@@ -6648,11 +6707,13 @@ def _multiturn_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return escape(str(value)) if type(value) is int else "n/a"
 
     rows: list[str] = []
@@ -6771,11 +6832,13 @@ def _needle_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return escape(str(value)) if type(value) is int else "n/a"
 
     rows: list[str] = []
@@ -6909,11 +6972,13 @@ def _placement_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return escape(str(value)) if type(value) is int else "n/a"
 
     rows: list[str] = []
@@ -7049,11 +7114,13 @@ def _canonical_form_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return _escape_text(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return _escape_text(str(value)) if type(value) is int else "n/a"
 
     rows: list[str] = []
@@ -7191,14 +7258,17 @@ def _negation_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return _escape_text(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return _escape_text(str(value)) if type(value) is int else "n/a"
 
     def _arm_line(name: str, arm: dict[str, Any]) -> str:
+        """Return the arm line."""
         decomp = arm.get("decomposition")
         decomp_bits = ""
         if type(decomp) is dict:
@@ -7454,14 +7524,17 @@ def _instruction_distance_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return _escape_text(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return _escape_text(str(value)) if type(value) is int else "n/a"
 
     def _arm_line(name: str, arm: dict[str, Any]) -> str:
+        """Return the arm line."""
         decomp = arm.get("decomposition")
         decomp_bits = ""
         if type(decomp) is dict:
@@ -7507,6 +7580,7 @@ def _instruction_distance_section(result: dict[str, Any]) -> str:
         )
 
     def _oc_paragraph(direct_passes: Any) -> str:
+        """Return the oc paragraph."""
         return (
             "<div>At D = "
             + _count(direct_passes)
@@ -7744,19 +7818,23 @@ def _history_frame_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return _escape_text(f"{float(value):.3f}")
         return "n/a"
 
     def _pct(value: Any) -> str:
+        """Return the pct."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return _escape_text(f"{100.0 * float(value):.2f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return _escape_text(str(value)) if type(value) is int else "n/a"
 
     def _arm_line(name: str, arm: dict[str, Any]) -> str:
+        """Return the arm line."""
         return (
             "<div>"
             + _escape_text(name)
@@ -8097,11 +8175,13 @@ def _prune_sweep_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return _escape_text(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return _escape_text(str(value)) if type(value) is int else "n/a"
 
     arm_names = ("dose0", "dose18", "dose36", "dose72", "tail72", "closed_book")
@@ -8452,14 +8532,17 @@ def _record_notation_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return _escape_text(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return _escape_text(str(value)) if type(value) is int else "n/a"
 
     def _points(value: Any) -> str:
+        """Return the points."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return _escape_text(f"{float(value):.1f}")
         return "n/a"
@@ -8646,9 +8729,11 @@ def _record_notation_section(result: dict[str, Any]) -> str:
             break
 
     def _oc(key: str) -> str:
+        """Return the oc."""
         return _rate(oc.get(key))
 
     def _sci(key: str) -> str:
+        """Return the sci."""
         value = oc.get(key)
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             return _escape_text(f"{float(value):.2e}")
@@ -8804,11 +8889,13 @@ def _rotation_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return _escape_text(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return _escape_text(str(value)) if type(value) is int else "n/a"
 
     rows: list[str] = []
@@ -9002,21 +9089,25 @@ def _density_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):.3f}")
         return "n/a"
 
     def _pvalue(value: Any) -> str:
+        """Return the pvalue."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):.3g}")
         return "n/a"
 
     def _mean(value: Any) -> str:
+        """Return the mean."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):.1f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return escape(str(value)) if type(value) is int else "n/a"
 
     rows: list[str] = []
@@ -9266,16 +9357,19 @@ def _field_order_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return _escape_text(f"{float(value):.3f}")
         return "n/a"
 
     def _pvalue(value: Any) -> str:
+        """Return the pvalue."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return _escape_text(f"{float(value):.3g}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return _escape_text(str(value)) if type(value) is int else "n/a"
 
     rows: list[str] = []
@@ -9502,11 +9596,13 @@ def _choiceaudit_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return escape(str(value)) if type(value) is int else "n/a"
 
     rows: list[str] = []
@@ -9701,19 +9797,23 @@ def _precision_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):.3f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return escape(str(value)) if type(value) is int else "n/a"
 
     def _delta(value: Any) -> str:
+        """Return the delta."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):+.3f}")
         return "n/a"
 
     def _passed(value: Any) -> str:
+        """Return the passed."""
         if value is True:
             return "passes"
         if value is False:
@@ -9896,19 +9996,23 @@ def _confidence_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):.3f}")
         return "n/a"
 
     def _num(value: Any) -> str:
+        """Return the num."""
         if type(value) in (int, float) and not isinstance(value, bool):
             return escape(f"{float(value):.1f}")
         return "n/a"
 
     def _count(value: Any) -> str:
+        """Return the count."""
         return escape(str(value)) if type(value) is int else "n/a"
 
     def _block_lines(block: Any, label: str) -> list[str]:
+        """Return the block lines."""
         if type(block) is not dict:
             return []
         joint = block.get("joint")
@@ -10091,11 +10195,13 @@ def _cache_profile_section(result: dict[str, Any]) -> str:
         return ""
 
     def _pct(value: Any) -> str:
+        """Return the pct."""
         if type(value) in (int, float):
             return f"{value:.1%}"
         return "n/a"
 
     def _num(value: Any) -> str:
+        """Return the num."""
         if type(value) in (int, float):
             return f"{value:.1f}"
         return "n/a"
@@ -10241,11 +10347,13 @@ def _confidentiality_section(result: dict[str, Any]) -> str:
         return ""
 
     def _pct(value: Any) -> str:
+        """Return the pct."""
         if type(value) in (int, float):
             return f"{value:.1%}"
         return "n/a"
 
     def _num(value: Any) -> str:
+        """Return the num."""
         if type(value) in (int, float):
             return f"{value:.3f}"
         return "n/a"
@@ -10371,11 +10479,13 @@ def _answer_collision_section(result: dict[str, Any]) -> str:
         return ""
 
     def _pct(value: Any) -> str:
+        """Return the pct."""
         if type(value) in (int, float):
             return f"{value:.1%}"
         return "n/a"
 
     def _int(value: Any) -> str:
+        """Return the int."""
         if type(value) is int:
             return str(value)
         return "n/a"
@@ -10484,6 +10594,7 @@ def _fewshot_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float):
             return f"{value:.2f}"
         return "n/a"
@@ -10652,9 +10763,11 @@ def _synthhistory_section(result: dict[str, Any]) -> str:
     n_fixtures = history.get("n_fixtures")
 
     def _name(value: Any) -> str:
+        """Return the name."""
         return "(none)" if value is None else str(value)
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float):
             return f"{value:.0%}"
         return "n/a"
@@ -10743,6 +10856,7 @@ def _synthhistory_section(result: dict[str, Any]) -> str:
 
     def _as_rate(value: Any) -> float | None:
         # Strict: bools are excluded (type() check, not isinstance()).
+        """Return the as rate."""
         return float(value) if type(value) in (int, float) else None
 
     exp_rate: float | None = None
@@ -10846,11 +10960,13 @@ def _batchinv_section(result: dict[str, Any]) -> str:
         return ""
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float):
             return f"{value:.1%}"
         return "n/a"
 
     def _num(value: Any) -> str:
+        """Return the num."""
         return str(value) if type(value) is int else "n/a"
 
     verdict = audit.get("verdict")
@@ -10954,9 +11070,11 @@ def _prefill_section(result: dict[str, Any]) -> str:
     n_fixtures = prefill.get("n_fixtures")
 
     def _name(value: Any) -> str:
+        """Return the name."""
         return "(none)" if value is None else str(value)
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float):
             return f"{value:.0%}"
         return "n/a"
@@ -11052,6 +11170,7 @@ def _prefill_section(result: dict[str, Any]) -> str:
 
     def _as_rate(value: Any) -> float | None:
         # Strict: bools are excluded (type() check, not isinstance()).
+        """Return the as rate."""
         return float(value) if type(value) in (int, float) else None
 
     if type(think_effect) is dict:
@@ -11222,9 +11341,11 @@ def _portfolio_section(result: dict[str, Any]) -> str:
         return ""
 
     def _name(value: Any) -> str:
+        """Return the name."""
         return "(none)" if value is None else str(value)
 
     def _rate(value: Any) -> str:
+        """Return the rate."""
         if type(value) in (int, float):
             return f"{value:.0%}"
         return "n/a"
@@ -11333,7 +11454,6 @@ def render_html(result: dict[str, Any]) -> str:
     its own styling and needs no external assets. Expects the enriched result
     shape produced by attach_diagnostics.
     """
-
     decision = str(result.get("decision", ""))
     dclass = _DECISION_CLASS.get(decision, "neutral")
     dhelp = _DECISION_HELP.get(decision, "Unrecognized decision value.")
@@ -11830,7 +11950,6 @@ def save_report(
     FileExistsError if the leaf is (or resolves through) a symlink -- report
     files are never written through a symlinked leaf.
     """
-
     # Automatic diagnostics: pure functions of the recorded search
     # outcomes, attached to a copy so the caller's dict is untouched. The
     # JSON keeps them (they are safe aggregates) while _public_view strips

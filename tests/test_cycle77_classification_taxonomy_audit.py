@@ -69,7 +69,7 @@ def oracle_classify_observation(obs: Any, eos_id: int | None) -> str | None:
     raw_reason = obs.get("raw_reason")
     if status == "failed" or raw_reason == "error" or status == "cancelled":
         return "backend-error"
-    elif not found:
+    if not found:
         if obs.get("boundary_text_match") is True:
             return "boundary-text-mismatch"
         if eos_id is not None:
@@ -190,7 +190,8 @@ class ClassifyMinimalPairTests(unittest.TestCase):
 
     EOS = 99
 
-    def _obs(self, **overrides: Any) -> dict[str, Any]:
+    @staticmethod
+    def _obs(**overrides: Any) -> dict[str, Any]:
         obs: dict[str, Any] = {
             "exact_match": False,
             "boundary_found": False,
@@ -595,10 +596,12 @@ class ScriptBackend:
     def decode(self, token_ids: Any) -> str:
         return "".join(self._texts.get(t, f"<{t}>") for t in tuple(token_ids))
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         raise AssertionError("encode unused in classification-audit tests")
 
-    def generate(self, *args: Any, **kwargs: Any) -> Any:
+    @staticmethod
+    def generate(*args: Any, **kwargs: Any) -> Any:
         raise AssertionError("generate unused in classification-audit tests")
 
 
@@ -649,7 +652,8 @@ class StopCellFixedTests(unittest.TestCase):
 
     def test_decode_exception_degrades_cell(self):
         class RaisingDecode(ScriptBackend):
-            def decode(self, token_ids: Any) -> str:
+            @staticmethod
+            def decode(token_ids: Any) -> str:
                 raise RuntimeError("synthetic decode failure")
 
         outcome = StopOutcome(True, True, (1, 2), "fired_at_step_2")
@@ -658,7 +662,8 @@ class StopCellFixedTests(unittest.TestCase):
 
     def test_decode_non_string_degrades_cell(self):
         class NonStringDecode(ScriptBackend):
-            def decode(self, token_ids: Any) -> Any:
+            @staticmethod
+            def decode(token_ids: Any) -> Any:
                 return 12345
 
         outcome = StopOutcome(True, True, (1, 2), "fired_at_step_2")
@@ -768,6 +773,7 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             boundary=(33,),
             eos_id=99,
         )
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertEqual(
             row,
@@ -813,6 +819,7 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             boundary=(33,),
             eos_id=99,
         )
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertTrue(row["native_pass"])
         cells = row["cells"]
@@ -838,6 +845,7 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             eos_id=99,
             vllm_include_stop_str_in_output=True,
         )
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertEqual(row["cells"]["vllm_holdback"]["stop_text"], "kept")
         self.assertTrue(row["cells"]["vllm_holdback"]["fired"])
@@ -859,6 +867,7 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             boundary=(8364,),
             eos_id=99,
         )
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         hf = row["cells"]["hf_stop_string"]
         vllm = row["cells"]["vllm_holdback"]
@@ -880,6 +889,7 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             boundary=(33,),
             eos_id=99,
         )
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertFalse(row["native_pass"])
         for semantic in STOP_SEMANTICS[1:]:
@@ -897,6 +907,7 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             (_matrix_observation(output_ids=("a",), exact_match=False, boundary_found=False),),
             boundary=(33,),
         )
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         for semantic in STOP_SEMANTICS[1:]:
             with self.subTest(semantic=semantic):
@@ -925,8 +936,8 @@ class StopMatrixWiringTests(unittest.TestCase):
     source's own composition.
     """
 
+    @staticmethod
     def _predict(
-        self,
         backend: Any,
         fixture: Fixture,
         boundary: tuple[int, ...],
@@ -990,6 +1001,7 @@ class StopMatrixWiringTests(unittest.TestCase):
             for eos_id, keep in itertools.product((None, 99), (False, True)):
                 with self.subTest(index=index, eos_id=eos_id, keep=keep):
                     expected = self._predict(backend, fixture, (33,), obs, eos_id, keep_vllm=keep)
+                    # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
                     (actual,) = stop_matrix(
                         backend,
                         "tiny",
@@ -1005,7 +1017,8 @@ class StopMatrixWiringTests(unittest.TestCase):
 class StopMatrixValidationTests(unittest.TestCase):
     """Every documented input contract raises ValueError, never a traceback."""
 
-    def _good_args(self) -> dict[str, Any]:
+    @staticmethod
+    def _good_args() -> dict[str, Any]:
         return {
             "backend": TinyBackend(),
             "candidate_name": "tiny",
@@ -1057,12 +1070,14 @@ class StopMatrixValidationTests(unittest.TestCase):
 
     def test_undecodable_boundary_disables_string_cells(self):
         class NoBoundaryText(TinyBackend):
+            # skipcq: PYL-R0201 - zero-arg super() requires an instance method
             def decode(self, token_ids: Any) -> Any:
                 if tuple(token_ids) == (33,):
                     return ""
                 return super().decode(token_ids)
 
         rows = self._run(backend=NoBoundaryText(), eos_id=99)
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertFalse(row["cells"]["hf_stop_string"]["available"])
         self.assertFalse(row["cells"]["vllm_holdback"]["available"])

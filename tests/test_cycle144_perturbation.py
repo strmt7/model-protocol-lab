@@ -669,7 +669,8 @@ class RenderPerturbationSummaryTests(unittest.TestCase):
 
 
 class PerturbationSectionTests(unittest.TestCase):
-    def _result(self, **overrides):
+    @staticmethod
+    def _result(**overrides):
         payload = _perturbation_payload(**overrides)
         return {"perturbation": payload}
 

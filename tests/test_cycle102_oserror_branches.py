@@ -76,7 +76,8 @@ class _FailingReader:
         os.close(self._fd)
         return False
 
-    def read(self, *args: object, **kwargs: object) -> bytes:
+    @staticmethod
+    def read(*args: object, **kwargs: object) -> bytes:
         raise OSError(5, "I/O error")
 
 
@@ -130,7 +131,8 @@ class ExamineModelOSErrorBranchTests(unittest.TestCase):
     def test_index_read_error_fails_asset_layout(self):
         """OSError while _model_assets reads the weight index -> the
         ``except OSError`` around _model_assets fires: failed verdict,
-        asset_layout failed with the fixed vocabulary, early return."""
+        asset_layout failed with the fixed vocabulary, early return.
+        """
         root = Path(tempfile.mkdtemp())
         _write_healthy(root, sharded=True)
         with _ReadErrorInjector("model.safetensors.index.json"):
@@ -145,7 +147,8 @@ class ExamineModelOSErrorBranchTests(unittest.TestCase):
     def test_manifest_read_error_fails_manifest_check(self):
         """OSError while _manifest hashes an asset -> the ``except
         OSError`` around _manifest fires: asset_layout ok (enumeration
-        succeeded), asset_manifest failed with the fixed vocabulary."""
+        succeeded), asset_manifest failed with the fixed vocabulary.
+        """
         root = Path(tempfile.mkdtemp())
         _write_healthy(root)
         with _ReadErrorInjector("model.safetensors"):
@@ -159,7 +162,8 @@ class ExamineModelOSErrorBranchTests(unittest.TestCase):
     def test_config_read_error_fails_config_check(self):
         """OSError while _read_json reads config.json -> the ``except
         OSError`` around the config read fires: config failed with the
-        fixed vocabulary, never a raw OSError."""
+        fixed vocabulary, never a raw OSError.
+        """
         root = Path(tempfile.mkdtemp())
         _write_healthy(root)
         # Manifest hashes config.json first; skip that read so the error
@@ -173,7 +177,8 @@ class ExamineModelOSErrorBranchTests(unittest.TestCase):
 
     def test_tokenizer_read_error_fails_tokenizer_check(self):
         """OSError while _read_json reads tokenizer.json -> the
-        ``except OSError`` around the tokenizer read fires."""
+        ``except OSError`` around the tokenizer read fires.
+        """
         root = Path(tempfile.mkdtemp())
         _write_healthy(root)
         # tokenizer.json is read only by its own stage (the manifest
@@ -188,7 +193,8 @@ class ExamineModelOSErrorBranchTests(unittest.TestCase):
 
     def test_no_raw_oserror_escapes(self):
         """Belt and braces: even with every read failing, examine_model
-        returns a report — it never propagates OSError."""
+        returns a report — it never propagates OSError.
+        """
         root = Path(tempfile.mkdtemp())
         _write_healthy(root, sharded=True)
         for target in (

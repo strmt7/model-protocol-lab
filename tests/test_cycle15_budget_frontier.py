@@ -519,10 +519,12 @@ class BudgetFrontierEdgeCaseTests(unittest.TestCase):
 
 
 class BudgetFrontierValidationTests(unittest.TestCase):
-    def _valid_search(self):
+    @staticmethod
+    def _valid_search():
         return [_entry("a", [_obs("f1", [1, 2])])]
 
-    def _valid_kwargs(self):
+    @staticmethod
+    def _valid_kwargs():
         return {
             "boundary": (1, 2),
             "max_new_tokens": 8,
@@ -622,7 +624,8 @@ class BudgetFrontierSensitivityTests(unittest.TestCase):
     comparison flags the difference. If these fail, the fuzz is blind.
     """
 
-    def _passing_case(self):
+    @staticmethod
+    def _passing_case():
         search = [
             _entry("a", [_obs("f1", [7, 1, 2, 9]), _obs("f2", [1, 2, 0, 0])]),
             _entry("b", [_obs("f1", [7, 7, 7, 7]), _obs("f2", [0, 0, 0, 0])]),

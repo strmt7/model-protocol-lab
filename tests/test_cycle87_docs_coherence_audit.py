@@ -197,7 +197,7 @@ class TestDocumentedFlagsExist(unittest.TestCase):
         problems: list[str] = []
         for sub_name, invocations in DOCUMENTED_INVOCATIONS:
             self.assertIn(sub_name, subs, f"subcommand missing from parser: {sub_name}")
-            flags, positionals = _subcommand_flags(subs[sub_name])
+            flags, _positionals = _subcommand_flags(subs[sub_name])
             for cmd in invocations:
                 for flag in set(_FLAG_RE.findall(cmd)):
                     if flag not in flags:
@@ -251,6 +251,7 @@ class TestExampleAssetsValid(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=120,
+                check=False,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
             rebuilt = datasets.load_dataset(out)
@@ -281,6 +282,7 @@ class TestDocumentedDebugTranscript(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=120,
+                check=False,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
             out = proc.stdout

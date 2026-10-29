@@ -23,6 +23,7 @@ class Message:
     content: str
 
     def __post_init__(self) -> None:
+        """Validate the role and content types at construction."""
         if self.role not in ("user", "assistant"):
             raise ValueError("Only user/assistant roles are supported")
         if type(self.content) is not str:
@@ -62,6 +63,7 @@ class Format:
     open_suffix: str | None = None
 
     def __post_init__(self) -> None:
+        """Validate the format text fields at construction."""
         fields = (self.name, self.bos, self.user_prefix, self.assistant_prefix, self.turn_end)
         if any(type(value) is not str for value in fields):
             raise ValueError("Format text fields must be strings")
@@ -151,6 +153,7 @@ class Fixture:
     group: str  # Related/paraphrased examples share one group.
 
     def __post_init__(self) -> None:
+        """Validate the fixture identity fields at construction."""
         if type(self.id) is not str or not self.id.strip():
             raise ValueError("Fixture ID must be a nonblank string")
         if type(self.group) is not str or not self.group.strip():
@@ -179,6 +182,7 @@ class Split:
     held_out: tuple[Fixture, ...]
 
     def __post_init__(self) -> None:
+        """Validate that both splits are nonempty tuples."""
         if (
             type(self.search) is not tuple
             or type(self.held_out) is not tuple
@@ -198,6 +202,7 @@ class Split:
         # (Homoglyph/confusable detection is out of scope: no normalization
         # form unifies those, and flagging them would need UTS-39 tables.)
         def _nfc(value: str) -> str:
+            """Return the nfc."""
             return unicodedata.normalize("NFC", value)
 
         if len({_nfc(case.id) for case in all_cases}) != len(all_cases):
@@ -206,6 +211,7 @@ class Split:
             raise ValueError("Related fixtures cannot cross the split")
 
         def message_key(case: Fixture) -> tuple[tuple[str, str], ...]:
+            """Return the message key."""
             return tuple((_nfc(message.role), _nfc(message.content)) for message in case.messages)
 
         if {message_key(case) for case in self.search} & {
@@ -243,13 +249,24 @@ class Backend(Protocol):
 
     fingerprint: str
 
-    def encode(self, text: str) -> tuple[int, ...]: ...
+    def encode(self, text: str) -> tuple[int, ...]:
+        """Encode the complete rendered prompt into raw token IDs."""
+        ...
 
-    def decode(self, token_ids: tuple[int, ...]) -> str: ...
+    def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode token IDs without dropping special tokens."""
+        ...
 
     def generate(
-        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
-    ) -> Generation: ...
+        self,
+        input_ids: tuple[int, ...],
+        *,
+        max_new_tokens: int,
+        seed: int,
+        cancel: Event,
+    ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
+        ...
 
 
 RunStatus = Literal["completed", "cancelled", "failed"]
@@ -304,6 +321,7 @@ class EvaluationReport:
     status: RunStatus
 
     def __post_init__(self) -> None:
+        """Validate the report counts and observations at construction."""
         if type(self.planned_count) is not int or self.planned_count < 1:
             raise ValueError("planned_count must be a positive integer")
         if type(self.observations) is not tuple or any(
@@ -333,18 +351,22 @@ class EvaluationReport:
 
     @property
     def attempted_count(self) -> int:
+        """Return the attempted count."""
         return len(self.observations)
 
     @property
     def complete(self) -> bool:
+        """Return the complete."""
         return self.status == "completed" and self.attempted_count == self.planned_count
 
     @property
     def aggregate_eligible(self) -> bool:
+        """Aggregate eligible."""
         return self.complete
 
 
 def _valid_token_ids(value: object, *, nonempty: bool = False) -> bool:
+    """Return whether token ids is valid."""
     return (
         type(value) is tuple
         and (not nonempty or bool(value))
@@ -353,6 +375,7 @@ def _valid_token_ids(value: object, *, nonempty: bool = False) -> bool:
 
 
 def _valid_generation(result: object, cap: int) -> bool:
+    """Return whether generation is valid."""
     if type(result) is not Generation or not _valid_token_ids(result.token_ids):
         return False
     if len(result.token_ids) > cap or type(result.reason) is not str:
@@ -771,6 +794,7 @@ def evaluate(
     records: list[Observation] = []
 
     def report(status: RunStatus) -> EvaluationReport:
+        """Return the report."""
         return EvaluationReport(tuple(records), len(cases), status)
 
     def record(
@@ -787,6 +811,7 @@ def evaluate(
     ) -> None:
         # All per-attempt state is passed explicitly: these helpers are defined
         # once outside the loop so they can never capture a stale loop variable.
+        """Record."""
         records.append(
             Observation(
                 candidate=candidate.name,
@@ -815,6 +840,7 @@ def evaluate(
         error: str | None = None,
         input_text: str = "",
     ) -> EvaluationReport:
+        """Return the terminate."""
         record(
             status,
             case,

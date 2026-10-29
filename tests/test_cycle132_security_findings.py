@@ -118,7 +118,8 @@ class TestFrontierCrashSites(unittest.TestCase):
 class TestRateFormatting(unittest.TestCase):
     """Findings 1+9: malformed rates degrade to "incomplete", never crash."""
 
-    def _search_result(self, rate):
+    @staticmethod
+    def _search_result(rate):
         return {
             "search": [
                 {
@@ -200,7 +201,8 @@ class TestSymlinkReportDir(unittest.TestCase):
 
 
 class FakeTokenizer:
-    def apply_chat_template(self, conversation, tokenize=False, add_generation_prompt=True):
+    @staticmethod
+    def apply_chat_template(conversation, tokenize=False, add_generation_prompt=True):
         return "hello"
 
 

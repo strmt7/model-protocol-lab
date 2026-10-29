@@ -42,18 +42,21 @@ _MAX_SEED = 2**64
 
 
 def _check_text(text: Any) -> str:
+    """Check text."""
     if type(text) is not str:
         raise ValueError("text must be a string")
     return text
 
 
 def _check_seed(seed: Any) -> int:
+    """Check seed."""
     if type(seed) is not int or isinstance(seed, bool) or not 0 <= seed < _MAX_SEED:
         raise ValueError("seed must be an unsigned 64-bit integer")
     return seed
 
 
 def _check_operator(operator: Any) -> str:
+    """Check operator."""
     for known in PERTURBATION_OPERATORS:
         if operator == known:
             return known

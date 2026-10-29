@@ -29,13 +29,16 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 
 CODEQL_LIMIT = 2
 REPOSITORY = "strmt7/model-protocol-lab"
 
 
-def count_codeql_findings(fetch) -> tuple[int, list[dict[str, object]]]:
+def count_codeql_findings(
+    fetch: Callable[[int], list[dict[str, object]]],
+) -> tuple[int, list[dict[str, object]]]:
     """Paginate the open code-scanning alerts; count CodeQL only."""
     findings: list[dict[str, object]] = []
     page = 1
@@ -57,7 +60,7 @@ def count_codeql_findings(fetch) -> tuple[int, list[dict[str, object]]]:
     return len(findings), findings
 
 
-def github_page_fetcher(repo: str, token: str):
+def github_page_fetcher(repo: str, token: str) -> Callable[[int], list[dict[str, object]]]:
     """Build a page fetcher over the code-scanning alerts API."""
 
     def fetch(page: int) -> list[dict[str, object]]:
@@ -93,7 +96,10 @@ def github_page_fetcher(repo: str, token: str):
 
 
 def deepsource_status(
-    repository: str, commit: str, output_root: Path, runner=subprocess.run
+    repository: str,
+    commit: str,
+    output_root: Path,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> tuple[str, int | None]:
     """Run the ported inventory; return (state, total_count).
 
@@ -145,9 +151,9 @@ def deepsource_status(
 def evaluate(
     repository: str,
     commit: str,
-    fetch,
+    fetch: Callable[[int], list[dict[str, object]]],
     output_root: Path,
-    runner=subprocess.run,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> dict[str, object]:
     """Run both legs; return the report (exit code under "exit")."""
     codeql_count, codeql_alerts = count_codeql_findings(fetch)
@@ -204,7 +210,7 @@ def main() -> int:
             github_page_fetcher(args.repository, token),
             args.output_root,
         )
-    except (ValueError, urllib.error.URLError, OSError) as error:
+    except (ValueError, OSError) as error:
         print(f"findings-guard: {error}", file=sys.stderr)
         return 2
     print(json.dumps(report, indent=2, sort_keys=True))

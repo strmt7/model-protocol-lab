@@ -163,6 +163,7 @@ class TestWorkflowPermissionScoping(unittest.TestCase):
         """The CI test step's script contains no template expansion."""
         doc = _load_yaml(WORKFLOWS / "ci.yml")
         steps = doc["jobs"]["test"]["steps"]
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         step = next(s for s in steps if s.get("name") == "run tests (output captured)")
         self.assertNotIn("${{", step["run"])
         self.assertEqual(step["env"]["PYTHON_VERSION"], "${{ matrix.python-version }}")
@@ -196,6 +197,7 @@ class TestDependencyReview(unittest.TestCase):
         job = self.doc["jobs"]["review"]
         self.assertEqual(job.get("name"), "dependency review")
         self.assertIsInstance(job.get("timeout-minutes"), int)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         review = next(
             s
             for s in job["steps"]

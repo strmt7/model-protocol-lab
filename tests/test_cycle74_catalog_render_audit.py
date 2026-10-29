@@ -111,7 +111,8 @@ def _user_end(fmt: Format) -> str:
 
 def _expected_one_turn(fmt: Format, content: str) -> str:
     """The documented render contract for a single user turn, rebuilt here
-    from the field values (pins the mechanics per variant)."""
+    from the field values (pins the mechanics per variant).
+    """
     out = fmt.bos + fmt.user_prefix + content + _user_end(fmt)
     if fmt.repeat_bos:
         out += fmt.bos
@@ -212,16 +213,19 @@ class TestStructuralInvariants(unittest.TestCase):
 
 
 class TestVariantInventory(unittest.TestCase):
-    def test_total_variant_count(self):
+    @staticmethod
+    def test_total_variant_count():
         assert len(_VARIANTS) == 118
 
-    def test_branch_variant_names(self):
+    @staticmethod
+    def test_branch_variant_names():
         for family, expected in _BRANCH_VARIANTS.items():
             names = [f.name for f in candidates(family, mutate=True)]
             for want in expected:
                 assert want in names, f"{want} missing for {family}"
 
-    def test_no_unexpected_branch_variants(self):
+    @staticmethod
+    def test_no_unexpected_branch_variants():
         for family in CATALOG:
             names = [f.name for f in candidates(family, mutate=True)]
             branch = [
@@ -231,12 +235,14 @@ class TestVariantInventory(unittest.TestCase):
             ]
             assert tuple(branch) == _BRANCH_VARIANTS.get(family, ()), family
 
-    def test_base_is_first_variant(self):
+    @staticmethod
+    def test_base_is_first_variant():
         for family in CATALOG:
             assert candidates(family, mutate=True)[0] is CATALOG[family]
             assert candidates(family) == (CATALOG[family],)
 
-    def test_variant_names_scoped(self):
+    @staticmethod
+    def test_variant_names_scoped():
         for family, fmt in _VARIANTS:
             assert fmt.name == family or fmt.name.startswith(family + "/")
 
@@ -264,24 +270,30 @@ _LLAMA3_2TURN = (
 class CatalogRenderAuditTests(unittest.TestCase):
     """unittest entry point; pytest runs TestCase classes natively."""
 
-    def test_crosscheck_llama3(self):
+    @staticmethod
+    def test_crosscheck_llama3():
         assert CATALOG["llama3"].render(_three_turn()) == _LLAMA3_2TURN
 
-    def test_crosscheck_gemma(self):
+    @staticmethod
+    def test_crosscheck_gemma():
         assert CATALOG["gemma"].render(_one_turn("U1")) == _GEMMA_1TURN
 
-    def test_crosscheck_qwen3(self):
+    @staticmethod
+    def test_crosscheck_qwen3():
         assert CATALOG["qwen3"].render(_one_turn("U1")) == _QWEN3_1TURN
         assert CATALOG["qwen3"].render(_three_turn()) == _QWEN3_2TURN
 
-    def test_crosscheck_deepseek(self):
+    @staticmethod
+    def test_crosscheck_deepseek():
         assert CATALOG["deepseek"].render(_three_turn()) == _DEEPSEEK_2TURN
 
-    def test_crosscheck_mistral_release_pin(self):
+    @staticmethod
+    def test_crosscheck_mistral_release_pin():
         assert CATALOG["mistral"].render(_one_turn("U1")) == _MISTRAL_RELEASE_1TURN
         assert CATALOG["mistral"].render(_three_turn()) == _MISTRAL_RELEASE_2TURN
 
-    def test_crosscheck_mistral_pin_delta_vs_current_hub(self):
+    @staticmethod
+    def test_crosscheck_mistral_pin_delta_vs_current_hub():
         assert _MISTRAL_RELEASE_1TURN.replace(" ", "") == _MISTRAL_HUB_CURRENT_1TURN.replace(
             " ", ""
         )
@@ -294,11 +306,14 @@ class CatalogRenderAuditTests(unittest.TestCase):
         assert "[/INST]A1</s>" in _MISTRAL_RELEASE_2TURN  # no leading space (release)
         assert "[/INST] A1</s>" in _MISTRAL_HUB_CURRENT_2TURN  # leading space (hub)
 
-    def test_crosscheck_hy4(self):
+    @staticmethod
+    def test_crosscheck_hy4():
         assert CATALOG["hy4"].render(_one_turn("U1")) == _HY4_1TURN
         assert CATALOG["hy4"].render(_three_turn()) == _HY4_2TURN
 
-    def test_crosscheck_hy4_no_think_variant(self):
+    @staticmethod
+    def test_crosscheck_hy4_no_think_variant():
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         variant = next(f for f in candidates("hy4", mutate=True) if f.name == "hy4/no-think")
         assert variant.render(_one_turn("U1")) == _HY4_USER + _HY4_NOTHINK_GEN
 
@@ -469,7 +484,8 @@ class TestAdversarialEdges(unittest.TestCase):
                 out = CATALOG[family].render(_msgs(("user", hostile)))
                 assert hostile in out
 
-    def test_very_long_conversation(self):
+    @staticmethod
+    def test_very_long_conversation():
         fmt = CATALOG["llama3"]
         n = 501
         convo = tuple(

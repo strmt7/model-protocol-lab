@@ -46,6 +46,8 @@ from unittest import mock
 from model_protocol_lab import backends, diffreports, experiments, refusals, reporting
 from model_protocol_lab import cli as cli_module
 from model_protocol_lab import doctor as doctor_mod
+
+# skipcq: PYL-W0404 - test-local import isolates the module under audit
 from model_protocol_lab import reporting as reporting_mod
 from model_protocol_lab.cli import main as cli_main
 
@@ -447,7 +449,8 @@ class TestCliWiring(unittest.TestCase):
 
 
 class TestReportingSection(unittest.TestCase):
-    def _result(self, **overrides: Any) -> dict[str, Any]:
+    @staticmethod
+    def _result(**overrides: Any) -> dict[str, Any]:
         result: dict[str, Any] = {
             "search": [
                 _entry(
@@ -527,7 +530,8 @@ class TestReportingSection(unittest.TestCase):
 
 
 class TestDiffRefusals(unittest.TestCase):
-    def _profile(self, name: str = "a", answers: Any = None, **kw: Any) -> dict[str, Any]:
+    @staticmethod
+    def _profile(name: str = "a", answers: Any = None, **kw: Any) -> dict[str, Any]:
         answers = answers if answers is not None else ["7"]
         observations = [
             _obs(f"f{i}", answer, exact=(answer == "7")) for i, answer in enumerate(answers)
@@ -578,6 +582,7 @@ class TestDiffRefusals(unittest.TestCase):
         # a changed opener list with its own matching digest. A bare
         # digest edit is list/digest corruption and validates as
         # neither (asserted below), not drift.
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib
 
         old = self._profile()
@@ -606,6 +611,7 @@ class TestDiffRefusals(unittest.TestCase):
         diff = diffreports.diff_refusals(old, new)
         self.assertEqual(diff["excluded_added"], ["a"])
         self.assertTrue(diff["changed"])
+        # skipcq: PYL-W1114 - the reversed diff is the assertion: symmetry is what is audited
         back = diffreports.diff_refusals(new, old)
         self.assertEqual(back["excluded_removed"], ["a"])
 
@@ -708,7 +714,8 @@ class TestMutationGates(unittest.TestCase):
 class TestValidatorBattery(unittest.TestCase):
     """Every _valid_refusals reject branch, one broken identity at a time."""
 
-    def _good(self) -> dict[str, Any]:
+    @staticmethod
+    def _good() -> dict[str, Any]:
         profile = experiments.refusal_profile(
             {
                 "search": [

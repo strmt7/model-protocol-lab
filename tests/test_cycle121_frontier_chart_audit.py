@@ -215,6 +215,7 @@ class TestDeterminism(unittest.TestCase):
                 timeout=120,
                 env={**os.environ, "PYTHONHASHSEED": seed},
                 cwd=str(_REPO_ROOT),
+                check=False,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr[-1000:])
             outs.append(proc.stdout)

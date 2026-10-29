@@ -301,6 +301,7 @@ def _check_arg_value(value: object, param: dict[str, Any], *, where: str) -> Non
     elif ptype == "number":
         ok = (
             (type(value) is int or type(value) is float)
+            # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
             and value == value
             and value not in (float("inf"), float("-inf"))
         )
@@ -410,7 +411,7 @@ def _parse_emitted(text: str) -> tuple[str | None, dict[str, Any] | None, str | 
             parse_constant=_reject_constant,
             parse_float=_reject_nonfinite_float,
         )
-    except (json.JSONDecodeError, ValueError):
+    except ValueError:
         return None, None, "bad_json"
     except RecursionError:
         # Deeply nested input: the C scanner recurses per nesting level and

@@ -266,6 +266,7 @@ def block_text(date_string: str) -> str:
     return BLOCK_TEMPLATE.replace("{DATE}", date_string)
 
 
+# skipcq: PYL-W0621 - the name mirrors the frozen payload field it consumes
 def control_block(neutral_text: str) -> str:
     """The control block: same envelope, sized neutral text."""
     return CONTROL_TEMPLATE.replace("{NEUTRAL}", neutral_text)
@@ -383,6 +384,7 @@ _MONTH_D_RE = re.compile(r"^([A-Za-z]+)\.?\s+(\d{1,2})$")
 
 
 def _valid_date(year: int, month: int, day: int) -> bool:
+    """Return whether date is valid."""
     try:
         _date(year, month, day)
     except ValueError:
@@ -457,6 +459,7 @@ def parse_date_candidates(text: str) -> set[tuple[int | None, int, int]]:
 
 
 def _arm_date_tuples() -> frozenset[tuple[int, int, int]]:
+    """Return the arm date tuples."""
     return frozenset(_DATE_BY_KEY.values())
 
 
@@ -626,6 +629,7 @@ def classify_pair(n_paired: int, a_only: int, b_only: int) -> str:
 
 
 def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the cell."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -635,7 +639,8 @@ def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
 
 def live_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Records that enter populations: not vacuous, blank,
-    screened, or message-date-bearing."""
+    screened, or message-date-bearing.
+    """
     return [
         r
         for r in records

@@ -61,10 +61,12 @@ class ScriptedBackend:
         self._script = dict(script)
         self.fingerprint = "cycle206-scripted-backend"
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         return tuple(ord(char) for char in text)
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return "".join(chr(token) for token in token_ids)
 
     def generate(
@@ -103,7 +105,8 @@ _SPLIT = Split(search=_SEARCH, held_out=_HELD)
 
 def _script_for_flip_at_1() -> dict[str, tuple[str, str]]:
     """Native cand-a passes; drop-1 flips it (search fails), drop-2
-    passes again -- so flips_at is exactly [1], not [1, 2]."""
+    passes again -- so flips_at is exactly [1], not [1, 2].
+    """
     script: dict[str, tuple[str, str]] = {}
     for fmt in (_FMT_A, _FMT_B):
         full = fmt.render(_SEARCH[0].messages)
@@ -413,7 +416,8 @@ class TokenSweepTests(unittest.TestCase):
 
 
 class TokenReportingTests(unittest.TestCase):
-    def _payload(self) -> dict:
+    @staticmethod
+    def _payload() -> dict:
         return {
             "granularity": "tokens",
             "native_winner": "cand-a",
@@ -515,7 +519,8 @@ class PerProbeEscapeTests(unittest.TestCase):
     through verbatim and save_report's UTF-8 write raised
     UnicodeEncodeError. All four sections now route payload-derived
     interpolations through _escape_text (controls stripped), while
-    U+2028/U+2029 pass through unchanged (cycle-100 pin)."""
+    U+2028/U+2029 pass through unchanged (cycle-100 pin).
+    """
 
     _SUR = "\ud800"
 
@@ -657,9 +662,10 @@ class _FakeHFBackend:
     fingerprint = "fake-hf"
 
     def __init__(self, *args, **kwargs) -> None:
-        pass
+        """Accept and ignore any construction arguments; the fake has no state."""
 
-    def encode(self, text):  # noqa: ANN001, ANN202
+    @staticmethod
+    def encode(text):  # noqa: ANN001, ANN202
         return (7, 8)
 
 
@@ -730,7 +736,8 @@ class TokenCliTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("max-drop-tokens", err_text)
 
-    def _run_with(self, argv_extra, exp_patches):
+    @staticmethod
+    def _run_with(argv_extra, exp_patches):
         with tempfile.TemporaryDirectory() as tmp:
             fixture = _write_fixture_file(tmp)
             outdir = Path(tmp) / "report"
@@ -754,6 +761,8 @@ class TokenCliTests(unittest.TestCase):
                     )
                 )
                 from model_protocol_lab import doctor as doctor_mod
+
+                # skipcq: PYL-W0404 - test-local import isolates the module under audit
                 from model_protocol_lab import reporting as reporting_mod
 
                 stack.enter_context(
@@ -797,7 +806,7 @@ class TokenCliTests(unittest.TestCase):
                 except SystemExit as exc:
                     kind, code = "exit", exc.code
                 else:
-                    kind, code = "return", code
+                    kind = "return"
             return (kind, code), result_doc, sentinel
 
     def test_token_depth_sweep_dispatches(self) -> None:

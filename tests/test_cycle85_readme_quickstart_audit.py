@@ -191,7 +191,8 @@ class TestImportsCoveredTest(unittest.TestCase):
 
     def test_torch_transformers_importers_are_covered(self) -> None:
         """Regression pin for the original failure: torch/transformers must be
-        importable by every test module that needs them at module level."""
+        importable by every test module that needs them at module level.
+        """
         importers = [
             module
             for module, roots in _module_level_third_party_imports().items()

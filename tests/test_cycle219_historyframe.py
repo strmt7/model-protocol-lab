@@ -392,7 +392,8 @@ class AggregateTests(unittest.TestCase):
     digests.
     """
 
-    def _records(self, count: int, **kwargs):
+    @staticmethod
+    def _records(count: int, **kwargs):
         """Build synthetic records with per-record cell kwargs."""
         # skipcq: PYL-E1125 - 'own'/'foreign' arrive via the **kwargs unpacking
         return [_record(f"fx-{i:02d}", **kwargs) for i in range(count)]
@@ -460,7 +461,8 @@ class SelectionTests(unittest.TestCase):
     completed set + canonical-form winner headlines.
     """
 
-    def _two_candidates(self):
+    @staticmethod
+    def _two_candidates():
         """Build two candidates whose records make cand-a the winner and cand-b the loser."""
         winner_records = [
             _record(f"fx-{i:02d}", own=_cell(True), foreign=_cell(True)) for i in range(3)
@@ -762,6 +764,7 @@ class ValidatorTests(unittest.TestCase):
         dropped = _payload(_WordBackend("frame_drop"))
         diff = diffreports.diff_history_frame(perfect, dropped)
         self.assertTrue(diff["changed"])
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         metric = next(
             entry
             for entry in diff["candidate_drift"]
@@ -829,10 +832,12 @@ class CliTests(unittest.TestCase):
         from model_protocol_lab.cli import build_parser
 
         parser = build_parser()
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         run = next(
             action for action in parser._actions if action.__class__.__name__ == "_SubParsersAction"
         )
         help_text = run.choices["run"].format_help()  # raises on a bare %
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         flag = next(a for a in run.choices["run"]._actions if "--history-frame" in a.option_strings)
         self.assertIsNotNone(flag)
         # Naming condition: the prepend disclosure sits in
@@ -894,7 +899,8 @@ class GapModuleTests(unittest.TestCase):
 
             fingerprint = "sha256:test-one-id"
 
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 """Encode any non-empty text to (1,) and empty text to ()."""
                 return (1,) if text else ()
 
@@ -1231,6 +1237,7 @@ class GapValidatorBatteryTests(unittest.TestCase):
                 "records": [],
             }
         self.assertFalse(diffreports._valid_history_frame(forged))
+        # skipcq: PTC-W0043 - deliberate tripwire: removing the entry is the audited behavior
         del entry
 
     def test_diff_candidates_added_removed_and_stratum_drift(self):

@@ -200,7 +200,8 @@ class BackendInitFailureTests(unittest.TestCase):
         build_tiny_gpt2(root)
         return root
 
-    def _config(self, root):
+    @staticmethod
+    def _config(root):
         path = root / "config.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         return path, data

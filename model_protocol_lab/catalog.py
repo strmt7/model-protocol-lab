@@ -681,8 +681,10 @@ CATALOG = {
         "hy4",
         "",
         f"<{_HY_BAR}hy_start:opensource{_HY_BAR}>user<{_HY_BAR}hy_middle:opensource{_HY_BAR}>",
+        # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
         f"<{_HY_BAR}hy_start:opensource{_HY_BAR}>assistant<{_HY_BAR}hy_middle:opensource{_HY_BAR}><think:opensource></think:opensource>",
         f"<{_HY_BAR}hy_end:opensource{_HY_BAR}>",
+        # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
         open_suffix=f"<{_HY_BAR}hy_start:opensource{_HY_BAR}>assistant<{_HY_BAR}hy_middle:opensource{_HY_BAR}><think:opensource>",
     ),
     # MiniMax-M3 (MiniMaxAI/MiniMax-M3, released 2026-06, MiniMax Community
@@ -920,7 +922,6 @@ def candidates(family: str, *, mutate: bool = False) -> tuple[Format, ...]:
     experiment can test small template mutations alongside the base.
     Raises ValueError for an unknown family name.
     """
-
     if type(family) is not str or family not in CATALOG:
         raise ValueError("Unknown format family")
     base = CATALOG[family]

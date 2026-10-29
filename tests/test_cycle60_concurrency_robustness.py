@@ -95,7 +95,8 @@ class TestMutantRootsPidScoped(unittest.TestCase):
 class TestConcurrentMutantStaging(unittest.TestCase):
     """Two processes running the mutant-sensitivity battery concurrently must
     both succeed. Before PID-scoping this raced on the fixed scratch dir
-    (FileExistsError / half-written imports)."""
+    (FileExistsError / half-written imports).
+    """
 
     def test_two_parallel_sensitivity_runs_both_pass(self):
         script = (

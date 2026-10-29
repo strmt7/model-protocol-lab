@@ -198,7 +198,8 @@ def _failed_with(report: Any, code: str) -> None:
 class HostileGenerationShapeTest(unittest.TestCase):
     """Malformed Generation values must fail closed as invalid_generation."""
 
-    def _gen(self, value: Any) -> Any:
+    @staticmethod
+    def _gen(value: Any) -> Any:
         return _run(HostileBackend(generate=lambda *a, **k: value))
 
     def test_empty_ids_with_limit(self) -> None:
@@ -207,7 +208,8 @@ class HostileGenerationShapeTest(unittest.TestCase):
     def test_negative_id(self) -> None:
         _failed_with(self._gen(Generation((1001, -5, 1003, 1004), "limit")), "invalid_generation")
 
-    def test_huge_id_survives_validation(self) -> None:
+    @staticmethod
+    def test_huge_id_survives_validation() -> None:
         # 2**200 is a valid nonnegative int: it passes _valid_generation and
         # reaches decode; a tolerant decode completes with no corruption.
         backend = HostileBackend(
@@ -324,7 +326,8 @@ class HostileGenerationShapeTest(unittest.TestCase):
 class HostileGenerateRaisesTest(unittest.TestCase):
     """generate()/encode() raising: Exception -> fixed code, BaseException -> propagate."""
 
-    def _raising(self, exc: BaseException) -> HostileBackend:
+    @staticmethod
+    def _raising(exc: BaseException) -> HostileBackend:
         def generate(*a: Any, **k: Any) -> Generation:
             raise exc
 
@@ -353,7 +356,8 @@ class HostileGenerateRaisesTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             _run(self._raising(SystemExit(3)))
 
-    def test_encode_raising(self) -> None:
+    @staticmethod
+    def test_encode_raising() -> None:
         def encode(text: str) -> tuple[int, ...]:
             raise RuntimeError("enc boom")
 
@@ -366,17 +370,20 @@ class HostileGenerateRaisesTest(unittest.TestCase):
         with self.assertRaises(KeyboardInterrupt):
             _run(HostileBackend(encode=encode))
 
-    def test_encode_non_tuple(self) -> None:
+    @staticmethod
+    def test_encode_non_tuple() -> None:
         _failed_with(_run(HostileBackend(encode=lambda text: "not-a-tuple")), "invalid_input_ids")
 
-    def test_encode_bad_ids(self) -> None:
+    @staticmethod
+    def test_encode_bad_ids() -> None:
         _failed_with(_run(HostileBackend(encode=lambda text: (1, -2, 3))), "invalid_input_ids")
 
 
 class HostileDecodeTest(unittest.TestCase):
     """decode() returning/raising hostile values must fail closed as decode_failed."""
 
-    def _decode_backend(self, decode: Callable[[tuple[int, ...]], Any]) -> HostileBackend:
+    @staticmethod
+    def _decode_backend(decode: Callable[[tuple[int, ...]], Any]) -> HostileBackend:
         return HostileBackend(
             generate=lambda *a, **k: Generation(_ids("ok"), "limit"),
             decode=decode,
@@ -443,7 +450,8 @@ class HostileDecodeTest(unittest.TestCase):
 class NonDeterministicBackendTest(unittest.TestCase):
     """A backend changing shape between calls fails closed on the first bad one."""
 
-    def test_valid_then_invalid(self) -> None:
+    @staticmethod
+    def test_valid_then_invalid() -> None:
         calls = {"n": 0}
 
         def generate(*a: Any, **k: Any) -> Generation:
@@ -476,10 +484,12 @@ class HostileLogprobTest(unittest.TestCase):
         def __init__(self, forward: Callable[[tuple[int, ...]], Any] | None) -> None:
             self._forward = forward
 
-        def encode(self, text: str) -> tuple[int, ...]:
+        @staticmethod
+        def encode(text: str) -> tuple[int, ...]:
             return tuple(ord(c) - _OFFSET for c in text)
 
-        def decode(self, token_ids: tuple[int, ...]) -> str:
+        @staticmethod
+        def decode(token_ids: tuple[int, ...]) -> str:
             return "".join(chr(t + _OFFSET) for t in token_ids)
 
         def forward_logits(self, input_ids: tuple[int, ...]) -> torch.Tensor:
@@ -487,8 +497,9 @@ class HostileLogprobTest(unittest.TestCase):
             result: torch.Tensor = self._forward(input_ids)
             return result
 
+        @staticmethod
         def generate(  # noqa: ANN401 -- Backend protocol member; never called here
-            self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+            input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
         ) -> Generation:
             raise NotImplementedError("logprob probe never generates")
 
@@ -599,14 +610,17 @@ class HostileLogprobTest(unittest.TestCase):
         class NoLogits:
             fingerprint = "x"
 
-            def encode(self, text: str) -> tuple[int, ...]:
+            @staticmethod
+            def encode(text: str) -> tuple[int, ...]:
                 return tuple(ord(c) - _OFFSET for c in text)
 
-            def decode(self, token_ids: tuple[int, ...]) -> str:
+            @staticmethod
+            def decode(token_ids: tuple[int, ...]) -> str:
                 return "".join(chr(t + _OFFSET) for t in token_ids)
 
+            @staticmethod
             def generate(
-                self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+                input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
             ) -> Generation:
                 raise NotImplementedError("logprob probe never generates")
 
@@ -618,14 +632,16 @@ class HostileLogprobTest(unittest.TestCase):
 class MixedHostileTaxonomyTest(unittest.TestCase):
     """Hostile + well-behaved fixtures in one run: taxonomy counts must sum exactly."""
 
-    def test_counts_sum_with_no_double_counting_or_loss(self) -> None:
+    @staticmethod
+    def test_counts_sum_with_no_double_counting_or_loss() -> None:
         # One scheduled backend, hostile only for cand-b (keyed on its "<b>"
         # BOS marker): cand-a runs all four fixtures well-behaved, cand-b
         # fails on its first fixture and terminates. Both candidates'
         # taxonomy counts must sum exactly to their non-passing observations.
         class Scheduled(HostileBackend):
+            @staticmethod
             def generate(
-                self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+                input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
             ) -> Generation:
                 prompt = _dec(input_ids)
                 if "<b>" in prompt:
@@ -671,6 +687,7 @@ class MixedHostileTaxonomyTest(unittest.TestCase):
             assert all(
                 v == 0 for k, v in counts.items() if k not in ("no-boundary-in-N", "backend-error")
             )
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             entry = next(e for e in result["search"] if e["format"]["name"] == name)
             observations = entry["observations"]
             non_passing = sum(

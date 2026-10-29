@@ -685,8 +685,9 @@ class StopMatrixSensitivityTests(unittest.TestCase):
         core_mod = importlib.import_module(f"{pkg_name}.core")
         return experiments_mod, core_mod
 
+    @staticmethod
     def _sensitivity_inputs(
-        self, core_mod: Any
+        core_mod: Any,
     ) -> tuple[TextBackend, tuple[Any, ...], tuple[dict[str, Any], ...]]:
         backend = TextBackend(_TOKEN_TEXTS)
         fixture = core_mod.Fixture(

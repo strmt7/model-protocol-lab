@@ -62,20 +62,24 @@ class OrdTokenizer:
     fail-closed decode path a hostile id would exercise.
     """
 
-    def encode(self, text: str, add_special_tokens: bool = False) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str, add_special_tokens: bool = False) -> tuple[int, ...]:
         return tuple(ord(char) for char in text)
 
-    def decode(self, token_ids: list[int] | tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: list[int] | tuple[int, ...]) -> str:
         return "".join(chr(token_id) for token_id in token_ids)
 
 
 class ExplodingTokenizer:
     """Every operation raises: the REPL must degrade, never die."""
 
-    def encode(self, text: str, add_special_tokens: bool = False) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str, add_special_tokens: bool = False) -> tuple[int, ...]:
         raise RuntimeError("encode exploded")
 
-    def decode(self, token_ids: list[int] | tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: list[int] | tuple[int, ...]) -> str:
         raise RuntimeError("decode exploded")
 
 
@@ -88,7 +92,8 @@ class CountTokenizer:
     def encode(self, text: str, add_special_tokens: bool = False) -> tuple[int, ...]:
         return tuple(range(self._count))
 
-    def decode(self, token_ids: list[int] | tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: list[int] | tuple[int, ...]) -> str:
         return ""
 
 
@@ -219,7 +224,8 @@ class _Deterministic:
 class TestIdListGrammar(unittest.TestCase):
     """Unit oracle for _parse_id_list: the exact accept/reject grammar."""
 
-    def _parse(self, value: str, what: str = "x", max_len: int = 16) -> tuple[int, ...]:
+    @staticmethod
+    def _parse(value: str, what: str = "x", max_len: int = 16) -> tuple[int, ...]:
         return debug_module._parse_id_list(value, what=what, max_len=max_len)
 
     def test_valid_cases(self) -> None:
@@ -869,7 +875,8 @@ class TestErrorRecovery(unittest.TestCase):
 class TestTranscriptBoundaries(unittest.TestCase):
     """The transcript trim: marker first, newest output kept, total capped."""
 
-    def _overflow(self, shell: DebugShell, buf: io.StringIO, cap: int, renders: int = 15) -> None:
+    @staticmethod
+    def _overflow(shell: DebugShell, buf: io.StringIO, cap: int, renders: int = 15) -> None:
         with mock.patch.object(debug_module, "_MAX_SAVE_BYTES", cap):
             for _ in range(renders):
                 _one(shell, buf, ".render")
@@ -933,7 +940,8 @@ class TestTranscriptBoundaries(unittest.TestCase):
 
 
 class TestReadScriptEdges(unittest.TestCase):
-    def _write(self, tmp: str, name: str, text: str) -> Path:
+    @staticmethod
+    def _write(tmp: str, name: str, text: str) -> Path:
         path = Path(tmp) / name
         path.write_text(text, encoding="utf-8")
         return path
@@ -958,7 +966,7 @@ class TestReadScriptEdges(unittest.TestCase):
             self.assertIn("buffered 1 message(s)", out)
 
     def test_read_empty_script(self) -> None:
-        shell, buf = _make_shell()
+        shell, _buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
             script = self._write(tmp, "s.txt", "")
             self.assertFalse(shell.read_commands(script))
@@ -991,13 +999,13 @@ class TestReadScriptEdges(unittest.TestCase):
         shell, buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
             # Self-recursive: terminates at the depth cap with an error.
-            script = self._write(tmp, "loop.txt", ".read {p}\n".format(p=Path(tmp) / "loop.txt"))
+            script = self._write(tmp, "loop.txt", f".read {Path(tmp) / 'loop.txt'}\n")
             _, out = _one(shell, buf, f".read {script}")
             self.assertIn("error: nested .read too deep", out)
         self.assertEqual(shell._read_depth, 0)
 
     def test_script_ending_mid_say_abandons_buffer_without_crash(self) -> None:
-        shell, buf = _make_shell()
+        shell, _buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
             script = self._write(tmp, "s.txt", ".say\nuser: hi\n")
             self.assertEqual(run_script(shell, script), 0)

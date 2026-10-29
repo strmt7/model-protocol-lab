@@ -74,10 +74,12 @@ class ScriptedBackend:
         self._default = default
         self.fingerprint = "cycle17-scripted-backend"
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         return tuple(ord(char) for char in text)
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return "".join(chr(token) for token in token_ids)
 
     def generate(
@@ -485,8 +487,8 @@ class SweepOracleFuzzTests(unittest.TestCase):
 class SweepEdgeCaseTests(unittest.TestCase):
     """Hand-built edge cases: truncation semantics, flip semantics, validation."""
 
+    @staticmethod
     def _run(
-        self,
         core_mod: Any,
         backend: ScriptedBackend,
         formats: tuple[Any, ...],
@@ -780,7 +782,8 @@ class SweepSensitivityTests(unittest.TestCase):
         core_mod = importlib.import_module(f"{pkg_name}.core")
         return experiments_mod, core_mod
 
-    def _flip_scenario(self, core_mod: Any) -> tuple[ScriptedBackend, tuple, Any, dict]:
+    @staticmethod
+    def _flip_scenario(core_mod: Any) -> tuple[ScriptedBackend, tuple, Any, dict]:
         """Two candidates, one fixture: native selects cand-a, depth 1 flips."""
         formats = _tiny_formats(core_mod)
         search = (_tiny_fixture(core_mod, "s0", "question", "yes"),)

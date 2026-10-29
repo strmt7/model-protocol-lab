@@ -189,6 +189,7 @@ class TestDeterminismBlockingSet(unittest.TestCase):
         audit = determinism.audit_determinism(_artifact([good, bad]), _PureBackend())
         self.assertNotEqual(audit["verdict"], "deterministic")
         self.assertIsNone(audit["certificate"])
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         bad_cell = next(c for c in audit["cells"] if c["fixture"] == "f2")
         self.assertEqual(bad_cell["detail"], "recorded_ids_invalid")
 
@@ -209,6 +210,7 @@ class TestDeterminismBlockingSet(unittest.TestCase):
         audit = determinism.audit_determinism(_artifact([good, aborted]), _PureBackend())
         self.assertEqual(audit["verdict"], "deterministic")
         self.assertIsNotNone(audit["certificate"])
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         aborted_cell = next(c for c in audit["cells"] if c["fixture"] == "f2")
         self.assertEqual(aborted_cell["detail"], "observation_not_completed")
 
@@ -225,7 +227,8 @@ class TestDeterminismBlockingSet(unittest.TestCase):
 
 
 class TestPackReservedName(unittest.TestCase):
-    def _report_dir(self, tmp: str, *, with_manifest: bool) -> Path:
+    @staticmethod
+    def _report_dir(tmp: str, *, with_manifest: bool) -> Path:
         sample = Path(__file__).resolve().parent.parent / "examples" / "sample-report"
         directory = Path(tmp)
         for name in ("results.json", "report.html"):

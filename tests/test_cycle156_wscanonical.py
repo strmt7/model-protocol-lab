@@ -79,7 +79,8 @@ class ParityBackend:
     def decode(token_ids):
         return "".join(map(chr, token_ids))
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         answer = "WORD" if len(input_ids) % 2 == 0 else "NOPE"
         out = tuple(map(ord, (answer + "|").ljust(max_new_tokens, ".")[:max_new_tokens]))
         return Generation(token_ids=out, reason="limit")
@@ -90,7 +91,8 @@ class ConstantBackend(ParityBackend):
 
     fingerprint = "scripted-ws-constant-v1"
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         out = tuple(map(ord, ("WORD" + "|").ljust(max_new_tokens, ".")[:max_new_tokens]))
         return Generation(token_ids=out, reason="limit")
 
@@ -98,7 +100,8 @@ class ConstantBackend(ParityBackend):
 class FailingBackend(ParityBackend):
     fingerprint = "scripted-ws-failing-v1"
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         raise RuntimeError("boom")
 
 
@@ -244,7 +247,8 @@ class CompareIdSequencesTests(unittest.TestCase):
 
 
 class AggregateMutationRecordsTests(unittest.TestCase):
-    def _record(self, mutation, divergent=0, flips=0, n=4):
+    @staticmethod
+    def _record(mutation, divergent=0, flips=0, n=4):
         return {
             "mutation": mutation,
             "n_fixtures": n,
@@ -342,7 +346,8 @@ class WsScanBackendTests(unittest.TestCase):
 
 
 class BruteForceOracleTests(unittest.TestCase):
-    def _independent_apply(self, text, mutation):
+    @staticmethod
+    def _independent_apply(text, mutation):
         if mutation == "trailing_space":
             return text + " "
         if mutation == "double_trailing_space":
@@ -504,7 +509,8 @@ class NativeSearchInputIdsTests(unittest.TestCase):
 
 
 class WsStageTests(unittest.TestCase):
-    def _cases(self, n=2):
+    @staticmethod
+    def _cases(n=2):
         return tuple(_fixture(f"f{i}") for i in range(n))
 
     def test_cells_record_verdicts_and_ids(self):
@@ -561,7 +567,8 @@ class WsStageTests(unittest.TestCase):
 
 
 class WsCanonicalizationTests(unittest.TestCase):
-    def _run(self, backend, names=("chatml",), n_fixtures=2):
+    @staticmethod
+    def _run(backend, names=("chatml",), n_fixtures=2):
         from model_protocol_lab.core import evaluate
 
         formats = tuple(_format(name) for name in names)
@@ -808,10 +815,6 @@ class WsChangedSingleCausePinTests(unittest.TestCase):
         self._only(mutate)
 
     def test_fragile_removed_only(self):
-        def mutate(new):
-            old_fragile = _ws_payload(robust=False)
-            return old_fragile  # replaced below
-
         old = _ws_payload(robust=False)
         new = _ws_payload(robust=False)
         new["fragile_candidates"] = []
@@ -866,7 +869,8 @@ class WsCanonicalMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _trailing_space_scenario(self, mod):
+    @staticmethod
+    def _trailing_space_scenario(mod):
         assert mod.apply_mutation("abc", "trailing_space") == "abc "
 
     def test_mutant_flipped_trailing_space_caught(self):
@@ -878,7 +882,8 @@ class WsCanonicalMutationGateTests(unittest.TestCase):
             self._trailing_space_scenario,
         )
 
-    def _fail_closed_scenario(self, mod):
+    @staticmethod
+    def _fail_closed_scenario(mod):
         try:
             mod.apply_mutation("abc", "nope")
         except ValueError:
@@ -902,7 +907,8 @@ class WsCanonicalMutationGateTests(unittest.TestCase):
             self._fail_closed_scenario,
         )
 
-    def _rate_drift_scenario(self, mod):
+    @staticmethod
+    def _rate_drift_scenario(mod):
         old = _ws_payload()
         new = _ws_payload()
         new["per_candidate"]["alpha"]["per_mutation"]["trailing_space"]["verdict_flip_rate"] = 1.0
@@ -930,7 +936,8 @@ class WsCanonicalMutationGateTests(unittest.TestCase):
             self._rate_drift_scenario,
         )
 
-    def _robust_flip_scenario(self, mod):
+    @staticmethod
+    def _robust_flip_scenario(mod):
         old = _ws_payload()
         new = _ws_payload()
         new["per_candidate"]["beta"]["whitespace_robust"] = False
@@ -1080,6 +1087,7 @@ class CliProbeTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=120,
+            check=False,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr[-500:])
         self.assertIn("--ws-scan", proc.stdout)
@@ -1196,7 +1204,8 @@ class WsCoverageGapTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             compare_id_sequences((1, 2), [1, 2])
 
-    def _valid_record(self):
+    @staticmethod
+    def _valid_record():
         return {
             "mutation": "trailing_space",
             "n_fixtures": 4,
@@ -1229,6 +1238,7 @@ class WsCoverageGapTests(unittest.TestCase):
     # --- experiments.native_search_input_ids: malformed entries ---
 
     def test_native_input_ids_malformed_entries(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import native_search_input_ids
 
         # Non-dict entry: candidate degrades to None.
@@ -1311,7 +1321,8 @@ class WsCoverageGapTests(unittest.TestCase):
 
     def test_ws_stage_evaluate_raise_degrades_cell(self):
         class EncodeBoomBackend(ParityBackend):
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 raise RuntimeError("encode boom")
 
         stage = ws_stage(
@@ -1325,10 +1336,12 @@ class WsCoverageGapTests(unittest.TestCase):
 
     # --- experiments.ws_canonicalization: malformed inputs ---
 
-    def _good_stage(self):
+    @staticmethod
+    def _good_stage():
         return {"mutations": ["trailing_space"], "per_mutation": {}}
 
     def test_canonicalization_rejects_malformed_native(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import ws_canonicalization
 
         out = ws_canonicalization("nope", {}, self._good_stage(), ("c1",))
@@ -1337,6 +1350,7 @@ class WsCoverageGapTests(unittest.TestCase):
         self.assertEqual(out["detail"], "native_data_malformed")
 
     def test_canonicalization_rejects_malformed_stage(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import ws_canonicalization
 
         out = ws_canonicalization({}, {}, "nope", ("c1",))
@@ -1349,6 +1363,7 @@ class WsCoverageGapTests(unittest.TestCase):
         self.assertEqual(out["detail"], "ws_result_malformed")
 
     def test_canonicalization_malformed_variant_cell(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import ws_canonicalization
 
         stage = {
@@ -1375,6 +1390,7 @@ class WsCoverageGapTests(unittest.TestCase):
         self.assertEqual(cell["detail"], "variant_cell_malformed")
 
     def test_canonicalization_skips_bad_fixture_rows(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import ws_canonicalization
 
         stage = {

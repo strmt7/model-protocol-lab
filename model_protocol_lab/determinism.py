@@ -100,6 +100,7 @@ def _id_tuple(value: Any, *, nonempty: bool) -> tuple[int, ...] | None:
 def _entry_name(entry: dict[str, Any]) -> str | None:
     # Kept local, mirroring verify._entry_name, so this module does not
     # import the verify CLI layer.
+    """Return the entry name."""
     fmt = entry.get("format")
     name = fmt.get("name") if type(fmt) is dict else None
     return name if type(name) is str and name else None

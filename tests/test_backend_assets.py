@@ -87,7 +87,9 @@ class AssetTests(unittest.TestCase):
 
 
 class WeightIndexEdgeTests(unittest.TestCase):
-    def _root_with_index(self, tmp, weight_map):
+    @staticmethod
+    def _root_with_index(tmp, weight_map):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from pathlib import Path as _Path
 
         root = _Path(tmp)
@@ -98,6 +100,7 @@ class WeightIndexEdgeTests(unittest.TestCase):
         return root
 
     def test_empty_and_nondict_weight_maps_rejected(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from tempfile import TemporaryDirectory as _TD
 
         for mapping in ({}, [], "x", None, 0):
@@ -107,7 +110,10 @@ class WeightIndexEdgeTests(unittest.TestCase):
                     _model_assets(root)
 
     def test_oversized_asset_json_rejected(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from pathlib import Path as _Path
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from tempfile import TemporaryDirectory as _TD
 
         with _TD() as tmp:

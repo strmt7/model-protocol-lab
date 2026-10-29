@@ -141,7 +141,8 @@ def _make_backend(
 
 class _BytePathBackend(_ConcatBackend):
     """Concat backend exposing ``hf_stop_token_bytes`` so the HF cell runs
-    the byte-space path (no per-token decode during the HF emulation)."""
+    the byte-space path (no per-token decode during the HF emulation).
+    """
 
     def hf_stop_token_bytes(self, token_id: int) -> bytes | None:
         return self._texts[token_id].encode("utf-8")
@@ -195,7 +196,8 @@ def _step_from_detail(detail: str) -> int | None:
 
 def _readable_text(backend: Any, snap: _Snap) -> str | None:
     """The text the semantic would return: the exposed returned text, else
-    the decode of the truncated ids -- None when it cannot be established."""
+    the decode of the truncated ids -- None when it cannot be established.
+    """
     if snap.text is not None:
         return snap.text
     decode = getattr(backend, "decode", None)
@@ -291,7 +293,8 @@ def _rule_firing_steps_differ(
     stop: str, snaps: dict[str, _Snap], ctx: SimpleNamespace
 ) -> list[str]:
     """Docstring: "the stop-string semantics disagree on the completing output
-    step (None = did not fire)". Unavailable cells are excluded."""
+    step (None = did not fire)". Unavailable cells are excluded.
+    """
     live = [snap for key, snap in snaps.items() if key in _STOP4 and snap.available]
     return [stop] if len({snap.step for snap in live}) > 1 else []
 
@@ -300,7 +303,8 @@ def _rule_kept_vs_stripped(stop: str, snaps: dict[str, _Snap], ctx: SimpleNamesp
     """Docstring: "HF always keeps the stop string while vLLM's default
     (include_stop_str_in_output=False) strips it". Both cells must have
     fired; when the kept text cannot be established the rule degrades to
-    silence rather than failing."""
+    silence rather than failing.
+    """
     hf = snaps[HF_STOP_STRING]
     strip = snaps[VLLM_HOLDBACK_STRIP]
     if not (hf.available and hf.fired and strip.available and strip.fired):
@@ -314,7 +318,8 @@ def _rule_kept_vs_stripped(stop: str, snaps: dict[str, _Snap], ctx: SimpleNamesp
 def _rule_min_tokens_gated(stop: str, snaps: dict[str, _Snap], ctx: SimpleNamespace) -> list[str]:
     """Docstring: "a stop that fires with min_tokens=0 does not fire under
     the given min_tokens (vLLM PR #22014)". The shared ungated diagnostic
-    re-run decides whether the gate is what silenced the strip cell."""
+    re-run decides whether the gate is what silenced the strip cell.
+    """
     strip = snaps[VLLM_HOLDBACK_STRIP]
     if not (ctx.min_tokens > 0 and strip.available and not strip.fired):
         return []
@@ -330,7 +335,8 @@ def _rule_no_min_tokens_gate(
     """Docstring: "the SGLang column on the MIN_TOKENS_GATED class: SGLang
     has no min_tokens equivalent ... so a stop that vLLM's min_tokens gate
     blocks still fires under the SGLang emulation". Nested inside the gate
-    firing by construction."""
+    firing by construction.
+    """
     if not gated:
         return []
     sglang = snaps[SGLANG_STOP]
@@ -342,7 +348,8 @@ def _rule_no_min_tokens_gate(
 def _rule_eos_precedence(stop: str, snaps: dict[str, _Snap], ctx: SimpleNamespace) -> list[str]:
     """Docstring: "EOS fires at/before the stop-string firing step". The
     stop-string step is the minimum over the available, fired stop-semantic
-    cells."""
+    cells.
+    """
     eos = snaps[EOS_APPENDED]
     if not (eos.available and eos.fired and eos.step is not None):
         return []
@@ -360,7 +367,8 @@ def _rule_str_over_eos(stop: str, snaps: dict[str, _Snap], ctx: SimpleNamespace)
     """Docstring: "stop string and EOS fire in the same step, so precedence
     -- not firing order -- decides the outcome". The code compares the
     *sglang* cell's step against EOS; it does NOT require EOS_PRECEDENCE
-    (see the module docstring discrepancy pinned by the tie tests)."""
+    (see the module docstring discrepancy pinned by the tie tests).
+    """
     sglang = snaps[SGLANG_STOP]
     eos = snaps[EOS_APPENDED]
     if (
@@ -378,7 +386,8 @@ def _rule_str_over_eos(stop: str, snaps: dict[str, _Snap], ctx: SimpleNamespace)
 def _rule_harness_relied(stop: str, snaps: dict[str, _Snap], ctx: SimpleNamespace) -> list[str]:
     """Docstring: 'a "stripped"-disposition cell's returned text still
     contains the stop string: the strip failed ... Cells whose disposition
-    is "kept" keep the stop string by definition and are not flagged.'"""
+    is "kept" keep the stop string by definition and are not flagged.'
+    """
     hits: list[str] = []
     for key, snap in snaps.items():
         if key not in _STOP4 or not snap.available or not snap.fired:
@@ -401,7 +410,8 @@ def _rule_multi_stop_selection(
     firing steps and trimmed texts" (the keep cell's returned text is the
     firing step's decoded text cut at the match end, so its length IS
     stop_index + len(stop_str)). Fires when the (stop, step) winners differ;
-    the carried stop_text prefers the sglang winner."""
+    the carried stop_text prefers the sglang winner.
+    """
     sglang_best: tuple[tuple[int, int], str] | None = None
     vllm_best: tuple[tuple[int, int, int], str] | None = None
     for list_index, (stop, snaps) in enumerate(per_stop):
@@ -435,8 +445,8 @@ def _rule_multi_stop_selection(
 class _DocstringOracle:
     """The independent oracle: validate, snapshot the emulations, classify."""
 
+    @staticmethod
     def _snapshot(
-        self,
         backend: Any,
         prompt_ids: tuple[int, ...],
         output_ids: tuple[int, ...],
@@ -734,6 +744,7 @@ _CLASS_CASES = {
 }
 
 
+# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class _Cycle37Base(unittest.TestCase):
     def setUp(self) -> None:
         self.oracle = _DocstringOracle()
@@ -763,7 +774,8 @@ class _Cycle37Base(unittest.TestCase):
     ) -> None:
         """The classification contract: (class, stop_text) multiset, cell
         records, echoed stop texts and verdict all agree; details are
-        non-empty strings."""
+        non-empty strings.
+        """
         impl_pairs = sorted((d["class"], d["stop_text"]) for d in impl["divergences"])
         oracle_pairs = sorted(oracle_result["findings"])
         self.assertEqual(impl_pairs, oracle_pairs, label)
@@ -988,10 +1000,12 @@ class OracleDifferentialTests(_Cycle37Base):
 class ClassificationDetailTests(_Cycle37Base):
     """Per-class predicate details, finding construction, and edge cases."""
 
-    def _kinds(self, impl: dict[str, Any]) -> set[str]:
+    @staticmethod
+    def _kinds(impl: dict[str, Any]) -> set[str]:
         return {d["class"] for d in impl["divergences"]}
 
-    def _details(self, impl: dict[str, Any], kind: str) -> list[str]:
+    @staticmethod
+    def _details(impl: dict[str, Any], kind: str) -> list[str]:
         return [d["detail"] for d in impl["divergences"] if d["class"] == kind]
 
     # -- EOS_PRECEDENCE vs STR_OVER_EOS_PRECEDENCE ---------------------------
@@ -1293,11 +1307,13 @@ class ClassificationDetailTests(_Cycle37Base):
         # ...degrading to None when decode raises, returns non-str, or is
         # absent -- the text checks degrade, never fail the diff.
         class _Raises:
-            def decode(self, ids: tuple[int, ...]) -> str:
+            @staticmethod
+            def decode(ids: tuple[int, ...]) -> str:
                 raise RuntimeError("boom")
 
         class _NonStr:
-            def decode(self, ids: tuple[int, ...]) -> int:
+            @staticmethod
+            def decode(ids: tuple[int, ...]) -> int:
                 return 42
 
         self.assertIsNone(_effective_text(_Raises(), cell2))
@@ -1418,8 +1434,9 @@ class SectionAggregationTests(_Cycle37Base):
                 self.assertEqual(set(finding), {"class", "stop_text", "detail", "severity"}, label)
                 self.assertTrue(finding["detail"], label)
 
+    @staticmethod
     def _section_kwargs(
-        self, observations: list[Any] | tuple[Any, ...], backend: _ConcatBackend, **extra: Any
+        observations: list[Any] | tuple[Any, ...], backend: _ConcatBackend, **extra: Any
     ) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "observations": observations,
@@ -1661,7 +1678,8 @@ _MUTANTS: tuple[tuple[str, str, str], ...] = (
 class SensitivityTests(unittest.TestCase):
     """Prove this file catches real bugs: each mutant is a copy of the
     package in /tmp with one behavior change; the suite must fail on every
-    mutant and pass on the pristine copy. Never mutates the repo."""
+    mutant and pass on the pristine copy. Never mutates the repo.
+    """
 
     def test_mutants_are_caught(self) -> None:
         if os.environ.get("C37_UNDER_MUTANT") == "1":
@@ -1719,7 +1737,8 @@ class SensitivityTests(unittest.TestCase):
             with open(target, "w", encoding="utf-8") as handle:
                 handle.write(text.replace(old, new or ""))
 
-    def _run_suite(self, workdir: str, python: str, *, fast: bool) -> bool:
+    @staticmethod
+    def _run_suite(workdir: str, python: str, *, fast: bool) -> bool:
         env = dict(os.environ)
         env["PYTHONPATH"] = workdir
         env["C37_UNDER_MUTANT"] = "1"
@@ -1735,7 +1754,7 @@ class SensitivityTests(unittest.TestCase):
         if fast:
             cmd.append("-x")
         proc = subprocess.run(  # noqa: S603 -- fixed argv, no shell, local pytest
-            cmd, cwd=workdir, env=env, capture_output=True, text=True, timeout=900
+            cmd, cwd=workdir, env=env, capture_output=True, text=True, timeout=900, check=False
         )
         return proc.returncode == 0
 

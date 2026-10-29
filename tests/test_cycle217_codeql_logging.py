@@ -26,6 +26,7 @@ from model_protocol_lab import diffreports
 
 
 def _payload(**overrides):
+    """Build the confidentiality-section payload used by the logging adjudication."""
     cell = {
         "n": 12,
         "n_treat_evaluable": 12,
@@ -73,6 +74,7 @@ def _payload(**overrides):
 
 
 def _leaves(node, out):
+    """Yield every leaf value in the nested payload."""
     if isinstance(node, dict):
         for value in node.values():
             _leaves(value, out)
@@ -84,6 +86,8 @@ def _leaves(node, out):
 
 
 class LoggingAdjudicationTests(unittest.TestCase):
+    """The clear-text-logging alerts are adjudicated false positives, with executed proof."""
+
     def test_confidentiality_section_schema_is_aggregates_only(self):
         """Section leaves are enum/bool/number/label only."""
         old, new = _payload(), _payload()

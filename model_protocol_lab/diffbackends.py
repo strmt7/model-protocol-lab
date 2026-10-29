@@ -174,6 +174,7 @@ class CellResult:
     disposition: str | None
 
     def as_dict(self) -> dict[str, Any]:
+        """Return the as dict."""
         return {
             "available": self.available,
             "fired": self.fired,
@@ -193,6 +194,7 @@ class Divergence:
     detail: str
 
     def as_dict(self) -> dict[str, Any]:
+        """Return the as dict."""
         return {"class": self.kind, "stop_text": self.stop_text, "detail": self.detail}
 
 
@@ -322,6 +324,7 @@ def _cell(
     outcome: Any,
     disposition: str | None,
 ) -> CellResult:
+    """Return the cell."""
     return CellResult(
         semantic=semantic,
         available=bool(outcome.available),
@@ -333,6 +336,7 @@ def _cell(
     )
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def diff_backends(
     *,
     prompt_ids: tuple[int, ...],
@@ -610,6 +614,7 @@ def diff_backends(
     if sglang_winner != vllm_winner:
 
         def _pick_text(pick: tuple[str, int] | None) -> str:
+            """Return the pick text."""
             if pick is None:
                 return "no stop"
             return f"stop {pick[0]!r} at step {pick[1]}"
@@ -837,6 +842,7 @@ class _TokenizerBackend:
     """
 
     def __init__(self, tokenizer: Any, vocab_size: int) -> None:
+        """Initialise the tokenizer-only diff backend."""
         if type(vocab_size) is not int or vocab_size <= 0:
             raise ValueError("invalid_vocab_size")
         if not callable(getattr(tokenizer, "decode", None)):
@@ -849,6 +855,7 @@ class _TokenizerBackend:
         )
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode token IDs without dropping special tokens."""
         if type(token_ids) is not tuple or any(
             type(token) is not int or not 0 <= token < self._vocab_size for token in token_ids
         ):

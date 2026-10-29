@@ -33,6 +33,7 @@ def run_module(*args: str) -> subprocess.CompletedProcess:
         capture_output=True,
         text=True,
         timeout=300,
+        check=False,
     )
 
 
@@ -85,10 +86,7 @@ class ModuleEntryTests(unittest.TestCase):
         if not script.exists():
             self.skipTest("console script not installed in this environment")
         proc = subprocess.run(
-            [str(script), "catalog"],
-            capture_output=True,
-            text=True,
-            timeout=120,
+            [str(script), "catalog"], capture_output=True, text=True, timeout=120, check=False
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
 

@@ -48,7 +48,8 @@ class OrdinalBackend:
     def decode(ids):
         return "".join(map(chr, ids))
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         return core.Generation(tuple(input_ids[:max_new_tokens]), "limit")
 
 
@@ -74,7 +75,8 @@ class SpecialBackend:
     def decode(cls, ids):
         return "".join(cls.MARKER if x == 7 else chr(x) for x in ids)
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         return core.Generation(tuple(input_ids[:max_new_tokens]), "limit")
 
 
@@ -350,7 +352,8 @@ class ScoreTests(unittest.TestCase):
 
 
 class PureProfileTests(unittest.TestCase):
-    def _cell(self, cls_list):
+    @staticmethod
+    def _cell(cls_list):
         per_fixture = [_fixture(f"f{i}", _scored(c), None) for i, c in enumerate(cls_list)]
         return col.collision_cell(per_fixture, n_fixtures=len(cls_list), boundary_len=1)
 
@@ -582,7 +585,8 @@ class CliTests(unittest.TestCase):
 
 
 class ReportingTests(unittest.TestCase):
-    def _payload(self, backend=None, boundary=(124,)):
+    @staticmethod
+    def _payload(backend=None, boundary=(124,)):
         fmt = _format("alpha")
         stage = experiments.answer_collision_stage(
             backend or OrdinalBackend(), (fmt,), boundary=boundary, seed=1
@@ -725,7 +729,8 @@ class MutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _classify_scenario(self, mod):
+    @staticmethod
+    def _classify_scenario(mod):
         assert mod.classify_observation(True, True) == "collision"
         assert mod.classify_observation(True, False) == "ends_at_marker"
 
@@ -738,7 +743,8 @@ class MutationGateTests(unittest.TestCase):
             self._classify_scenario,
         )
 
-    def _rate_scenario(self, mod):
+    @staticmethod
+    def _rate_scenario(mod):
         per_fixture = [
             _fixture("a", _scored("collision"), None),
             _fixture("b", _scored("intact"), None),
@@ -756,7 +762,8 @@ class MutationGateTests(unittest.TestCase):
             self._rate_scenario,
         )
 
-    def _diff_scenario(self, mod):
+    @staticmethod
+    def _diff_scenario(mod):
         def payload(n_coll):
             per_fixture = [
                 _fixture(f"f{i}", _scored("collision" if i < n_coll else "intact"), None)

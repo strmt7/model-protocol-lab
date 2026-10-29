@@ -130,7 +130,8 @@ class TestDigestAndPredicate(unittest.TestCase):
 
 
 class TestAnalyzeCandidate(unittest.TestCase):
-    def _analyze(self, observations: Any, **kw: Any) -> dict[str, Any]:
+    @staticmethod
+    def _analyze(observations: Any, **kw: Any) -> dict[str, Any]:
         return aliasing.analyze_candidate(
             observations,
             candidate_name="A",
@@ -207,7 +208,8 @@ class TestAnalyzeCandidate(unittest.TestCase):
 class TestFingerprintTrap(unittest.TestCase):
     """Gate 4: classes ignore the fingerprint and the format dict."""
 
-    def _fmt(self, name: str, **over: Any) -> Format:
+    @staticmethod
+    def _fmt(name: str, **over: Any) -> Format:
         base: dict[str, Any] = {
             "name": name,
             "bos": "",
@@ -254,6 +256,7 @@ class TestProfileClasses(unittest.TestCase):
         self.assertEqual(payload["n_effective_measurement"], 2)
         self.assertEqual(payload["n_redundant_completed_observations"], 2)
         self.assertEqual(payload["n_redundant_render_observations"], 2)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         pair = next(p for p in payload["pairs"] if p["candidates"] == ["A", "B"])
         self.assertEqual(pair["n_common_completed"], 2)
         self.assertEqual(pair["n_shared"], 2)
@@ -306,6 +309,7 @@ class TestProfileClasses(unittest.TestCase):
         self.assertEqual(payload["n_primary_cohort"], 2)
         self.assertEqual(payload["excluded_candidates"], ["Z"])
         self.assertEqual(payload["n_effective_measurement"], 1)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         zed = next(c for c in payload["candidates"] if c["candidate"] == "Z")
         self.assertFalse(zed["in_primary_cohort"])
         self.assertIsNone(zed["measurement_class_members"])
@@ -724,7 +728,8 @@ class TestCliProbe(unittest.TestCase):
 class TestRunExperimentConstruction(unittest.TestCase):
     """The flag case built through the real run_experiment (red-team
     A's demand): two formats whose renders coincide on the fixture
-    set, a deterministic stub backend, decision ambiguous."""
+    set, a deterministic stub backend, decision ambiguous.
+    """
 
     def test_flag_fires_on_real_run(self):
         from model_protocol_lab.core import Fixture, Generation, Message, Split
@@ -734,15 +739,18 @@ class TestRunExperimentConstruction(unittest.TestCase):
             fingerprint = "sha256:stub"
             eos_token_id = None
 
-            def encode(self, text: str) -> tuple[int, ...]:
+            @staticmethod
+            def encode(text: str) -> tuple[int, ...]:
                 # Deliberately lossy: every prompt encodes to the
                 # same ids, so distinct formats alias by construction.
                 return (1, 2, 3)
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):  # noqa: ANN001, ANN202
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):  # noqa: ANN001, ANN202
                 return Generation((5, 99, 5, 99)[:max_new_tokens], "limit")
 
-            def decode(self, ids) -> str:  # noqa: ANN001, ANN202
+            @staticmethod
+            def decode(ids) -> str:  # noqa: ANN001, ANN202
                 return "yo"
 
         fmt_a = Format(name="alpha", bos="", user_prefix="U:", assistant_prefix="A:", turn_end="\n")
@@ -787,10 +795,13 @@ class TestRunExperimentConstruction(unittest.TestCase):
 class TestCliDispatchEndToEnd(unittest.TestCase):
     """The --aliasing branch driven through the real run flow
     (cycle-179 lesson: a flag can parse while its dispatch silently
-    never runs)."""
+    never runs).
+    """
 
     def test_aliasing_dispatches_through_main(self):
         from model_protocol_lab import backends, doctor, experiments
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab import reporting as reporting_mod
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -887,7 +898,8 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
 class TestMutationGates(unittest.TestCase):
     """Tempdir gates (cycle-179 pattern): each mutant of the pure
     module's load-bearing constructions must be killed by a named
-    scenario, and each scenario must pass on the real module."""
+    scenario, and each scenario must pass on the real module.
+    """
 
     def _run_gate(self, name, old_text, new_text, scenario):  # noqa: ANN001
         import importlib.util
@@ -1026,7 +1038,8 @@ if __name__ == "__main__":
 class TestValidatorGapBattery(unittest.TestCase):
     """Structural rejects in the recompute's first pass: each
     malformed shape must be refused before any aggregate is
-    compared (the cycle-174 gap-test pattern)."""
+    compared (the cycle-174 gap-test pattern).
+    """
 
     def setUp(self):
         self.payload = aliasing_profile(_aliased_pair())
@@ -1107,14 +1120,18 @@ class TestValidatorGapBattery(unittest.TestCase):
 
     def test_evaluable_status_coupling(self):
         payload = self._interrupted_payload()
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         zed = next(c for c in payload["candidates"] if c["candidate"] == "Z")
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         failed_record = next(r for r in zed["records"] if r["status"] == "failed")
         failed_record["evaluable"] = True  # evaluable but not completed
         self.assertFalse(_valid_aliasing(payload))
 
     def test_non_evaluable_digest_must_be_none(self):
         payload = self._interrupted_payload()
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         zed = next(c for c in payload["candidates"] if c["candidate"] == "Z")
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         failed_record = next(r for r in zed["records"] if r["status"] == "failed")
         failed_record["input_sha256"] = "a" * 64
         self.assertFalse(_valid_aliasing(payload))
@@ -1146,9 +1163,11 @@ class TestValidatorGapBattery(unittest.TestCase):
 
 class TestReportingGaps(unittest.TestCase):
     """Hostile-payload rendering: the section's defensive branches
-    must degrade, never raise and never leak (cycle-174 pattern)."""
+    must degrade, never raise and never leak (cycle-174 pattern).
+    """
 
-    def _render(self, aliasing_payload: Any) -> str:
+    @staticmethod
+    def _render(aliasing_payload: Any) -> str:
         return reporting.render_html(
             {"decision": "ambiguous", "search": [], "aliasing": aliasing_payload}
         )

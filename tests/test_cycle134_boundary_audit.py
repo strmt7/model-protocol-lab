@@ -138,7 +138,8 @@ class TestBoundaryProblemRate(unittest.TestCase):
 
 
 class TestAuditSearchObservations(unittest.TestCase):
-    def _entries(self):
+    @staticmethod
+    def _entries():
         return [
             {
                 "format": {"name": "chatml/x"},
@@ -241,13 +242,16 @@ class IdentityBackend:
 
     fingerprint = "identity-test-backend"
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         return tuple(map(ord, text))
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return "".join(map(chr, token_ids))
 
-    def generate(self, input_ids, *, max_new_tokens: int, seed: int, cancel: Event) -> Generation:
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens: int, seed: int, cancel: Event) -> Generation:
         return Generation((65,), "limit")
 
 
@@ -317,7 +321,8 @@ class TestInputTextRecording(unittest.TestCase):
 
 
 class TestHtmlSection(unittest.TestCase):
-    def _result(self, per_family):
+    @staticmethod
+    def _result(per_family):
         return {
             "decision": "select_best",
             "selected_candidate": "chatml",
@@ -351,7 +356,8 @@ class TestHtmlSection(unittest.TestCase):
 
 
 class TestDiffBoundaryAudit(unittest.TestCase):
-    def _audit(self, rate, families=None):
+    @staticmethod
+    def _audit(rate, families=None):
         chatml_entry = {"n_usable": 4, "n_problem": int(rate * 4), "rate": rate}
         return {
             "available": True,
@@ -414,7 +420,8 @@ class TestDiffBoundaryAudit(unittest.TestCase):
 
 
 class TestDiffReportsWiring(unittest.TestCase):
-    def _report(self, rate):
+    @staticmethod
+    def _report(rate):
         return {
             "decision": "select_best",
             "selected_candidate": "chatml",
@@ -516,6 +523,7 @@ class TestMutationGate(unittest.TestCase):
                     capture_output=True,
                     text=True,
                     cwd=_REPO_ROOT,
+                    check=False,
                 )
             finally:
                 self.SOURCE.write_text(source)

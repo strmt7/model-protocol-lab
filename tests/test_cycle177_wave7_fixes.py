@@ -92,7 +92,8 @@ class CacheRecomputeTests(unittest.TestCase):
     def test_genuine_profile_valid(self) -> None:
         self.assertTrue(diffreports._valid_cache_profile(_cache_profile()))
 
-    def _broken(self, mutate: Any) -> dict[str, Any]:
+    @staticmethod
+    def _broken(mutate: Any) -> dict[str, Any]:
         payload = json.loads(json.dumps(_cache_profile()))
         mutate(payload)
         return payload
@@ -146,7 +147,8 @@ class ConfidentialityCellRecomputeTests(unittest.TestCase):
     def test_genuine_cell_valid(self) -> None:
         self.assertTrue(experiments._confidentiality_cell_valid(_conf_cell()))
 
-    def _broken(self, **overrides: Any) -> dict[str, Any]:
+    @staticmethod
+    def _broken(**overrides: Any) -> dict[str, Any]:
         return _conf_cell(**overrides)
 
     def test_rate_lie_rejected(self) -> None:
@@ -212,7 +214,8 @@ class ConfidentialityProfileRecomputeTests(unittest.TestCase):
     def test_genuine_profile_valid(self) -> None:
         self.assertTrue(diffreports._valid_confidentiality(_conf_profile()))
 
-    def _broken(self, mutate: Any) -> dict[str, Any]:
+    @staticmethod
+    def _broken(mutate: Any) -> dict[str, Any]:
         payload = json.loads(json.dumps(_conf_profile()))
         mutate(payload)
         return payload
@@ -244,7 +247,8 @@ class ConfidentialityProfileRecomputeTests(unittest.TestCase):
 
 class ConfidentialityCellGapBatteryTests(unittest.TestCase):
     """One broken identity per recompute branch (coverage-driven:
-    each variant keeps every other identity consistent)."""
+    each variant keeps every other identity consistent).
+    """
 
     def test_paired_above_arm_evaluable_rejected(self) -> None:
         cell = _conf_cell(n_treat_evaluable=11, evaluable_mismatch=True)
@@ -356,9 +360,11 @@ class ConfidentialityCellGapBatteryTests(unittest.TestCase):
 
 class CacheGapBatteryTests(unittest.TestCase):
     """The experiments-side cell recompute branches, via the
-    profile assembler (stage_invalid) and the direct validator."""
+    profile assembler (stage_invalid) and the direct validator.
+    """
 
-    def _cell(self) -> dict[str, Any]:
+    @staticmethod
+    def _cell() -> dict[str, Any]:
         profile = _cache_profile()
         return json.loads(json.dumps(profile))["per_candidate"]["a"]
 

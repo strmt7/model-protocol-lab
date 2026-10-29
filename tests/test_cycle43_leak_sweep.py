@@ -170,6 +170,7 @@ def _no_ws(text: str) -> str:
     return "".join(text.split())
 
 
+# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class LeakAsserts(unittest.TestCase):
     """Shared canary scanners; not a test case itself (no test_ methods)."""
 
@@ -281,8 +282,9 @@ class _CanaryBackend:
     def decode(token_ids: tuple[int, ...]) -> str:
         return "".join(map(chr, token_ids))
 
+    @staticmethod
     def generate(
-        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+        input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
         text = (CANARY + "|").ljust(max_new_tokens)[:max_new_tokens]
         return Generation(tuple(map(ord, text)), "limit")
@@ -355,7 +357,8 @@ def _graft_diagnostics(result: dict, split) -> dict:
     """Attach the real diagnostic sections (stop matrix, budget frontier,
     logprob diagnostic) so the HTML render path is swept too. All three are
     aggregates over the hostile run: fixture IDs, counts and fixed
-    vocabularies only."""
+    vocabularies only.
+    """
     backend = _CanaryBackend()
     entry = result["search"][0]
     observations = tuple(entry["observations"])
@@ -541,7 +544,8 @@ class PublicViewBarrier(LeakAsserts):
 class EndToEndDivergencePipeline(LeakAsserts):
     """The real divergence_section_data output through the real barrier."""
 
-    def _result_with_real_divergence(self) -> tuple[dict, dict]:
+    @staticmethod
+    def _result_with_real_divergence() -> tuple[dict, dict]:
         split = parse_dataset(json.dumps(_hostile_document()))
         result = run_experiment(
             _CanaryBackend(),
@@ -593,6 +597,7 @@ def _run_cli(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess
         capture_output=True,
         text=True,
         timeout=180,
+        check=False,
     )
 
 
@@ -620,7 +625,8 @@ class DiffBackendsSweep43(LeakAsserts):
 
     def test_diff_backends_echoes_only_operator_supplied_text(self) -> None:
         """By design: the operator's own --stop texts are echoed back (the
-        tool has no dataset input for content to come from)."""
+        tool has no dataset input for content to come from).
+        """
         result = diff_backends(
             prompt_ids=tuple(map(ord, f"prompt {CANARY}")),
             output_ids=tuple(map(ord, "output stop!")),
@@ -684,7 +690,8 @@ class DiffBackendsSweep43(LeakAsserts):
 class DiffReportsSweep43(LeakAsserts):
     """diff-reports reduces observations to verdicts; drift carries IDs only."""
 
-    def _evidence_report(self, directory: Path, document: dict | None = None) -> dict:
+    @staticmethod
+    def _evidence_report(directory: Path, document: dict | None = None) -> dict:
         split = parse_dataset(json.dumps(document or _hostile_document()))
         result = run_experiment(
             _CanaryBackend(),
@@ -697,7 +704,8 @@ class DiffReportsSweep43(LeakAsserts):
         json_path, _ = save_report(result, directory, include_evidence=True)
         return json.loads(json_path.read_text(encoding="utf-8"))
 
-    def _decoded_text(self, report: dict) -> str:
+    @staticmethod
+    def _decoded_text(report: dict) -> str:
         decode = _CanaryBackend.decode
         chunks = []
         for entry in report["search"]:
@@ -719,7 +727,8 @@ class DiffReportsSweep43(LeakAsserts):
 
     def test_fixture_set_drift_carries_ids_only(self) -> None:
         """New since cycle 24: config_drift lists fixture ID sets; the
-        canary in a *new* fixture's content must not reach the diff."""
+        canary in a *new* fixture's content must not reach the diff.
+        """
         document = _hostile_document()
         document["search"].append(
             {
@@ -823,9 +832,11 @@ class _OrdTokenizer:
 
 class DebugReplSweep43(LeakAsserts):
     """The debug REPL shows the operator's own dataset BY DESIGN (USAGE.md
-    section 10); surfaces that must stay content-free are pinned clean."""
+    section 10); surfaces that must stay content-free are pinned clean.
+    """
 
-    def _session(self, commands: list[str], tokenizer=None) -> str:
+    @staticmethod
+    def _session(commands: list[str], tokenizer=None) -> str:
         split = parse_dataset(json.dumps(_hostile_document()))
         out = io.StringIO()
         shell = DebugShell(split, dataset_label="canary-fixtures", tokenizer=tokenizer, stdout=out)
@@ -840,7 +851,8 @@ class DebugReplSweep43(LeakAsserts):
     def test_save_persists_transcript_by_design(self) -> None:
         """.save writes the session transcript (echoes + output) to the
         operator-chosen path; USAGE.md section 10 warns not to paste it
-        into public issues."""
+        into public issues.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             target = str(Path(tmp) / "transcript.txt")
             self._session([".render", f".save {target}", ".quit"])
@@ -861,7 +873,8 @@ class DebugReplSweep43(LeakAsserts):
     def test_step_decodes_operator_typed_stream_by_design(self) -> None:
         """With a tokenizer attached, .step prints text= for each walked
         token -- but the walked stream is the operator's own typed IDs, so
-        this is an echo of operator input, not a fixture leak."""
+        this is an echo of operator input, not a fixture leak.
+        """
         canary_ids = ",".join(str(ord(char)) for char in CANARY[:4])
         out = self._session(
             [".boundary 124", f".step {canary_ids}", ".quit"],
@@ -919,7 +932,8 @@ def _hostile_csv() -> str:
 
 class FixturesBuildSweep(LeakAsserts):
     """`fixtures build`: the fixture file is the operator's own dataset (its
-    content appears BY DESIGN); the audit sidecar must stay content-free."""
+    content appears BY DESIGN); the audit sidecar must stay content-free.
+    """
 
     def test_fixtures_build_sidecar_carries_no_content(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1043,7 +1057,8 @@ class DoctorSweep43(LeakAsserts):
 class ScoringSweep43(LeakAsserts):
     """stop_matrix / budget_frontier / logprob interpretation: aggregates only."""
 
-    def _winner_observations(self) -> tuple[tuple, tuple[dict, ...]]:
+    @staticmethod
+    def _winner_observations() -> tuple[tuple, tuple[dict, ...]]:
         split = parse_dataset(json.dumps(_hostile_document()))
         result = run_experiment(
             _CanaryBackend(),

@@ -59,6 +59,7 @@ from model_protocol_lab.core import (
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 try:
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import importlib.util as _ilu
 
     HAS_HF = all(
@@ -83,10 +84,12 @@ class _PureBackend:
         self.fingerprint = fingerprint
         self.calls: list[tuple[tuple[int, ...], int, int]] = []
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         return tuple(text.encode("utf-8"))
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return bytes(t % 256 for t in token_ids).decode("utf-8", errors="replace")
 
     def generate(
@@ -113,12 +116,14 @@ class _FlakyBackend(_PureBackend):
 
 
 class _RaisingBackend(_PureBackend):
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):  # type: ignore[no-untyped-def]
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):  # type: ignore[no-untyped-def]
         raise RuntimeError("boom -- private backend text")
 
 
 class _InterruptingBackend(_PureBackend):
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):  # type: ignore[no-untyped-def]
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):  # type: ignore[no-untyped-def]
         raise KeyboardInterrupt
 
 
@@ -506,7 +511,8 @@ class TestAuditGates(unittest.TestCase):
 
     def test_vocab_method_and_hostile_vocab(self) -> None:
         class MethodVocab(_PureBackend):
-            def vocab_size(self):  # type: ignore[no-untyped-def]
+            @staticmethod
+            def vocab_size():  # type: ignore[no-untyped-def]
                 return 1000
 
         class HostileVocab(_PureBackend):
@@ -702,7 +708,8 @@ def _wiring_artifact() -> dict:
 
 
 class TestVerifyWiring(unittest.TestCase):
-    def _write(self, tmp: str, data: dict) -> Path:
+    @staticmethod
+    def _write(tmp: str, data: dict) -> Path:
         path = Path(tmp) / "results.json"
         path.write_text(json.dumps(data), encoding="utf-8")
         return path
@@ -751,6 +758,7 @@ class TestVerifyWiring(unittest.TestCase):
         audit = payload["determinism"]
         self.assertFalse(audit["available"])
         self.assertEqual(audit["detail"], "observations_stripped")
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         check = next(c for c in payload["checks"] if c["id"] == "determinism_replay")
         self.assertEqual(check["status"], "unavailable")
 
@@ -768,6 +776,7 @@ class TestVerifyWiring(unittest.TestCase):
         self.assertEqual(audit["verdict"], "deterministic")
         self.assertIsNotNone(audit["certificate"])
         self.assertEqual(audit["certificate"]["replay"], {"device": "cpu", "max_context": 2048})
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         check = next(c for c in payload["checks"] if c["id"] == "determinism_replay")
         self.assertEqual(check["status"], "passed")
 
@@ -784,6 +793,7 @@ class TestVerifyWiring(unittest.TestCase):
                 code, payload, _err = _run_verify(args)
         self.assertEqual(code, 2)
         self.assertEqual(payload["verdict"], "failed")
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         check = next(c for c in payload["checks"] if c["id"] == "determinism_replay")
         self.assertEqual(check["status"], "failed")
         self.assertIn("backend-determinism finding", check["detail"])
@@ -803,6 +813,7 @@ class TestVerifyWiring(unittest.TestCase):
                 code, payload, _err = _run_verify(args)
         self.assertEqual(code, 0)
         self.assertEqual(payload["determinism"]["verdict"], "inconclusive")
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         check = next(c for c in payload["checks"] if c["id"] == "determinism_replay")
         self.assertEqual(check["status"], "unavailable")
         self.assertIn("determinism not established", check["detail"])
@@ -819,6 +830,7 @@ class TestVerifyWiring(unittest.TestCase):
             ):
                 code, payload, _err = _run_verify(args)
         self.assertEqual(code, 0)
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         check = next(c for c in payload["checks"] if c["id"] == "determinism_replay")
         self.assertEqual(check["status"], "unavailable")
         self.assertIn("search incomplete", check["detail"])

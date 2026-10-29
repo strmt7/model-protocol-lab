@@ -102,14 +102,16 @@ class CharBackend:
     def __init__(self, logits: torch.Tensor) -> None:
         self._logits = logits
 
-    def decode(self, ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(ids: tuple[int, ...]) -> str:
         return "".join(chr(65 + i) for i in ids)
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         return tuple(ord(c) - 65 for c in text)
 
+    @staticmethod
     def generate(
-        self,
         input_ids: tuple[int, ...],
         *,
         max_new_tokens: int,
@@ -200,7 +202,8 @@ class TestF32MatchesTorch(unittest.TestCase):
 class TestEndToEndOverflowScoring(unittest.TestCase):
     """The bug's pipeline impact: fp32-range logits must score ok."""
 
-    def _extreme_backend(self) -> CharBackend:
+    @staticmethod
+    def _extreme_backend() -> CharBackend:
         # Row 1 (the single target row) has fp32-range logits whose true
         # logprob for token 1 is ~-6.8e38: finite float64, out of f32 range.
         logits = torch.tensor(
@@ -331,7 +334,8 @@ class TestScoringRejections(unittest.TestCase):
 
 
 class ExplodingBackend(CharBackend):
-    def decode(self, ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(ids: tuple[int, ...]) -> str:
         raise RuntimeError("decode exploded")
 
 
@@ -354,7 +358,8 @@ class TestFailClosedPipeline(unittest.TestCase):
 
     def test_provider_exception_maps_to_fixed_code(self) -> None:
         class BadForward(CharBackend):
-            def forward_logits(self, input_ids: tuple[int, ...]) -> torch.Tensor:
+            @staticmethod
+            def forward_logits(input_ids: tuple[int, ...]) -> torch.Tensor:
                 # Whitelisted provider-vocabulary codes pass through;
                 # anything else collapses (see next test).
                 raise ValueError("non_finite_logits")
@@ -365,7 +370,8 @@ class TestFailClosedPipeline(unittest.TestCase):
 
     def test_provider_arbitrary_exception_collapses(self) -> None:
         class BadForward(CharBackend):
-            def forward_logits(self, input_ids: tuple[int, ...]) -> torch.Tensor:
+            @staticmethod
+            def forward_logits(input_ids: tuple[int, ...]) -> torch.Tensor:
                 raise RuntimeError("something unprintable \x00")
 
         score = score_target_logprobs(BadForward(torch.zeros(3, 4)), (0, 1), (1,))

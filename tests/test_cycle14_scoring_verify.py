@@ -175,7 +175,8 @@ def oracle_alignment(
     target_ids: tuple[int, ...],
 ) -> tuple[bool, str | None]:
     """Independent §9.3 predicate: (ok, reason), mirroring the documented
-    contract rather than the implementation's code."""
+    contract rather than the implementation's code.
+    """
     try:
         prompt_text = tok.decode(prompt_ids)
     except Exception:  # noqa: BLE001 -- oracle mirrors the sanitization boundary
@@ -240,7 +241,8 @@ class FuzzBackend:
 
 def make_piece_table(rng: random.Random) -> dict[str, int]:
     """Random piece table over {a,b,c}; single chars always covered, at
-    least one multi-char piece guaranteed (merge-sensitive boundaries)."""
+    least one multi-char piece guaranteed (merge-sensitive boundaries).
+    """
     pieces: dict[str, int] = {"a": 0, "b": 1, "c": 2}
     alphabet = ["a", "b", "c"]
     pairs = [x + y for x in alphabet for y in alphabet]
@@ -271,7 +273,8 @@ class ScoreSpanDifferentialTests(unittest.TestCase):
 
     N_SEEDS = 60
 
-    def _trial_tensors(self, seed: int) -> tuple[torch.Tensor, int, tuple[int, ...]]:
+    @staticmethod
+    def _trial_tensors(seed: int) -> tuple[torch.Tensor, int, tuple[int, ...]]:
         rng = random.Random(10_000 + seed)  # noqa: S311 -- deterministic test seed
         vocab = rng.choice([1, 2, 3, 5, 8, 13])
         total_len = rng.randint(2, 40)
@@ -595,7 +598,8 @@ class AlignmentDifferentialTests(unittest.TestCase):
 
         # decode() returning a non-str -> decode_failed, never an exception.
         class BadDecode(FuzzBackend):
-            def decode(self, token_ids: tuple[int, ...]) -> str:  # type: ignore[override]
+            @staticmethod
+            def decode(token_ids: tuple[int, ...]) -> str:  # type: ignore[override]
                 return ["not", "a", "str"]  # type: ignore[return-value]
 
         check = check_alignment(BadDecode(tok), (0,), (1,))
@@ -603,7 +607,8 @@ class AlignmentDifferentialTests(unittest.TestCase):
 
         # decode() raising -> decode_failed.
         class RaisingDecode(FuzzBackend):
-            def decode(self, token_ids: tuple[int, ...]) -> str:
+            @staticmethod
+            def decode(token_ids: tuple[int, ...]) -> str:
                 raise RuntimeError("tokenizer exploded")
 
         check = check_alignment(RaisingDecode(tok), (0,), (1,))
@@ -616,7 +621,8 @@ class AlignmentDifferentialTests(unittest.TestCase):
 
         # encode() returning a non-tuple -> encode_failed.
         class BadEncode(FuzzBackend):
-            def encode(self, text: str) -> tuple[int, ...]:  # type: ignore[override]
+            @staticmethod
+            def encode(text: str) -> tuple[int, ...]:  # type: ignore[override]
                 return [0]  # type: ignore[return-value]
 
         check = check_alignment(BadEncode(tok), (0,), (1,))
@@ -641,7 +647,8 @@ class AlignmentDifferentialTests(unittest.TestCase):
 class EndToEndDifferentialTests(unittest.TestCase):
     N_SEEDS = 40
 
-    def _trial(self, seed: int):
+    @staticmethod
+    def _trial(seed: int):
         rng = random.Random(60_000 + seed)  # noqa: S311 -- deterministic test seed
         tok = FuzzTokenizer(make_piece_table(rng))
         # Genuine split of one encoding at a token boundary: alignment is

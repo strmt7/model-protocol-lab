@@ -200,7 +200,10 @@ class ParserHostilePropertiesTests(unittest.TestCase):
     """unittest entry point; pytest runs TestCase classes natively."""
 
     def setUp(self) -> None:
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import tempfile
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from pathlib import Path
 
         # PID-scoped temp dir; tempfile picks the location (no hard-coded /tmp).
@@ -210,7 +213,8 @@ class ParserHostilePropertiesTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._td.cleanup()
 
-    def test_valid_text_sanity(self):
+    @staticmethod
+    def test_valid_text_sanity():
         split = check_contract(lambda: parse_dataset(_VALID_TEXT))
         assert split is not None
         assert [c.id for c in split.search] == ["s1"]
@@ -268,7 +272,8 @@ class ParserHostilePropertiesTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_dataset(Sneaky("{}"))
 
-    def test_number_attacks(self):
+    @staticmethod
+    def test_number_attacks():
         check_rejected(json.dumps({"search": 10**1000, "held_out": []}))
         check_rejected('{"search": [' + "9" * 5000 + "]}")  # trips the 4300-digit cap
         for token in ("1e308", "-1e308", "1e-9999"):
@@ -281,7 +286,8 @@ class ParserHostilePropertiesTests(unittest.TestCase):
         # Must be ValueError -- a bare RecursionError escaping is the F5 bug class.
         check_contract(lambda: parse_dataset(text))
 
-    def test_nesting_spliced_inside_fixture(self):
+    @staticmethod
+    def test_nesting_spliced_inside_fixture():
         deep = "[" * 300 + "]" * 300
         bad = _VALID_TEXT.replace('[{"role": "user", "content": "Search question?"}]', deep, 1)
         check_rejected(bad)

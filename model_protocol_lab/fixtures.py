@@ -72,7 +72,8 @@ def _safe(value: str) -> str:
     terminal escape sequences into error messages, and apply the R4-7
     200-character preview cap: before the cap, one 131,071-character
     id produced a 131,115-character exception message (oversight
-    security S-9a)."""
+    security S-9a).
+    """
     cleaned = _CONTROL_CHARS.sub("", value)
     if len(cleaned) > 200:
         return cleaned[:200] + "..."
@@ -117,6 +118,7 @@ def read_authoring_file(path: str | Path) -> str:
 
 
 def _expected_message_headers(count: int) -> tuple[str, ...]:
+    """Return the expected message headers."""
     headers: list[str] = []
     index = 1
     while len(headers) < count:
@@ -275,6 +277,7 @@ def split_to_json_text(split: Split) -> str:
         raise ValueError("split_to_json_text needs a Split")
 
     def fixture_json(case: Fixture) -> dict[str, Any]:
+        """Return the fixture json."""
         return {
             "id": case.id,
             "group": case.group,
@@ -382,6 +385,7 @@ class AuditFinding:
     offset: int
 
     def __post_init__(self) -> None:
+        """Validate the finding text fields at construction."""
         if (
             type(self.fixture_id) is not str
             or type(self.field) is not str
@@ -445,6 +449,7 @@ def _audit_targets(
     targets: list[tuple[str, str, str]] = []
 
     def add_fixture(case: Fixture) -> None:
+        """Add fixture."""
         for index, message in enumerate(case.messages):
             targets.append((case.id, f"{message.role}_{index // 2 + 1}", message.content))
 

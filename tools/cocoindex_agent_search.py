@@ -62,7 +62,8 @@ CONFIG_DIGEST = hashlib.sha256((SETTINGS + PROJECT_SETTINGS).encode("utf-8")).he
 def home() -> Path:
     """Purpose: Select external agent state
     Inputs: environment
-    Outputs: safe absolute cache path."""
+    Outputs: safe absolute cache path.
+    """
     override = os.environ.get("AGENT_CODE_HOME")
     if override:
         path = Path(override).expanduser()
@@ -84,7 +85,8 @@ def home() -> Path:
 def paths(base: Path, repo: Path = ROOT) -> tuple[Path, Path, Path, Path]:
     """Purpose: Scope tool, mirror, and runtime state
     Inputs: base/repo
-    Outputs: four external paths."""
+    Outputs: four external paths.
+    """
     digest = hashlib.sha256(str(repo.resolve()).encode("utf-8")).hexdigest()[:16]
     return (
         base / "venv",
@@ -97,7 +99,8 @@ def paths(base: Path, repo: Path = ROOT) -> tuple[Path, Path, Path, Path]:
 def ccc_path(venv: Path) -> Path:
     """Purpose: Locate the pinned CLI
     Inputs: virtual environment
-    Outputs: platform executable path."""
+    Outputs: platform executable path.
+    """
     return venv / ("Scripts/ccc.exe" if os.name == "nt" else "bin/ccc")
 
 
@@ -106,7 +109,8 @@ def _run(
 ) -> subprocess.CompletedProcess[str]:
     """Purpose: Run a bounded child
     Inputs: argv/cwd/timeout/env
-    Outputs: captured result or failure."""
+    Outputs: captured result or failure.
+    """
     return subprocess.run(
         args,
         cwd=cwd,
@@ -124,7 +128,8 @@ def _run(
 def install(base: Path) -> None:
     """Purpose: Install pinned development CLI
     Inputs: external base
-    Outputs: verified environment or error."""
+    Outputs: verified environment or error.
+    """
     venv = paths(base)[0]
     command = ccc_path(venv)
     if command.is_file():
@@ -162,7 +167,8 @@ def install(base: Path) -> None:
 def tracked_files(repo: Path) -> list[tuple[str, Path]]:
     """Purpose: Inventory live code
     Inputs: checkout
-    Outputs: safe paths without Git-confirmed deletions."""
+    Outputs: safe paths without Git-confirmed deletions.
+    """
     raw = subprocess.run(
         [_GIT, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--deduplicate"],
         cwd=repo,
@@ -204,11 +210,13 @@ def tracked_files(repo: Path) -> list[tuple[str, Path]]:
 def source_digest(entries: list[tuple[str, Path]]) -> str:
     """Purpose: Fingerprint indexable bytes.
     Inputs: live path/source entries in any Git inventory order.
-    Outputs: canonical SHA-256, unchanged by staging alone."""
+    Outputs: canonical SHA-256, unchanged by staging alone.
+    """
     digest = hashlib.sha256()
     for name, source in sorted(entries, key=lambda entry: entry[0]):
         digest.update(name.encode("utf-8", "surrogateescape") + b"\0")
         with source.open("rb") as stream:
+            # skipcq: PYL-W0640 - the stream lambda is consumed by iter() in the same iteration
             for block in iter(lambda: stream.read(1024 * 1024), b""):
                 digest.update(block)
         digest.update(b"\0")
@@ -218,7 +226,8 @@ def source_digest(entries: list[tuple[str, Path]]) -> str:
 def prepare_mirror(mirror: Path, entries: list[tuple[str, Path]]) -> None:
     """Purpose: Synchronize private source mirror
     Inputs: mirror/entries
-    Outputs: exact safe copies."""
+    Outputs: exact safe copies.
+    """
     mirror.mkdir(parents=True, exist_ok=True)
     resolved = mirror.resolve()
     wanted = set()
@@ -244,7 +253,8 @@ def prepare_mirror(mirror: Path, entries: list[tuple[str, Path]]) -> None:
 def _environment(base: Path, config: Path, runtime: Path) -> dict[str, str]:
     """Purpose: Isolate CLI state
     Inputs: external paths
-    Outputs: child environment without telemetry."""
+    Outputs: child environment without telemetry.
+    """
     result = dict(os.environ)
     result.update(
         {
@@ -260,7 +270,8 @@ def _environment(base: Path, config: Path, runtime: Path) -> dict[str, str]:
 def index(base: Path, repo: Path = ROOT) -> None:
     """Purpose: Refresh semantic index
     Inputs: external base/checkout
-    Outputs: fresh marker or error."""
+    Outputs: fresh marker or error.
+    """
     venv, mirror, config, runtime = paths(base, repo)
     command = ccc_path(venv)
     if not command.is_file():
@@ -310,7 +321,8 @@ def index(base: Path, repo: Path = ROOT) -> None:
 def record_search_use(base: Path, repo: Path, digest: str, query: str, hit_count: int) -> None:
     """Purpose: Record real successful routing.
     Inputs: verified search metadata.
-    Outputs: atomic local receipt, no query text."""
+    Outputs: atomic local receipt, no query text.
+    """
     mirror = paths(base, repo)[1]
     target = base / "active" / (mirror.name + ".usage.json")
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -339,7 +351,8 @@ def record_search_use(base: Path, repo: Path, digest: str, query: str, hit_count
 def search(base: Path, query: str, limit: int, repo: Path = ROOT, path: str | None = None) -> None:
     """Purpose: Route a conceptual query
     Inputs: fresh index/query/limit/path
-    Outputs: bounded hints."""
+    Outputs: bounded hints.
+    """
     if path and any(mark in path for mark in "*?["):
         raise ValueError(
             "wildcard path filters are unreliable in CocoIndex Code 0.2.41; "
@@ -395,7 +408,8 @@ def search(base: Path, query: str, limit: int, repo: Path = ROOT, path: str | No
 def main(argv: list[str] | None = None) -> int:
     """Purpose: Dispatch CLI actions
     Inputs: optional argv
-    Outputs: zero or an actionable failure."""
+    Outputs: zero or an actionable failure.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("install")

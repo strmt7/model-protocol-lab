@@ -47,6 +47,8 @@ need no model and never touch the network.
 
 from __future__ import annotations
 
+from functools import partial
+
 #: Passed fixture ids per candidate, as validated by
 #: :func:`validate_passing`: candidate name -> sorted tuple of fixture
 #: ids the candidate passes (exact answer AND explicit boundary).
@@ -160,6 +162,11 @@ def oracle_rates(
     }
 
 
+def _coverage_size(passing: PassingMap, uncovered: set[str], name: str) -> int:
+    """How many still-uncovered fixtures one candidate covers."""
+    return len(set(passing[name]) & uncovered)
+
+
 def greedy_cover(passing: PassingMap, fixture_ids: tuple[str, ...]) -> list[str]:
     """Greedy covering protocol portfolio; deterministic.
 
@@ -188,7 +195,7 @@ def greedy_cover(passing: PassingMap, fixture_ids: tuple[str, ...]) -> list[str]
             break
         best = max(
             sorted(passing),
-            key=lambda name: len(set(passing[name]) & uncovered),
+            key=partial(_coverage_size, passing, uncovered),
         )
         portfolio.append(best)
         covered |= set(passing[best])

@@ -802,6 +802,7 @@ def perturbation_stage(
     }
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def perturbation_robustness(
     primary_winner: str | None,
     primary_decision: str,
@@ -1115,6 +1116,7 @@ def native_search_outcomes(
     return outcomes
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def healing_delta(
     primary_winner: str | None,
     primary_decision: str,
@@ -1421,6 +1423,7 @@ def _hierarchy_entry_valid(entry: Any, n_fixtures: int) -> bool:
     return type(entry.get("pass")) is bool
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def hierarchy_adherence(
     primary_winner: str | None,
     primary_decision: str,
@@ -1483,6 +1486,7 @@ def hierarchy_adherence(
                 return {"available": False, "detail": f"stage_{position}_invalid"}
 
     def _rates(entry: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Return the rates."""
         if entry is None:
             return None
         n = entry["n"]
@@ -1691,6 +1695,7 @@ def _position_entry_valid(entry: Any, n_fixtures: int) -> bool:
     return type(entry.get("pass")) is bool
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def position_sensitivity(
     primary_winner: str | None,
     primary_decision: str,
@@ -1753,6 +1758,7 @@ def position_sensitivity(
                 return {"available": False, "detail": f"stage_{condition}_invalid"}
 
     def _rates(entry: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Return the rates."""
         if entry is None:
             return None
         n = entry["n"]
@@ -1940,6 +1946,7 @@ def _synthhistory_entry_valid(entry: Any, n_fixtures: int) -> bool:
     return type(entry.get("pass")) is bool
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def synthhistory_stability(
     primary_winner: str | None,
     primary_decision: str,
@@ -2001,6 +2008,7 @@ def synthhistory_stability(
                 return {"available": False, "detail": f"stage_{condition}_invalid"}
 
     def _rates(entry: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Return the rates."""
         if entry is None:
             return None
         n = entry["n"]
@@ -2582,6 +2590,7 @@ def _prefill_entry_valid(entry: Any, n_fixtures: int) -> bool:
     return type(entry.get("pass")) is bool
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def prefill_adherence(
     primary_winner: str | None,
     primary_decision: str,
@@ -2644,6 +2653,7 @@ def prefill_adherence(
                 return {"available": False, "detail": f"stage_{prefill_id}_invalid"}
 
     def _rates(entry: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Return the rates."""
         if entry is None:
             return None
         completed = entry["n_completed"]
@@ -2781,6 +2791,7 @@ def _observation_min_budget(obs: dict[str, Any], boundary: tuple[int, ...]) -> i
     return cut + len(boundary)
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def budget_frontier(
     search: list[dict[str, Any]] | tuple[dict[str, Any], ...],
     *,
@@ -2921,6 +2932,7 @@ def budget_frontier(
     }
 
     def pass_count(name: str, budget: int) -> int:
+        """Return the pass count."""
         return bisect_right(sorted_mins[name], budget)
 
     candidates: dict[str, dict[str, Any]] = {}
@@ -2944,6 +2956,7 @@ def budget_frontier(
         }
 
     def decision_at(budget: int) -> tuple[str, str | None]:
+        """Return the selection decision at a token budget."""
         winners = [name for name in names if pass_count(name, budget) == n_fixtures]
         if len(winners) == 1:
             return ("selected", winners[0])
@@ -3133,7 +3146,8 @@ _LOGPROB_ENCODE_FAILED = "encode_failed"
 def _logprob_unavailable(reason: str, prompt_len: int) -> TargetScore:
     """Build an engine-shaped refusal for caller-side problems (e.g. the
     expected answer could not be encoded): status ``unavailable`` with a
-    fixed reason, never an exception."""
+    fixed reason, never an exception.
+    """
     return TargetScore(
         status="unavailable",
         reason=reason,
@@ -3218,6 +3232,7 @@ def _aggregate_fixture_scores(scores: list[TargetScore]) -> dict[str, Any]:
 
 
 def _plural_fixtures(count: int) -> str:
+    """Return the plural fixtures."""
     return f"{count} fixture" + ("" if count == 1 else "s")
 
 
@@ -3584,7 +3599,8 @@ def _prompt_token_length(
 ) -> int | None:
     """Token length of one rendered prompt, or None when it fails
     natively: a prompt that fails to render or encode fails the
-    native run too, so it carries no truncation-specific fact."""
+    native run too, so it carries no truncation-specific fact.
+    """
     try:
         ids = backend.encode(fmt.render(case.messages))
     except Exception:  # noqa: BLE001 -- natively-failing prompt, not a truncation fact
@@ -3796,6 +3812,7 @@ def _failure_code(report: EvaluationReport) -> str | None:
 
 
 def _summary(report: EvaluationReport) -> dict[str, Any]:
+    """Return the summary."""
     passed = sum(o.exact_match and o.boundary_found for o in report.observations)
     return {
         "status": report.status,
@@ -3911,6 +3928,7 @@ def _configuration_digest(
     """
 
     def fixture_digest(case: Fixture) -> dict[str, Any]:
+        """Return the fixture digest."""
         return {
             "id": case.id,
             "messages": [asdict(message) for message in case.messages],
@@ -4009,7 +4027,6 @@ def run_experiment(
     later consumer can prove a baseline belongs to this
     configuration before comparing against it.
     """
-
     if type(formats) is not tuple or not 1 <= len(formats) <= 24:
         raise ValueError("Supply between 1 and 24 candidates")
     if any(type(fmt) is not Format for fmt in formats):
@@ -4066,6 +4083,7 @@ def run_experiment(
     def finish() -> dict[str, Any]:
         # Every return path carries the failure taxonomy so the decision
         # banner can cite it; it is deterministic from the stored records.
+        """Return the finish."""
         output["failure_taxonomy"] = failure_taxonomy(output, eos_id)
         return output
 
@@ -5672,6 +5690,7 @@ def _faketurn_cell_view(entry: Any) -> dict[str, Any] | None:
     return {"supported": True, "token_source": token_source, "verdicts": verdicts}
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def faketurn_robustness(
     native_outcomes: dict[str, dict[str, Any]],
     stage_result: dict[str, Any],
@@ -6660,6 +6679,7 @@ def _aliasing_flag(
     return False, "boundaries_differ_within_passing_set", []
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def repetition_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -6734,6 +6754,7 @@ def repetition_stage(
     marker = "\x00mplrep\x00"
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     candidates: dict[str, Any] = {}
@@ -6922,6 +6943,8 @@ def repetition_stage(
 def _fixture_with_content(fixture: Any, content: str) -> Any:
     """A copy of ``fixture`` whose target message carries ``content``."""
     from . import repetition as _rep
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
 
     index = _rep.target_index(fixture)
@@ -7080,6 +7103,7 @@ def _answer_digest(value: Any) -> str | None:
     return sha256(value.encode("utf-8")).hexdigest()
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def distraction_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -7166,6 +7190,7 @@ def distraction_stage(
     order_cache: dict[tuple[tuple[str, ...], int], list[tuple[int, int, int]]] = {}
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     def _size_span(
@@ -7178,6 +7203,7 @@ def distraction_stage(
         native_len: int,
         planted: str | None,
     ) -> tuple[str, Any, tuple[int, ...]] | None:
+        """Return the size span."""
         cache_key = (sentences, level)
         order = order_cache.get(cache_key)
         if order is None:
@@ -7460,6 +7486,7 @@ def distraction_analysis(
     }
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def leading_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -7548,6 +7575,7 @@ def leading_stage(
             boundary_text[fmt.name] = ""
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     candidates: dict[str, Any] = {}
@@ -7806,6 +7834,7 @@ def leading_analysis(
     }
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def dateline_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -7889,6 +7918,7 @@ def dateline_stage(
     screens = {case.id: _dl.fixture_screen(case) for case in cases}
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     candidates: dict[str, Any] = {}
@@ -8297,6 +8327,8 @@ def _multiturn_turn(
     digests only.
     """
     from . import multiturn as _mt
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture
 
     fixture = Fixture(id=case_id, messages=messages, expected=expected, group=_mt.GROUP)
@@ -8355,6 +8387,8 @@ def multiturn_stage(
     docs/MULTITURN_DESIGN.md.
     """
     from . import multiturn as _mt
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Message
     from .fixtures import audit_special_token_literals
 
@@ -8400,6 +8434,7 @@ def multiturn_stage(
             }
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     candidates: dict[str, Any] = {}
@@ -8718,6 +8753,8 @@ def _needle_run_cell(
     ``cell_details`` and the cell itself stays None.
     """
     from . import needle as _nd
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
 
     if any(_nd.filler_screened(span, value, boundary_text) for span in spans if span):
@@ -8747,6 +8784,7 @@ def _needle_run_cell(
         record["cells"][key] = cell
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def needle_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -8778,6 +8816,8 @@ def needle_stage(
     fail-closed payload. Design: docs/NEEDLE_DESIGN.md.
     """
     from . import needle as _nd
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .distraction import NEUTRAL_CORPUS, span_candidates, span_text
     from .fixtures import audit_special_token_literals
@@ -8831,9 +8871,11 @@ def needle_stage(
     order_cache: dict[tuple[int, int], list[tuple[int, int, int]]] = {}
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     def _order(start: int, target: int) -> list[tuple[int, int, int]]:
+        """Return the order."""
         cache_key = (start, target)
         order = order_cache.get(cache_key)
         if order is None:
@@ -8842,6 +8884,7 @@ def needle_stage(
         return order
 
     def _render_ids(fmt: Any, content: str) -> tuple[int, ...]:
+        """Render ids."""
         fixture = Fixture(
             id="needle-probe",
             messages=(Message("user", content),),
@@ -8854,7 +8897,7 @@ def needle_stage(
         fmt: Any,
         case: dict[str, Any],
         target: int,
-        z_ids: tuple[int, ...],
+        _z_ids: tuple[int, ...],
         q_ids: tuple[int, ...],
         anchor: int,
         encodes: int,
@@ -8863,7 +8906,8 @@ def needle_stage(
         encodes) for the first prefix whose D equals ``target``
         -- None when the budget runs out first. Depth 0 is the
         empty prefix with the question-only render as its
-        comparator, no search."""
+        comparator, no search.
+        """
         fact = str(case["fact"])
         question = str(case["question"])
         if target == 0:
@@ -8927,7 +8971,8 @@ def needle_stage(
         """Size one duplicate cell (needles at 25% and 75%):
         prefix phase, middle phase against the second offset,
         suffix phase against the duplicate delta with both
-        offsets re-verified on the final ids."""
+        offsets re-verified on the final ids.
+        """
         fact = str(case["fact"])
         question = str(case["question"])
         z_ids: tuple[int, ...] = base["z_ids"]
@@ -8976,7 +9021,8 @@ def needle_stage(
         fmt: Any, case: dict[str, Any], dose: int, base: dict[str, Any]
     ) -> tuple[str, tuple[int, ...], list[str]] | None:
         """Size one absent cell: a single span whose rendered
-        delta over the question-only render equals the dose."""
+        delta over the question-only render equals the dose.
+        """
         question = str(case["question"])
         q_ids: tuple[int, ...] = base["q_ids"]
         encodes = 0
@@ -9214,7 +9260,8 @@ def needle_analysis(
 class _PlacementCancelled(Exception):
     """Internal: the run's cancel event fired during the
     placement stage; the stage unwinds to its fail-closed
-    payload rather than mislabelling the interruption."""
+    payload rather than mislabelling the interruption.
+    """
 
 
 def _placement_cell(
@@ -9293,6 +9340,8 @@ def placement_stage(
     fail-closed payload. Design: docs/PLACEMENT_DESIGN.md.
     """
     from . import placement as _pl
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
@@ -9349,6 +9398,7 @@ def placement_stage(
             }
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     candidates: dict[str, Any] = {}
@@ -9467,7 +9517,8 @@ def placement_analysis(
 class _CanonicalFormCancelled(Exception):
     """Internal: the run's cancel event fired during the
     canonical-form stage; the stage unwinds to its fail-closed
-    payload rather than mislabelling the interruption."""
+    payload rather than mislabelling the interruption.
+    """
 
 
 def _canonical_form_cell(
@@ -9547,6 +9598,8 @@ def canonicalform_stage(
     Design: docs/CANONICALFORM_DESIGN.md.
     """
     from . import canonicalform as _cf
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
@@ -9603,6 +9656,7 @@ def canonicalform_stage(
             }
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     candidates: dict[str, Any] = {}
@@ -9743,7 +9797,8 @@ def canonicalform_analysis(
 class _NegationCancelled(Exception):
     """Internal: the run's cancel event fired during the
     negation stage; the stage unwinds to its fail-closed
-    payload rather than mislabelling the interruption."""
+    payload rather than mislabelling the interruption.
+    """
 
 
 def _negation_cell(
@@ -9831,6 +9886,8 @@ def negation_stage(
     Design: docs/NEGATION_DESIGN.md.
     """
     from . import negation as _ng
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
     from .numform import margin_class
@@ -9915,6 +9972,7 @@ def negation_stage(
             }
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     candidates: dict[str, Any] = {}
@@ -10057,7 +10115,8 @@ class _InstructionDistanceCancelled(Exception):
     """Internal: the run's cancel event fired during the
     instruction-distance stage; the stage unwinds to its
     fail-closed payload rather than mislabelling the
-    interruption."""
+    interruption.
+    """
 
 
 def _instruction_distance_cell(
@@ -10158,6 +10217,8 @@ def instruction_distance_stage(
     docs/INSTRUCTIONDISTANCE_DESIGN.md.
     """
     from . import instructiondistance as _id
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .distraction import NEUTRAL_CORPUS, span_candidates, span_text
     from .fixtures import audit_special_token_literals
@@ -10235,9 +10296,11 @@ def instruction_distance_stage(
     order_cache: dict[int, list[tuple[int, int, int]]] = {}
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     def _order(dose: int) -> list[tuple[int, int, int]]:
+        """Return the order."""
         order = order_cache.get(dose)
         if order is None:
             order = span_candidates(stream, target=dose, chars_per_token=chars_per_token)
@@ -10245,6 +10308,7 @@ def instruction_distance_stage(
         return order
 
     def _render_ids(fmt: Any, content: str) -> tuple[int, ...]:
+        """Render ids."""
         fixture = Fixture(
             id="instructiondistance-probe",
             messages=(Message("user", content),),
@@ -10456,7 +10520,8 @@ def instruction_distance_analysis(
 class _HistoryFrameCancelled(Exception):
     """Internal: the run's cancel event fired during the
     history-frame stage; the stage unwinds to its fail-closed
-    payload rather than mislabelling the interruption."""
+    payload rather than mislabelling the interruption.
+    """
 
 
 def _history_frame_cell(
@@ -10555,6 +10620,8 @@ def history_frame_stage(
     docs/HISTORYFRAME_DESIGN.md.
     """
     from . import historyframe as _hf
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
     from .synthhistory import SYNTHETIC_TURNS
@@ -10670,6 +10737,7 @@ def history_frame_stage(
         built[fmt.name] = per_case
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     candidates: dict[str, Any] = {}
@@ -10841,7 +10909,8 @@ def history_frame_analysis(
 class _PruneSweepCancelled(Exception):
     """Internal: the run's cancel event fired during the
     prune-sweep stage; the stage unwinds to its fail-closed
-    payload rather than mislabelling the interruption."""
+    payload rather than mislabelling the interruption.
+    """
 
 
 def _prune_sweep_cell(
@@ -10928,6 +10997,8 @@ def prune_sweep_stage(
     Design: docs/PRUNESWEEP_DESIGN.md.
     """
     from . import prunesweep as _ps
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
@@ -11007,6 +11078,7 @@ def prune_sweep_stage(
             }
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     candidates: dict[str, Any] = {}
@@ -11135,7 +11207,8 @@ def prune_sweep_analysis(
 class _RecordNotationCancelled(Exception):
     """Internal: the run's cancel event fired during the
     record-notation stage; the stage unwinds to its fail-closed
-    payload rather than mislabelling the interruption."""
+    payload rather than mislabelling the interruption.
+    """
 
 
 def _record_notation_cell(
@@ -11236,6 +11309,8 @@ def record_notation_stage(
     docs/PAYLOADSERIALIZATION_DESIGN.md.
     """
     from . import recordnotation as _rn
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
@@ -11315,6 +11390,7 @@ def record_notation_stage(
             }
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     candidates: dict[str, Any] = {}
@@ -11463,7 +11539,8 @@ def record_notation_analysis(
 class _RotationCancelled(Exception):
     """Internal: the run's cancel event fired during the
     rotation stage; the stage unwinds to its fail-closed
-    payload rather than mislabelling the interruption."""
+    payload rather than mislabelling the interruption.
+    """
 
 
 def _rotation_cell(
@@ -11548,6 +11625,8 @@ def rotation_stage(
     payload. Design: docs/ROTATION_DESIGN.md.
     """
     from . import rotation as _rot
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
@@ -11603,6 +11682,7 @@ def rotation_stage(
             }
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     candidates: dict[str, Any] = {}
@@ -11729,7 +11809,8 @@ def rotation_analysis(
 class _DensityCancelled(Exception):
     """Internal: the run's cancel event fired during the
     density stage; the stage unwinds to its fail-closed
-    payload rather than mislabelling the interruption."""
+    payload rather than mislabelling the interruption.
+    """
 
 
 def _density_cell(
@@ -11815,6 +11896,8 @@ def density_stage(
     docs/DENSITY_DESIGN.md.
     """
     from . import density as _den
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
@@ -11877,6 +11960,7 @@ def density_stage(
             }
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     candidates: dict[str, Any] = {}
@@ -12081,6 +12165,8 @@ def fieldorder_stage(
     docs/FIELDORDER_DESIGN.md.
     """
     from . import fieldorder as _fo
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
     from .structured import _canonical_json
@@ -12121,6 +12207,7 @@ def fieldorder_stage(
             boundary_text[fmt.name] = ""
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     candidates: dict[str, Any] = {}
@@ -12334,6 +12421,7 @@ def numform_stage(
     grouping = _nf.measure_grouping(backend.encode, value_set)
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     if _cancelled():
@@ -12901,6 +12989,7 @@ def ablation_stage(
     boundaries = _resolve_boundaries(formats, boundary, boundary_map)
 
     def _verdicts(fmt: Any) -> tuple[bool, ...] | None:
+        """Return the verdicts."""
         try:
             report = _evaluate(
                 backend,
@@ -13032,6 +13121,7 @@ def confidentiality_stage(
     per_candidate: dict[str, dict[str, Any] | None] = {}
 
     def _score(obs: Any) -> dict[str, Any] | None:
+        """Return the score."""
         if obs.status != "completed":
             return None
         try:
@@ -13100,6 +13190,7 @@ def _in_closed_range(value: Any, lo: float, hi: float) -> bool:
     return type(value) in (int, float) and isinstance(value, (int, float)) and lo <= value <= hi
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def _confidentiality_cell_valid(entry: Any) -> bool:
     """Structural check for one candidate cell of a confidentiality stage."""
     if entry is None:
@@ -13297,18 +13388,22 @@ class _ScriptedEmissionBackend:
     fingerprint = "answer-collision-scripted-v1"
 
     def __init__(self, base: Backend, emission: tuple[int, ...]) -> None:
+        """Initialise the scripted-emission backend over ``base``."""
         self._base = base
         self._emission = tuple(emission)
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode the complete rendered prompt into raw token IDs."""
         return self._base.encode(text)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode token IDs without dropping special tokens."""
         return self._base.decode(token_ids)
 
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Any
     ) -> Any:
+        """Generate exactly the cap unless cancelled or failed."""
         from .core import Generation
 
         return Generation(tuple(self._emission[:max_new_tokens]), "limit")
@@ -13349,6 +13444,8 @@ def answer_collision_stage(
         score_observation,
         subword_emission,
     )
+
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message, first_boundary
 
     if backend is None:
@@ -13641,6 +13738,7 @@ def _choiceaudit_cell(score: TargetScore) -> dict[str, Any]:
     }
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def choiceaudit_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -13724,6 +13822,7 @@ def choiceaudit_stage(
     block_by_id = {entry["fixture"]: entry for entry in block}
 
     def _cancelled() -> bool:
+        """Return the cancelled."""
         return cancel is not None and cancel.is_set()
 
     candidates: dict[str, Any] = {}
@@ -13956,6 +14055,7 @@ def _precision_logprob(backend: Any, prompt_ids: tuple[int, ...], expected: str)
     any non-ok score (alignment, provider, context) degrades this
     cell's logprob to None -- never a stage failure, never a guess.
     """
+    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .scoring import score_target_logprobs
 
     if not callable(getattr(backend, "forward_logits", None)):
@@ -13968,6 +14068,7 @@ def _precision_logprob(backend: Any, prompt_ids: tuple[int, ...], expected: str)
     if getattr(score, "status", None) != "ok":
         return None
     total = getattr(score, "total_logprob", None)
+    # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
     if isinstance(total, (int, float)) and not isinstance(total, bool) and total == total:
         return float(total)
     return None
@@ -14026,6 +14127,7 @@ def precision_stage(
     protocol["fingerprint"] = _pr.protocol_fingerprint(protocol)
 
     def _unavailable(detail: str) -> dict[str, Any]:
+        """Return the unavailable."""
         return {
             "available": False,
             "detail": detail,
@@ -14261,6 +14363,7 @@ def confidence_stage(
     protocol["fingerprint"] = _cf.protocol_fingerprint(protocol)
 
     def _unavailable(detail: str) -> dict[str, Any]:
+        """Return the unavailable."""
         return {
             "available": False,
             "detail": detail,
@@ -14295,6 +14398,7 @@ def confidence_stage(
     unavailable_candidates: list[str] = []
 
     def _eval(fmt: Any, name: str, treated_cases: tuple[Any, ...]) -> dict[str, Any]:
+        """Return the eval."""
         if not treated_cases:
             return {}
         try:

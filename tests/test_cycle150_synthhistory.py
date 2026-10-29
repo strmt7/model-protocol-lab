@@ -388,7 +388,8 @@ def _cell(passed, n=2):
 
 
 class SynthhistoryStabilityTests(unittest.TestCase):
-    def _stages(self, alpha_pass, beta_pass, condition="history_2"):
+    @staticmethod
+    def _stages(alpha_pass, beta_pass, condition="history_2"):
         return {
             condition: _stage_payload(
                 condition,
@@ -630,7 +631,8 @@ class SynthhistoryMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _delimiter_scenario(self, mod):
+    @staticmethod
+    def _delimiter_scenario(mod):
         assert mod.delimiter_explicitness(CATALOG["deepseek"]) == "loose", (
             "deepseek has no user close marker"
         )
@@ -645,7 +647,8 @@ class SynthhistoryMutationGateTests(unittest.TestCase):
             self._delimiter_scenario,
         )
 
-    def _prepend_scenario(self, mod):
+    @staticmethod
+    def _prepend_scenario(mod):
         built, _ = mod.build_history_fixtures((_case("f1"),), condition="history_2")
         assert built[0].messages[0] == SYNTHETIC_TURNS[0], (
             "synthetic turns must precede the fixture messages"
@@ -660,11 +663,13 @@ class SynthhistoryMutationGateTests(unittest.TestCase):
             self._prepend_scenario,
         )
 
-    def _pass_predicate_scenario(self, mod):
+    @staticmethod
+    def _pass_predicate_scenario(mod):
         expected = "A" * 16
         # The experiments mutant reuses the real synthhistory module
         # (only experiments.py is rewritten), so build fixtures from the
         # real module here.
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.synthhistory import build_history_fixtures as real_build
 
         real_built, _ = real_build((_case("f1", expected),), condition="history_2")
@@ -689,7 +694,8 @@ class SynthhistoryMutationGateTests(unittest.TestCase):
             self._pass_predicate_scenario,
         )
 
-    def _flips_disjunct_scenario(self, mod):
+    @staticmethod
+    def _flips_disjunct_scenario(mod):
         base = _synthhistory_payload(flips=[])
         flipped = _synthhistory_payload(
             flips=[
@@ -989,7 +995,8 @@ class SynthhistoryCliTests(unittest.TestCase):
 class SynthhistoryCoverageTests(unittest.TestCase):
     """Branch-coverage pins for the fail-closed/defensive paths."""
 
-    def _built(self):
+    @staticmethod
+    def _built():
         built, _ = build_history_fixtures((_case("f1"),), condition="history_2")
         return built
 
@@ -1045,7 +1052,8 @@ class SynthhistoryCoverageTests(unittest.TestCase):
         self.assertFalse(_synthhistory_entry_valid({"n": 2, "passed": 2, "pass": "yes"}, 2))
         self.assertTrue(_synthhistory_entry_valid({"n": 2, "passed": 2, "pass": True}, 2))
 
-    def _bad_stages(self, stage):
+    @staticmethod
+    def _bad_stages(stage):
         return synthhistory_stability("alpha", "selected", ("alpha",), stage)
 
     def test_stability_rejects_non_dict_stage(self):
@@ -1147,9 +1155,11 @@ class SynthhistoryCoverageTests(unittest.TestCase):
 class SynthhistoryValidatorTests(unittest.TestCase):
     """Hostile-payload validator tests (wave-2 C3 lesson)."""
 
-    def _mutants(self):
+    @staticmethod
+    def _mutants():
         good = _synthhistory_payload()
         cond = good["per_condition"]["history_2"]
+        # skipcq: PY-W0070 - mutants are built from the base payload; appends are the battery
         mutants = []
         mutants.append(("not_a_dict", "nope"))
         mutants.append(("available_false", {**good, "available": False}))
@@ -1408,9 +1418,11 @@ class SynthhistoryRedteamRegressionTests(unittest.TestCase):
 
 class SynthhistoryGroupLabelSanitizationTests(unittest.TestCase):
     """Wave-3 red-team A F1: hostile group_pass_rates labels must not
-    inject terminal escapes into the stderr summary."""
+    inject terminal escapes into the stderr summary.
+    """
 
-    def _evil_reports(self, label):
+    @staticmethod
+    def _evil_reports(label):
         def payload(rate):
             return {
                 "available": True,

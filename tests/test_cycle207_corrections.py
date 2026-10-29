@@ -34,14 +34,17 @@ class FakeBase:
 
     fingerprint = "cycle207-fake-base"
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         return tuple(ord(char) for char in text)
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return "".join(chr(token) for token in token_ids)
 
+    @staticmethod
     def generate(
-        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+        input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
         return Generation(token_ids=(ord("X"),), reason="limit")
 
@@ -53,10 +56,12 @@ class ScriptedBackend:
         self._script = dict(script)
         self.fingerprint = "cycle207-scripted-backend"
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         return tuple(ord(char) for char in text)
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return "".join(chr(token) for token in token_ids)
 
     def generate(
@@ -152,7 +157,8 @@ class NestedPrefillRefusalTests(unittest.TestCase):
             def __init__(self) -> None:
                 self._inner = self
 
-            def encode(self, text: str) -> tuple[int, ...]:
+            @staticmethod
+            def encode(text: str) -> tuple[int, ...]:
                 return tuple(ord(char) for char in text)
 
         wrapped = TokenTruncatedPromptBackend(Loopy(), 1)

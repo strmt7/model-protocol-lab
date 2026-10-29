@@ -22,11 +22,13 @@ from model_protocol_lab.fixtures import split_to_json_text
 class FakeTokenizer:
     """Deterministic char-level tokenizer shim (no weights, no network)."""
 
-    def encode(self, text: str, add_special_tokens: bool = False) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str, add_special_tokens: bool = False) -> tuple[int, ...]:
         assert isinstance(text, str)
         return tuple(ord(char) for char in text)
 
-    def decode(self, token_ids: object) -> str:
+    @staticmethod
+    def decode(token_ids: object) -> str:
         assert isinstance(token_ids, (list, tuple))
         return "".join(chr(token_id) for token_id in token_ids)  # type: ignore[union-attr]
 
@@ -163,6 +165,7 @@ class TestRender(unittest.TestCase):
             offset = int(end)
         self.assertEqual(offset, len(rendered))
         # Exact per-segment token IDs from the attached tokenizer.
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         content_line = next(line for line in out.splitlines() if "user_content" in line)
         self.assertIn("tokens=[104, 101, 108, 108, 111]", content_line)
 
@@ -195,7 +198,8 @@ class TestTokens(unittest.TestCase):
 
 
 class TestStep(unittest.TestCase):
-    def _walked(self, *commands: str) -> str:
+    @staticmethod
+    def _walked(*commands: str) -> str:
         shell, buf = _make_shell(tokenizer=None)
         return _run(shell, buf, *commands)
 
@@ -239,7 +243,8 @@ class TestStep(unittest.TestCase):
 
 
 class TestAudit(unittest.TestCase):
-    def _poisoned_shell(self) -> tuple[DebugShell, io.StringIO]:
+    @staticmethod
+    def _poisoned_shell() -> tuple[DebugShell, io.StringIO]:
         split = Split(
             search=(
                 Fixture(
@@ -443,7 +448,8 @@ class TestCliWiring(unittest.TestCase):
 
 
 class TestTerminalEscapeSanitization(unittest.TestCase):
-    def _evil_split(self) -> Split:
+    @staticmethod
+    def _evil_split() -> Split:
         evil_id = "s1\x1b[2J\x1b]0;pwned\x07"
         evil_text = "hello\x1b[31mred\x1b[0m"
         search = (

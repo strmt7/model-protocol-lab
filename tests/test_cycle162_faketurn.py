@@ -52,7 +52,8 @@ class FakeTurnScriptedBackend:
     marker is also a genuine delimiter of the rendering template
     (same-family). Cross-family forged prompts delegate to the
     keyword policy ("Say the word." -> WORD), so no flip.
-    Deterministic."""
+    Deterministic.
+    """
 
     fingerprint = "scripted-faketurn-c162"
 
@@ -155,6 +156,7 @@ class FixtureBuilderTests(unittest.TestCase):
                 group="g",
             ),
         )
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (forged,) = build_faketurn_fixtures(cases, payload="fake_system", marker_index=2)
         self.assertNotIn("ref: faketurn", forged.messages[0].content)
         self.assertNotIn("ref: faketurn", forged.messages[1].content)
@@ -165,6 +167,7 @@ class FixtureBuilderTests(unittest.TestCase):
         cases = (_fixture("f0"),)
         for payload in PAYLOADS:
             for index in range(len(MARKERS)):
+                # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
                 (forged,) = build_faketurn_fixtures(cases, payload=payload, marker_index=index)
                 for decoy in ("WRONG", "INCORRECT", "DECOY", "NOT_THE_ANSWER"):
                     if decoy in forged.messages[0].content:
@@ -269,7 +272,8 @@ class TransferGapTests(unittest.TestCase):
 
 
 class FaketurnStageTests(unittest.TestCase):
-    def _run(self, formats, payloads=("fake_assistant",), marker_indexes=(0, 3)):
+    @staticmethod
+    def _run(formats, payloads=("fake_assistant",), marker_indexes=(0, 3)):
         backend = FakeTurnScriptedBackend()
         cases = (_fixture("f0"), _fixture("f1"))
         return faketurn_stage(
@@ -327,7 +331,8 @@ class FaketurnStageTests(unittest.TestCase):
         # A backend whose generate always errors: every cell degrades to
         # an unsupported marker, the stage itself still returns its shape.
         class BrokenBackend(FakeTurnScriptedBackend):
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
                 raise RuntimeError("boom")
 
         stage = faketurn_stage(
@@ -696,7 +701,8 @@ class FaketurnMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _gap_direction_scenario(self, mod):
+    @staticmethod
+    def _gap_direction_scenario(mod):
         # transfer_gap is cross-minus-same: the direction is the finding.
         # (Targeted at the mutated function directly: experiments binds
         # the name at import time, so the gate asserts on mod itself.)
@@ -712,7 +718,8 @@ class FaketurnMutationGateTests(unittest.TestCase):
             self._gap_direction_scenario,
         )
 
-    def _provenance_scenario(self, mod):
+    @staticmethod
+    def _provenance_scenario(mod):
         assert mod.marker_provenance("a <|im_start|> b", "<|im_start|>") == "same"
         assert mod.marker_provenance("plain text", "<|im_start|>") == "cross"
 
@@ -725,7 +732,8 @@ class FaketurnMutationGateTests(unittest.TestCase):
             self._provenance_scenario,
         )
 
-    def _intact_count_scenario(self, mod):
+    @staticmethod
+    def _intact_count_scenario(mod):
         ref = "(ref: faketurn/fake_assistant/0/f0)"
         text = f"one {MARKERS[0]} two {MARKERS[0]} {ref}"
         assert mod.payload_intact(text, ref, MARKERS[0]) is True
@@ -739,7 +747,8 @@ class FaketurnMutationGateTests(unittest.TestCase):
             self._intact_count_scenario,
         )
 
-    def _source_drift_scenario(self, mod):
+    @staticmethod
+    def _source_drift_scenario(mod):
         old = _ft_diff_payload()
         new = _ft_diff_payload()
         new["per_candidate"]["c"]["cells"]["fake_assistant/0"]["token_source"] = "cross"
@@ -1074,7 +1083,8 @@ class FaketurnCliTests(unittest.TestCase):
 
 
 class FaketurnReportingTests(unittest.TestCase):
-    def _result(self):
+    @staticmethod
+    def _result():
         return {
             "faketurn": {
                 "available": True,

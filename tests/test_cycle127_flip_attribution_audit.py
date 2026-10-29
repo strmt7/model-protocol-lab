@@ -361,10 +361,12 @@ class TestFlipAttributionOracle(unittest.TestCase):
 
 
 class TestFlipAttributionHtml(unittest.TestCase):
-    def _section(self, frontier):
+    @staticmethod
+    def _section(frontier):
         return _frontier_section({"budget_frontier": frontier})
 
-    def _flipping_frontier(self):
+    @staticmethod
+    def _flipping_frontier():
         return _frontier(
             [
                 _entry("A", {"f0": 3, "f1": 12}),

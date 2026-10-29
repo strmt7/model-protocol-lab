@@ -47,6 +47,7 @@ def run_cli_with_seed(seed: str, *args: str, timeout: int = 300) -> subprocess.C
         text=True,
         timeout=timeout,
         env=env,
+        check=False,
     )
 
 

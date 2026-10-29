@@ -117,6 +117,7 @@ _SPEC_KEYS = ("id", "distractor", "elicitation")
 
 
 def _build_specs() -> tuple[dict[str, str], ...]:
+    """Build specs."""
     specs = []
     index = 0
     for elicitation in ELICITATIONS:
@@ -170,7 +171,8 @@ def validate_confidentiality_specs(
 
 def protocol_fingerprint() -> str:
     """sha256 over the canonical frozen protocol (marker, threshold,
-    normalization, elicitations, distractors, spec ids)."""
+    normalization, elicitations, distractors, spec ids).
+    """
     payload = {
         "version": PROTOCOL_VERSION,
         "marker": MARKER,
@@ -331,6 +333,7 @@ def confidentiality_cell(
     discord_treat_only = sum(1 for f in paired if f["treat"]["leak"] and not f["ctrl"]["leak"])
 
     def _rate(count: int) -> float | None:
+        """Return the rate."""
         return count / n_paired if n_paired else None
 
     treat_rate = _rate(treat_leaks)
@@ -350,10 +353,12 @@ def confidentiality_cell(
         gap = None
 
     def _mean(key: str, arm: str) -> float | None:
+        """Return the mean."""
         values = [f[arm][key] for f in paired]
         return sum(values) / len(values) if values else None
 
     def _max(key: str, arm: str) -> float | None:
+        """Return the max."""
         values = [f[arm][key] for f in paired]
         return max(values) if values else None
 

@@ -84,7 +84,8 @@ class DeliScriptedBackend:
     marker id is present in the input ids, WORD otherwise. The two
     deliforge arms decode to identical text; only the encoding of the
     forged markers differs -- so a flip on the reserved arm and none
-    on the subword arm is a pure encoding-authority effect."""
+    on the subword arm is a pure encoding-authority effect.
+    """
 
     fingerprint = "scripted-deliforge-c159"
 
@@ -96,8 +97,8 @@ class DeliScriptedBackend:
     def decode(token_ids: tuple[int, ...]) -> str:
         return scripted_decode(token_ids)
 
+    @staticmethod
     def generate(
-        self,
         input_ids: tuple[int, ...],
         *,
         max_new_tokens: int,
@@ -322,7 +323,8 @@ class ForgedMarkerOffsetsTests(unittest.TestCase):
 
 
 class BuildSubwordIdsTests(unittest.TestCase):
-    def _pair(self, marker_index=0):
+    @staticmethod
+    def _pair(marker_index=0):
         marker = MARKERS[marker_index]
         pair = find_encoding_pair(scripted_encode, scripted_decode, marker)
         assert pair is not None
@@ -353,7 +355,7 @@ class BuildSubwordIdsTests(unittest.TestCase):
         return marker, pair, text, spliced, offsets
 
     def test_splice_replaces_only_forged(self):
-        marker, pair, text, spliced, offsets = self._splice("Say the word.")
+        _marker, pair, text, spliced, offsets = self._splice("Say the word.")
         self.assertIsNotNone(spliced)
         assert spliced is not None
         self.assertEqual(len(offsets), 2)
@@ -362,7 +364,7 @@ class BuildSubwordIdsTests(unittest.TestCase):
         self.assertNotIn(pair["reserved"][0], spliced)
 
     def test_genuine_template_markers_untouched(self):
-        marker, pair, text, spliced, offsets = self._splice(
+        _marker, pair, text, spliced, _offsets = self._splice(
             f"template {MARKERS[0]} says: Say the word.", marker_index=0
         )
         self.assertIsNotNone(spliced)
@@ -525,7 +527,8 @@ class DeliforgeBackendTests(unittest.TestCase):
             DeliforgeBackend(inner, [("x", (1,))])  # type: ignore[arg-type]
 
         class NoFingerprint:
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 return (1,)
 
         with self.assertRaises(ValueError):
@@ -538,7 +541,8 @@ class DeliforgeBackendTests(unittest.TestCase):
 
 
 class DeliforgeStageEndToEndTests(unittest.TestCase):
-    def _native_entries(self, names, formats, cases):
+    @staticmethod
+    def _native_entries(names, formats, cases):
         from model_protocol_lab.core import evaluate
 
         entries = []
@@ -680,7 +684,8 @@ _FAILED_CELL = "failed"  # pass cell=_FAILED_CELL for a failed (None) cell
 def _stage_cell(n=2, reserved_flips=2, subword_flips=0):
     """Stage-shaped supported cell: native verdicts are all True, so the
     reserved arm flips ``reserved_flips`` fixtures and the subword arm
-    flips ``subword_flips``."""
+    flips ``subword_flips``.
+    """
     verdicts = {
         f"f{i}": {
             "reserved": (i >= reserved_flips),
@@ -777,7 +782,8 @@ def _oracle_mask_expand(encode, decode, text, marker, marker_id, subword, span):
     the test alphabet, encodes as the single id 0), encode the masked
     text in one shot, then expand each mask id to the subword ids.
     A genuinely different algorithm from build_subword_ids'
-    segment walk; the two must agree exactly."""
+    segment walk; the two must agree exactly.
+    """
     start, end = span
     masked = []
     i = 0
@@ -885,7 +891,8 @@ class DeliforgeMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _gap_sign_scenario(self, mod):
+    @staticmethod
+    def _gap_sign_scenario(mod):
         assert mod.authority_gap(1.0, 0.0) == 1.0
         assert mod.authority_gap(0.0, 1.0) == -1.0
 
@@ -898,7 +905,8 @@ class DeliforgeMutationGateTests(unittest.TestCase):
             self._gap_sign_scenario,
         )
 
-    def _splice_genuine_scenario(self, mod):
+    @staticmethod
+    def _splice_genuine_scenario(mod):
         marker = MARKERS[0]
         pair = mod.find_encoding_pair(scripted_encode, scripted_decode, marker)
         assert pair is not None
@@ -939,7 +947,8 @@ class DeliforgeMutationGateTests(unittest.TestCase):
             self._splice_genuine_scenario,
         )
 
-    def _none_excluded_scenario(self, mod):
+    @staticmethod
+    def _none_excluded_scenario(mod):
         out = mod.flip_rates({"f0": True, "f1": True}, {"f0": None, "f1": None})
         assert out["n_evaluable"] == 0
         assert out["flip_rate"] is None
@@ -954,7 +963,8 @@ class DeliforgeMutationGateTests(unittest.TestCase):
             self._none_excluded_scenario,
         )
 
-    def _diff_changed_scenario(self, mod):
+    @staticmethod
+    def _diff_changed_scenario(mod):
         def payload(gap0, gap1):
             def cell(gap):
                 return {
@@ -1224,7 +1234,8 @@ class DeliforgeCliProbeTests(unittest.TestCase):
 
 
 class DeliforgeReportingTests(unittest.TestCase):
-    def _result(self):
+    @staticmethod
+    def _result():
         return {
             "deliforge": {
                 "available": True,
@@ -1397,7 +1408,8 @@ class EncodingPairSkipTests(unittest.TestCase):
 
 
 class BuildSubwordIdsInvalidTests(unittest.TestCase):
-    def _pair(self):
+    @staticmethod
+    def _pair():
         marker = MARKERS[0]
         pair = find_encoding_pair(scripted_encode, scripted_decode, marker)
         assert pair is not None

@@ -154,7 +154,8 @@ class RunExperimentBoundaryMapTests(unittest.TestCase):
 
 
 class BudgetFrontierBoundaryTests(unittest.TestCase):
-    def _entry(self, name, output_text, boundary_ids):
+    @staticmethod
+    def _entry(name, output_text, boundary_ids):
         obs = {
             "fixture": "s1",
             "status": "completed",
@@ -321,7 +322,8 @@ class ResolveBoundaryMapTests(unittest.TestCase):
 
 
 class RunBoundaryMapCliTests(unittest.TestCase):
-    def _run_args(self, tmp, extra):
+    @staticmethod
+    def _run_args(tmp, extra):
         return [
             "run",
             "--model",
@@ -427,7 +429,8 @@ class RunBoundaryMapEndToEndTests(unittest.TestCase):
 
 
 class DoctorBoundaryMapTests(unittest.TestCase):
-    def _model(self, root):
+    @staticmethod
+    def _model(root):
         root.mkdir(parents=True, exist_ok=True)
         return write_model_dir(root)
 
@@ -735,6 +738,7 @@ class WriteFixtureFileTests(unittest.TestCase):
             self.assertIn("not writable", str(ctx.exception))
 
     def test_partial_write_leaves_no_file(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import os as _os
         from unittest.mock import patch
 

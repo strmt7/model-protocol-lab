@@ -77,7 +77,8 @@ class _FakeStringTokenizer:
     def _convert_id_to_token(self, index: int) -> str:
         return self._tokens[index]
 
-    def convert_tokens_to_string(self, tokens: list[str]) -> str:
+    @staticmethod
+    def convert_tokens_to_string(tokens: list[str]) -> str:
         return "".join(tokens)
 
     def __call__(self, text: str, add_special_tokens: bool = False) -> dict[str, list[int]]:
@@ -103,14 +104,15 @@ class _TextBackend:
     def __init__(self, tokens: list[str]) -> None:
         self._texts = dict(enumerate(tokens))
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         raise AssertionError("encode unused in stop tests")
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
         return "".join(self._texts[token] for token in token_ids)
 
+    @staticmethod
     def generate(
-        self,
         input_ids: tuple[int, ...],
         *,
         max_new_tokens: int,

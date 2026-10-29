@@ -47,6 +47,7 @@ _SHA_RE = re.compile(r"^[^@]+@[0-9a-f]{40}$")
 
 
 def _load_yaml(path):
+    """Load a YAML file (the workflow under audit) with yaml.safe_load."""
     import yaml
 
     return yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -54,10 +55,12 @@ def _load_yaml(path):
 
 def _triggers(doc):
     # PyYAML (YAML 1.1) parses the `on:` key as boolean True.
+    """Return the workflow's trigger map (YAML parses the on key as True)."""
     return doc.get(True, doc.get("on", {}))
 
 
 def _run_steps(doc):
+    """Collect every run step across all jobs in the workflow."""
     for job in (doc.get("jobs") or {}).values():
         for step in job.get("steps") or []:
             run = step.get("run")
@@ -66,6 +69,8 @@ def _run_steps(doc):
 
 
 class WorkflowPinningTests(unittest.TestCase):
+    """Workflow pinning audits: every action is pinned and every workflow parses."""
+
     def test_every_workflow_pip_install_is_hash_pinned_or_local(self):
         """No workflow may install a remote package without hashes."""
         for path in WORKFLOWS:
@@ -141,7 +146,7 @@ def _pin_blocks(path):
             blocks.append(current)
         elif current is not None and "--hash=sha256:" in line:
             current[3].add(re.search(r"--hash=sha256:([0-9a-f]+)", line).group(1))
-    return [(name, version, marker, hashes) for name, version, marker, hashes in blocks]
+    return [tuple(block) for block in blocks]
 
 
 def _hashed_workflow_files():
@@ -167,6 +172,8 @@ _SINGLE_HASH_RELEASES = {("cuda-pathfinder", "1.8.4"), ("cuda-toolkit", "13.0.3.
 
 
 class HashedRequirementsMultiTargetTests(unittest.TestCase):
+    """Hashed requirements install on every CI target: each interpreter and platform."""
+
     def test_pin_blocks_carry_multi_hash_sets(self):
         """Each pinned release lists its complete (multi-file) hash set."""
         files = _hashed_workflow_files()

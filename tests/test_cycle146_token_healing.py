@@ -396,21 +396,26 @@ class HealInputIdsAdapterTests(unittest.TestCase):
         vocab = {"a": 0, "ab": 1, "abc": 2}
 
         class FakeTokenizer:
-            def get_vocab(self):
+            @staticmethod
+            def get_vocab():
                 return dict(vocab)
 
-            def convert_tokens_to_ids(self, text):
+            @staticmethod
+            def convert_tokens_to_ids(text):
                 return vocab.get(text)
 
-            def convert_ids_to_tokens(self, ids):
+            @staticmethod
+            def convert_ids_to_tokens(ids):
                 inv = {v: k for k, v in vocab.items()}
                 return [inv[i] for i in ids]
 
-            def decode(self, ids, **kwargs):
+            @staticmethod
+            def decode(ids, **kwargs):
                 inv = {v: k for k, v in vocab.items()}
                 return "".join(inv[i] for i in ids)
 
-            def encode(self, text, **kwargs):
+            @staticmethod
+            def encode(text, **kwargs):
                 table = {"aab": (0, 1), "a": (0,)}
                 if text not in table:
                     raise ValueError("unknown text")
@@ -453,7 +458,8 @@ class HealInputIdsAdapterTests(unittest.TestCase):
             def all(self):
                 return self
 
-            def item(self):
+            @staticmethod
+            def item():
                 return True
 
         class FakeScalar:
@@ -576,7 +582,8 @@ class HealingStageTests(unittest.TestCase):
 
 
 class NativeSearchOutcomesTests(unittest.TestCase):
-    def _entries(self):
+    @staticmethod
+    def _entries():
         def obs(passed):
             return {
                 "fixture": "S1",
@@ -920,7 +927,8 @@ def _oracle_healing_delta(primary_winner, primary_decision, candidates, native, 
 
 
 class DiffTokenHealingTests(unittest.TestCase):
-    def _payload(self, flipped=False, winner="alpha", extra=None):
+    @staticmethod
+    def _payload(flipped=False, winner="alpha", extra=None):
         payload = {
             "available": True,
             "primary_winner": "alpha",
@@ -1046,7 +1054,8 @@ class DiffTokenHealingTests(unittest.TestCase):
 
 
 class TokenHealingSectionTests(unittest.TestCase):
-    def _result(self):
+    @staticmethod
+    def _result():
         d = _delta(
             {"alpha": "pass", "beta": "fail"},
             {"alpha": "fail", "beta": "pass"},

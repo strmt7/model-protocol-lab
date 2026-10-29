@@ -338,11 +338,13 @@ class _RecordingInner:
         self.encode_inputs.append(text)
         return tuple(ord(char) for char in text)
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return "".join(chr(token) for token in token_ids)
 
+    @staticmethod
     def generate(
-        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+        input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> core.Generation:
         return core.Generation(token_ids=(ord("~"),) * max_new_tokens, reason="limit")
 
@@ -441,7 +443,8 @@ class _ScriptedBackend:
         self.encode_inputs.append(text)
         return tuple(ord(char) for char in text)
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return "".join(chr(token) for token in token_ids)
 
     def generate(
@@ -514,7 +517,8 @@ def _stable_script() -> dict[str, tuple[str, str]]:
 class SweepAggregation(unittest.TestCase):
     """Pin the sweep's aggregation: winner_changed truth table + flips_at."""
 
-    def _run(self, script: dict[str, tuple[str, str]], max_drop: int):
+    @staticmethod
+    def _run(script: dict[str, tuple[str, str]], max_drop: int):
         backend = _ScriptedBackend(script)
         result = prompt_sensitivity_sweep(
             backend,

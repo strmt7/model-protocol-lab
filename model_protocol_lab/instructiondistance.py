@@ -1,4 +1,4 @@
-"""Instruction-distance probe (cycle 218, research wave-11
+r"""Instruction-distance probe (cycle 218, research wave-11
 rank 2; fresh review BUILD-as-amended, coordinator #59).
 
 One frozen format directive -- "Reply with only the number: no
@@ -24,7 +24,7 @@ A--J):
   answer. The byte-exact verdict (span == expected, conjoined
   with boundary presence) is descriptive only. The headline is
   compliance under the frozen grammar: a completed cell is
-  compliant iff its span matches ``\\A[0-9]+\\Z`` (fullmatch;
+  compliant iff its span matches ``\A[0-9]+\Z`` (fullmatch;
   ASCII digits only -- amendment B2/B3). ``digit_count`` and
   first-run extraction use the same ASCII alphabet.
 * Decomposition (exactly one class per completed cell):
@@ -82,7 +82,7 @@ A--J):
   576. The sizing rule drops needle's in-span
   offset-verification phase: this instrument has no offset
   variable (filler sits wholly between the directive and the
-  block, or wholly after it) and the "\\n" joiner insulates
+  block, or wholly after it) and the "\n" joiner insulates
   the span, so delta-exactness on the final render is the
   only acceptance condition.
 * Generated cases only, stage-local, never the user's Split.
@@ -370,7 +370,8 @@ def digest_text(text: str) -> str:
 
 def digest_ids(ids: tuple[int, ...]) -> str:
     """SHA-256 hex digest of a render id sequence, so records
-    carry the sequence's identity without its contents."""
+    carry the sequence's identity without its contents.
+    """
     canonical = ",".join(str(i) for i in ids)
     return hashlib.sha256(canonical.encode("ascii")).hexdigest()
 
@@ -382,7 +383,8 @@ def _derive(seed: int, index: int, slot: int, counter: int) -> int:
     """One deterministic draw. The material string, the slot
     meaning (0 = value), and the redraw rule in
     :func:`generate_cases` are frozen together -- the diff
-    validator's mirror reproduces them exactly."""
+    validator's mirror reproduces them exactly.
+    """
     material = f"{seed}|instructiondistance|{index}|{slot}|{counter}"
     return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
@@ -395,7 +397,8 @@ def generate_cases(seed: int) -> list[dict[str, Any]]:
     case's value redraws at the next counter, so the 24 values
     (3-digit integers, 100--999) are pairwise distinct by
     construction and a closed-book guess is a 1-in-900 event
-    before any model prior."""
+    before any model prior.
+    """
     if type(seed) is not int:
         raise ValueError("instruction-distance seed must be an int")
     cases: list[dict[str, Any]] = []
@@ -427,16 +430,18 @@ def generate_cases(seed: int) -> list[dict[str, Any]]:
 
 def block_text(case: dict[str, Any]) -> str:
     """The case's governed block B: fact line + question line,
-    byte-identical in every arm."""
+    byte-identical in every arm.
+    """
     return str(case["fact"]) + JOINER + str(case["question"])
 
 
 def arm_content(case: dict[str, Any], arm: str, span: str = "") -> str:
-    """One arm's user-turn content. Blocks join with the
-    distraction JOINER ("\\n"); the constraint and the block
+    r"""One arm's user-turn content. Blocks join with the
+    distraction JOINER ("\n"); the constraint and the block
     are byte-identical wherever they appear. ``span`` is the
     sized filler text for the sized arms and is ignored by
-    the unsized arms."""
+    the unsized arms.
+    """
     block = block_text(case)
     if arm == "adj":
         return CONSTRAINT + JOINER + block
@@ -468,7 +473,8 @@ def canonical_generated_rows(seed: int) -> list[list[Any]]:
 def ground_sha256(seed: int) -> str:
     """Digest of the canonical generated rows for a seed: two
     runs share an instrument only when this matches, because
-    the generated set is the treatment."""
+    the generated set is the treatment.
+    """
     canonical = json.dumps(canonical_generated_rows(seed), separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -477,7 +483,8 @@ def case_material_sha256() -> str:
     """Digest of the frozen case material (the constraint, the
     templates, the topics): the material is bound by digest in
     the protocol, so a payload cannot quietly carry a different
-    instrument under the same version number."""
+    instrument under the same version number.
+    """
     canonical = json.dumps(
         [CONSTRAINT, FACT_TEMPLATE, QUESTION_TEMPLATE, list(TOPICS)],
         separators=(",", ":"),
@@ -499,7 +506,8 @@ def screening_rule_sha256() -> str:
 def protocol_object(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The frozen instrument description a payload is checked
     against: arms, doses, case material, rule digests, floors,
-    budgets, and the seed/backend pair that generated the set."""
+    budgets, and the seed/backend pair that generated the set.
+    """
     return {
         "version": PROTOCOL_VERSION,
         "arm_keys": list(ARM_KEYS),
@@ -536,7 +544,8 @@ def protocol_fingerprint(seed: int, backend_fingerprint: str) -> str:
 
 def filler_stream() -> tuple[str, ...]:
     """The filler sentence stream: the neutral corpus cycled
-    ``STREAM_CYCLES`` times, in order."""
+    ``STREAM_CYCLES`` times, in order.
+    """
     from .distraction import NEUTRAL_CORPUS
 
     return tuple(
@@ -553,7 +562,8 @@ def filler_screened(span: str, value: str, boundary_text: str) -> bool:
     a 3-digit string and the corpus carries no digits at all,
     so the value screen is a guard against a future corpus
     edit, not a live filter -- stated so nobody mistakes it
-    for one."""
+    for one.
+    """
     if value and value.casefold() in span.casefold():
         return True
     return bool(boundary_text) and boundary_text in span
@@ -567,26 +577,29 @@ def filler_screened(span: str, value: str, boundary_text: str) -> bool:
 
 
 def span_compliant(span: str) -> bool:
-    """Grammar membership: the span matches ``\\A[0-9]+\\Z``
+    r"""Grammar membership: the span matches ``\A[0-9]+\Z``
     (fullmatch). A trailing newline, a sign, grouping, or any
-    non-digit character -- ASCII or not -- is noncompliance."""
+    non-digit character -- ASCII or not -- is noncompliance.
+    """
     return re.fullmatch(r"[0-9]+", span) is not None
 
 
 def first_digit_run(span: str) -> str | None:
     """The first maximal run of ASCII digits in the span, or
     None when the span has none. "1,417" yields "1": grouping
-    is a format violation and its first run is not the value."""
+    is a format violation and its first run is not the value.
+    """
     match = _DIGIT_RUN_RE.search(span)
     return match.group(0) if match is not None else None
 
 
 def digit_count(span: str) -> int:
-    """Total ASCII digit characters in the span (descriptive
+    r"""Total ASCII digit characters in the span (descriptive
     only; never a verdict input -- amendment C). Unicode
-    digits do not count: ``str.isdigit`` and ``\\d`` disagree
-    with each other on spans like "4\\u00b27", so the alphabet
-    is pinned to [0-9] exactly."""
+    digits do not count: ``str.isdigit`` and ``\d`` disagree
+    with each other on spans like "4\u00b27", so the alphabet
+    is pinned to [0-9] exactly.
+    """
     return sum(1 for ch in span if ch in _ASCII_DIGITS)
 
 
@@ -594,14 +607,16 @@ def nondigit_projection(span: str) -> str:
     """The span with every ASCII digit removed. The span is
     all-digits (hence compliant, given non-emptiness) iff this
     projection is the empty string -- the digest of the
-    projection is what amendment C binds compliance to."""
+    projection is what amendment C binds compliance to.
+    """
     return "".join(ch for ch in span if ch not in _ASCII_DIGITS)
 
 
 def first_digit_run_digest(span: str) -> str:
     """Digest of the first maximal ASCII digit run; "" when
     the span has no run (amendment B3: the no-run field is the
-    empty string, not the digest of the empty string)."""
+    empty string, not the digest of the empty string).
+    """
     run = first_digit_run(span)
     return digest_text(run) if run is not None else ""
 
@@ -623,7 +638,8 @@ def _class_from_digests(
     stage classifies spans by digesting them into exactly
     these inputs, and the diff validator recomputes classes
     from the recorded digests alone, so the two can never
-    disagree (the cycle-190 digest-binding discipline)."""
+    disagree (the cycle-190 digest-binding discipline).
+    """
     compliant = (
         type(answer_digest) is str
         and answer_digest != EMPTY_DIGEST
@@ -644,7 +660,8 @@ def _class_from_digests(
 
 def decompose_span(span: str, expected: str, boundary_found: bool) -> str:
     """The decomposition class of one completed cell, from its
-    span text (the stage's path)."""
+    span text (the stage's path).
+    """
     return _class_from_digests(
         answer_digest=digest_text(span),
         run_digest=first_digit_run_digest(span),
@@ -659,7 +676,8 @@ def decompose_cell(cell: dict[str, Any], expected_digest: str) -> str:
     recorded digests alone (the validator's path; the report
     recomputes nothing from raw text because no raw text is
     carried). Callers must only invoke this on completed
-    cells; a missing cell is attrition, not a class."""
+    cells; a missing cell is attrition, not a class.
+    """
     if cell is None:
         raise ValueError("decomposition requires a completed cell")
     return _class_from_digests(
@@ -691,6 +709,7 @@ def classify_instruction_distance(direct_passes: int, separated: int, displaced:
 
 
 def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the cell."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -699,6 +718,7 @@ def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
 
 
 def _detail(record: dict[str, Any], key: str) -> str:
+    """Return the detail."""
     details = record.get("cell_details")
     if not isinstance(details, dict):
         return ""
@@ -707,6 +727,7 @@ def _detail(record: dict[str, Any], key: str) -> str:
 
 
 def _rate(numerator: int, denominator: int) -> float | None:
+    """Return the rate."""
     return (numerator / denominator) if denominator else None
 
 

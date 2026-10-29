@@ -52,21 +52,21 @@ _RANGE_LITERAL_BOUND = 1_000_000
 
 def _findings_for(source: str) -> tuple[TemplateFinding, ...]:
     """Walk the parsed AST; implementation of :func:`scan_template_ast`."""
-    try:
-        from jinja2 import Environment, nodes
-    except ImportError:
-        raise
+    from jinja2 import Environment, nodes
+
     # Parse-only: the AST is walked for the firewall, nothing is rendered
     # here, so autoescape is inapplicable (ruff S701 / bandit B701).
     tree = Environment().parse(source)  # noqa: S701 # nosec B701
     findings: list[TemplateFinding] = []
 
     def deny(rule: str, detail: str) -> None:
+        """Deny."""
         findings.append(TemplateFinding(rule=rule, detail=detail))
 
     def visit(node: Any) -> None:
         # Attribute access: only dunder/private names are dangerous;
         # message.role / message.content must keep working.
+        """Visit."""
         if isinstance(node, nodes.Getattr):
             if type(node.attr) is str and node.attr.startswith("_"):
                 deny("dunder_getattr", f"dunder attribute access: {node.attr!r}")

@@ -128,7 +128,8 @@ class TestFingerprintGuard(unittest.TestCase):
 
     def test_helper_rejects_non_string_fingerprints(self) -> None:
         class MethodBackend:
-            def fingerprint(self) -> dict:  # the cycle-195 fake shape
+            @staticmethod
+            def fingerprint() -> dict:  # the cycle-195 fake shape
                 return {"model": "fake"}
 
         class IntBackend:
@@ -160,7 +161,8 @@ class TestFingerprintGuard(unittest.TestCase):
         )
 
         class MethodFingerprintBackend(_WordBackend):
-            def fingerprint(self) -> dict:  # type: ignore[override]
+            @staticmethod
+            def fingerprint() -> dict:  # type: ignore[override]
                 return {"model": "fake"}
 
         backend = MethodFingerprintBackend()
@@ -319,15 +321,12 @@ class TestChangelogMentionBoundaries(unittest.TestCase):
 
 class TestMcpFrameDiscipline(unittest.TestCase):
     """F6/F7: the MCP frame parser rejects non-finite numbers; a
-    non-object backend is -32602 (invalid params), not -32603."""
+    non-object backend is -32602 (invalid params), not -32603.
+    """
 
     def _serve(self, lines: str) -> str:
         proc = subprocess.run(
-            MCP_SERVER_CMD,
-            input=lines,
-            capture_output=True,
-            text=True,
-            timeout=60,
+            MCP_SERVER_CMD, input=lines, capture_output=True, text=True, timeout=60, check=False
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         return proc.stdout

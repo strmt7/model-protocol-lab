@@ -62,7 +62,8 @@ _EXCLUDED_NAMES = {
 }
 
 
-def _ignore(directory: str, names: list[str]) -> list[str]:
+def _ignore(_directory: str, names: list[str]) -> list[str]:
+    """Return the ignore."""
     ignored = []
     for name in names:
         if name in _EXCLUDED_NAMES or name.endswith(".egg-info"):
@@ -71,6 +72,7 @@ def _ignore(directory: str, names: list[str]) -> list[str]:
 
 
 def _copy_tree(source: Path, dest: Path) -> None:
+    """Copy tree."""
     shutil.copytree(source, dest, ignore=_ignore)
 
 
@@ -94,6 +96,7 @@ def _find_symlinks(source: Path) -> list[Path]:
 
 
 def _package_version(source: Path) -> str:
+    """Return the package version."""
     with (source / "pyproject.toml").open("rb") as handle:
         data = tomllib.load(handle)
     version = data["project"]["version"]
@@ -111,6 +114,7 @@ def _first(paths: object, label: str) -> Path:
 
 
 def _normalize_mtimes(root: Path, epoch: int) -> None:
+    """Normalize mtimes."""
     for path in sorted(root.rglob("*")):
         os.utime(path, (epoch, epoch))
     os.utime(root, (epoch, epoch))
@@ -153,6 +157,7 @@ def normalize_sdist_bytes(data: bytes, epoch: int) -> bytes:
 
 
 def _sha256(path: Path) -> str:
+    """Return the sha256."""
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -178,6 +183,7 @@ def _member_digests(path: Path) -> dict[str, str]:
 
 
 def _report_mismatch(label: str, first: Path, second: Path) -> None:
+    """Report mismatch."""
     print(f"MISMATCH: {label} artifacts differ", file=sys.stderr)
     print(f"  first : {_sha256(first)}  {first}", file=sys.stderr)
     print(f"  second: {_sha256(second)}  {second}", file=sys.stderr)
@@ -189,6 +195,7 @@ def _report_mismatch(label: str, first: Path, second: Path) -> None:
 
 
 def _build_once(source: Path, work: Path, epoch: int) -> tuple[Path, Path]:
+    """Build once."""
     tree = work / "tree"
     _copy_tree(source, tree)
     _normalize_mtimes(tree, epoch)
@@ -218,6 +225,7 @@ def _build_once(source: Path, work: Path, epoch: int) -> tuple[Path, Path]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Return the main."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=Path("."))
     parser.add_argument("--output", type=Path, required=True)

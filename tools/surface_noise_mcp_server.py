@@ -19,6 +19,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
+# skipcq: PYL-R0401 - intra-package cycles are managed by the deferred-import discipline
 from model_protocol_lab.mcp_server import serve
 
 if __name__ == "__main__":

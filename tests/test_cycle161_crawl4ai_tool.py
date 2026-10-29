@@ -26,7 +26,8 @@ class CrawlerContracts(unittest.TestCase):
     def test_check_lock_uses_an_empty_environment_and_preserves_failures(self):
         """Purpose: Detect masked dependency conflicts
         Inputs: Resolver outcomes
-        Outputs: Isolation checks."""
+        Outputs: Isolation checks.
+        """
         for failure in (False, True):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temp:
                 home = Path(temp)
@@ -37,7 +38,8 @@ class CrawlerContracts(unittest.TestCase):
                 ):
                     """Purpose: Inspect the resolver boundary
                     Inputs: Actual argv/env
-                    Outputs: Result or error."""
+                    Outputs: Result or error.
+                    """
                     _calls.append(command)
                     self.assertTrue(Path(command[0]).parent.parent.is_relative_to(_home))
                     self.assertIn("--dry-run", command)
@@ -65,7 +67,8 @@ class CrawlerContracts(unittest.TestCase):
     def test_check_lock_cli_does_not_install_the_runtime_or_browser(self):
         """Purpose: Separate validation from setup
         Inputs: Public command
-        Outputs: Only resolver invoked."""
+        Outputs: Only resolver invoked.
+        """
         with (
             patch.object(tool, "check_lock") as resolve,
             patch.object(tool, "install") as install,
@@ -77,7 +80,8 @@ class CrawlerContracts(unittest.TestCase):
     def test_install_cli_provisions_and_reports_version(self):
         """Purpose: Verify install dispatch
         Inputs: Public command
-        Outputs: Provision invoked, JSON reported."""
+        Outputs: Provision invoked, JSON reported.
+        """
         with tempfile.TemporaryDirectory() as temp:
             fake_python = Path(temp) / "bin" / "python"
             with (
@@ -92,7 +96,8 @@ class CrawlerContracts(unittest.TestCase):
     def test_doctor_cli_does_not_provision(self):
         """Purpose: Keep diagnostics side-effect free
         Inputs: Public command
-        Outputs: Doctor only."""
+        Outputs: Doctor only.
+        """
         with (
             patch.object(tool, "doctor") as doctor,
             patch.object(tool, "install") as install,
@@ -104,7 +109,8 @@ class CrawlerContracts(unittest.TestCase):
     def test_text_identity_ignores_only_line_endings(self):
         """Purpose: Reuse checkout text
         Inputs: Line endings/content changes
-        Outputs: Identity assertions."""
+        Outputs: Identity assertions.
+        """
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "lock.txt"
             path.write_bytes(b"package==1.0\n")
@@ -117,7 +123,8 @@ class CrawlerContracts(unittest.TestCase):
     def test_cache_and_interpreter_paths(self):
         """Purpose: Check host-independent ownership
         Inputs: Temporary paths/platforms
-        Outputs: Path assertions."""
+        Outputs: Path assertions.
+        """
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp).resolve()
             self.assertEqual(tool.cache_home(str(path)), path)
@@ -145,7 +152,8 @@ class CrawlerContracts(unittest.TestCase):
     def test_tool_environment_is_child_scoped_and_disables_telemetry(self):
         """Purpose: Keep settings child-scoped
         Inputs: Cache home
-        Outputs: Telemetry off, parent intact."""
+        Outputs: Telemetry off, parent intact.
+        """
         before = dict(os.environ)
         home = Path.home() / "crawler-test"
         env = tool.tool_environment(home)
@@ -158,7 +166,8 @@ class CrawlerContracts(unittest.TestCase):
     def test_verify_versions_rejects_mismatch(self):
         """Purpose: Enforce the reviewed pin
         Inputs: Version strings
-        Outputs: Explicit failure on drift."""
+        Outputs: Explicit failure on drift.
+        """
         with tempfile.TemporaryDirectory() as temp:
             python = Path(temp) / "python"
             python.write_text("", encoding="utf-8")
@@ -173,7 +182,8 @@ class CrawlerContracts(unittest.TestCase):
     def test_install_reuses_qualified_receipt(self):
         """Purpose: Avoid redundant provisioning
         Inputs: Valid receipt
-        Outputs: Interpreter reused, no venv build."""
+        Outputs: Interpreter reused, no venv build.
+        """
         with tempfile.TemporaryDirectory() as temp:
             home = Path(temp)
             directory, python, identity = tool.environment_paths(home)
@@ -191,7 +201,8 @@ class CrawlerContracts(unittest.TestCase):
     def test_sites_manifest_has_thirty_two_entries(self):
         """Purpose: Pin the qualification surface
         Inputs: Manifest file
-        Outputs: 32 url/marker pairs."""
+        Outputs: 32 url/marker pairs.
+        """
         manifest = json.loads((tool.ROOT / "tools/crawl4ai_sites.json").read_text(encoding="utf-8"))
         self.assertEqual(sorted(manifest.keys()), ["purpose", "schema", "sites"])
         self.assertEqual(len(manifest["sites"]), 32)
@@ -202,7 +213,8 @@ class CrawlerContracts(unittest.TestCase):
     def test_inspect_result_rejects_challenges_empty_and_error_pages(self):
         """Purpose: Keep qualification honest
         Inputs: Synthetic results
-        Outputs: Strict validity."""
+        Outputs: Strict validity.
+        """
         good = SimpleNamespace(
             success=True,
             status_code=200,
@@ -232,7 +244,8 @@ class CrawlerContracts(unittest.TestCase):
     def test_crawler_version_gate(self):
         """Purpose: Bind research to the reviewed pin
         Inputs: Installed version
-        Outputs: Explicit mismatch failure."""
+        Outputs: Explicit mismatch failure.
+        """
         with (
             patch("importlib.metadata.version", return_value="0.0.0"),
             self.assertRaisesRegex(ValueError, "does not match"),
@@ -242,7 +255,8 @@ class CrawlerContracts(unittest.TestCase):
     def test_source_identity_covers_integration_files(self):
         """Purpose: Bind receipts to exact bytes
         Inputs: Repo files
-        Outputs: Digests for the four tracked paths."""
+        Outputs: Digests for the four tracked paths.
+        """
         identity = research.source_identity()
         self.assertEqual(
             sorted(identity.keys()),

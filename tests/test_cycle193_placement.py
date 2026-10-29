@@ -138,7 +138,8 @@ def _payload_with_unavailable():
     """A coherent payload whose second candidate is an
     unavailable entry (the analysis shape for a candidate the
     stage could not evaluate), built through the real
-    analysis so the rest of the payload stays consistent."""
+    analysis so the rest of the payload stays consistent.
+    """
     backend = _WordBackend()
     stage = experiments.placement_stage(
         backend,
@@ -796,7 +797,8 @@ class TestScreeningAndConditions(unittest.TestCase):
 class TestValidatorBattery(unittest.TestCase):
     """One break at a time against a coherent payload."""
 
-    def _breaks(self):
+    @staticmethod
+    def _breaks():
         base = _payload()
 
         def mutate(fn):
@@ -1197,7 +1199,8 @@ class TestReportingAndCli(unittest.TestCase):
         class _Boom:
             fingerprint = "sha256:boom"
 
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 raise RuntimeError("boom")
 
         result: dict = {}

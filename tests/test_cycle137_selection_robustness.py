@@ -30,7 +30,8 @@ class TextBackend:
 
     fingerprint = "cycle137-selection-robustness"
 
-    def decode(self, token_ids):
+    @staticmethod
+    def decode(token_ids):
         return "".join(TEXTS[token] for token in token_ids)
 
 

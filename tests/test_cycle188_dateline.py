@@ -807,7 +807,8 @@ class TestAggregationEdges(unittest.TestCase):
 class _DecodeRaisesBoundaryBackend(_DateBackend):
     """Raises only for the exact boundary-id tuple, which is how
     the stage asks for the boundary text; answer slices are lists
-    or different ids and decode normally."""
+    or different ids and decode normally.
+    """
 
     def decode(self, ids):
         if (
@@ -840,7 +841,8 @@ class _DateRaisingBackend(_DateBackend):
 class _TripleRefBackend(_DateBackend):
     """Words cost 3 tokens whenever the text mentions the neutral
     unit's subject, which makes the control-sizing equation
-    unsolvable (see cycle-188 gap analysis)."""
+    unsolvable (see cycle-188 gap analysis).
+    """
 
     def encode(self, text):
         ids = super().encode(text)
@@ -855,7 +857,8 @@ class _TripleRefBackend(_DateBackend):
 class _TruncatingBackend(_DateBackend):
     """A tokenizer with a hard input cap: renders longer than the
     cap encode to the same length, so the empty control already
-    matches the anchor arm's rendered length (delta == 0)."""
+    matches the anchor arm's rendered length (delta == 0).
+    """
 
     def encode(self, text):
         return super().encode(text)[:12]
@@ -1074,7 +1077,8 @@ class TestAnalysisEdges(unittest.TestCase):
 
 class TestValidatorBattery2(unittest.TestCase):
     """Second battery: protocol scalars, record-shape checks, and
-    the record caps, one break at a time."""
+    the record caps, one break at a time.
+    """
 
     def setUp(self):
         self.payload = _base_payload()
@@ -1085,7 +1089,8 @@ class TestValidatorBattery2(unittest.TestCase):
         mutate(payload)
         self.assertFalse(_valid_dateline(payload))
 
-    def _record(self, p, index=0):
+    @staticmethod
+    def _record(p, index=0):
         return p["candidates"]["dt-a"]["records"][index]
 
     def test_protocol_not_a_dict(self):
@@ -1373,7 +1378,8 @@ class TestMutationGates(unittest.TestCase):
     """Tempdir mutation gates on dateline.py's exactness-critical
     lines (cycle-169 pattern, package-namespace exec per the
     cycle-187 lesson: the scenario passes on the real module and
-    must raise AssertionError on the mutant)."""
+    must raise AssertionError on the mutant).
+    """
 
     def _run_gate(self, name, old_text, new_text, scenario):
         import importlib.util
@@ -1401,7 +1407,8 @@ class TestMutationGates(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _lie_scenario(self, mod):
+    @staticmethod
+    def _lie_scenario(mod):
         assert mod.lie_date_string() == "Thursday, 2026-10-21"
         assert mod.lie_date_string() != mod.format_date("anchor", "weekday_iso")
 
@@ -1413,7 +1420,8 @@ class TestMutationGates(unittest.TestCase):
             self._lie_scenario,
         )
 
-    def _floor_scenario(self, mod):
+    @staticmethod
+    def _floor_scenario(mod):
         assert mod.classify_pair(3, 2, 0) == "insufficient"
         assert mod.classify_pair(6, 2, 0) == "discordant_asymmetric"
 
@@ -1425,7 +1433,8 @@ class TestMutationGates(unittest.TestCase):
             self._floor_scenario,
         )
 
-    def _screen_scenario(self, mod):
+    @staticmethod
+    def _screen_scenario(mod):
         assert mod.screen_expected("21") is True  # component leg only
         assert mod.screen_expected("26") is False
 
@@ -1437,7 +1446,8 @@ class TestMutationGates(unittest.TestCase):
             self._screen_scenario,
         )
 
-    def _loss_scenario(self, mod):
+    @staticmethod
+    def _loss_scenario(mod):
         def cell(verdict):
             return {"verdict": verdict}
 

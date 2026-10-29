@@ -26,14 +26,16 @@ class _BurnTokenizer:
         self, conversation: object, tokenize: bool = False, add_generation_prompt: bool = True
     ) -> str:
         end = time.monotonic() + self._seconds
+        # skipcq: PTC-W0047 - burning cycles until the deadline is the fixture
         while time.monotonic() < end:
             pass
         return "burned"
 
 
 class _OkTokenizer:
+    @staticmethod
     def apply_chat_template(
-        self, conversation: object, tokenize: bool = False, add_generation_prompt: bool = True
+        conversation: object, tokenize: bool = False, add_generation_prompt: bool = True
     ) -> str:
         return "<|user|>hi<|assistant|>"
 
@@ -120,8 +122,8 @@ class TestRenderTimeBudget(unittest.TestCase):
         from model_protocol_lab.doctor import _render_with_time_budget
 
         class _MemBomb:
+            @staticmethod
             def apply_chat_template(
-                self,
                 conversation: object,
                 tokenize: bool = False,
                 add_generation_prompt: bool = True,

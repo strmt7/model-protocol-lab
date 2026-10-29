@@ -206,10 +206,12 @@ class BackendDivergenceReportTests(unittest.TestCase):
     def setUp(self) -> None:
         self.backend = TableBackend({1: "a", 2: "b", 3: "STOP", 4: "c"})
 
-    def _render(self, result: dict[str, Any]) -> str:
+    @staticmethod
+    def _render(result: dict[str, Any]) -> str:
         return render_html(result)
 
-    def _section_result(self, section: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _section_result(section: dict[str, Any]) -> dict[str, Any]:
         return {"decision": "compatible_on_fixture_set", "backend_divergences": section}
 
     def _diverge_section(self) -> dict[str, Any]:

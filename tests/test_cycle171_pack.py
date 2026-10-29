@@ -86,7 +86,8 @@ class PathGrammarTests(unittest.TestCase):
 
 
 class ManifestSchemaTests(unittest.TestCase):
-    def _valid(self) -> dict:
+    @staticmethod
+    def _valid() -> dict:
         return {
             "context": {
                 "backend_fingerprint": "fp",
@@ -302,7 +303,8 @@ class GoldenRoundTripTests(unittest.TestCase):
 
 
 class TamperTests(unittest.TestCase):
-    def _golden(self) -> bytes:
+    @staticmethod
+    def _golden() -> bytes:
         with tempfile.TemporaryDirectory(prefix="c171_t_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             bundle, _, _ = _pack_to_bytes(report)
@@ -484,7 +486,8 @@ class PackDisciplineTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
-    def _run_main(self, argv: list[str]) -> tuple[int, str, str]:
+    @staticmethod
+    def _run_main(argv: list[str]) -> tuple[int, str, str]:
         from model_protocol_lab.cli import main
 
         stdout, stderr = io.StringIO(), io.StringIO()
@@ -589,7 +592,8 @@ class PackMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _tampered_comment_bundle(self) -> bytes:
+    @staticmethod
+    def _tampered_comment_bundle() -> bytes:
         with tempfile.TemporaryDirectory(prefix="c171_g1_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             bundle, _, _ = _pack_to_bytes(report)
@@ -601,7 +605,8 @@ class PackMutationGateTests(unittest.TestCase):
             archive.comment = b"mpl-bundle-sha256:" + b"0" * 64
         return out.getvalue()
 
-    def _extra_entry_bundle(self) -> bytes:
+    @staticmethod
+    def _extra_entry_bundle() -> bytes:
         with tempfile.TemporaryDirectory(prefix="c171_g2_") as tmpdir:
             report = _sample_report_dir(Path(tmpdir))
             bundle, _, _ = _pack_to_bytes(report)

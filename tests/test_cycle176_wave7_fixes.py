@@ -111,7 +111,8 @@ class MarkerRunSliceTests(unittest.TestCase):
 class OffsetZeroCellTests(unittest.TestCase):
     """F5: offset 0 is a valid marker position."""
 
-    def _cell(self, **overrides: Any) -> dict[str, Any]:
+    @staticmethod
+    def _cell(**overrides: Any) -> dict[str, Any]:
         cell: dict[str, Any] = {
             "n": 12,
             "n_treat_evaluable": 12,
@@ -157,7 +158,8 @@ class OffsetZeroCellTests(unittest.TestCase):
 class RefusalsValidatorRecomputeTests(unittest.TestCase):
     """F6a: one broken identity at a time, from a genuine profile."""
 
-    def _broken(self, mutate: Any) -> dict[str, Any]:
+    @staticmethod
+    def _broken(mutate: Any) -> dict[str, Any]:
         payload = json.loads(json.dumps(_refusals_profile()))
         mutate(payload)
         return payload
@@ -226,7 +228,8 @@ class RefusalsValidatorRecomputeTests(unittest.TestCase):
 class AblationValidatorRecomputeTests(unittest.TestCase):
     """F6d: one broken identity at a time, from a consistent payload."""
 
-    def _broken(self, mutate: Any) -> dict[str, Any]:
+    @staticmethod
+    def _broken(mutate: Any) -> dict[str, Any]:
         payload = json.loads(json.dumps(_ablation_payload()))
         mutate(payload["candidates"]["t1"], payload["candidates"]["t1"]["arms"]["user_prefix"])
         return payload

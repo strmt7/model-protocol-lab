@@ -453,7 +453,8 @@ class DoctorPortabilityTests(unittest.TestCase):
         self.assertEqual(_portability_check("/nonexistent", (5, -1), object())["status"], "skipped")
 
         class ExplodingTokenizer:
-            def decode(self, ids):
+            @staticmethod
+            def decode(ids):
                 raise RuntimeError("synthetic decode failure")
 
         self.assertEqual(
@@ -468,7 +469,8 @@ class DoctorPortabilityTests(unittest.TestCase):
         from unittest.mock import patch
 
         class StubPrimary:
-            def decode(self, ids):
+            @staticmethod
+            def decode(ids):
                 return "tok5"
 
         with TemporaryDirectory() as tmp:
@@ -484,7 +486,8 @@ class DoctorPortabilityTests(unittest.TestCase):
 
 
 class FailureTaxonomyTests(unittest.TestCase):
-    def run_taxonomy(self, backend, *, eos_id=None, max_new_tokens=5):
+    @staticmethod
+    def run_taxonomy(backend, *, eos_id=None, max_new_tokens=5):
         result = run_experiment(
             backend,
             (BASE,),
@@ -508,19 +511,19 @@ class FailureTaxonomyTests(unittest.TestCase):
             generation=Generation((10, 20), "limit"),
             decode_script=["ok|", "|", "ok|", "ok|", "|", "ok|"],
         )
-        decision, taxonomy = self.run_taxonomy(backend, max_new_tokens=2)
+        _decision, taxonomy = self.run_taxonomy(backend, max_new_tokens=2)
         counts = taxonomy["per_candidate"]["base"]
         self.assertEqual(counts["boundary-text-mismatch"], 2)
 
     def test_eos_without_boundary(self):
         backend = FakeBackend(generation=Generation((7, EOS_ID, 8), "limit"))
-        decision, taxonomy = self.run_taxonomy(backend, eos_id=EOS_ID, max_new_tokens=3)
+        _decision, taxonomy = self.run_taxonomy(backend, eos_id=EOS_ID, max_new_tokens=3)
         counts = taxonomy["per_candidate"]["base"]
         self.assertEqual(counts["eos-without-boundary"], 2)
 
     def test_eos_ignored_without_eos_id(self):
         backend = FakeBackend(generation=Generation((7, EOS_ID, 8), "limit"))
-        decision, taxonomy = self.run_taxonomy(backend, eos_id=None, max_new_tokens=3)
+        _decision, taxonomy = self.run_taxonomy(backend, eos_id=None, max_new_tokens=3)
         counts = taxonomy["per_candidate"]["base"]
         self.assertEqual(counts["no-boundary-in-N"], 2)
         self.assertFalse(taxonomy["eos_id_considered"])
@@ -558,7 +561,7 @@ class FailureTaxonomyTests(unittest.TestCase):
 
     def test_wrong_answer_with_boundary_is_no_boundary_in_n(self):
         backend = FakeBackend(generation=Generation(ids("WRONG|"), "limit"))
-        decision, taxonomy = self.run_taxonomy(backend, max_new_tokens=6)
+        _decision, taxonomy = self.run_taxonomy(backend, max_new_tokens=6)
         counts = taxonomy["per_candidate"]["base"]
         # Documented reading: the expected answer never appeared
         # boundary-delimited within the cap.
@@ -682,7 +685,8 @@ class HFOverhangTests(unittest.TestCase):
 
 def _oracle_bpe_tokenizer(path):
     """Tiny BPE tokenizer whose token strings concatenate cleanly, so HF's
-    own StopStringCriteria can serve as a test oracle."""
+    own StopStringCriteria can serve as a test oracle.
+    """
     from tokenizers import Tokenizer
     from tokenizers.decoders import ByteLevel as ByteLevelDecoder
     from tokenizers.models import BPE
@@ -812,7 +816,8 @@ class StopEmulationTests(unittest.TestCase):
         class BadDecode:
             fingerprint = "bad"
 
-            def decode(self, ids):
+            @staticmethod
+            def decode(ids):
                 raise RuntimeError("synthetic")
 
         outcome = emulate_hf_stop_string(BadDecode(), (1,), (2,), "stop")
@@ -855,7 +860,8 @@ class StopEmulationTests(unittest.TestCase):
         class BadDecode:
             fingerprint = "bad"
 
-            def decode(self, ids):
+            @staticmethod
+            def decode(ids):
                 raise RuntimeError("synthetic")
 
         outcome = emulate_vllm_holdback(BadDecode(), (1, 2), "stop")
@@ -911,7 +917,8 @@ class QuirkBackend:
     fingerprint = "quirk-backend-not-a-model"
     TEXTS = {10: "pre<", 11: "stop>post", 20: "REAL", 5: "<stop>", 12: "tail"}
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
         raise AssertionError("encode unused in stop-matrix tests")
 
     def decode(self, token_ids):
@@ -923,7 +930,8 @@ class QuirkBackend:
             return "pre< " + "".join(parts[1:])
         return "".join(parts)
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         raise AssertionError("generate unused in stop-matrix tests")
 
 
@@ -959,6 +967,7 @@ class StopMatrixTests(unittest.TestCase):
             boundary=(5,),
             eos_id=99,
         )
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertTrue(row["native_pass"])
         # HF's overhang walk fires at step 2 ("pre<" + "stop>post" covers
@@ -1009,6 +1018,7 @@ class StopMatrixTests(unittest.TestCase):
             boundary=(5,),
             eos_id=99,
         )
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         eos = row["cells"]["eos_appended"]
         self.assertTrue(eos["fired"])
@@ -1029,6 +1039,7 @@ class StopMatrixTests(unittest.TestCase):
             boundary=(5,),
             eos_id=99,
         )
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertFalse(row["cells"]["hf_stop_string"]["available"])
         self.assertFalse(row["cells"]["vllm_holdback"]["available"])
@@ -1043,6 +1054,7 @@ class StopMatrixTests(unittest.TestCase):
             (quirk_observation(status="failed", exact_match=False, boundary_found=False),),
             boundary=(5,),
         )
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertFalse(row["native_pass"])
         for semantic in ("hf_stop_string", "vllm_holdback", "eos_appended"):
@@ -1151,15 +1163,18 @@ class MarkerBackend:
 
     fingerprint = "marker-backend-not-a-model"
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
         if text.endswith("<END>"):
             return tuple(map(ord, text[:-5])) + (50,)
         return tuple(map(ord, text))
 
-    def decode(self, token_ids):
+    @staticmethod
+    def decode(token_ids):
         return "".join("<END>" if t == 50 else chr(t) for t in token_ids)
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         if input_ids and input_ids[-1] == 50:
             return Generation(ids("ok|"), "limit")
         return Generation(ids("BAD"), "limit")
@@ -1407,7 +1422,8 @@ class FakeRunBackend:
     def encode(self, text):
         return self._codec_ids(text)
 
-    def decode(self, token_ids):
+    @staticmethod
+    def decode(token_ids):
         return "".join(map(chr, token_ids))
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
@@ -1443,7 +1459,8 @@ def write_e2e_dataset(path: Path) -> None:
 
 @unittest.skipUnless(HAS_HF, "the 'hf' extra is not installed")
 class RunCommandE2ETests(unittest.TestCase):
-    def run_cli(self, tmp, argv, backend_cls=FakeRunBackend):
+    @staticmethod
+    def run_cli(tmp, argv, backend_cls=FakeRunBackend):
         from unittest.mock import patch
 
         from model_protocol_lab.cli import main
@@ -1643,6 +1660,7 @@ class EmulationBranchTests(unittest.TestCase):
             boundary=(5,),
             eos_id=99,
         )
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertFalse(row["cells"]["hf_stop_string"]["available"])
         self.assertFalse(row["cells"]["vllm_holdback"]["available"])
@@ -1655,6 +1673,7 @@ class EmulationBranchTests(unittest.TestCase):
             (quirk_observation(output_ids=("a",), exact_match=False, boundary_found=False),),
             boundary=(5,),
         )
+        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         for semantic in ("hf_stop_string", "vllm_holdback", "eos_appended"):
             cell = row["cells"][semantic]
@@ -1671,7 +1690,8 @@ class DoctorBranchTests(unittest.TestCase):
 
     def test_portability_check_rejects_empty_boundary_text(self):
         class EmptyDecode:
-            def decode(self, ids):
+            @staticmethod
+            def decode(ids):
                 return ""
 
         check = _portability_check("/nonexistent", (5,), EmptyDecode())
@@ -1702,7 +1722,8 @@ class DoctorBranchTests(unittest.TestCase):
 
 
 class BoundaryTextMatchBranchTests(unittest.TestCase):
-    def run_evaluate(self, decode_script):
+    @staticmethod
+    def run_evaluate(decode_script):
         backend = FakeBackend(
             generation=Generation(ids("ok|"), "limit"), decode_script=decode_script
         )
@@ -1746,7 +1767,8 @@ class ReportingBranchTests(unittest.TestCase):
             },
         }
 
-    def zero_counts(self):
+    @staticmethod
+    def zero_counts():
         return {
             "no-boundary-in-N": 0,
             "boundary-text-mismatch": 0,

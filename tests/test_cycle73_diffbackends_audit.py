@@ -334,8 +334,7 @@ def _oracle_divergences(
     sglang_best: tuple[str, int] | None = None
     vllm_best_key: tuple[int, int, int] | None = None
     vllm_best: tuple[str, int] | None = None
-    for list_index in range(len(stops)):
-        stop_text = stops[list_index]
+    for list_index, stop_text in enumerate(stops):
         cells = per_stop[stop_text]
         sglang = cells[SGLANG_STOP]
         strip = cells[VLLM_HOLDBACK_STRIP]
@@ -434,7 +433,8 @@ def _check(
 
 
 class ValidatorTests(unittest.TestCase):
-    def _good_kwargs(self) -> dict[str, Any]:
+    @staticmethod
+    def _good_kwargs() -> dict[str, Any]:
         return {
             "prompt_ids": (1, 2),
             "output_ids": (3,),
@@ -595,7 +595,8 @@ class ValidatorTests(unittest.TestCase):
         from model_protocol_lab.diffbackends import _TokenizerBackend
 
         class _Tok:
-            def decode(self, ids: list[int], **kwargs: Any) -> str:
+            @staticmethod
+            def decode(ids: list[int], **kwargs: Any) -> str:
                 return "".join(f"<{i}>" for i in ids)
 
         backend = _TokenizerBackend(_Tok(), 8)
@@ -1439,7 +1440,8 @@ class _FakeTokenizer:
 
 
 class RunDiffBackendsTests(unittest.TestCase):
-    def _args(self, **overrides: Any) -> argparse.Namespace:
+    @staticmethod
+    def _args(**overrides: Any) -> argparse.Namespace:
         base: dict[str, Any] = {
             "min_tokens": 0,
             "eos_id": None,
@@ -1451,7 +1453,8 @@ class RunDiffBackendsTests(unittest.TestCase):
         base.update(overrides)
         return argparse.Namespace(**base)
 
-    def _parser(self) -> argparse.ArgumentParser:
+    @staticmethod
+    def _parser() -> argparse.ArgumentParser:
         return argparse.ArgumentParser(prog="mpl diff-backends")
 
     def _run_cli(self, args: argparse.Namespace) -> tuple[int, str, str]:
@@ -1483,7 +1486,8 @@ class RunDiffBackendsTests(unittest.TestCase):
         code, _, _ = self._run_cli(self._args(output_text="x" * 1_000_001))
         self.assertEqual(code, 2)
 
-    def _patch_tokenizer(self, tokenizer: _FakeTokenizer) -> Any:
+    @staticmethod
+    def _patch_tokenizer(tokenizer: _FakeTokenizer) -> Any:
         import model_protocol_lab.doctor as doctor
 
         return mock.patch.object(doctor, "_build_primary_tokenizer", return_value=tokenizer)
@@ -1580,14 +1584,16 @@ class SensitivityTests(unittest.TestCase):
         finally:
             shutil.rmtree(path, ignore_errors=True)
 
-    def _copy_package(self, dest: Path) -> None:
+    @staticmethod
+    def _copy_package(dest: Path) -> None:
         shutil.copytree(
             REPO_ROOT / "model_protocol_lab",
             dest / "model_protocol_lab",
             ignore=shutil.ignore_patterns("__pycache__"),
         )
 
-    def _run_suite(self, pkg_parent: Path) -> subprocess.CompletedProcess[str]:
+    @staticmethod
+    def _run_suite(pkg_parent: Path) -> subprocess.CompletedProcess[str]:
         env = dict(os.environ)
         env["PYTHONPATH"] = str(pkg_parent) + os.pathsep + env.get("PYTHONPATH", "")
         cmd = [
@@ -1609,6 +1615,7 @@ class SensitivityTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=900,
+            check=False,
         )
 
     def test_pristine_copy_passes(self) -> None:

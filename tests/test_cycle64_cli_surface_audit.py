@@ -130,6 +130,7 @@ def run_cli(*args: str):
         capture_output=True,
         text=True,
         timeout=CALL_TIMEOUT,
+        check=False,
     )
 
 
@@ -434,7 +435,8 @@ class DoctorValidationTests(unittest.TestCase):
 class RunValidationTests(unittest.TestCase):
     """`run`: full argument-validation table (no model work is reached)."""
 
-    def _base(self, tmp: str, **overrides):
+    @staticmethod
+    def _base(tmp: str, **overrides):
         argv = [
             "run",
             "--model",
@@ -835,7 +837,8 @@ class DiffReportsValidationTests(unittest.TestCase):
 
     MINIMAL = {"decision": "x", "search": [], "selected_candidate": None, "held_out": None}
 
-    def _write(self, tmp: Path, name: str, data) -> Path:
+    @staticmethod
+    def _write(tmp: Path, name: str, data) -> Path:
         path = tmp / name
         if isinstance(data, bytes):
             path.write_bytes(data)
@@ -1192,7 +1195,8 @@ class DiffBackendsCodeTableUnitTests(unittest.TestCase):
     @staticmethod
     def _stub_backend():
         class Stub:
-            def decode(self, ids):
+            @staticmethod
+            def decode(ids):
                 return "".join(f"<{i}>" for i in ids)
 
         return Stub()
@@ -1428,6 +1432,7 @@ class ConsoleScriptEquivalenceTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=CALL_TIMEOUT,
+            check=False,
         )
 
     def _assert_identical(self, argv):

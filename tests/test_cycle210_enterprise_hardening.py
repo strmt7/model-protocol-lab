@@ -17,12 +17,14 @@ WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 
 
 def _load_yaml(path):
+    """Load a YAML file (the workflow under audit) with yaml.safe_load."""
     import yaml
 
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
 def _checkout_steps(doc):
+    """Collect every checkout step across all jobs in the workflow."""
     steps = []
     for job in doc["jobs"].values():
         for step in job.get("steps", []):
@@ -33,7 +35,10 @@ def _checkout_steps(doc):
 
 
 class TestWorkflowHygiene(unittest.TestCase):
+    """Workflow hygiene: least-privilege permissions, timeouts, pinned scanners."""
+
     def test_ci_top_level_permissions(self):
+        """CI's top-level permissions are contents:read; id-token write sits on the test job."""
         doc = _load_yaml(WORKFLOWS / "ci.yml")
         self.assertEqual(doc.get("permissions"), {"contents": "read"})
         # The test job's own block replaces the top-level one; its
@@ -41,10 +46,12 @@ class TestWorkflowHygiene(unittest.TestCase):
         self.assertEqual(doc["jobs"]["test"]["permissions"].get("id-token"), "write")
 
     def test_ci_still_four_jobs(self):
+        """CI still has exactly four jobs."""
         doc = _load_yaml(WORKFLOWS / "ci.yml")
         self.assertEqual(len(doc["jobs"]), 4)
 
     def test_all_checkouts_persist_credentials_false(self):
+        """Every checkout in ci.yml and release.yml sets persist-credentials: false."""
         for name in ("ci.yml", "release.yml"):
             doc = _load_yaml(WORKFLOWS / name)
             steps = _checkout_steps(doc)
@@ -57,6 +64,7 @@ class TestWorkflowHygiene(unittest.TestCase):
                 )
 
     def test_every_job_has_timeout(self):
+        """Every job in ci.yml and release.yml has a timeout."""
         for name in ("ci.yml", "release.yml"):
             doc = _load_yaml(WORKFLOWS / name)
             for job_name, job in doc["jobs"].items():
@@ -65,6 +73,7 @@ class TestWorkflowHygiene(unittest.TestCase):
                 self.assertGreater(timeout, 0, f"{name}/{job_name}")
 
     def test_new_workflows_parse(self):
+        """The CodeQL, Scorecard, gitleaks and smoke workflows parse as YAML."""
         for name in ("codeql.yml", "scorecard.yml", "gitleaks.yml", "smoke.yml"):
             doc = _load_yaml(WORKFLOWS / name)
             self.assertIn("jobs", doc, name)
@@ -72,6 +81,7 @@ class TestWorkflowHygiene(unittest.TestCase):
                 self.assertIn("timeout-minutes", job, name)
 
     def test_codeql_python_and_schedule(self):
+        """CodeQL analyzes Python on its frozen schedule."""
         doc = _load_yaml(WORKFLOWS / "codeql.yml")
         text = (WORKFLOWS / "codeql.yml").read_text(encoding="utf-8")
         self.assertIn("languages: python", text)
@@ -84,6 +94,7 @@ class TestWorkflowHygiene(unittest.TestCase):
         self.assertNotEqual(doc["permissions"].get("security-events"), "write")
 
     def test_scorecard_publishes_results(self):
+        """Scorecard publishes its results with the frozen step shape."""
         doc = _load_yaml(WORKFLOWS / "scorecard.yml")
         steps = doc["jobs"]["analysis"]["steps"]
         scorecard = [
@@ -93,6 +104,7 @@ class TestWorkflowHygiene(unittest.TestCase):
         self.assertIs(scorecard[0]["with"].get("publish_results"), True)
 
     def test_gitleaks_pinned_binary(self):
+        """Gitleaks is pinned at 8.30.1 in the workflow."""
         text = (WORKFLOWS / "gitleaks.yml").read_text(encoding="utf-8")
         self.assertIn('GITLEAKS_VERSION: "8.30.1"', text)
         self.assertIn(
@@ -102,6 +114,7 @@ class TestWorkflowHygiene(unittest.TestCase):
         self.assertIn("sha256sum -c -", text)
 
     def test_smoke_matrix_and_scope(self):
+        """The smoke workflow's matrix and scope match the frozen shape."""
         doc = _load_yaml(WORKFLOWS / "smoke.yml")
         job = doc["jobs"]["smoke"]
         self.assertEqual(
@@ -117,7 +130,10 @@ class TestWorkflowHygiene(unittest.TestCase):
 
 
 class TestCommunityFiles(unittest.TestCase):
+    """Community and repo-meta files carry their adjudicated contents."""
+
     def test_codeowners(self):
+        """CODEOWNERS assigns the repo to its owner and covers the frozen paths."""
         text = (REPO_ROOT / ".github" / "CODEOWNERS").read_text(encoding="utf-8")
         self.assertIn("* @strmt7", text)
         for path in (
@@ -133,6 +149,7 @@ class TestCommunityFiles(unittest.TestCase):
         self.assertIn("documentary", text.lower())
 
     def test_issue_template_config(self):
+        """The issue-template config disables blank issues and carries the contact links."""
         doc = _load_yaml(REPO_ROOT / ".github" / "ISSUE_TEMPLATE" / "config.yml")
         self.assertIs(doc.get("blank_issues_enabled"), False)
         links = doc.get("contact_links", [])
@@ -140,18 +157,21 @@ class TestCommunityFiles(unittest.TestCase):
         self.assertTrue(any("advisories" in str(link.get("url", "")) for link in links))
 
     def test_support_policy(self):
+        """SUPPORT.md states the best-effort, no-SLA support policy."""
         text = (REPO_ROOT / "SUPPORT.md").read_text(encoding="utf-8")
         self.assertIn("best-effort", text)
         self.assertIn("no SLA", text)
         self.assertIn("docs/SECURITY.md", text)
 
     def test_root_security_is_a_pointer(self):
+        """The root SECURITY.md is a pointer to docs/SECURITY.md."""
         text = (REPO_ROOT / "SECURITY.md").read_text(encoding="utf-8")
         self.assertIn("docs/SECURITY.md", text)
         self.assertIn("pointer", text.lower())
         self.assertTrue((REPO_ROOT / "docs" / "SECURITY.md").exists())
 
     def test_editorconfig_and_gitattributes(self):
+        """EditorConfig and gitattributes carry the frozen formatting rules."""
         editor = (REPO_ROOT / ".editorconfig").read_text(encoding="utf-8")
         self.assertIn("indent_size = 4", editor)
         self.assertIn("end_of_line = lf", editor)
@@ -160,10 +180,12 @@ class TestCommunityFiles(unittest.TestCase):
         self.assertIn("examples/sample-report", attrs)
 
     def test_typing_classifier(self):
+        """pyproject carries the 'Typing :: Typed' classifier."""
         text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn('"Typing :: Typed"', text)
 
     def test_dependabot_cooldown_and_groups(self):
+        """Dependabot config has four updates with the frozen cooldown and groups."""
         doc = _load_yaml(REPO_ROOT / ".github" / "dependabot.yml")
         # Cycle 217 added the pip entry for tools/requirements
         # (hash-pinned workflow installs); the cooldown/groups
@@ -174,6 +196,7 @@ class TestCommunityFiles(unittest.TestCase):
             self.assertTrue(update.get("groups"))
 
     def test_gitleaks_config(self):
+        """The gitleaks allowlist carries exactly the two adjudicated regexes."""
         with (REPO_ROOT / ".gitleaks.toml").open("rb") as handle:
             doc = tomllib.load(handle)
         patterns = doc.get("allowlist", {}).get("regexes", [])
@@ -183,7 +206,10 @@ class TestCommunityFiles(unittest.TestCase):
 
 
 class TestReadmeSurface(unittest.TestCase):
+    """README surface: badges, contents and links match the shipped state."""
+
     def test_dev_tool_badges_dropped_and_scorecard_added(self):
+        """Dev-tool badges are dropped from the README and the Scorecard badge is present."""
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         for badge in ("[![cocoindex-code]", "[![caveman]", "[![crawl4ai]"):
             self.assertNotIn(badge, readme)
@@ -192,6 +218,7 @@ class TestReadmeSurface(unittest.TestCase):
         self.assertLess(readme.index("[![CI]"), readme.index("[![Codecov]"))
 
     def test_toc_and_expected_output(self):
+        """The README contents list and expected-output block match the shipped state."""
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("## Contents", readme)
         self.assertIn("[Quick start](#quick-start)", readme)
@@ -204,10 +231,12 @@ class TestReadmeSurface(unittest.TestCase):
         self.assertIn('"name": "chatml"', readme)
 
     def test_contributing_link(self):
+        """The README links CONTRIBUTING.md."""
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("[CONTRIBUTING.md](CONTRIBUTING.md)", readme)
 
     def test_sbom_decision_documented(self):
+        """The no-SBOM adjudication is documented in docs/SECURITY.md."""
         text = (REPO_ROOT / "docs" / "SECURITY.md").read_text(encoding="utf-8")
         self.assertIn("Why no SBOM is shipped (cycle 210 adjudication)", text)
 

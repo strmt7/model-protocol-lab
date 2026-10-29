@@ -198,7 +198,8 @@ def _pair(treat, ctrl, ot=30, oc=5):
 
 
 class CellTests(unittest.TestCase):
-    def _base_pairs(self, n=12):
+    @staticmethod
+    def _base_pairs(n=12):
         return [_pair(_detection(False), _detection(False)) for _ in range(n)]
 
     def test_positive_cell(self):
@@ -271,7 +272,8 @@ class CellTests(unittest.TestCase):
 
 
 class ProfileTests(unittest.TestCase):
-    def _cell(self, ctrl_leaks=2):
+    @staticmethod
+    def _cell(ctrl_leaks=2):
         return conf.confidentiality_cell(
             [
                 _pair(_detection(False), _detection(True))
@@ -472,7 +474,8 @@ class ProfileGuardTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
-    def _probe(self, result, backend=None, formats=None):
+    @staticmethod
+    def _probe(result, backend=None, formats=None):
         cli._run_confidentiality_probe(
             result,
             tuple(_format(c) for c in CANDIDATES) if formats is None else formats,
@@ -498,7 +501,7 @@ class CliTests(unittest.TestCase):
 
     def test_probe_never_raises(self):
         result = {}
-        self._probe(result, backend=None if False else object())
+        self._probe(result, backend=object())
         self.assertFalse(result["confidentiality"]["available"])
         self.assertEqual(result["confidentiality"]["detail"], "confidentiality_unavailable")
 
@@ -687,7 +690,8 @@ class MutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _threshold_scenario(self, mod):
+    @staticmethod
+    def _threshold_scenario(mod):
         assert mod.detect_leak("zorblax alone")["leak"] is False
         assert mod.detect_leak("zorblax quindle vexmor")["leak"] is True
 
@@ -700,7 +704,8 @@ class MutationGateTests(unittest.TestCase):
             self._threshold_scenario,
         )
 
-    def _base_rate_scenario(self, mod):
+    @staticmethod
+    def _base_rate_scenario(mod):
         pairs = [
             {
                 "treat": mod.detect_leak("x"),
@@ -722,7 +727,8 @@ class MutationGateTests(unittest.TestCase):
             self._base_rate_scenario,
         )
 
-    def _treatment_scenario(self, mod):
+    @staticmethod
+    def _treatment_scenario(mod):
         assert mod.treatment_block() != mod.control_block()
         assert PRIVILEGE_OPEN in mod.treatment_block()
 
@@ -735,7 +741,8 @@ class MutationGateTests(unittest.TestCase):
             self._treatment_scenario,
         )
 
-    def _mcnemar_scenario(self, mod):
+    @staticmethod
+    def _mcnemar_scenario(mod):
         assert mod.mcnemar_exact_p(2, 0) == 0.5
 
     def test_mutant_mcnemar_one_sided_caught(self):

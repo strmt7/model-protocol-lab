@@ -78,6 +78,7 @@ def _or_verdict(summary: Any) -> str:
 
 
 def _or_candidate_name(entry: Any) -> str | None:
+    """Or candidate name."""
     if type(entry) is not dict:
         return None
     fmt = entry.get("format")
@@ -176,6 +177,7 @@ def _or_stage_evidence(
 
 
 def _or_base_family(name: str) -> str:
+    """Or base family."""
     return name.split("/", 1)[0]
 
 
@@ -238,6 +240,7 @@ def _or_fixture_set_drift(
     return entries
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def oracle_diff_reports(
     old: dict[str, Any],
     new: dict[str, Any],
@@ -351,6 +354,7 @@ def oracle_diff_reports(
     # carry budget_frontier payloads, so the comparison below agrees with
     # the implementation on every input this oracle sees.
     def _or_frontier_valid(value: Any) -> bool:
+        """Or frontier valid."""
         if type(value) is not dict:
             return False
         candidates = value.get("candidates")
@@ -390,6 +394,7 @@ def oracle_diff_reports(
     # held_out_budget_floor payloads, so the comparison below agrees with
     # the implementation on every input this oracle sees.
     def _or_hof_valid(value: Any) -> bool:
+        """Or hof valid."""
         if type(value) is not dict or value.get("available", True) is False:
             return False
         if value.get("native_verdict") not in (
@@ -416,6 +421,7 @@ def oracle_diff_reports(
     _o_hof_asymmetric = _o_hof_available not in ("both", "neither")
 
     def _or_ba_valid(value: Any) -> bool:
+        """Or ba valid."""
         if type(value) is not dict or value.get("available", True) is False:
             return False
         if type(value.get("per_family")) is not dict:
@@ -436,6 +442,7 @@ def oracle_diff_reports(
     _o_ba_asymmetric = _o_ba_available not in ("both", "neither")
 
     def _or_sr_valid(value: Any) -> bool:
+        """Or sr valid."""
         ps = value.get("per_semantic") if type(value) is dict else None
         return (
             type(value) is dict
@@ -459,6 +466,7 @@ def oracle_diff_reports(
 
     def _or_tr_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_transfer exactly.
+        """Or tr valid."""
         per_checkpoint = value.get("per_checkpoint") if type(value) is dict else None
         matrix = value.get("matrix") if type(value) is dict else None
         return (
@@ -484,6 +492,7 @@ def oracle_diff_reports(
     _o_tr_asymmetric = _o_tr_available not in ("both", "neither")
 
     def _or_ct_valid(value: Any) -> bool:
+        """Or ct valid."""
         pairs = value.get("pairs") if type(value) is dict else None
         return (
             type(value) is dict
@@ -505,6 +514,7 @@ def oracle_diff_reports(
     _o_ct_asymmetric = _o_ct_available not in ("both", "neither")
 
     def _or_pb_valid(value: Any) -> bool:
+        """Or pb valid."""
         pv = value.get("per_variant") if type(value) is dict else None
         st = value.get("stability") if type(value) is dict else None
         return (
@@ -531,6 +541,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_token_healing exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or hl valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         if type(value.get("flipped")) is not bool:
@@ -563,6 +574,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_hierarchy exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or hy valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         positions = value.get("positions")
@@ -628,6 +640,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_prefill exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or pf valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         prefills = value.get("prefills")
@@ -696,6 +709,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_portfolio exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or po valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         if type(value.get("n_fixtures")) is not int or value["n_fixtures"] <= 0:
@@ -748,6 +762,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_synthhistory exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or sh valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         if type(value.get("primary_decision")) is not str:
@@ -834,6 +849,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_batchinv exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or bi valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         for key in ("n_prompts", "n_evaluable", "n_failed", "n_diverged"):
@@ -892,6 +908,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_position exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or pos valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         conditions = value.get("conditions")
@@ -959,6 +976,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_stop_cause exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or sc valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         per_candidate = value.get("per_candidate")
@@ -998,6 +1016,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_ws_canonical exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or ws valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         mutations = value.get("mutations")
@@ -1050,6 +1069,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_structured exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or structured valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         n_fixtures = value.get("n_fixtures")
@@ -1091,6 +1111,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_deliforge exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or deliforge valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         payloads = value.get("payloads")
@@ -1147,6 +1168,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_fewshot exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or fewshot valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         demo_ids = value.get("demo_ids")
@@ -1212,6 +1234,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_faketurn exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or faketurn valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         payloads = value.get("payloads")
@@ -1270,6 +1293,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_toolcall exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or toolcall valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         n_fixtures = value.get("n_fixtures")
@@ -1315,6 +1339,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_verbosity exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or verbosity valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         n_fixtures = value.get("n_fixtures")
@@ -1376,6 +1401,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_refusals exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or refusals valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         method = value.get("method")
@@ -1485,6 +1511,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_scorerlens exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too, including every recompute identity.
+        """Or scorerlens valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         method = value.get("method")
@@ -1588,6 +1615,7 @@ def oracle_diff_reports(
             evaluable_sets.append(frozenset(r["fixture"] for r in evaluable))
 
             def _matches(r: Any, rung: int) -> bool:
+                """Matches."""
                 return r["exact_match"] is True or (
                     r["first_flip_rung"] is not None and r["first_flip_rung"] <= rung
                 )
@@ -1698,7 +1726,10 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_aliasing exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too, including every recompute identity.
+        """Or aliasing valid."""
+
         def _hex(v: Any) -> bool:
+            """Hex."""
             return type(v) is str and len(v) == 64 and all(c in "0123456789abcdef" for c in v)
 
         def _recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -1804,6 +1835,7 @@ def oracle_diff_reports(
                 return None
 
             def _fixtures(entry: dict[str, Any]) -> frozenset[str]:
+                """Fixtures."""
                 return frozenset(r["fixture"] for r in entry["records"] if r["evaluable"])
 
             mismatch = len({_fixtures(e) for e in available}) > 1
@@ -1812,6 +1844,7 @@ def oracle_diff_reports(
                 groups.setdefault(_fixtures(entry), []).append(entry)
 
             def _rank(item: tuple[frozenset[str], list[dict[str, Any]]]) -> tuple[Any, ...]:
+                """Rank."""
                 fixtures, members = item
                 return (
                     -len(members),
@@ -1825,6 +1858,7 @@ def oracle_diff_reports(
             fixtures_sorted = sorted(_fixtures(primary[0])) if primary else []
 
             def _classes(key_with_boundary: bool) -> list[list[str]]:
+                """Classes."""
                 grouped: dict[tuple[Any, ...], list[str]] = {}
                 for entry in primary:
                     cells = {r["fixture"]: r for r in entry["records"] if r["evaluable"]}
@@ -2046,7 +2080,11 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_distraction exactly: shape
         # pre-checks, record structure, aggregates, conditions,
         # and the protocol fingerprint all recomputed.
+        """Or distraction valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         _details = {
@@ -2061,14 +2099,17 @@ def oracle_diff_reports(
         _hex = frozenset("0123456789abcdef")
 
         def _digest(item: Any) -> bool:
+            """Digest."""
             return item is None or (
                 type(item) is str and len(item) == 64 and all(c in _hex for c in item)
             )
 
         def _int(item: Any) -> bool:
+            """Int."""
             return type(item) is int and not isinstance(item, bool) and item >= 0
 
         def _recompute(payload: dict) -> dict | None:
+            """Recompute."""
             protocol = payload.get("protocol")
             if type(protocol) is not dict:
                 return None
@@ -2453,7 +2494,11 @@ def oracle_diff_reports(
         # conditions with the defined-set withholding rule,
         # common population, and the protocol fingerprint all
         # recomputed.
+        """Or leading valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import math as _math
 
@@ -2480,14 +2525,17 @@ def oracle_diff_reports(
         _hex = frozenset("0123456789abcdef")
 
         def _digest(item: Any) -> bool:
+            """Digest."""
             return item is None or (
                 type(item) is str and len(item) == 64 and all(c in _hex for c in item)
             )
 
         def _int(item: Any) -> bool:
+            """Int."""
             return type(item) is int and not isinstance(item, bool) and item >= 0
 
         def _mcnemar(ctrl_only: int, treat_only: int) -> float | None:
+            """Mcnemar."""
             n = ctrl_only + treat_only
             if n == 0:
                 return None
@@ -2496,6 +2544,7 @@ def oracle_diff_reports(
             return min(1.0, 2.0 * tail)
 
         def _classify(n_paired: int, wrong_only: int, right_only: int) -> str:
+            """Classify."""
             if n_paired < 6:
                 return "insufficient"
             if wrong_only == 0 and right_only == 0:
@@ -2509,6 +2558,7 @@ def oracle_diff_reports(
             return "below_threshold"
 
         def _cell_ok(cell: Any, expected_digest: Any) -> bool:
+            """Cell ok."""
             if type(cell) is not dict:
                 return False
             if type(cell.get("verdict")) is not bool:
@@ -2529,6 +2579,7 @@ def oracle_diff_reports(
             return bool(cell.get("verdict")) == recomputed
 
         def _caving(records: list, framing: str) -> dict:
+            """Caving."""
             wrong_key = f"wrong_{framing}"
             right_key = f"right_{framing}"
             n_paired = 0
@@ -2568,6 +2619,7 @@ def oracle_diff_reports(
             }
 
         def _aggregate(records: list) -> dict:
+            """Aggregate."""
             live = [r for r in records if not r["vacuous"] and not r["expected_blank"]]
             framings: dict = {}
             for framing in ("first_person", "third_person"):
@@ -2636,6 +2688,7 @@ def oracle_diff_reports(
             }
 
         def _recompute(payload: dict) -> dict | None:
+            """Recompute."""
             protocol = payload.get("protocol")
             if type(protocol) is not dict:
                 return None
@@ -2999,7 +3052,11 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_repetition exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too, including every recompute identity.
+        """Or repetition valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         _details = {
@@ -3017,6 +3074,7 @@ def oracle_diff_reports(
         )
 
         def _recompute(payload: dict) -> dict | None:
+            """Recompute."""
             protocol = payload.get("protocol")
             if type(protocol) is not dict:
                 return None
@@ -3157,10 +3215,12 @@ def oracle_diff_reports(
                 return None
 
             def _verdict(record: dict, arm: str) -> bool | None:
+                """Verdict."""
                 cell = record["arms"][arm]
                 return None if cell is None else bool(cell["verdict"])
 
             def _contrast(recs: list, arm_a: str, arm_b: str, effect: str) -> dict:
+                """Contrast."""
                 paired = [
                     r
                     for r in recs
@@ -3365,7 +3425,11 @@ def oracle_diff_reports(
         # scalars, the grouping classification re-run over the
         # stored evidence, the grouping delta relation checked,
         # and every aggregate and paired contrast recomputed.
+        """Or numform valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import math as _math
         import re as _re
@@ -3425,9 +3489,11 @@ def oracle_diff_reports(
         _hex = frozenset("0123456789abcdef")
 
         def _int(item: Any) -> bool:
+            """Int."""
             return type(item) is int and not isinstance(item, bool) and item >= 0
 
         def _grouped(digits: str, separator: str) -> str:
+            """Grouped."""
             chunks = []
             while len(digits) > 3:
                 chunks.append(digits[-3:])
@@ -3436,6 +3502,7 @@ def oracle_diff_reports(
             return separator.join(reversed(chunks))
 
         def _render(v: int, form: str) -> str:
+            """Render."""
             if form == "plain":
                 return str(v)
             if form == "comma":
@@ -3452,6 +3519,7 @@ def oracle_diff_reports(
             return f"{mantissa}e{exponent}"
 
         def _carry(a: int, b: int) -> str:
+            """Carry."""
             da, db = str(a), str(b)
             width = max(len(da), len(db))
             carry_in = 0
@@ -3468,9 +3536,11 @@ def oracle_diff_reports(
             return "some"
 
         def _margin(a: int, b: int) -> str:
+            """Margin."""
             da, db = str(a), str(b)
             if len(da) != len(db):
                 return "different_length"
+            # skipcq: PTC-W0060 - the oracle indexes parallel sequences by one shared index
             for index in range(len(da)):
                 if da[index] != db[index]:
                     if index == len(da) - 1:
@@ -3488,6 +3558,7 @@ def oracle_diff_reports(
         def _parse(text: Any) -> Any:
             # Hand mirror of numform.parse_value (cycle 190):
             # the third leg of the differential parse battery.
+            """Parse."""
             if type(text) is not str or not text:
                 return None
             if _plain_re.fullmatch(text):
@@ -3521,18 +3592,21 @@ def oracle_diff_reports(
             return None
 
         def _text_digest(text: Any) -> Any:
+            """Text digest."""
             try:
                 return _hashlib.sha256(text.encode("utf-8")).hexdigest()
             except UnicodeEncodeError:
                 return None
 
         def _is_round(v: int) -> bool:
+            """Return whether round."""
             if v < 10:
                 return False
             digits = str(v)
-            return v == 10 ** (len(digits) - 1) or v == 10 ** len(digits) - 1
+            return v in (10 ** (len(digits) - 1), 10 ** len(digits) - 1)
 
         def _probes() -> list:
+            """Probes."""
             probes = []
             sequential = "123456789012"
             ones = "1" * 12
@@ -3546,6 +3620,7 @@ def oracle_diff_reports(
             return probes
 
         def _classify_grouping(evidence: dict) -> str:
+            """Classify grouping."""
             digit_probes = [p for p in _probes() if p.isascii() and p.isdigit()]
             if not evidence or any(p not in evidence for p in digit_probes):
                 return "unknown"
@@ -3561,6 +3636,7 @@ def oracle_diff_reports(
             return "unknown"
 
         def _mcnemar(b: int, c: int) -> float | None:
+            """Mcnemar."""
             n = b + c
             if n == 0:
                 return None
@@ -3569,6 +3645,7 @@ def oracle_diff_reports(
             return min(1.0, 2.0 * tail)
 
         def _classify_contrast(n_paired: int, a_only: int, b_only: int) -> str:
+            """Classify contrast."""
             if n_paired < 6:
                 return "insufficient"
             if a_only == 0 and b_only == 0:
@@ -3582,6 +3659,7 @@ def oracle_diff_reports(
             return "below_threshold"
 
         def _decomposition(record: dict) -> str:
+            """Decomposition."""
             cell = record["cell"]
             if cell["verdict"]:
                 return "exact_pass"
@@ -3596,6 +3674,7 @@ def oracle_diff_reports(
             return "value_fail"
 
         def _aggregate(records: list, task: str, form: str) -> dict:
+            """Aggregate."""
             selected = [r for r in records if r["task"] == task and r["form"] == form]
             completed = [r for r in selected if r["cell"] is not None]
             n_exact = sum(1 for r in completed if r["cell"]["verdict"])
@@ -3637,6 +3716,7 @@ def oracle_diff_reports(
             }
 
         def _contrast(records: list, task: str, form_a: str, form_b: str) -> dict:
+            """Contrast."""
             by_value: dict = {}
             for record in records:
                 if record["task"] != task or record["form"] not in (form_a, form_b):
@@ -3677,6 +3757,7 @@ def oracle_diff_reports(
             }
 
         def _construction(record: Any):
+            """Construction."""
             if type(record) is not dict or set(record) != _record_keys:
                 return None
             task = record["task"]
@@ -4041,6 +4122,8 @@ def oracle_diff_reports(
         # producer module (dateline) where the implementation
         # recomputes through its own literal tables -- a drift in
         # either side's constants breaks the agreement.
+        """Or dateline valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import dateline as _dl
@@ -4062,14 +4145,17 @@ def oracle_diff_reports(
         _hex = frozenset("0123456789abcdef")
 
         def _digest(item: Any) -> bool:
+            """Digest."""
             return item is None or (
                 type(item) is str and len(item) == 64 and all(c in _hex for c in item)
             )
 
         def _int(item: Any) -> bool:
+            """Int."""
             return type(item) is int and not isinstance(item, bool) and item >= 0
 
         def _cell_ok(cell: Any, expected_digest: Any) -> bool:
+            """Cell ok."""
             if type(cell) is not dict:
                 return False
             if type(cell.get("verdict")) is not bool:
@@ -4336,6 +4422,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_confidentiality exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or confidentiality valid."""
         from model_protocol_lab.experiments import _confidentiality_cell_valid
 
         if type(value) is not dict or value.get("available") is not True:
@@ -4424,6 +4511,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_answer_collision exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or answer collision valid."""
         from model_protocol_lab.experiments import _answer_collision_cell_valid
 
         if type(value) is not dict or value.get("available") is not True:
@@ -4505,7 +4593,11 @@ def oracle_diff_reports(
         # sharded turns identities checked, aggregates and
         # selection readouts recomputed. A drift in either
         # side's constants breaks the agreement.
+        """Or multiturn valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import multiturn as _mt
@@ -4526,11 +4618,13 @@ def oracle_diff_reports(
         _hex = frozenset("0123456789abcdef")
 
         def _digest_ok(item: Any) -> bool:
+            """Digest ok."""
             return type(item) is str and len(item) == 64 and all(c in _hex for c in item)
 
         def _cell_ok(
             cell: Any, arm: str, depth: int, expected_digest: str, empty_digest: str
         ) -> bool:
+            """Cell ok."""
             if type(cell) is not dict:
                 return False
             keys = set(cell)
@@ -4774,7 +4868,11 @@ def oracle_diff_reports(
         # offsets checked, aggregates, headline readouts, and
         # per-cell selections recomputed. A drift in either
         # side's constants breaks the agreement.
+        """Or needle valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import needle as _nd
@@ -4796,9 +4894,11 @@ def oracle_diff_reports(
         _hex = frozenset("0123456789abcdef")
 
         def _digest_ok(item: Any) -> bool:
+            """Digest ok."""
             return type(item) is str and len(item) == 64 and all(c in _hex for c in item)
 
         def _expected_offsets(key: str) -> list | None:
+            """Expected offsets."""
             if key == "dose_0":
                 return [0]
             for dose in _nd.DOSES:
@@ -4812,6 +4912,7 @@ def oracle_diff_reports(
             return None
 
         def _cell_ok(cell: Any, expected_digest: str) -> bool:
+            """Cell ok."""
             if type(cell) is not dict or set(cell) != _cell_keys:
                 return False
             if type(cell["verdict"]) is not bool:
@@ -4979,7 +5080,11 @@ def oracle_diff_reports(
         # arm_tokens, aggregates and per-arm selections
         # recomputed. A drift in either side's constants breaks
         # the agreement.
+        """Or placement valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import placement as _pl
@@ -5134,7 +5239,11 @@ def oracle_diff_reports(
         # record's arm token count, aggregates and per-arm
         # selections recomputed. A drift in either side's
         # constants breaks the agreement.
+        """Or canonicalform valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import canonicalform as _cf
@@ -5314,7 +5423,11 @@ def oracle_diff_reports(
         # the producer's aggregator (whose classes derive from
         # the recorded digests alone, amendment C). A drift in
         # either side's constants breaks the agreement.
+        """Or instructiondistance valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import instructiondistance as _idm
@@ -5522,12 +5635,15 @@ def oracle_diff_reports(
         # through the producer's own functions (whose gates
         # derive from the recorded id digests alone). A drift
         # in either side's constants breaks the agreement.
+        """Or historyframe valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import re as _re
 
         from model_protocol_lab import historyframe as _hfm
 
         def _digest_ok(digest: Any) -> bool:
+            """Digest ok."""
             return type(digest) is str and _re.fullmatch(r"[0-9a-f]{64}", digest) is not None
 
         if type(value) is not dict or value.get("available") is not True:
@@ -5790,12 +5906,15 @@ def oracle_diff_reports(
         # count, and the aggregates recomputed through the
         # producer's own aggregate function. A drift in
         # either side's constants breaks the agreement.
+        """Or prunesweep valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import re as _re
 
         from model_protocol_lab import prunesweep as _psm
 
         def _digest_ok(digest: Any) -> bool:
+            """Digest ok."""
             return type(digest) is str and _re.fullmatch(r"[0-9a-f]{64}", digest) is not None
 
         if type(value) is not dict or value.get("available") is not True:
@@ -5997,12 +6116,15 @@ def oracle_diff_reports(
         # recomputed through the producer's own aggregate
         # function. A drift in either side's constants breaks
         # the agreement.
+        """Or recordnotation valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import re as _re
 
         from model_protocol_lab import recordnotation as _rnm
 
         def _digest_ok(digest: Any) -> bool:
+            """Digest ok."""
             return type(digest) is str and _re.fullmatch(r"[0-9a-f]{64}", digest) is not None
 
         if type(value) is not dict or value.get("available") is not True:
@@ -6210,7 +6332,11 @@ def oracle_diff_reports(
         # checked, aggregates and per-arm selections
         # recomputed. A drift in either side's constants breaks
         # the agreement.
+        """Or rotation valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import rotation as _rt
@@ -6388,6 +6514,8 @@ def oracle_diff_reports(
         # the aggregates recomputed through the producer's
         # pure aggregation. A drift in either side's constants
         # breaks the agreement.
+        """Or density valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import density as _dn
@@ -6458,6 +6586,7 @@ def oracle_diff_reports(
         }
 
         def _digest_ok(v: Any) -> bool:
+            """Digest ok."""
             return type(v) is str and len(v) == 64 and all(c in "0123456789abcdef" for c in v)
 
         for name, entry in candidates.items():
@@ -6540,6 +6669,8 @@ def oracle_diff_reports(
         # and the aggregates recomputed through the producer's
         # pure aggregation. A drift in either side's constants
         # breaks the agreement.
+        """Or field order valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import math as _math
 
@@ -6723,6 +6854,8 @@ def oracle_diff_reports(
         # float32-representable, and every derived value
         # recomputed through the producer's pure aggregation.
         # A drift in either side's constants breaks the agreement.
+        """Or choiceaudit valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import math as _math
         import struct as _struct
@@ -6730,6 +6863,7 @@ def oracle_diff_reports(
         from model_protocol_lab import choiceaudit as _ca
 
         def _f32(v: float) -> float:
+            """F32."""
             if _math.isfinite(v) and abs(v) > float.fromhex("0x1.fffffep+127"):
                 return _math.copysign(_math.inf, v)
             return _struct.unpack("<f", _struct.pack("<f", v))[0]
@@ -6963,11 +7097,14 @@ def oracle_diff_reports(
         # through the producer's pure aggregation
         # (precision.compute_derived). A drift in either side's
         # constants breaks the agreement.
+        """Or precision valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import precision as _pr
 
         def _dig(v: Any) -> bool:
+            """Dig."""
             return type(v) is str and len(v) == 64 and all(c in "0123456789abcdef" for c in v)
 
         if type(value) is not dict or value.get("available") is not True:
@@ -7115,6 +7252,7 @@ def oracle_diff_reports(
                     return False
                 lp = cell["logprob"]
                 if lp is not None and (
+                    # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON
                     type(lp) not in (int, float) or lp != lp or lp in (float("inf"), float("-inf"))
                 ):
                     return False
@@ -7191,17 +7329,21 @@ def oracle_diff_reports(
         # value recomputed through the producer's pure aggregation
         # (confidence.compute_derived). A drift in either side's
         # constants breaks the agreement.
+        """Or confidence valid."""
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import re
 
         from model_protocol_lab import confidence as _cfd
 
         def _dig(v: Any) -> bool:
+            """Dig."""
             return type(v) is str and len(v) == 64 and all(c in "0123456789abcdef" for c in v)
 
         _grammar = re.compile(r"^Confidence: (0|[1-9][0-9]?|100)$")
 
         def _cell_ok(cell: Any, expected_digest: str) -> bool:
+            """Cell ok."""
             if type(cell) is not dict or set(cell) != {
                 "answer_digest",
                 "boundary_found",
@@ -7451,6 +7593,7 @@ def oracle_diff_reports(
         # Mirrors diffreports._valid_cache_profile exactly: the
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
+        """Or cache profile valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         block_size = value.get("block_size")
@@ -7614,10 +7757,14 @@ def oracle_diff_reports(
 
     def _or_trob_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_template_robustness exactly.
+        """Or trob valid."""
+
         def _ok_rate(v: Any) -> bool:
+            """Ok rate."""
             return v is None or (type(v) in (int, float) and 0.0 <= v <= 1.0)
 
         def _ok_report(rep: Any) -> bool:
+            """Ok report."""
             if type(rep) is not dict:
                 return False
             if rep.get("status") != "ok":
@@ -7650,6 +7797,7 @@ def oracle_diff_reports(
 
     def _or_ablation_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_ablation exactly.
+        """Or ablation valid."""
         if type(value) is not dict or value.get("available") is not True:
             return False
         candidates = value.get("candidates")
@@ -8293,6 +8441,7 @@ _BOUNDARY_IDS = [1, 7, 42, 128, 32000, 128000]
 
 
 def _rand_name(rng: random.Random) -> str:
+    """Rand name."""
     family = rng.choice(_FAMILIES)
     mutation = rng.choice(["", "/a", "/b", "/long-mutation-name"])
     return family + mutation
@@ -8342,6 +8491,7 @@ def _rand_summary(rng: random.Random) -> Any:
 
 
 def _rand_observation(rng: random.Random, fixture: str) -> dict[str, Any]:
+    """Rand observation."""
     style = rng.random()
     if style < 0.80:
         return {
@@ -8384,6 +8534,7 @@ def _rand_observations(rng: random.Random, n_fixtures: int) -> Any:
 
 
 def _rand_boundary_ids(rng: random.Random) -> Any:
+    """Rand boundary ids."""
     style = rng.random()
     if style < 0.60:
         return rng.sample(_BOUNDARY_IDS, rng.randint(1, 4))
@@ -8399,6 +8550,7 @@ def _rand_boundary_ids(rng: random.Random) -> Any:
 
 
 def _rand_entry(rng: random.Random, name: str, n_fixtures: int) -> dict[str, Any]:
+    """Rand entry."""
     entry: dict[str, Any] = {"format": {"name": name}}
     if rng.random() < 0.85:
         entry["summary"] = _rand_summary(rng)
@@ -8494,11 +8646,13 @@ def _flip_one_observation(observations: list[Any]) -> bool:
 
 
 def scenario_identical(rng: random.Random) -> tuple[dict, dict]:
+    """Scenario identical."""
     base = make_report(rng)
     return base, copy.deepcopy(base)
 
 
 def scenario_flip_fixture(rng: random.Random) -> tuple[dict, dict]:
+    """Scenario flip fixture."""
     base = make_report(rng)
     new = copy.deepcopy(base)
     # find a candidate entry with flippable evidence; retry budget
@@ -8515,6 +8669,7 @@ def scenario_flip_fixture(rng: random.Random) -> tuple[dict, dict]:
 
 
 def scenario_add_remove_fixture(rng: random.Random) -> tuple[dict, dict]:
+    """Scenario add remove fixture."""
     base = make_report(rng)
     new = copy.deepcopy(base)
     for entry in new["search"]:
@@ -8534,6 +8689,7 @@ def scenario_add_remove_fixture(rng: random.Random) -> tuple[dict, dict]:
 
 
 def scenario_config_changed(rng: random.Random) -> tuple[dict, dict]:
+    """Scenario config changed."""
     base = make_report(rng)
     new = copy.deepcopy(base)
     which = rng.choice(
@@ -8565,6 +8721,7 @@ def scenario_config_changed(rng: random.Random) -> tuple[dict, dict]:
 
 
 def scenario_nested_field_changed(rng: random.Random) -> tuple[dict, dict]:
+    """Scenario nested field changed."""
     base = make_report(rng)
     new = copy.deepcopy(base)
     entry = rng.choice(new["search"])
@@ -8585,6 +8742,7 @@ def scenario_nested_field_changed(rng: random.Random) -> tuple[dict, dict]:
 
 
 def scenario_evidence_stripped(rng: random.Random) -> tuple[dict, dict]:
+    """Scenario evidence stripped."""
     base = make_report(rng)
     # ensure at least one side has evidence before stripping the other
     new = copy.deepcopy(base)
@@ -8596,6 +8754,7 @@ def scenario_evidence_stripped(rng: random.Random) -> tuple[dict, dict]:
 
 
 def scenario_decision_winner(rng: random.Random) -> tuple[dict, dict]:
+    """Scenario decision winner."""
     base = make_report(rng)
     new = copy.deepcopy(base)
     decisions = [d for d in _DECISIONS if d != base["decision"]]
@@ -8631,6 +8790,7 @@ class FuzzOracleAgreement(unittest.TestCase):
     """Seeded differential fuzz: oracle vs implementation on every pair."""
 
     def test_scenarios_oracle_agreement(self) -> None:
+        """Scenarios oracle agreement."""
         for scenario_name, generator in _SCENARIOS.items():
             for seed in _FUZZ_SEEDS:
                 with self.subTest(scenario=scenario_name, seed=seed):
@@ -8639,6 +8799,7 @@ class FuzzOracleAgreement(unittest.TestCase):
                     compare_pair(impl, old, new)
 
     def test_scenarios_oracle_agreement_all_fixtures_flag(self) -> None:
+        """Scenarios oracle agreement all fixtures flag."""
         for scenario_name, generator in _SCENARIOS.items():
             for seed in _FUZZ_SEEDS:
                 with self.subTest(scenario=scenario_name, seed=seed, all_fixtures=True):
@@ -8669,6 +8830,7 @@ class FuzzOracleAgreement(unittest.TestCase):
         """Key insertion order (and a JSON round-trip) must not affect output."""
 
         def reorder(value: Any) -> Any:
+            """Reorder."""
             if type(value) is dict:
                 items = list(value.items())
                 return {k: reorder(v) for k, v in reversed(items)}
@@ -8979,6 +9141,7 @@ class SummaryAndDriftShape(unittest.TestCase):
     """Hand-built pairs asserting exact summary counts and drift ordering."""
 
     def test_full_drift_shape_hand_built(self) -> None:
+        """Full drift shape hand built."""
         old = {
             "decision": "abstain",
             "search": [
@@ -9090,6 +9253,7 @@ class SummaryAndDriftShape(unittest.TestCase):
                 "fixtures:search",
             ],
         )
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         planned = next(e for e in diff["config_drift"] if e["field"] == "planned:llama3/a")
         self.assertEqual((planned["old"], planned["new"]), (2, 3))
         # no fixtures:held_out entry: held fixture ids identical ({h1})
@@ -9110,6 +9274,7 @@ class SummaryAndDriftShape(unittest.TestCase):
         )
 
     def test_all_fixtures_flag_lists_unchanged(self) -> None:
+        """All fixtures flag lists unchanged."""
         rng = random.Random("allflag-shape:4")  # noqa: S311 -- deterministic test seed
         old, new = scenario_flip_fixture(rng)
         changed_only = impl.diff_reports(old, new)
@@ -9124,7 +9289,8 @@ class SummaryAndDriftShape(unittest.TestCase):
         changed_in_all = [d for d in all_cells["fixture_diffs"] if d["old"] != d["new"]]
         self.assertEqual(changed_in_all, changed_only["fixture_diffs"])
 
-    def test_load_results_roundtrip_agrees(self) -> None:
+    @staticmethod
+    def test_load_results_roundtrip_agrees() -> None:
         """Full path: JSON on disk -> load_results -> diff_reports."""
         import tempfile
 

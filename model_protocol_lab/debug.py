@@ -69,6 +69,7 @@ _ROLE_RE = re.compile(r"^([A-Za-z]+)\s*:\s*(.*)$", re.DOTALL)
 # rationale (which strips all controls from short IDs); kept local so
 # debug.py stays importable without cli.
 _CONTROL_CHARS = re.compile(
+    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]"
 )
 
@@ -183,6 +184,7 @@ class DebugShell(cmd.Cmd):
         stdin: Any = None,
         stdout: Any = None,
     ) -> None:
+        """Initialise the debug shell over a fixture split."""
         if type(split) is not Split:
             raise ValueError("DebugShell needs a Split")
         if family not in CATALOG:
@@ -237,13 +239,16 @@ class DebugShell(cmd.Cmd):
 
     @property
     def _fmt(self) -> Format:
+        """Return the fmt."""
         return CATALOG[self._family]
 
     @property
     def _case(self) -> Fixture:
+        """Return the case."""
         return self._cases[self._case_index]
 
     def _refresh_prompt(self) -> None:
+        """Refresh prompt."""
         if self._say_buffer is not None:
             self.prompt = "...> "
         else:
@@ -294,6 +299,7 @@ class DebugShell(cmd.Cmd):
         return stop
 
     def _dispatch(self, line: str) -> bool:
+        """Return the dispatch."""
         stripped = line.strip()
         if not stripped:
             return False
@@ -343,17 +349,21 @@ class DebugShell(cmd.Cmd):
     # -- shared helpers -------------------------------------------------
 
     def _active_messages(self) -> tuple[tuple[Message, ...], str]:
+        """Return the active messages."""
         if self._buffered is not None:
             return self._buffered, "buffered"
         return self._case.messages, f"fixture={_sanitize_display(self._case.id)}"
 
-    def _format_ids(self, ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def _format_ids(ids: tuple[int, ...]) -> str:
+        """Format ids."""
         if len(ids) > _TOKEN_DISPLAY_CAP:
             head = ", ".join(str(token_id) for token_id in ids[:_TOKEN_DISPLAY_CAP])
             return f"[{head}, ... ({len(ids)} total)]"
         return f"[{', '.join(str(token_id) for token_id in ids)}]"
 
     def _encode(self, text: str) -> tuple[int, ...]:
+        """Return the encode."""
         return tuple(self._tokenizer.encode(text, add_special_tokens=False))
 
     def _print_step(
@@ -364,6 +374,7 @@ class DebugShell(cmd.Cmd):
         seen: tuple[int, ...],
         boundary: tuple[int, ...],
     ) -> None:
+        """Print step."""
         at = first_boundary(seen, boundary)
         overhang = _overhang(seen, boundary)
         parts = [f"token {position}/{total} id={token_id}"]
@@ -379,6 +390,7 @@ class DebugShell(cmd.Cmd):
         print(" ".join(parts))
 
     def _finish_say(self) -> None:
+        """Finish say."""
         buffer = self._say_buffer or []
         self._say_buffer = None
         self._refresh_prompt()
@@ -485,7 +497,8 @@ class DebugShell(cmd.Cmd):
         print(f"using family {family}")
         return False
 
-    def _cmd_families(self, arg: str) -> bool:
+    @staticmethod
+    def _cmd_families(arg: str) -> bool:
         """Usage: .families
 
         List every format-hypothesis family in the catalog.
@@ -718,7 +731,8 @@ class DebugShell(cmd.Cmd):
         """
         return self.read_commands(arg)
 
-    def _cmd_quit(self, arg: str) -> bool:
+    @staticmethod
+    def _cmd_quit(arg: str) -> bool:
         """Usage: .quit | .q
 
         Exit the debugger.

@@ -754,7 +754,8 @@ def _record(fixture, native_verdict, cells, *, vacuous=False, defined=True, plan
 
 
 class TestFirstFlipStateMachine(unittest.TestCase):
-    def _flip(self, cells, native=True):
+    @staticmethod
+    def _flip(cells, native=True):
         record = _record("f", native, cells)
         return distraction.aggregate_candidate([record])["first_flip"]["neutral_before"]
 
@@ -902,6 +903,7 @@ class TestAnalysisMapping(unittest.TestCase):
 class TestSizingBudget(unittest.TestCase):
     def test_encode_budget_bounded(self):
         class _FlatBackend(_WordBackend):
+            # skipcq: PYL-R0201 - zero-arg super() requires an instance method
             def encode(self, text):
                 super().encode(text)
                 return (1, 2, 3)
@@ -1017,6 +1019,8 @@ class TestValidatorAndDiff(unittest.TestCase):
         # The fingerprint is rebuilt over the payload's own
         # components, exactly as the validator rebuilds it.
         import hashlib as _h
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _j
 
         rebuilt = {k: v for k, v in foreign["protocol"].items() if k != "fingerprint"}
@@ -1566,7 +1570,8 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
         self.backend = _WordBackend(RULES, EXPECTED_BY_MARKER)
         self.payload = _payload(self.backend, _run_stage(self.backend))
 
-    def _record0(self, payload):
+    @staticmethod
+    def _record0(payload):
         return payload["candidates"]["dst-a"]["records"][0]
 
     def test_structural_battery(self):
@@ -1668,6 +1673,7 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
             self._record0(p)["cell_details"]["neutral_1024_before"] = "bogus"
             yield "detail_vocabulary", p
             p = copy.deepcopy(self.payload)
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             vac = next(r for r in p["candidates"]["dst-a"]["records"] if r["vacuous"])
             vac["cells"]["neutral_64_before"] = {
                 "verdict": True,
@@ -1814,7 +1820,8 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
 
     def test_stage_decode_failure_falls_back(self):
         class _BadDecodeBackend(_WordBackend):
-            def decode(self, ids):
+            @staticmethod
+            def decode(ids):
                 raise RuntimeError("scripted decode failure")
 
         backend = _BadDecodeBackend(RULES, EXPECTED_BY_MARKER)
@@ -1822,6 +1829,7 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
         self.assertTrue(stage["available"])
 
     def test_stage_sizing_skips_plant_cutting_suffix(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from unittest import mock
 
         backend = _CharBackend()
@@ -1840,6 +1848,7 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
         self.assertGreaterEqual(calls["n"], 1)
 
     def test_stage_sizing_skips_empty_span(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from unittest import mock
 
         backend = _WordBackend(RULES, EXPECTED_BY_MARKER)

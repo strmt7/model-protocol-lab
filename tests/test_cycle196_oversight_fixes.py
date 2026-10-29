@@ -64,7 +64,8 @@ class PackExceptionNormalisationTests(unittest.TestCase):
     """S-4 / S-6 / L-C: the verify boundary returns the documented
     manifest_unparseable report instead of leaking interpreter
     exceptions, and the container boundary names invalid UTF-8
-    entry names in the fixed vocabulary."""
+    entry names in the fixed vocabulary.
+    """
 
     def test_control_bundle_still_ok(self):
         data, _text, _files = _sealed_files()
@@ -144,9 +145,11 @@ class PackExceptionNormalisationTests(unittest.TestCase):
 class PackEntryTypeTests(unittest.TestCase):
     """S-8: an entry whose stored Unix file type is explicitly not
     a regular file fails seal_container; pack's own shape (no type
-    bits claimed) and explicitly regular entries still pass."""
+    bits claimed) and explicitly regular entries still pass.
+    """
 
-    def _retyped(self, target, mode_bits):
+    @staticmethod
+    def _retyped(target, mode_bits):
         data, _text, _files = _sealed_files()
         source = zipfile.ZipFile(io.BytesIO(data))
         out = io.BytesIO()
@@ -179,7 +182,8 @@ class PackEntryTypeTests(unittest.TestCase):
 class PackSurrogateNameTests(unittest.TestCase):
     """S-10: a surrogateescape filename in a report directory is a
     pack_entry_name_invalid ValueError, not a raw UnicodeEncodeError
-    during serialisation."""
+    during serialisation.
+    """
 
     def test_surrogateescape_filename_rejected_in_vocabulary(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -194,7 +198,8 @@ class PackSurrogateNameTests(unittest.TestCase):
 class DisplayCapTests(unittest.TestCase):
     """S-9: the R4-7 200-character preview cap now lives in every
     display sanitizer (verify/cli/diffreports _display_id and
-    fixtures._safe), not just at the sites the earlier round fixed."""
+    fixtures._safe), not just at the sites the earlier round fixed.
+    """
 
     def test_caps(self):
         long_value = "x" * 300
@@ -212,10 +217,7 @@ class DisplayCapTests(unittest.TestCase):
 
 def _run_server(raw_input, timeout=60):
     proc = subprocess.run(
-        SERVER_CMD,
-        input=raw_input,
-        capture_output=True,
-        timeout=timeout,
+        SERVER_CMD, input=raw_input, capture_output=True, timeout=timeout, check=False
     )
     responses = [
         json.loads(line) for line in proc.stdout.decode("utf-8").splitlines() if line.strip()
@@ -248,7 +250,8 @@ def _tool_call(arguments):
 class MCPFrameHardeningTests(unittest.TestCase):
     """S-3 / S-5 / S-11 / S-12 / S-13: the MCP frame boundary fails
     closed in the fixed JSON-RPC vocabulary and the process
-    survives every malformed frame class."""
+    survives every malformed frame class.
+    """
 
     def test_nested_bomb_is_parse_error_and_server_survives(self):
         rc, out = _run_server(("[" * 10000 + "]" * 10000 + "\n" + _PING + "\n").encode())
@@ -314,7 +317,8 @@ class MCPFrameHardeningTests(unittest.TestCase):
 class ProbeOutputPermissionTests(unittest.TestCase):
     """S-7: surface-noise probe output follows the save_report
     permission discipline (0700 directory, 0600 files) under a
-    permissive umask."""
+    permissive umask.
+    """
 
     def test_probe_output_permissions(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -343,6 +347,7 @@ class ProbeOutputPermissionTests(unittest.TestCase):
                     text=True,
                     timeout=120,
                     cwd=ROOT,
+                    check=False,
                 )
             finally:
                 os.umask(old_umask)
@@ -355,7 +360,8 @@ class ProbeOutputPermissionTests(unittest.TestCase):
 class ReportControlStripTests(unittest.TestCase):
     """S-14: C0 controls planted in candidate names / fixture IDs
     do not reach report.html verbatim through the main rendering
-    paths."""
+    paths.
+    """
 
     def test_main_paths_strip_controls(self):
         result = json.loads(
@@ -391,7 +397,8 @@ class ReportControlStripTests(unittest.TestCase):
 
 class BoolForIntGuardTests(unittest.TestCase):
     """Edge F2: a JSON true must not validate as the integer 1 in
-    equality-compared validator fields."""
+    equality-compared validator fields.
+    """
 
     def test_needle_protocol_version_bool_rejected(self):
         payload = _needle_payload()
@@ -419,7 +426,8 @@ class BoolForIntGuardTests(unittest.TestCase):
 
 class PrimaryPairBindingTests(unittest.TestCase):
     """Edge F3: primary_decision/primary_winner are bound to the
-    run-decision vocabulary and winner consistency."""
+    run-decision vocabulary and winner consistency.
+    """
 
     def test_genuine_payload_valid(self):
         self.assertTrue(diffreports._valid_dateline(_dateline_payload()))
@@ -454,7 +462,8 @@ class NeedleHtmlLeakTests(unittest.TestCase):
     """The needle-section leak check the oversight auditor's
     attempt left vacuous: render a genuine full payload through
     render_html (section provably present), with a marker planted
-    in free-text fields a leaky renderer might emit."""
+    in free-text fields a leaky renderer might emit.
+    """
 
     MARKER = "XYZZY-NEEDLE-VALUE-7749"
 

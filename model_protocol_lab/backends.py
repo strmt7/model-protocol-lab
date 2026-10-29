@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
 
 def _directory(value: str | Path) -> Path:
+    """Return the directory."""
     if not isinstance(value, (str, Path)) or not str(value):
         raise ValueError("invalid_local_directory")
     try:
@@ -38,6 +39,7 @@ def _directory(value: str | Path) -> Path:
 
 
 def _member(root: Path, name: str) -> Path:
+    """Return the member."""
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
         raise ValueError("invalid_asset_name")
     path = root / name
@@ -73,6 +75,7 @@ def _open_regular_read(path: Path) -> int:
 
 
 def _read_json(path: Path) -> dict[str, Any]:
+    """Read json."""
     fd = _open_regular_read(path)
     try:
         with os.fdopen(fd, "rb") as handle:
@@ -85,7 +88,7 @@ def _read_json(path: Path) -> dict[str, Any]:
         raise ValueError("oversized_asset_json")
     try:
         value = json.loads(content.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, ValueError):
+    except (RecursionError, ValueError):
         # Keep the fixed error vocabulary: raw codec/parser text (which
         # reflects the inspected file's bytes) must not reach doctor check
         # details. Mirrors datasets.parse_dataset, which maps the same
@@ -100,6 +103,7 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _model_assets(root: Path) -> tuple[str, ...]:
+    """Return the model assets."""
     if (root / "adapter_config.json").exists():
         raise ValueError("adapters_not_supported")
     single, index = root / "model.safetensors", root / "model.safetensors.index.json"
@@ -158,6 +162,7 @@ def _manifest_entries(
 
 
 def _manifest(root: Path, names: tuple[str, ...]) -> list[dict[str, Any]]:
+    """Return the manifest."""
     return [record for record, _ in _manifest_entries(root, names)]
 
 
@@ -191,6 +196,7 @@ def _verify_manifest_fingerprints(
     for name in names:
         path = _member(root, name)
         try:
+            # skipcq: PYL-W0621 - the name is load-bearing (import binding / payload vocabulary)
             stat = path.stat()
         except OSError:
             raise ValueError("assets_changed") from None
@@ -199,6 +205,7 @@ def _verify_manifest_fingerprints(
 
 
 def _ids_valid(value: object, vocab_size: int) -> bool:
+    """Return the ids valid."""
     return type(value) is tuple and all(
         type(token) is int and 0 <= token < vocab_size for token in value
     )
@@ -370,7 +377,8 @@ def _bytes_to_unicode() -> dict[int, str]:
 
 def _decoder_config_has_type(config: Any, decoder_type: str) -> bool:
     """Port of ``StopStringCriteria._decoder_has_type``: does the tokenizers
-    decoder config tree contain a decoder of the given type?"""
+    decoder config tree contain a decoder of the given type?
+    """
     if isinstance(config, dict):
         if config.get("type") == decoder_type:
             return True
@@ -449,6 +457,7 @@ def _hf_byte_token_mapper(tokenizer: Any) -> Callable[[int], bytes | None] | Non
         return None
 
     def _map(token_id: int) -> bytes | None:
+        """Return the map."""
         if type(token_id) is not int or token_id < 0:
             raise ValueError("token id must be a nonnegative integer")
         if token_id >= vocab_size:
@@ -778,6 +787,7 @@ class TruncatedPromptBackend:
     """
 
     def __init__(self, inner: Backend, drop_bytes: int) -> None:
+        """Wrap ``inner``, truncating the prompt by whole bytes."""
         if type(drop_bytes) is not int or drop_bytes < 1:
             raise ValueError("drop_bytes must be a positive integer")
         inner_fingerprint = getattr(inner, "fingerprint", None)
@@ -791,17 +801,20 @@ class TruncatedPromptBackend:
         self.hf_stop_token_bytes = getattr(inner, "hf_stop_token_bytes", None)
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode the complete rendered prompt into raw token IDs."""
         mutated = truncate_text_tail(text, self._drop_bytes)
         if mutated is None:
             raise ValueError("prompt_truncation_splits_codepoint")
         return self._inner.encode(mutated)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode token IDs without dropping special tokens."""
         return self._inner.decode(token_ids)
 
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         return self._inner.generate(
             input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel
         )
@@ -834,6 +847,7 @@ class TokenTruncatedPromptBackend:
     """
 
     def __init__(self, inner: Backend, drop_tokens: int) -> None:
+        """Wrap ``inner``, truncating the prompt by whole tokens."""
         if type(drop_tokens) is not int or drop_tokens < 1:
             raise ValueError("drop_tokens must be a positive integer")
         inner_fingerprint = getattr(inner, "fingerprint", None)
@@ -862,17 +876,20 @@ class TokenTruncatedPromptBackend:
         self.hf_stop_token_bytes = getattr(inner, "hf_stop_token_bytes", None)
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode the complete rendered prompt into raw token IDs."""
         ids = self._inner.encode(text)
         if type(ids) is not tuple or self._drop_tokens >= len(ids):
             raise ValueError("prompt_token_truncation_beyond_length")
         return ids[: -self._drop_tokens]
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode token IDs without dropping special tokens."""
         return self._inner.decode(token_ids)
 
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         return self._inner.generate(
             input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel
         )
@@ -892,6 +909,7 @@ class TokenHealingBackend:
     """
 
     def __init__(self, inner: Backend) -> None:
+        """Wrap ``inner``, adding token healing to its generations."""
         inner_fingerprint = getattr(inner, "fingerprint", None)
         if type(inner_fingerprint) is not str:
             raise ValueError("Backend fingerprint must be a string")
@@ -906,14 +924,17 @@ class TokenHealingBackend:
         self.n_fallback = 0
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode the complete rendered prompt into raw token IDs."""
         return self._inner.encode(text)
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode token IDs without dropping special tokens."""
         return self._inner.decode(token_ids)
 
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         heal = getattr(self._inner, "heal_input_ids", None)
         try:
             if not callable(heal):
@@ -1005,6 +1026,7 @@ class LocalHFBackend:
         max_context: int = 2048,
         dtype: str = "float32",
     ) -> None:
+        """Load the local Hugging Face checkpoint at ``model_path``."""
         self._lock = RLock()
         self._model = self._tokenizer = None
         try:
@@ -1190,6 +1212,7 @@ class LocalHFBackend:
         return tokenizer, model
 
     def encode(self, text: str) -> tuple[int, ...]:
+        """Encode the complete rendered prompt into raw token IDs."""
         if type(text) is not str:
             raise ValueError("invalid_text")
         tokenizer, _ = self._ready()
@@ -1207,6 +1230,7 @@ class LocalHFBackend:
             raise RuntimeError("local_encode_failed") from None
 
     def decode(self, token_ids: tuple[int, ...]) -> str:
+        """Decode token IDs without dropping special tokens."""
         if not _ids_valid(token_ids, self._vocab_size) or any(
             t not in self._tokenizer_ids for t in token_ids
         ):
@@ -1268,6 +1292,7 @@ class LocalHFBackend:
         def _decode_prompt(ids: tuple[int, ...]) -> str:
             # Skip-specials is False (deliberate adaptation, see healing):
             # the lab's prompts are exact id sequences that must round-trip.
+            """Return the decode prompt."""
             text: str = tokenizer.decode(
                 list(ids),
                 skip_special_tokens=False,
@@ -1276,10 +1301,12 @@ class LocalHFBackend:
             return text
 
         def _decode_token(token_id: int) -> str:
+            """Return the decode token."""
             text: str = tokenizer.decode([token_id], clean_up_tokenization_spaces=False)
             return text
 
         def _reencode(text: str) -> tuple[int, ...]:
+            """Return the reencode."""
             values = tuple(
                 tokenizer.encode(text, add_special_tokens=False, truncation=False, padding=False)
             )
@@ -1288,6 +1315,7 @@ class LocalHFBackend:
             return values
 
         def _biased_argmax(trimmed: tuple[int, ...], biases: dict[int, float]) -> int:
+            """Return the biased argmax."""
             if len(trimmed) > self._context_limit:
                 raise ValueError("heal_context_limit_exceeded")
             with torch.inference_mode():
@@ -1379,6 +1407,7 @@ class LocalHFBackend:
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
+        """Generate exactly the cap unless cancelled or failed."""
         if not _ids_valid(input_ids, self._vocab_size) or not input_ids:
             return Generation((), "error", "invalid_or_empty_input")
         if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 4096:

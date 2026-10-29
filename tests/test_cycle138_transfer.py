@@ -166,7 +166,8 @@ class ScriptedBackend:
 
 
 class TransferStageTest(unittest.TestCase):
-    def _stage(self, behavior):
+    @staticmethod
+    def _stage(behavior):
         expected = {"S1": "GREEN", "S2": "BLUE"}
         cases = tuple(_fixture(fid, ans) for fid, ans in expected.items())
         formats = tuple(_format(n) for n in CANDIDATES)
@@ -244,7 +245,8 @@ class TransferStageTest(unittest.TestCase):
 
 
 class TransferHtmlTest(unittest.TestCase):
-    def _transfer(self):
+    @staticmethod
+    def _transfer():
         return {
             "available": True,
             "primary_winner": "alpha",

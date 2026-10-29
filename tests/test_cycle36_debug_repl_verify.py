@@ -82,11 +82,13 @@ from model_protocol_lab.fixtures import split_to_json_text
 class FakeTokenizer:
     """Deterministic char-level tokenizer shim (no weights, no network)."""
 
-    def encode(self, text, add_special_tokens=False):
+    @staticmethod
+    def encode(text, add_special_tokens=False):
         assert isinstance(text, str)
         return tuple(ord(char) for char in text)
 
-    def decode(self, token_ids):
+    @staticmethod
+    def decode(token_ids):
         assert isinstance(token_ids, (list, tuple))
         return "".join(chr(token_id) for token_id in token_ids)
 
@@ -94,7 +96,8 @@ class FakeTokenizer:
 class ExplodingDecodeTokenizer(FakeTokenizer):
     """decode() always fails: the stepper must degrade, never die."""
 
-    def decode(self, token_ids):
+    @staticmethod
+    def decode(token_ids):
         raise RuntimeError("decode exploded")
 
 
@@ -226,11 +229,11 @@ class TestCommandParsing(unittest.TestCase):
 
     def test_exact_match_beats_prefix(self) -> None:
         # ".q" is an exact command even though ".quit" also starts with ".q".
-        shell, buf = _make_shell()
+        shell, _buf = _make_shell()
         self.assertTrue(shell.onecmd(".q"))
 
     def test_qu_abbreviation_quits(self) -> None:
-        shell, buf = _make_shell()
+        shell, _buf = _make_shell()
         self.assertTrue(shell.onecmd(".qu"))
 
     def test_double_dot_is_unknown(self) -> None:
@@ -468,6 +471,7 @@ class TestRender(unittest.TestCase):
     def test_render_per_segment_token_ids(self) -> None:
         shell, buf = _make_shell()
         out = _run(shell, buf, ".render", ".quit")
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         content_line = next(line for line in out.splitlines() if "user_content" in line)
         self.assertIn("tokens=[104, 101, 108, 108, 111]", content_line)
 
@@ -558,7 +562,8 @@ class TestTokens(unittest.TestCase):
 
 
 class TestBoundaryStreamStep(unittest.TestCase):
-    def _walked(self, *commands: str) -> str:
+    @staticmethod
+    def _walked(*commands: str) -> str:
         shell, buf = _make_shell(tokenizer=None)
         return _run(shell, buf, *commands)
 
@@ -838,7 +843,8 @@ class TestSay(unittest.TestCase):
 
 
 class TestAudit(unittest.TestCase):
-    def _split_with_literal(self) -> Split:
+    @staticmethod
+    def _split_with_literal() -> Split:
         return Split(
             search=(
                 Fixture(
@@ -893,7 +899,7 @@ class TestSave(unittest.TestCase):
             self.assertIn("1: s1 *\n", before)
 
     def test_save_appends(self) -> None:
-        shell, buf = _make_shell()
+        shell, _buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
             target = str(Path(tmp) / "t.txt")
             shell.onecmd(".fixtures")
@@ -1080,7 +1086,8 @@ class TestRead(unittest.TestCase):
             out = _run(shell, buf, f".read {script}", ".quit")
             self.assertNotIn("error", out)
 
-    def _write_chain(self, tmp: str, depth: int) -> str:
+    @staticmethod
+    def _write_chain(tmp: str, depth: int) -> str:
         """s{depth} -> ... -> s0; s0 runs .families."""
         prev = Path(tmp) / "s0.txt"
         prev.write_text(".families\n", encoding="utf-8")
@@ -1215,7 +1222,7 @@ class TestRunScript(unittest.TestCase):
         self.assertIn("debug: unreadable script file:", err.getvalue())
 
     def test_run_script_quit_inside_returns_0(self) -> None:
-        shell, buf = _make_shell()
+        shell, _buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
             script = Path(tmp) / "s.txt"
             script.write_text(".fixtures\n.quit\n", encoding="utf-8")
@@ -1223,13 +1230,15 @@ class TestRunScript(unittest.TestCase):
 
 
 class TestRunDebug(unittest.TestCase):
-    def _namespace(self, **kwargs):
+    @staticmethod
+    def _namespace(**kwargs):
         kwargs.setdefault("dataset", None)
         kwargs.setdefault("model", None)
         kwargs.setdefault("script", None)
         return argparse.Namespace(**kwargs)
 
-    def _write_dataset(self, tmp: str) -> str:
+    @staticmethod
+    def _write_dataset(tmp: str) -> str:
         path = str(Path(tmp) / "ds.json")
         Path(path).write_text(split_to_json_text(_make_split()), encoding="utf-8")
         return path
@@ -1312,6 +1321,7 @@ class TestRunDebug(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=120,
+                check=False,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertNotIn("model-protocol-lab debug", proc.stdout)
@@ -1330,6 +1340,7 @@ class TestRunDebug(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=120,
+            check=False,
         )
         self.assertEqual(proc.stdout.strip(), "False")
 
@@ -1341,7 +1352,8 @@ class TestRunDebug(unittest.TestCase):
 class TestAttachTokenizerEndToEnd(unittest.TestCase):
     """attach_tokenizer on a locally-built checkpoint: tokenizer-only, offline."""
 
-    def _build_checkpoint(self, tmp: str) -> str:
+    @staticmethod
+    def _build_checkpoint(tmp: str) -> str:
         from tokenizers import Tokenizer
         from tokenizers.models import WordLevel
         from tokenizers.pre_tokenizers import WhitespaceSplit
@@ -1382,6 +1394,7 @@ class TestAttachTokenizerEndToEnd(unittest.TestCase):
             tok = attach_tokenizer(self._build_checkpoint(tmp))
             shell, buf = _make_shell(tokenizer=tok)
             out = _run(shell, buf, ".render", ".quit")
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             content_line = next(line for line in out.splitlines() if "user_content" in line)
             expected = tok.encode("hello", add_special_tokens=False)
             self.assertIn(f"tokens=[{', '.join(str(i) for i in expected)}]", content_line)

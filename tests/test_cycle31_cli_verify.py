@@ -609,7 +609,7 @@ class TestInspect(unittest.TestCase):
 
     def test_directory_returns_one(self):
         with tempfile.TemporaryDirectory() as tmp:
-            kind, code, _out, err = run_cli(["inspect", tmp])
+            kind, code, _out, _err = run_cli(["inspect", tmp])
         self.assertEqual((kind, code), ("return", 1))
 
     def test_empty_expected_warns_and_sanitizes(self):
@@ -851,7 +851,7 @@ class TestRunValidation(unittest.TestCase):
         self.assertIn("Duplicate --boundary-map", err)
 
     def test_malformed_boundary_map_exits_two(self):
-        kind, code, _out, err = run_cli(run_argv() + ["--boundary-map", "chatml"])
+        kind, code, _out, _err = run_cli(run_argv() + ["--boundary-map", "chatml"])
         self.assertEqual((kind, code), ("exit", 2))
 
 
@@ -867,7 +867,8 @@ class _FakeBackend:
 
 
 class TestRunDispatch(unittest.TestCase):
-    def _run_with(self, result, argv_extra=()):
+    @staticmethod
+    def _run_with(result, argv_extra=()):
         with tempfile.TemporaryDirectory() as tmp:
             fixture = write_fixture_file(tmp)
             outdir = Path(tmp) / "report"
@@ -1168,6 +1169,7 @@ class TestMainModule(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=120,
+            check=False,
         )
 
     def test_module_help(self):

@@ -823,7 +823,8 @@ class ModelDifferentialTests(unittest.TestCase):
 
     def test_truncated_safetensors_header_fails_weight_headers(self):
         """Byte-level header validation: a truncated header still passes the
-        filename-level asset_layout check, but now fails weight_headers."""
+        filename-level asset_layout check, but now fails weight_headers.
+        """
         with TemporaryDirectory() as tmp:
             root = _write_checkpoint(Path(tmp), config={"model_type": "gpt2"}, weights="truncated")
             header_ok, reason = oracle_parse_safetensors_header(root / "model.safetensors")
@@ -1138,7 +1139,8 @@ class ModelDifferentialTests(unittest.TestCase):
 class WeightHeadersCheckTests(unittest.TestCase):
     """doctor's byte-level safetensors header check vs the oracle."""
 
-    def _checkpoint(self, tmp: str, filename: str, payload: bytes) -> Path:
+    @staticmethod
+    def _checkpoint(tmp: str, filename: str, payload: bytes) -> Path:
         root = Path(tmp) / "ckpt"
         root.mkdir(parents=True, exist_ok=True)
         _write_json(root / "config.json", {"model_type": "gpt2"})
@@ -1151,7 +1153,8 @@ class WeightHeadersCheckTests(unittest.TestCase):
             )
         return root
 
-    def _valid_payload(self, header: dict) -> bytes:
+    @staticmethod
+    def _valid_payload(header: dict) -> bytes:
         header_bytes = json.dumps(header).encode("utf-8")
         return struct.pack("<Q", len(header_bytes)) + header_bytes
 
@@ -1267,7 +1270,8 @@ class TemplateConformanceDifferentialTests(unittest.TestCase):
         group="g",
     )
 
-    def _conformance_dir(self, tmp: str, tokenizer_config: object) -> Path:
+    @staticmethod
+    def _conformance_dir(tmp: str, tokenizer_config: object) -> Path:
         root = Path(tmp) / "ckpt"
         root.mkdir()
         _write_wordlevel_tokenizer(root)
@@ -1457,7 +1461,7 @@ class MutationTests(unittest.TestCase):
     def test_mutation_miscomputed_new_tokens_is_caught(self):
         """Mutant: _next_command ignores the fitted budget (always 64)."""
         with TemporaryDirectory() as tmp:
-            root, ds, longest, window = _build_suggestion_fixture(tmp, window_mode="over")
+            root, ds, _longest, _window = _build_suggestion_fixture(tmp, window_mode="over")
             mutant = self._mutant(
                 tmp,
                 [

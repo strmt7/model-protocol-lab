@@ -210,14 +210,17 @@ class ScriptedBackend:
 
     fingerprint = "cycle46-scripted-backend"
 
-    def encode(self, text: str) -> tuple[int, ...]:
+    @staticmethod
+    def encode(text: str) -> tuple[int, ...]:
         return tuple(ord(char) for char in text)
 
-    def decode(self, token_ids: tuple[int, ...]) -> str:
+    @staticmethod
+    def decode(token_ids: tuple[int, ...]) -> str:
         return "".join(chr(token) for token in token_ids)
 
+    @staticmethod
     def generate(
-        self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
+        input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Any:
         prompt = "".join(chr(token) for token in input_ids)
         answer = "BLUE" if "BLUE" in prompt else "GREEN"
@@ -294,6 +297,7 @@ class CommandNamesTest(unittest.TestCase):
             text=True,
             cwd=REPO_ROOT,
             timeout=60,
+            check=False,
         )
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(len(json.loads(proc.stdout)), len(CATALOG))
@@ -594,7 +598,8 @@ DOCUMENTED_CSV = (
 class FixturesBuildTest(unittest.TestCase):
     """USAGE sec 9 + README: `fixtures build`."""
 
-    def _build(self, tmp: str, csv_text: str, name: str = "fixtures.json"):
+    @staticmethod
+    def _build(tmp: str, csv_text: str, name: str = "fixtures.json"):
         csv_path = Path(tmp) / "cases.csv"
         csv_path.write_text(csv_text, encoding="utf-8")
         out_path = Path(tmp) / name
@@ -655,7 +660,7 @@ class FixturesBuildTest(unittest.TestCase):
             "id,group,partition,expected,user_1,assistant_1,user_2\na,g,search,BLUE,hi,,later\n"
         )
         with TemporaryDirectory() as tmp:
-            code, _, err, out_path = self._build(tmp, csv_text)
+            code, _, _err, out_path = self._build(tmp, csv_text)
             self.assertEqual(code, 1)
             self.assertFalse(out_path.exists())
 
@@ -680,7 +685,8 @@ class DoctorTest(unittest.TestCase):
     def tearDownClass(cls):
         cls._tmp.cleanup()
 
-    def _doctor(self, *argv: str) -> tuple[int, dict, str]:
+    @staticmethod
+    def _doctor(*argv: str) -> tuple[int, dict, str]:
         code, out, err = run_cli(["doctor", *argv])
         return code, json.loads(out), err
 
@@ -749,7 +755,7 @@ class DoctorTest(unittest.TestCase):
 
     def test_reference_model_reports_mismatch(self):
         # USAGE sec 8.4: "Non-portability is reported as `mismatch`".
-        code, report, _ = self._doctor(
+        _code, report, _ = self._doctor(
             "--model",
             str(self.ckpt),
             "--reference-model",
@@ -762,7 +768,7 @@ class DoctorTest(unittest.TestCase):
     def test_portability_matrix_stdout_stays_parseable_json(self):
         # USAGE sec 2: "the CLI also prints a readable table to stderr so
         # stdout stays parseable JSON".
-        code, out, err = run_cli(
+        _code, out, err = run_cli(
             [
                 "doctor",
                 "--model",
@@ -820,7 +826,7 @@ class RunTest(unittest.TestCase):
     def test_documented_template_runs_end_to_end(self):
         with TemporaryDirectory() as tmp:
             output = Path(tmp) / "report"
-            code, out, err = patched_run(self._base_argv(output))
+            code, out, _err = patched_run(self._base_argv(output))
             self.assertIn(code, (0, 2))
             summary = json.loads(out)
             self.assertIn("decision", summary)
@@ -975,7 +981,8 @@ class RunTest(unittest.TestCase):
 class DebugTest(unittest.TestCase):
     """USAGE sec 10 + README: `debug`."""
 
-    def _script_run(self, lines: list[str], model: Path | None = None):
+    @staticmethod
+    def _script_run(lines: list[str], model: Path | None = None):
         with TemporaryDirectory() as tmp:
             script = Path(tmp) / "session.txt"
             script.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -1016,6 +1023,7 @@ class DebugTest(unittest.TestCase):
             text=True,
             cwd=REPO_ROOT,
             timeout=60,
+            check=False,
         )
         self.assertEqual(proc.returncode, 0)
         match = re.search(
@@ -1082,7 +1090,7 @@ class DebugTest(unittest.TestCase):
     def test_save_writes_transcript(self):
         with TemporaryDirectory() as tmp:
             target = Path(tmp) / "transcript.txt"
-            code, out, _ = self._script_run([".render", f".save {target}", ".quit"])
+            code, _out, _ = self._script_run([".render", f".save {target}", ".quit"])
             self.assertEqual(code, 0)
             self.assertTrue(target.exists())
             self.assertIn("render: family=chatml", target.read_text(encoding="utf-8"))
@@ -1122,7 +1130,8 @@ class DiffBackendsTest(unittest.TestCase):
     def tearDownClass(cls):
         cls._tmp.cleanup()
 
-    def _run(self, *argv: str) -> tuple[int, dict, str]:
+    @staticmethod
+    def _run(*argv: str) -> tuple[int, dict, str]:
         code, out, err = run_cli(["diff-backends", *argv])
         return code, (json.loads(out) if out.strip() else {}), err
 

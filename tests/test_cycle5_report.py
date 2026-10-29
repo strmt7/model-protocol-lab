@@ -46,20 +46,24 @@ class _ScriptCollector(HTMLParser):
         self._current: list[str] | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        """Record the start of a script element."""
         if tag == "script":
             self._current = []
 
     def handle_endtag(self, tag: str) -> None:
+        """Close the current script body on the script end tag."""
         if tag == "script" and self._current is not None:
             self.bodies.append("".join(self._current))
             self._current = None
 
     def handle_data(self, data: str) -> None:
+        """Accumulate script body text while inside a script element."""
         if self._current is not None:
             self._current.append(data)
 
 
 def _script_bodies(html: str) -> list[str]:
+    """Extract the bodies of all script elements in the HTML."""
     collector = _ScriptCollector()
     collector.feed(html)
     collector.close()
@@ -67,6 +71,7 @@ def _script_bodies(html: str) -> list[str]:
 
 
 def _obs(fixture: str, passed: bool) -> dict[str, Any]:
+    """Build one observation dict for the report fixtures."""
     return {
         "fixture": fixture,
         "status": "completed",
@@ -78,7 +83,8 @@ def _obs(fixture: str, passed: bool) -> dict[str, Any]:
 def _rich_result() -> dict[str, Any]:
     """Result exercising every report section: config, search, outcome
     grid, decisive fixtures, conformance, stop matrix, budget frontier,
-    sensitivity sweep and held-out."""
+    sensitivity sweep and held-out.
+    """
     return {
         "decision": "compatible_on_fixture_set",
         "selected_candidate": "cand-a",
@@ -219,7 +225,10 @@ def _rich_result() -> dict[str, Any]:
 
 
 class NoRemoteReferencesTests(unittest.TestCase):
+    """The rendered HTML and the committed sample report reference no remote resources."""
+
     def assert_no_remote_references(self, html: str) -> None:
+        """Assert the HTML carries no remote URLs, src attributes or other remote references."""
         self.assertNotIn("http://", html)
         self.assertNotIn("https://", html)
         # No src= resource attributes anywhere (<script src>, <img>, ...).
@@ -233,18 +242,24 @@ class NoRemoteReferencesTests(unittest.TestCase):
         self.assertNotIn("@import", html)
 
     def test_render_html_has_no_remote_references(self) -> None:
+        """A rich rendered report has no remote references."""
         self.assert_no_remote_references(render_html(_rich_result()))
 
     def test_render_html_minimal_has_no_remote_references(self) -> None:
+        """A minimal rendered report has no remote references."""
         self.assert_no_remote_references(render_html({"decision": "failed", "search": []}))
 
     def test_committed_sample_report_has_no_remote_references(self) -> None:
+        """The committed sample report has no remote references."""
         html = (COMMITTED / "report.html").read_text(encoding="utf-8")
         self.assert_no_remote_references(html)
 
 
 class SortableTableTests(unittest.TestCase):
+    """Sortable report tables carry numeric data-sort keys and one inert sort script."""
+
     def test_sortable_tables_carry_data_sort_keys(self) -> None:
+        """Sortable tables exist and their cells carry data-sort keys."""
         html = render_html(_rich_result())
         tables = re.findall(r'<table class="sortable">(.*?)</table>', html, re.DOTALL)
         # Search candidates, outcome grid, conformance, frontier curves, sweep.
@@ -259,6 +274,7 @@ class SortableTableTests(unittest.TestCase):
                 self.assertIn("data-sort=", cell, f"sortable cell lacks key: {cell[:70]}")
 
     def test_sort_script_is_single_and_inert_safe(self) -> None:
+        """Exactly one sort script is emitted and it is inert-safe."""
         html = render_html(_rich_result())
         bodies = _script_bodies(html)
         self.assertEqual(len(bodies), 1)
@@ -270,13 +286,17 @@ class SortableTableTests(unittest.TestCase):
     def test_numeric_keys_sort_numerically(self) -> None:
         # data-sort keys for counts/rates are plain numbers, which the
         # inline sorter compares numerically (parseFloat branch).
+        """Numeric sort keys are emitted in fixed-point form so they sort numerically."""
         html = render_html(_rich_result())
         self.assertIn('data-sort="1.000000"', html)
         self.assertIn('data-sort="0.500000"', html)
 
 
 class TocTests(unittest.TestCase):
+    """The report table of contents links only to rendered sections."""
+
     def test_toc_anchors_resolve(self) -> None:
+        """Every TOC anchor resolves to a rendered section."""
         html = render_html(_rich_result())
         nav = re.search(r'<nav class="toc".*?</nav>', html, re.DOTALL)
         self.assertIsNotNone(nav)
@@ -288,6 +308,7 @@ class TocTests(unittest.TestCase):
             self.assertIn(anchor, ids, f"TOC anchor #{anchor} has no target")
 
     def test_toc_skips_unrendered_sections(self) -> None:
+        """The TOC omits sections that were not rendered."""
         html = render_html({"decision": "failed", "search": []})
         nav = re.search(r'<nav class="toc".*?</nav>', html, re.DOTALL)
         self.assertIsNotNone(nav)
@@ -297,7 +318,10 @@ class TocTests(unittest.TestCase):
 
 
 class CspScriptTests(unittest.TestCase):
+    """The CSP hash allowlist matches the single emitted script."""
+
     def test_csp_hash_allowlist_matches_emitted_script(self) -> None:
+        """The CSP hash allowlist matches the single emitted script body."""
         html = render_html(_rich_result())
         bodies = _script_bodies(html)
         self.assertEqual(len(bodies), 1)
@@ -315,7 +339,10 @@ class CspScriptTests(unittest.TestCase):
 
 
 class SvgSparklineTests(unittest.TestCase):
+    """SVG sparklines are text-free, deterministic geometry over quantized counts."""
+
     def test_svg_has_no_text_glyphs(self) -> None:
+        """The sparkline SVG contains shapes only, no text glyphs."""
         svg = _spark_svg([0, 2, 4], 4, "label")
         self.assertIn("<svg", svg)
         self.assertIn("<rect", svg)
@@ -323,14 +350,17 @@ class SvgSparklineTests(unittest.TestCase):
             self.assertNotIn(glyph, svg)
 
     def test_svg_degenerate_inputs(self) -> None:
+        """Degenerate sparkline inputs render the '?' placeholder."""
         self.assertEqual(_spark_svg([], 4, "x"), "?")
         self.assertEqual(_spark_svg([1], 0, "x"), "?")
 
     def test_svg_is_deterministic(self) -> None:
+        """The sparkline SVG is deterministic for identical inputs."""
         self.assertEqual(_spark_svg([0, 2, 4], 4, "l"), _spark_svg([0, 2, 4], 4, "l"))
 
     def test_svg_geometry_matches_quantized_counts(self) -> None:
         # counts [0,0,1,1,2,2,2,2] of 2 -> levels 0,0,4,4,8,8,8,8 on an 8-high grid.
+        """Sparkline rect geometry matches the quantized counts."""
         svg = _spark_svg([0, 0, 1, 1, 2, 2, 2, 2], 2, "l")
         self.assertEqual(svg.count("<rect"), 8)
         self.assertIn('height="8"', svg)
@@ -338,6 +368,7 @@ class SvgSparklineTests(unittest.TestCase):
         self.assertIn('height="0"', svg)
 
     def test_frontier_table_uses_svg_with_accessible_data_label(self) -> None:
+        """The frontier table uses an SVG sparkline with an accessible data label."""
         frontier = {
             "max_new_tokens": 8,
             "candidates": {
@@ -355,7 +386,10 @@ class SvgSparklineTests(unittest.TestCase):
 
 
 class DetailsAccordionTests(unittest.TestCase):
+    """Report details accordions carry their group names."""
+
     def test_details_groups_are_named(self) -> None:
+        """Details groups carry the candidate-details and conformance-details names."""
         html = render_html(_rich_result())
         self.assertIn('name="candidate-details"', html)
         self.assertIn('name="conformance-details"', html)
@@ -363,13 +397,19 @@ class DetailsAccordionTests(unittest.TestCase):
 
 
 class DeterminismTests(unittest.TestCase):
+    """render_html is byte-deterministic."""
+
     def test_render_html_is_byte_deterministic(self) -> None:
+        """render_html returns identical bytes for identical input."""
         result = _rich_result()
         self.assertEqual(render_html(result), render_html(result))
 
 
 class SampleReportRegenTests(unittest.TestCase):
+    """The committed sample report regenerates byte-identically."""
+
     def test_sample_report_regenerates_byte_identically(self) -> None:
+        """The sample-report script regenerates the committed report byte-identically."""
         spec = importlib.util.spec_from_file_location("make_sample_report", SCRIPT)
         self.assertIsNotNone(spec)
         assert spec is not None
@@ -387,11 +427,14 @@ class SampleReportRegenTests(unittest.TestCase):
 
 
 class HostileAttributeEscapingTests(unittest.TestCase):
+    """Hostile strings are neutralized inside data-sort attributes."""
+
     def test_hostile_strings_neutralized_in_data_sort_attributes(self) -> None:
         # Pins the attribute-injection fix: hostile candidate/fixture names
         # must render escaped inside data-sort="..." attributes (and element
         # text), including the budget-frontier SVG sparkline section. This
         # bug class escaped once already; the fix must not regress silently.
+        """A script/img hostile string is neutralized inside data-sort attributes."""
         evil = '"><script>alert(1)</script><img src=x onerror=alert(2)>'
         result = _rich_result()
         for entry in result["search"]:

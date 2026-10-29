@@ -16,6 +16,7 @@ MAX_TEXT = 16_384
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Return the unique object."""
     result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
@@ -25,6 +26,7 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def _reject_constant(_value: str) -> NoReturn:
+    """Return the reject constant."""
     raise ValueError("Nonfinite JSON")
 
 
@@ -32,11 +34,13 @@ _SURROGATE_RE = re.compile(r"[\ud800-\udfff]")
 
 
 def _fields(value: Any, expected: tuple[str, ...]) -> None:
+    """Fields."""
     if type(value) is not dict or set(value) != set(expected):
         raise ValueError("Unexpected or missing JSON fields")
 
 
 def _text(value: Any, *, nonblank: bool = False) -> str:
+    """Return the text."""
     if type(value) is not str or len(value) > MAX_TEXT:
         raise ValueError("Invalid or oversized text field")
     if _SURROGATE_RE.search(value) is not None:
@@ -52,6 +56,7 @@ def _text(value: Any, *, nonblank: bool = False) -> str:
 
 
 def _fixture(value: Any, label: str) -> Fixture:
+    """Return the fixture."""
     _fields(value, ("id", "group", "messages", "expected"))
     messages = value["messages"]
     if type(messages) is not list or not 1 <= len(messages) <= MAX_MESSAGES:
@@ -83,7 +88,6 @@ def parse_dataset(text: str) -> Split:
     this module's fixed messages, while JSON syntax errors keep the
     standard parser's wording (still ValueError).
     """
-
     if type(text) is not str:
         raise ValueError("Dataset exceeds size limit")
     try:
@@ -120,7 +124,6 @@ def load_dataset(path: str | Path) -> Split:
     devices, sockets, or directories), reads are size-capped, and the file is
     validated through parse_dataset. Raises ValueError on any problem.
     """
-
     if not isinstance(path, (str, Path)):
         raise ValueError("Invalid fixture path")
     target = Path(path)

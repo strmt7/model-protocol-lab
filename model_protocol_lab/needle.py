@@ -330,7 +330,8 @@ def _derive(seed: int, index: int, slot: int, counter: int) -> int:
     """One deterministic draw. The material string, the slot
     meanings (0 = code word, 1 = number), and the redraw rule
     in :func:`generate_cases` are frozen together -- the diff
-    validator's mirror reproduces them exactly."""
+    validator's mirror reproduces them exactly.
+    """
     material = f"{seed}|needle|{index}|{slot}|{counter}"
     return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
@@ -341,7 +342,8 @@ def generate_cases(seed: int) -> list[dict[str, Any]]:
     seed regenerates the identical set across runs and
     PYTHONHASHSEED values. A value colliding with an earlier
     case's value redraws both slots at the next counter, so the
-    twenty values are pairwise distinct by construction."""
+    twenty values are pairwise distinct by construction.
+    """
     if type(seed) is not int:
         raise ValueError("needle seed must be an int")
     cases: list[dict[str, Any]] = []
@@ -378,7 +380,8 @@ def canonical_generated_rows(seed: int) -> list[list[Any]]:
 def ground_sha256(seed: int) -> str:
     """Digest of the canonical generated rows for a seed: two
     runs share an instrument only when this matches, because
-    the generated set is the treatment."""
+    the generated set is the treatment.
+    """
     canonical = json.dumps(canonical_generated_rows(seed), separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -387,7 +390,8 @@ def case_material_sha256() -> str:
     """Digest of the frozen case material (fact template,
     topics, words): the lists are bound by digest in the
     protocol, so a payload cannot quietly carry a different
-    instrument under the same version number."""
+    instrument under the same version number.
+    """
     canonical = json.dumps(
         [FACT_TEMPLATE, QUESTION_TEMPLATE, list(TOPICS), list(WORDS)],
         separators=(",", ":"),
@@ -409,7 +413,8 @@ def screening_rule_sha256() -> str:
 def protocol_object(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The frozen instrument description a payload is checked
     against: doses, depths, case material, rule digests,
-    floors, budgets, and the seed/backend pair."""
+    floors, budgets, and the seed/backend pair.
+    """
     return {
         "version": PROTOCOL_VERSION,
         "doses": list(DOSES),
@@ -444,7 +449,8 @@ def protocol_fingerprint(seed: int, backend_fingerprint: str) -> str:
 
 def filler_stream() -> tuple[str, ...]:
     """The filler sentence stream: the neutral corpus cycled
-    ``STREAM_CYCLES`` times, in order."""
+    ``STREAM_CYCLES`` times, in order.
+    """
     return tuple(
         NEUTRAL_CORPUS[i % len(NEUTRAL_CORPUS)] for i in range(STREAM_CYCLES * len(NEUTRAL_CORPUS))
     )
@@ -506,6 +512,7 @@ def offset_measurement(
 
 
 def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the cell."""
     cells = record.get("cells")
     if type(cells) is not dict:
         return None
@@ -514,13 +521,15 @@ def _cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
 
 
 def _verdict(record: dict[str, Any], key: str) -> bool:
+    """Return the verdict."""
     cell = _cell(record, key)
     return bool(cell["verdict"]) if cell is not None else False
 
 
 def dose0_control(records: list[dict[str, Any]]) -> dict[str, Any]:
     """The candidate's own control level: dose-0 recorded and
-    passed counts over the generated cases."""
+    passed counts over the generated cases.
+    """
     n_recorded = 0
     n_pass = 0
     for record in records:
@@ -540,7 +549,8 @@ def dose0_control(records: list[dict[str, Any]]) -> dict[str, Any]:
 def false_recall_readout(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-dose false-recall floor from the absent cells: a
     pass with no needle planted is fabrication or guessing,
-    and the rate is reported beside that dose's curve."""
+    and the rate is reported beside that dose's curve.
+    """
     out: dict[str, Any] = {}
     for dose in DOSES:
         key = cell_key_absent(dose)
@@ -631,7 +641,8 @@ def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-candidate readouts recomputed from the records
     alone: the analysis-side definition. The diff validator
     carries its own mirror arithmetic and rejects on any
-    disagreement (the cycle-187 settlement)."""
+    disagreement (the cycle-187 settlement).
+    """
     return {
         "dose0_control": dose0_control(records),
         "false_recall": false_recall_readout(records),
@@ -765,7 +776,8 @@ def _selection_over(
     """The conservative selection for one cell key restricted
     to ``fixtures``: None when any candidate's completed set
     on that restriction is empty or the restricted completed
-    sets differ across candidates."""
+    sets differ across candidates.
+    """
     completed_sets: list[frozenset[str]] = []
     all_pass: dict[str, bool | None] = {}
     for name, records in records_by_candidate.items():

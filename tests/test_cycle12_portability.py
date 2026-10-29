@@ -221,7 +221,8 @@ class CompatibilityProbeTests(unittest.TestCase):
 
 @unittest.skipUnless(HAS_TRANSFORMERS and HAS_TOKENIZERS, "hf extra not installed")
 class PortabilityMatrixTests(unittest.TestCase):
-    def _chatml_section(self, tmp: str) -> dict:
+    @staticmethod
+    def _chatml_section(tmp: str) -> dict:
         second = write_tokenizer_checkpoint(Path(tmp) / "second", CHATML_TOKENS)
         return portability_matrix(second)
 
@@ -473,7 +474,8 @@ class HostileSecondCheckpointTests(unittest.TestCase):
         class HostileTokenizer:
             bos_token = "<s>"
 
-            def convert_tokens_to_ids(self, token):
+            @staticmethod
+            def convert_tokens_to_ids(token):
                 raise RuntimeError("boom")
 
         doc = {"added_tokens": [{"content": "<t>", "id": 7}]}

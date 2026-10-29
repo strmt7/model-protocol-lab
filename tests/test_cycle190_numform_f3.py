@@ -39,7 +39,8 @@ from model_protocol_lab.reporting import render_html  # noqa: E402
 def _honest_recompute(payload):
     """Splice honestly recomputed aggregates/contrasts into
     a mutated payload, so a rejection can only come from the
-    record-level checks (the F0 attack shape)."""
+    record-level checks (the F0 attack shape).
+    """
     recomputed = diffreports._numform_recompute(payload)
     assert recomputed is not None, "construction must pass for a splice"
     for name, expected in recomputed["aggregates"].items():
@@ -54,7 +55,8 @@ def _producer_recompute(payload):
     parse — that trust is exactly what F3 removes from the
     validator). After this splice every derived field is
     honest, so a validator rejection can only come from
-    the new record-level binding."""
+    the new record-level binding.
+    """
     stage = {
         "available": True,
         "detail": "",
@@ -140,9 +142,11 @@ class _FixedAnswerBackend(_NumformBackend):
 class TestVerbatimStorage(unittest.TestCase):
     """A9: whitespace-padded and empty answers are stored
     verbatim; the payload still validates (the parse of a
-    padded answer is None, which is a legal stored value)."""
+    padded answer is None, which is a legal stored value).
+    """
 
-    def _payload_with(self, answer):
+    @staticmethod
+    def _payload_with(answer):
         backend = _FixedAnswerBackend(answer)
         stage = experiments.numform_stage(
             backend,
@@ -180,7 +184,8 @@ class TestVerbatimStorage(unittest.TestCase):
 class TestF0Regression(unittest.TestCase):
     """The executed cycle-190 hole, in all three variants:
     each forged payload has honestly recomputed aggregates,
-    so only the new binding can reject it."""
+    so only the new binding can reject it.
+    """
 
     def test_forged_value_rejected(self):
         payload = _base_payload()
@@ -199,6 +204,7 @@ class TestF0Regression(unittest.TestCase):
     def test_single_candidate_variant_rejected(self):
         payload = _base_payload()
         name = next(iter(payload["candidates"]))
+        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         record = next(
             r
             for r in payload["candidates"][name]["records"]
@@ -241,6 +247,7 @@ class TestBindingBattery(unittest.TestCase):
         base = experiments.numform_analysis(stage, (FORMATS[0].name,))
         for field, value in (("answer_value", 5), ("answer_text", "5")):
             payload = copy.deepcopy(base)
+            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             record = next(
                 r for r in payload["candidates"][FORMATS[0].name]["records"] if r["cell"] is None
             )
@@ -290,9 +297,11 @@ class TestParseDifferential(unittest.TestCase):
     alphabet, plus the pattern-equality pin across all three
     implementations (the cycle-27 hand mirror is the third
     leg; its patterns are pinned textually here and its
-    behaviour through the cycle-27 fuzz agreement)."""
+    behaviour through the cycle-27 fuzz agreement).
+    """
 
-    def _battery(self):
+    @staticmethod
+    def _battery():
         strings = set()
         for value in range(0, 2001):
             for form in numform.FORMS:
@@ -389,7 +398,8 @@ class TestParseDifferential(unittest.TestCase):
 class TestRamblingCap(unittest.TestCase):
     """A5: answer text is byte-accounted; a checkpoint that
     rambles to a large token cap now fails the records cap
-    closed instead of staying available. No cap change."""
+    closed instead of staying available. No cap change.
+    """
 
     def test_rambling_answers_trip_records_cap(self):
         # At the legal maximum (24 candidates x 192 records)
@@ -415,7 +425,8 @@ class TestRamblingCap(unittest.TestCase):
 
 class TestReportingPin(unittest.TestCase):
     """A6: answer text is never rendered into the HTML
-    report (counts and aggregates only)."""
+    report (counts and aggregates only).
+    """
 
     def test_answer_text_not_rendered(self):
         payload = _base_payload()

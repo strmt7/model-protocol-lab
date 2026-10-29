@@ -153,7 +153,8 @@ class SurrogateSanitizationTests(unittest.TestCase):
 class WeightHeaderRobustnessTests(unittest.TestCase):
     """safetensors header parsing must fail closed on hostile headers."""
 
-    def _write(self, tmp: Path, payload: bytes) -> None:
+    @staticmethod
+    def _write(tmp: Path, payload: bytes) -> None:
         header = payload
         (tmp / "model.safetensors").write_bytes(struct.pack("<Q", len(header)) + header)
 
@@ -206,7 +207,8 @@ class WeightHeaderRobustnessTests(unittest.TestCase):
 class ConfigOutputBoundTests(unittest.TestCase):
     """Checkpoint-controlled strings must not bloat machine-readable output."""
 
-    def _healthy(self, tmp: Path, config: dict) -> Path:
+    @staticmethod
+    def _healthy(tmp: Path, config: dict) -> Path:
         (tmp / "config.json").write_text(json.dumps(config), encoding="utf-8")
         header = json.dumps({"__metadata__": {}}).encode()
         (tmp / "model.safetensors").write_bytes(struct.pack("<Q", len(header)) + header)
@@ -255,7 +257,8 @@ class ChatTemplateMemoryCapTests(unittest.TestCase):
         from model_protocol_lab.doctor import _render_with_memory_cap
 
         class BombTokenizer:
-            def apply_chat_template(self, conversation, tokenize=False, add_generation_prompt=True):
+            @staticmethod
+            def apply_chat_template(conversation, tokenize=False, add_generation_prompt=True):
                 return "x" * 500_000_000
 
         def rss_mb() -> float:
@@ -271,7 +274,8 @@ class ChatTemplateMemoryCapTests(unittest.TestCase):
         from model_protocol_lab.doctor import _render_with_memory_cap
 
         class OkTokenizer:
-            def apply_chat_template(self, conversation, tokenize=False, add_generation_prompt=True):
+            @staticmethod
+            def apply_chat_template(conversation, tokenize=False, add_generation_prompt=True):
                 return "<|user|>hi<|assistant|>"
 
         self.assertEqual(
@@ -283,7 +287,8 @@ class ChatTemplateMemoryCapTests(unittest.TestCase):
         from model_protocol_lab.doctor import _render_with_memory_cap
 
         class WeirdTokenizer:
-            def apply_chat_template(self, conversation, tokenize=False, add_generation_prompt=True):
+            @staticmethod
+            def apply_chat_template(conversation, tokenize=False, add_generation_prompt=True):
                 return ["not", "a", "string"]
 
         with self.assertRaises(ValueError):
@@ -293,22 +298,27 @@ class ChatTemplateMemoryCapTests(unittest.TestCase):
 class BaseExceptionBoundaryTests(unittest.TestCase):
     """A misbehaving backend must cost one observation, not the whole run."""
 
-    def _backend(self, exc):
+    @staticmethod
+    def _backend(exc):
         from model_protocol_lab.core import Backend
 
         class NastyBackend(Backend):
-            def generate(self, input_ids, max_new_tokens, seed=None, cancel=None):
+            @staticmethod
+            def generate(input_ids, max_new_tokens, seed=None, cancel=None):
                 raise exc
 
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 return (1, 2)
 
-            def decode(self, token_ids):
+            @staticmethod
+            def decode(token_ids):
                 return "x"
 
         return NastyBackend()
 
-    def _case(self):
+    @staticmethod
+    def _case():
         from model_protocol_lab.core import Fixture, Format, Message
 
         fmt = Format(name="f", bos="", user_prefix="<u>", assistant_prefix="<a>", turn_end="<e>")
@@ -351,13 +361,16 @@ class BaseExceptionBoundaryTests(unittest.TestCase):
         class NastyBackend:
             vocab_size = 10
 
-            def decode(self, token_ids):
+            @staticmethod
+            def decode(token_ids):
                 return "".join(chr(65 + (t % 26)) for t in token_ids)
 
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 return tuple(ord(c) - 65 for c in text)
 
-            def forward_logits(self, input_ids):
+            @staticmethod
+            def forward_logits(input_ids):
                 raise NastyError("boom")
 
         score = score_target_logprobs(NastyBackend(), (1, 2), (3,))

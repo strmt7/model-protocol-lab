@@ -278,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
         command = [str(python), "-m", "crawl4ai.cli", "crawl", *remaining]
     else:
         command = [str(python), "-m", "tools.crawl4ai_research", args.command, *remaining]
-    completed = subprocess.run(command, env=env, timeout=1800)
+    completed = subprocess.run(command, env=env, timeout=1800, check=False)
     return completed.returncode
 
 

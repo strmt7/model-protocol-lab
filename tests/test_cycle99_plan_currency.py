@@ -27,7 +27,8 @@ class DevelopmentPlanCurrencyTests(unittest.TestCase):
 
     def test_no_bare_proposed_framing_in_first_paragraph(self):
         """The first content paragraph must not present the tool as
-        merely proposed without the status-note qualification above it."""
+        merely proposed without the status-note qualification above it.
+        """
         text = (REPO_ROOT / "DEVELOPMENT_PLAN.md").read_text(encoding="utf-8")
         # Status note must come before the historical "proposed" paragraph.
         note_pos = text.find("Status note (2026-10-16, v0.1.0)")

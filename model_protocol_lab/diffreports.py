@@ -75,6 +75,7 @@ def _display_id(value: Any) -> str:
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Return the unique object."""
     result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
@@ -120,7 +121,8 @@ def _valid_primary_pair(payload: dict[str, Any]) -> bool:
     (list/dict) fails closed instead of raising — the verify.py
     A-F1 pattern, whose latent sibling this was until cycle 216
     (the precision and confidence recompute paths reach this
-    function without the pre-guard the other four callers carry)."""
+    function without the pre-guard the other four callers carry).
+    """
     decision = payload.get("primary_decision")
     winner = payload.get("primary_winner")
     if type(decision) is not str or decision not in _PRIMARY_DECISIONS:
@@ -141,7 +143,8 @@ def _recomputed_equal(stored: Any, expected: Any) -> bool:
     value is only ever compared, but a strictness wart in validators
     whose whole contract is exactness). Ints and bools must match in
     type AND value; dicts and lists recurse; everything else uses
-    plain equality."""
+    plain equality.
+    """
     if type(expected) is bool:
         return type(stored) is bool and stored == expected
     if type(expected) is int:
@@ -164,6 +167,7 @@ def _recomputed_equal(stored: Any, expected: Any) -> bool:
 
 
 def _reject_constant(_value: Any) -> Any:
+    """Return the reject constant."""
     raise ValueError("results_nonfinite_number")
 
 
@@ -284,6 +288,7 @@ def _require_shape(value: dict[str, Any]) -> None:
 
 
 def _candidate_name(entry: Any) -> str | None:
+    """Return the candidate name."""
     if type(entry) is not dict:
         return None
     fmt = entry.get("format")
@@ -295,6 +300,7 @@ def _base_family(name: str) -> str:
     # Mutated candidates are "family/mutation"; the family is the base name.
     # results.json does not store the --family flag, so this is the exact
     # family signal available.
+    """Return the base family."""
     return name.split("/", 1)[0]
 
 
@@ -341,6 +347,7 @@ def _search_verdicts(result: dict[str, Any]) -> tuple[dict[str, str], dict[str, 
 
 
 def _held_verdict(result: dict[str, Any]) -> tuple[str | None, str]:
+    """Return the held verdict."""
     winner = result.get("selected_candidate")
     if type(winner) is not str or not winner:
         return None, "absent"
@@ -1247,6 +1254,7 @@ def _step_function(points: list[tuple[int, Any]]) -> Callable[[int], Any]:
     keys = [budget for budget, _ in ordered]
 
     def value_at(budget: int) -> Any:
+        """Return the frontier label and value at a token budget."""
         index = bisect_right(keys, budget) - 1
         return ordered[index][1] if index >= 0 else ("unknown", None)
 
@@ -1329,6 +1337,7 @@ def diff_frontiers(old: Any, new: Any) -> dict[str, Any]:
         # Duplicate budgets are contradictory data (native payloads never
         # duplicate); the first occurrence wins so a foreign payload can
         # never crash the comparison (perf finding 1B).
+        """Return the decision points."""
         points = []
         seen_budgets: set[int] = set()
         for entry in frontier.get("decision_steps") or []:
@@ -1968,6 +1977,7 @@ def diff_hierarchy(old: Any, new: Any) -> dict[str, Any]:
     def _flip_key(flips: list[Any]) -> list[tuple[Any, ...]]:
         # ``flips`` is a list here: _valid_hierarchy rejects anything else
         # before this point, so no defensive branch is needed.
+        """Return the flip key."""
         keys = []
         for entry in flips:
             if type(entry) is not dict:
@@ -1986,6 +1996,7 @@ def diff_hierarchy(old: Any, new: Any) -> dict[str, Any]:
     flips_changed = _flip_key(old.get("flips")) != _flip_key(new.get("flips"))
 
     def _candidate_rates(payload: Any) -> dict[str, dict[str, tuple[Any, Any]]]:
+        """Return the candidate rates."""
         rates: dict[str, dict[str, tuple[Any, Any]]] = {}
         per_condition = payload.get("per_condition") or {}
         for position in sorted(per_condition):
@@ -2020,6 +2031,7 @@ def diff_hierarchy(old: Any, new: Any) -> dict[str, Any]:
                 )
 
     def _group_means(payload: Any) -> dict[str, Any]:
+        """Return the group means."""
         groups = payload.get("group_adherence") or {}
         return {
             label: (group or {}).get("mean_system_rate")
@@ -2166,6 +2178,7 @@ def diff_position(old: Any, new: Any) -> dict[str, Any]:
     def _flip_key(flips: list[Any]) -> list[tuple[Any, ...]]:
         # ``flips`` is a list here: _valid_position rejects anything else
         # before this point, so no defensive branch is needed.
+        """Return the flip key."""
         keys = []
         for entry in flips:
             if type(entry) is not dict:
@@ -2188,6 +2201,7 @@ def diff_position(old: Any, new: Any) -> dict[str, Any]:
     flips_changed = _flip_key(new.get("flips")) != _flip_key(old.get("flips"))
 
     def _candidate_rates(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate rates."""
         rates: dict[str, dict[str, Any]] = {}
         per_condition = payload.get("per_condition") or {}
         for condition in sorted(per_condition):
@@ -2217,6 +2231,7 @@ def diff_position(old: Any, new: Any) -> dict[str, Any]:
                 )
 
     def _index_map(payload: Any) -> dict[str, Any]:
+        """Return the index map."""
         primacy = payload.get("primacy_index") or {}
         return {k: v for k, v in primacy.items() if type(k) is str}
 
@@ -2234,6 +2249,7 @@ def diff_position(old: Any, new: Any) -> dict[str, Any]:
             )
 
     def _mean_index(payload: Any) -> Any:
+        """Return the mean index."""
         effect = payload.get("condition_effect") or {}
         return effect.get("mean_index")
 
@@ -2330,6 +2346,7 @@ def diff_stop_cause(old: Any, new: Any) -> dict[str, Any]:
         return result
 
     def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate view."""
         view: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             entry = entry or {}
@@ -2469,6 +2486,7 @@ def diff_ws_canonical(old: Any, new: Any) -> dict[str, Any]:
         return result
 
     def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate view."""
         view: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             entry = entry or {}
@@ -2625,6 +2643,7 @@ def diff_structured(old: Any, new: Any) -> dict[str, Any]:
         return result
 
     def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate view."""
         view: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             # _valid_structured guarantees str keys and dict/None cells,
@@ -2760,6 +2779,7 @@ def diff_deliforge(old: Any, new: Any) -> dict[str, Any]:
         return result
 
     def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate view."""
         view: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             # _valid_deliforge guarantees str keys and dict entries, so
@@ -2907,6 +2927,7 @@ def diff_fewshot(old: Any, new: Any) -> dict[str, Any]:
         return result
 
     def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate view."""
         view: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             # _valid_fewshot guarantees str keys and dict entries, so
@@ -2920,6 +2941,7 @@ def diff_fewshot(old: Any, new: Any) -> dict[str, Any]:
         return view
 
     def _arm_view(payload: Any) -> dict[str, tuple[Any, Any]]:
+        """Return the arm view."""
         return {
             arm: (cell.get("decision"), cell.get("winner"))
             for arm, cell in (payload.get("per_arm") or {}).items()
@@ -3059,6 +3081,7 @@ def diff_faketurn(old: Any, new: Any) -> dict[str, Any]:
         return result
 
     def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate view."""
         view: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             # _valid_faketurn guarantees str keys and dict entries, so
@@ -3224,6 +3247,7 @@ def diff_toolcall(old: Any, new: Any) -> dict[str, Any]:
         return result
 
     def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate view."""
         view: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             # _valid_toolcall guarantees str keys and dict/None entries,
@@ -3389,6 +3413,7 @@ def diff_verbosity(old: Any, new: Any) -> dict[str, Any]:
         return result
 
     def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate view."""
         view: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             # _valid_verbosity guarantees str keys and dict/None
@@ -3626,6 +3651,7 @@ def diff_refusals(old: Any, new: Any) -> dict[str, Any]:
     )
 
     def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate view."""
         view: dict[str, dict[str, Any]] = {}
         for entry in payload.get("candidates") or []:
             # _valid_refusals guarantees the entry shape, so no
@@ -3983,6 +4009,7 @@ def diff_scorerlens(old: Any, new: Any) -> dict[str, Any]:
     comparable = not protocol_drift and not fixture_set_drift
 
     def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate view."""
         view: dict[str, dict[str, Any]] = {}
         for entry in payload.get("candidates") or []:
             # _valid_scorerlens guarantees the entry shape, so no
@@ -4082,6 +4109,7 @@ def diff_scorerlens(old: Any, new: Any) -> dict[str, Any]:
 
 
 def _is_hex_digest(value: Any) -> bool:
+    """Return whether hex digest."""
     return type(value) is str and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
 
 
@@ -4188,6 +4216,7 @@ def _aliasing_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     def _fixtures(entry: dict[str, Any]) -> frozenset[str]:
+        """Return the fixtures."""
         return frozenset(r["fixture"] for r in entry["records"] if r["evaluable"])
 
     mismatch = len({_fixtures(e) for e in available}) > 1
@@ -4196,6 +4225,7 @@ def _aliasing_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         groups.setdefault(_fixtures(entry), []).append(entry)
 
     def _rank(item: tuple[frozenset[str], list[dict[str, Any]]]) -> tuple[Any, ...]:
+        """Return the rank."""
         fixtures, members = item
         return (
             -len(members),
@@ -4209,6 +4239,7 @@ def _aliasing_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     fixtures_sorted = sorted(_fixtures(primary[0])) if primary else []
 
     def _classes(key_with_boundary: bool) -> list[list[str]]:
+        """Return the classes."""
         grouped: dict[tuple[Any, ...], list[str]] = {}
         for entry in primary:
             cells = {r["fixture"]: r for r in entry["records"] if r["evaluable"]}
@@ -4465,6 +4496,7 @@ def diff_aliasing(old: Any, new: Any) -> dict[str, Any]:
     comparable = not protocol_drift and not fixture_set_drift and not backend_drift
 
     def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate view."""
         view: dict[str, dict[str, Any]] = {}
         for entry in payload.get("candidates") or []:
             # _valid_aliasing guarantees the entry shape, so no
@@ -4596,7 +4628,10 @@ def _repetition_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     not verifiability against fabricated records (the aliasing
     standard). Returns None on any structural defect.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
+
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -4735,12 +4770,14 @@ def _repetition_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     def _verdict(record: dict[str, Any], arm: str) -> bool | None:
+        """Return the verdict."""
         cell = record["arms"][arm]
         return None if cell is None else bool(cell["verdict"])
 
     def _contrast(
         recs: list[dict[str, Any]], arm_a: str, arm_b: str, effect: str
     ) -> dict[str, Any]:
+        """Return the contrast."""
         paired = [
             r
             for r in recs
@@ -5057,12 +5094,14 @@ _DISTRACTION_HEX = frozenset("0123456789abcdef")
 
 
 def _distraction_digest_ok(value: Any) -> bool:
+    """Return whether the distraction digest is well-formed."""
     return value is None or (
         type(value) is str and len(value) == 64 and all(char in _DISTRACTION_HEX for char in value)
     )
 
 
 def _distraction_int_ok(value: Any) -> bool:
+    """Return whether the distraction int is well-formed."""
     return type(value) is int and not isinstance(value, bool) and value >= 0
 
 
@@ -5077,7 +5116,10 @@ def _distraction_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     protocol fingerprint — is then rebuilt with independent
     arithmetic and compared by _valid_distraction.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
+
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -5619,12 +5661,14 @@ _LEADING_TEMPLATES = {
 
 
 def _leading_digest_ok(value: Any) -> bool:
+    """Return whether the leading digest is well-formed."""
     return value is None or (
         type(value) is str and len(value) == 64 and all(char in _LEADING_HEX for char in value)
     )
 
 
 def _leading_int_ok(value: Any) -> bool:
+    """Return whether the leading int is well-formed."""
     return type(value) is int and not isinstance(value, bool) and value >= 0
 
 
@@ -5636,6 +5680,7 @@ def _leading_mcnemar_p(ctrl_only: int, treat_only: int) -> float | None:
     cycle-185 tests pin the two implementations to the same
     values.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = ctrl_only + treat_only
@@ -5692,10 +5737,12 @@ def _leading_cell_consistent(cell: Any, expected_digest: Any) -> bool:
 
 
 def _leading_live(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return the leading live."""
     return [r for r in records if not r["vacuous"] and not r["expected_blank"]]
 
 
 def _leading_caving_block(records: list[dict[str, Any]], framing: str) -> dict[str, Any]:
+    """Return the leading caving block."""
     wrong_key = f"wrong_{framing}"
     right_key = f"right_{framing}"
     n_paired = 0
@@ -5827,7 +5874,10 @@ def _leading_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     property of answer text and is not recomputable from
     digests; the design doc states that limit.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
+
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -6356,6 +6406,7 @@ _NUMFORM_CELL_KEYS = {
 
 
 def _numform_grouped(digits: str, separator: str) -> str:
+    """Return the numform grouped."""
     parts: list[str] = []
     while digits:
         parts.append(digits[-3:])
@@ -6389,10 +6440,10 @@ _NUMFORM_MAX_PARSE_DIGITS = 20
 
 
 def _numform_parse_value(text: Any) -> int | None:
-    """Independent mirror of numform.parse_value (cycle 190).
+    r"""Independent mirror of numform.parse_value (cycle 190).
 
-    The grammars are deliberately [0-9], never \\d: int() and
-    \\d both accept non-ASCII decimal digits, the producer
+    The grammars are deliberately [0-9], never \d: int() and
+    \d both accept non-ASCII decimal digits, the producer
     accepts neither. Caps are digit counts checked before
     conversion, and the scientific branch keeps the
     producer's shift arithmetic exactly (a negative shift
@@ -6439,7 +6490,8 @@ def _numform_parse_value(text: Any) -> int | None:
 def _numform_text_digest(text: str) -> str | None:
     """SHA-256 of the UTF-8 encoding, or None when the text
     cannot be encoded (a lone-surrogate answer_text is a
-    validation failure, never an exception — cycle 190 A3)."""
+    validation failure, never an exception — cycle 190 A3).
+    """
     try:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
     except UnicodeEncodeError:
@@ -6447,6 +6499,7 @@ def _numform_text_digest(text: str) -> str | None:
 
 
 def _numform_carry(a: int, b: int) -> str:
+    """Return the numform carry."""
     digits_a = str(a)
     digits_b = str(b)
     width = max(len(digits_a), len(digits_b))
@@ -6465,6 +6518,7 @@ def _numform_carry(a: int, b: int) -> str:
 
 
 def _numform_margin(a: int, b: int) -> str:
+    """Return the numform margin."""
     digits_a = str(a)
     digits_b = str(b)
     if len(digits_a) != len(digits_b):
@@ -6480,10 +6534,11 @@ def _numform_margin(a: int, b: int) -> str:
 
 
 def _numform_is_round(value: int) -> bool:
+    """Return the numform is round."""
     if value < 10:
         return False
     digits = str(value)
-    result: bool = value == 10 ** (len(digits) - 1) or value == 10 ** len(digits) - 1
+    result: bool = value in (10 ** (len(digits) - 1), 10 ** len(digits) - 1)
     return result
 
 
@@ -6501,6 +6556,8 @@ def _numform_is_round(value: int) -> bool:
 def _numform_derive(
     seed: int, task: str, band_index: int, slot: int, counter: int, stream: int
 ) -> int:
+    """Return the numform derive."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"numform-v1|{seed}|{task}|{band_index}|{slot}|{counter}|{stream}"
@@ -6508,6 +6565,7 @@ def _numform_derive(
 
 
 def _numform_value_in_band(derived: int, lo: int, hi: int, *, min_length: int = 1) -> int:
+    """Return the numform value in band."""
     low = max(lo, min_length)
     length = low + derived % (hi - low + 1)
     rest = derived >> 16
@@ -6518,6 +6576,7 @@ def _numform_value_in_band(derived: int, lo: int, hi: int, *, min_length: int = 
 
 
 def _numform_round_value(band_index: int, slot: int) -> int:
+    """Return the numform round value."""
     _lo, hi = _NUMFORM_BANDS[band_index]
     if slot == 0:
         power: int = 10 ** (hi - 1)
@@ -6527,6 +6586,7 @@ def _numform_round_value(band_index: int, slot: int) -> int:
 
 
 def _numform_band_of(value: int) -> int:
+    """Return the frozen numform band index for a value's digit length."""
     length = len(str(value))
     for index, (lo, hi) in enumerate(_NUMFORM_BANDS):
         if lo <= length <= hi:
@@ -6535,6 +6595,7 @@ def _numform_band_of(value: int) -> int:
 
 
 def _numform_compare_partner(a: int, target: str, derived: int) -> int:
+    """Return the numform compare partner."""
     digits = str(a)
     length = len(digits)
     if target == "different_length":
@@ -6557,6 +6618,7 @@ def _numform_compare_partner(a: int, target: str, derived: int) -> int:
 
 
 def _numform_add_partner(a: int, target: str, derived: int) -> int:
+    """Return the numform add partner."""
     digits = [int(ch) for ch in reversed(str(a))]
     partner_digits: list[int] = []
     if target == "full_chain" and digits[0] == 0:
@@ -6603,6 +6665,7 @@ def _numform_add_partner(a: int, target: str, derived: int) -> int:
 
 
 def _numform_gen_copy(seed: int) -> list[dict[str, Any]]:
+    """Return the numform gen copy."""
     entries: list[dict[str, Any]] = []
     index = 0
     for band_index, (lo, hi) in enumerate(_NUMFORM_BANDS):
@@ -6635,6 +6698,7 @@ def _numform_gen_copy(seed: int) -> list[dict[str, Any]]:
 
 
 def _numform_gen_pairs(seed: int, task: str) -> list[dict[str, Any]]:
+    """Return the numform gen pairs."""
     entries: list[dict[str, Any]] = []
     index = 0
     targets = (
@@ -6697,7 +6761,8 @@ def _numform_generated(
 ) -> tuple[dict[tuple[str, str, str], tuple[Any, ...]], list[list[Any]]]:
     """Regenerate the seed's set; return the expected
     construction map (same tuple shape the record check builds)
-    and the canonical generated rows the protocol hash binds."""
+    and the canonical generated rows the protocol hash binds.
+    """
     value_set = {
         "copy": _numform_gen_copy(seed),
         "compare": _numform_gen_pairs(seed, "compare"),
@@ -6743,6 +6808,7 @@ def _numform_generated(
 
 
 def _numform_probe_strings() -> list[str]:
+    """Return the numform probe strings."""
     probes: list[str] = []
     sequential = "123456789012"
     ones = "1" * 12
@@ -6760,7 +6826,8 @@ def _numform_classify_grouping(evidence: Any) -> str:
     """Consistency re-run of the frozen grouping decision rule
     over stored probe evidence (the validator has no tokenizer;
     this checks the asserted class against the evidence, it
-    does not re-measure the tokenizer)."""
+    does not re-measure the tokenizer).
+    """
     if type(evidence) is not dict or not evidence:
         return "unknown"
     digit_probes = [
@@ -6784,6 +6851,8 @@ def _numform_classify_grouping(evidence: Any) -> str:
 
 
 def _numform_decomposition(record: dict[str, Any]) -> str:
+    """Return the numform decomposition."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     cell = record["cell"]
@@ -6799,6 +6868,7 @@ def _numform_decomposition(record: dict[str, Any]) -> str:
 
 
 def _numform_aggregate(records: list[dict[str, Any]], task: str, form: str) -> dict[str, Any]:
+    """Return the numform aggregate."""
     selected = [r for r in records if r["task"] == task and r["form"] == form]
     completed = [r for r in selected if r["cell"] is not None]
     n_exact = sum(1 for r in completed if r["cell"]["verdict"])
@@ -6839,6 +6909,7 @@ def _numform_aggregate(records: list[dict[str, Any]], task: str, form: str) -> d
 
 
 def _numform_classify_contrast(n_paired: int, n_a_only: int, n_b_only: int) -> str:
+    """Return the numform classify contrast."""
     if n_paired < 6:
         return "insufficient"
     if n_a_only == 0 and n_b_only == 0:
@@ -6855,6 +6926,7 @@ def _numform_classify_contrast(n_paired: int, n_a_only: int, n_b_only: int) -> s
 def _numform_contrast(
     records: list[dict[str, Any]], task: str, form_a: str, form_b: str
 ) -> dict[str, Any]:
+    """Return the numform contrast."""
     by_value: dict[str, dict[str, Any]] = {}
     for record in records:
         if record["task"] != task or record["form"] not in (form_a, form_b):
@@ -6900,7 +6972,9 @@ def _numform_record_construction(
 ) -> tuple[Any, ...] | None:
     """Validate one ground record; return its construction
     tuple (the fields that must be constant across candidates)
-    or None when the record is not an honest numform record."""
+    or None when the record is not an honest numform record.
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     if type(record) is not dict or set(record) != _NUMFORM_RECORD_KEYS:
@@ -7071,7 +7145,10 @@ def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     answer to the expected string, the value is checked
     against the expected value exactly.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
+
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -7528,6 +7605,7 @@ def _dateline_lie_string() -> str:
 
 
 def _dateline_arm_table() -> dict[str, str]:
+    """Return the dateline arm table."""
     table = {
         f"{value}_{fmt}": _dateline_format(value, fmt)
         for value in _DATELINE_VALUE_KEYS
@@ -7539,6 +7617,7 @@ def _dateline_arm_table() -> dict[str, str]:
 
 def _dateline_mcnemar_p(a_only: int, b_only: int) -> float | None:
     """Two-sided exact McNemar p (the frozen formula, local copy)."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = a_only + b_only
@@ -7564,6 +7643,7 @@ def _dateline_classify(n_paired: int, a_only: int, b_only: int) -> str:
 
 
 def _dateline_live(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return the dateline live."""
     return [
         r
         for r in records
@@ -7575,6 +7655,7 @@ def _dateline_live(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _dateline_pair_block(records: list[dict[str, Any]], key_a: str, key_b: str) -> dict[str, Any]:
+    """Return the dateline pair block."""
     n_paired = 0
     n_a_only = 0
     n_b_only = 0
@@ -7756,7 +7837,10 @@ def _dateline_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     message-date-bearing flags' cross-candidate constancy as
     reference fields, and the design doc states that limit.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
+
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -8296,6 +8380,8 @@ _MULTITURN_CELL_KEYS = {
 def _multiturn_derive(
     seed: int, family: str, depth: int, index: int, slot: int, counter: int
 ) -> int:
+    """Return the multiturn derive."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"multiturn-v1|{seed}|{family}|{depth}|{index}|{slot}|{counter}"
@@ -8353,6 +8439,7 @@ def _multiturn_generate(seed: int) -> list[dict[str, Any]]:
                     expected = str(sum(values))
                 else:
                     expected = _MULTITURN_LABELS[
+                        # skipcq: PYL-W0640 - consumed by max() within the same iteration
                         max(range(len(values)), key=lambda slot: values[slot])
                     ]
                 fixtures.append(
@@ -8369,13 +8456,19 @@ def _multiturn_generate(seed: int) -> list[dict[str, Any]]:
 
 
 def _multiturn_digest(text: str) -> str:
+    """Return the multiturn digest."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _multiturn_template_digest() -> str:
+    """Return the multiturn template digest."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
+
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -8387,7 +8480,11 @@ def _multiturn_template_digest() -> str:
 
 
 def _multiturn_ground_sha(seed: int) -> str:
+    """Return the multiturn ground sha."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
+
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -8406,6 +8503,7 @@ def _multiturn_ground_sha(seed: int) -> str:
 
 
 def _multiturn_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    """Return the multiturn protocol."""
     return {
         "version": 1,
         "families": list(_MULTITURN_FAMILIES),
@@ -8426,6 +8524,7 @@ def _multiturn_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
 
 def _multiturn_mcnemar_p(a_only: int, b_only: int) -> float | None:
     """Two-sided exact McNemar p (the frozen formula, local copy)."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = a_only + b_only
@@ -8438,6 +8537,7 @@ def _multiturn_mcnemar_p(a_only: int, b_only: int) -> float | None:
 
 
 def _multiturn_cell(record: dict[str, Any], arm: str) -> dict[str, Any] | None:
+    """Return the multiturn cell."""
     cells = record.get("cells")
     if type(cells) is not dict:
         return None
@@ -8446,11 +8546,14 @@ def _multiturn_cell(record: dict[str, Any], arm: str) -> dict[str, Any] | None:
 
 
 def _multiturn_verdict(record: dict[str, Any], arm: str) -> bool:
+    """Return the multiturn verdict."""
     cell = _multiturn_cell(record, arm)
     return bool(cell["verdict"]) if cell is not None else False
 
 
 def _multiturn_pair(records: list[dict[str, Any]], arm_a: str, arm_b: str) -> dict[str, int]:
+    """Return the multiturn pair."""
+    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     counts = {"n_paired": 0, "a_only": 0, "b_only": 0, "both_pass": 0, "both_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
     for record in records:
         cell_a = _multiturn_cell(record, arm_a)
@@ -8540,9 +8643,11 @@ def _multiturn_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
         delivery = _multiturn_pair(paired_records, "full", "sharded")
         scripted_pair = _multiturn_pair(paired_records, "full", "scripted")
         self_history = {
+            # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
             "n_full_pass": 0,  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
             "sh_only": 0,
             "sc_only": 0,
+            # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
             "both_pass": 0,  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
             "both_fail": 0,
         }
@@ -8617,6 +8722,7 @@ def _multiturn_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _multiturn_digest_ok(value: Any) -> bool:
+    """Return whether the multiturn digest is well-formed."""
     return (
         type(value) is str
         and len(value) == 64
@@ -8628,7 +8734,8 @@ def _multiturn_cell_ok(cell: Any, arm: str, depth: int, expected: str) -> bool:
     """One cell's shape and identities, including the verdict
     binding ``verdict == (answer_digest == sha256(expected))
     and boundary_found`` and, for the sharded arm, the turns
-    identities."""
+    identities.
+    """
     if type(cell) is not dict:
         return False
     keys = set(cell)
@@ -8702,7 +8809,10 @@ def _multiturn_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     re-derived from its digest identity; aggregates and
     selection readouts are recomputed and compared.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
+
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -9189,14 +9299,17 @@ _NEEDLE_CELL_FIELDS = {
 
 
 def _needle_key_treated(dose: int, depth: int) -> str:
+    """Return the needle key treated."""
     return f"dose_{dose}_depth_{depth}"
 
 
 def _needle_key_absent(dose: int) -> str:
+    """Return the needle key absent."""
     return f"absent_{dose}"
 
 
 def _needle_key_duplicate(dose: int) -> str:
+    """Return the needle key duplicate."""
     return f"duplicate_{dose}"
 
 
@@ -9209,12 +9322,15 @@ _NEEDLE_CELL_KEYS = (
 
 
 def _needle_digest(text: str) -> str:
+    """Return the needle digest."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _needle_digest_ok(value: Any) -> bool:
+    """Return whether the needle digest is well-formed."""
     return (
         type(value) is str
         and len(value) == 64
@@ -9223,6 +9339,8 @@ def _needle_digest_ok(value: Any) -> bool:
 
 
 def _needle_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    """Return the needle derive."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"{seed}|needle|{index}|{slot}|{counter}"
@@ -9232,7 +9350,8 @@ def _needle_derive(seed: int, index: int, slot: int, counter: int) -> int:
 def _needle_generate(seed: int) -> list[dict[str, Any]]:
     """Mirror of the frozen case generation: slot 0 is the code
     word, slot 1 the number; a value colliding with an earlier
-    case redraws both slots at the next counter."""
+    case redraws both slots at the next counter.
+    """
     cases: list[dict[str, Any]] = []
     seen: set[str] = set()
     for index in range(_NEEDLE_CASE_COUNT):
@@ -9257,7 +9376,11 @@ def _needle_generate(seed: int) -> list[dict[str, Any]]:
 
 
 def _needle_case_material_sha() -> str:
+    """Return the needle case material sha."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
+
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -9274,7 +9397,11 @@ def _needle_case_material_sha() -> str:
 
 
 def _needle_ground_sha(seed: int) -> str:
+    """Return the needle ground sha."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
+
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [[case["fixture_id"], case["topic"], case["value"]] for case in _needle_generate(seed)]
@@ -9283,7 +9410,11 @@ def _needle_ground_sha(seed: int) -> str:
 
 
 def _needle_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    """Return the needle protocol."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
+
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = {
@@ -9315,6 +9446,7 @@ def _needle_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
 
 
 def _needle_cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the needle cell."""
     cells = record.get("cells")
     if type(cells) is not dict:
         return None
@@ -9323,6 +9455,7 @@ def _needle_cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
 
 
 def _needle_verdict(record: dict[str, Any], key: str) -> bool:
+    """Return the needle verdict."""
     cell = _needle_cell(record, key)
     return bool(cell["verdict"]) if cell is not None else False
 
@@ -9331,7 +9464,8 @@ def _needle_cell_ok(cell: Any, expected_digest: str) -> bool:
     """One cell's shape and the verdict binding
     ``verdict == (answer_digest == expected_digest) and
     boundary_found``. The expected digest is the record's,
-    itself checked against the mirror-regenerated case."""
+    itself checked against the mirror-regenerated case.
+    """
     if type(cell) is not dict or set(cell) != _NEEDLE_CELL_FIELDS:
         return False
     if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
@@ -9570,7 +9704,8 @@ def _needle_selection(
     records_by_candidate: dict[str, list[dict[str, Any]]], key: str
 ) -> dict[str, Any]:
     """Mirror of needle.cell_selection, including the
-    paired-restricted flip baseline."""
+    paired-restricted flip baseline.
+    """
     all_fixtures = frozenset(
         record["fixture"] for records in records_by_candidate.values() for record in records
     )
@@ -9616,6 +9751,7 @@ def _needle_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     headline readouts, and per-cell selections are recomputed
     and compared.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -10020,7 +10156,9 @@ _PLACEMENT_AGGREGATE_KEYS = {
 
 def _placement_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
-    placement.py anywhere in this mirror)."""
+    placement.py anywhere in this mirror).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -10029,7 +10167,8 @@ def _placement_digest(text: str) -> str:
 def _placement_digest_ok(value: Any) -> bool:
     """Whether a stored answer digest is None or a well-formed
     SHA-256 hex digest (fails closed on lone surrogates, the
-    cycle-190 discipline)."""
+    cycle-190 discipline).
+    """
     if value is None:
         return True
     if type(value) is not str or len(value) != 64:
@@ -10039,6 +10178,7 @@ def _placement_digest_ok(value: Any) -> bool:
 
 def _placement_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """Mirror of placement._derive (frozen material string)."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"{seed}|placement|{index}|{slot}|{counter}"
@@ -10048,7 +10188,8 @@ def _placement_derive(seed: int, index: int, slot: int, counter: int) -> int:
 def _placement_generate(seed: int) -> list[dict[str, Any]]:
     """Mirror of placement.generate_cases: the frozen case set
     for a seed, regenerated from the protocol's own seed so a
-    fabricated set is rejected (the numform F2 lesson)."""
+    fabricated set is rejected (the numform F2 lesson).
+    """
     cases: list[dict[str, Any]] = []
     seen: set[str] = set()
     for index in range(_PLACEMENT_CASE_COUNT):
@@ -10081,6 +10222,7 @@ def _placement_generate(seed: int) -> list[dict[str, Any]]:
 
 def _placement_case_material_sha256() -> str:
     """Mirror of placement.case_material_sha256."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -10099,6 +10241,7 @@ def _placement_case_material_sha256() -> str:
 
 def _placement_ground_sha256(seed: int) -> str:
     """Mirror of placement.ground_sha256."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -10112,7 +10255,9 @@ def _placement_ground_sha256(seed: int) -> str:
 def _placement_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The placement protocol rebuilt from this module's own
     literals plus the payload's seed and backend fingerprint,
-    fingerprint included (compared whole)."""
+    fingerprint included (compared whole).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -10138,6 +10283,7 @@ def _placement_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
 
 def _placement_mcnemar_p(a_only: int, b_only: int) -> float | None:
     """Two-sided exact McNemar p (the frozen formula, local copy)."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = a_only + b_only
@@ -10150,6 +10296,7 @@ def _placement_mcnemar_p(a_only: int, b_only: int) -> float | None:
 
 
 def _placement_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the placement cell get."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -10158,11 +10305,13 @@ def _placement_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | No
 
 
 def _placement_verdict(record: dict[str, Any], key: str) -> bool:
+    """Return the placement verdict."""
     cell = _placement_cell_get(record, key)
     return bool(cell is not None and cell["verdict"])
 
 
 def _placement_screened(record: dict[str, Any]) -> bool:
+    """Return the placement screened."""
     cell = _placement_cell_get(record, "closed_book")
     return cell is not None and bool(cell["verdict"])
 
@@ -10427,7 +10576,8 @@ def _placement_cell_ok(cell: Any, expected_digest: str) -> bool:
     """One cell's shape and the verdict binding
     ``verdict == (answer_digest == expected_digest) and
     boundary_found``. The expected digest is the record's,
-    itself checked against the mirror-regenerated case."""
+    itself checked against the mirror-regenerated case.
+    """
     if type(cell) is not dict or set(cell) != _PLACEMENT_CELL_FIELDS:
         return False
     if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
@@ -10456,6 +10606,7 @@ def _placement_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     ``arm_tokens`` for that arm; the aggregates and the per-arm
     selections are recomputed and compared.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -10815,7 +10966,9 @@ _CANONICALFORM_AGGREGATE_KEYS = {
 
 def _canonicalform_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
-    canonicalform.py anywhere in this mirror)."""
+    canonicalform.py anywhere in this mirror).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -10824,7 +10977,8 @@ def _canonicalform_digest(text: str) -> str:
 def _canonicalform_digest_ok(value: Any) -> bool:
     """Whether a stored digest is None or a well-formed SHA-256
     hex digest (fails closed on lone surrogates, the cycle-190
-    discipline)."""
+    discipline).
+    """
     if value is None:
         return True
     if type(value) is not str or len(value) != 64:
@@ -10834,6 +10988,7 @@ def _canonicalform_digest_ok(value: Any) -> bool:
 
 def _canonicalform_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """Mirror of canonicalform._derive (frozen material string)."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"{seed}|canonicalform|{index}|{slot}|{counter}"
@@ -10845,7 +11000,8 @@ def _canonicalform_generate(seed: int) -> list[dict[str, Any]]:
     set for a seed, regenerated from the protocol's own seed so
     a fabricated set is rejected (the numform F2 lesson). The
     authored content is NFC; the NFD form is derived from it,
-    exactly as the producer derives it."""
+    exactly as the producer derives it.
+    """
     import unicodedata as _unicodedata
 
     cases: list[dict[str, Any]] = []
@@ -10888,6 +11044,7 @@ def _canonicalform_generate(seed: int) -> list[dict[str, Any]]:
 
 def _canonicalform_case_material_sha256() -> str:
     """Mirror of canonicalform.case_material_sha256."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -10907,7 +11064,9 @@ def _canonicalform_case_material_sha256() -> str:
 def _canonicalform_ground_sha256(seed: int) -> str:
     """Mirror of canonicalform.ground_sha256, including both
     arms' content digests so the ground digest binds the
-    treatment."""
+    treatment.
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -10928,7 +11087,9 @@ def _canonicalform_ground_sha256(seed: int) -> str:
 def _canonicalform_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The canonical-form protocol rebuilt from this module's
     own literals plus the payload's seed and backend
-    fingerprint, fingerprint included (compared whole)."""
+    fingerprint, fingerprint included (compared whole).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -10953,6 +11114,7 @@ def _canonicalform_protocol(seed: int, backend_fingerprint: str) -> dict[str, An
 
 def _canonicalform_mcnemar_p(a_only: int, b_only: int) -> float | None:
     """Two-sided exact McNemar p (the frozen formula, local copy)."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = a_only + b_only
@@ -10965,6 +11127,7 @@ def _canonicalform_mcnemar_p(a_only: int, b_only: int) -> float | None:
 
 
 def _canonicalform_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the canonicalform cell get."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -10973,6 +11136,7 @@ def _canonicalform_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] 
 
 
 def _canonicalform_verdict(record: dict[str, Any], key: str) -> bool:
+    """Return the canonicalform verdict."""
     cell = _canonicalform_cell_get(record, key)
     return bool(cell is not None and cell["verdict"])
 
@@ -10980,7 +11144,8 @@ def _canonicalform_verdict(record: dict[str, Any], key: str) -> bool:
 def _canonicalform_pair_block_divergent(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Mirror of canonicalform._pair_block_divergent: the
     headline population is both-cells-completed AND
-    ids-divergent; ids-identical records never enter."""
+    ids-divergent; ids-identical records never enter.
+    """
     n_paired = 0
     n_nfc_only = 0
     n_nfd_only = 0
@@ -11115,6 +11280,7 @@ def _canonicalform_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
 def _canonicalform_shared_fixtures(
     records_by_candidate: dict[str, list[dict[str, Any]]],
 ) -> frozenset[str]:
+    """Return the canonicalform shared fixtures."""
     populations: list[frozenset[str]] = []
     for records in records_by_candidate.values():
         populations.append(frozenset(str(r.get("fixture")) for r in records))
@@ -11227,7 +11393,8 @@ def _canonicalform_cell_ok(cell: Any, expected_digest: str) -> bool:
     """One cell's shape and the verdict binding
     ``verdict == (answer_digest == expected_digest) and
     boundary_found``. The expected digest is the record's,
-    itself checked against the mirror-regenerated case."""
+    itself checked against the mirror-regenerated case.
+    """
     if type(cell) is not dict or set(cell) != _CANONICALFORM_CELL_FIELDS:
         return False
     if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
@@ -11262,6 +11429,7 @@ def _canonicalform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     for that arm; the aggregates, per-arm selections, and
     winner headline are recomputed and compared.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -11701,7 +11869,9 @@ _INSTRUCTIONDISTANCE_COMPLIANT = ("compliant_correct", "compliant_wrong")
 
 def _instructiondistance_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
-    instructiondistance.py anywhere in this mirror)."""
+    instructiondistance.py anywhere in this mirror).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -11710,7 +11880,8 @@ def _instructiondistance_digest(text: str) -> str:
 def _instructiondistance_digest_ok(value: Any) -> bool:
     """Whether a stored digest is a well-formed SHA-256 hex
     digest (this probe's answer digests are never None: a
-    completed cell always carries a decoded span)."""
+    completed cell always carries a decoded span).
+    """
     if type(value) is not str or len(value) != 64:
         return False
     return all(ch in "0123456789abcdef" for ch in value)
@@ -11718,7 +11889,8 @@ def _instructiondistance_digest_ok(value: Any) -> bool:
 
 def _instructiondistance_run_digest_ok(value: Any) -> bool:
     """The first-digit-run digest field: "" (no ASCII digit
-    run, amendment B3) or a well-formed digest."""
+    run, amendment B3) or a well-formed digest.
+    """
     if value == "":
         return True
     return _instructiondistance_digest_ok(value)
@@ -11726,7 +11898,9 @@ def _instructiondistance_run_digest_ok(value: Any) -> bool:
 
 def _instructiondistance_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """Mirror of instructiondistance._derive (frozen material
-    string)."""
+    string).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"{seed}|instructiondistance|{index}|{slot}|{counter}"
@@ -11737,7 +11911,8 @@ def _instructiondistance_generate(seed: int) -> list[dict[str, Any]]:
     """Mirror of instructiondistance.generate_cases: the
     frozen case set for a seed, regenerated from the
     protocol's own seed so a fabricated set is rejected (the
-    numform F2 lesson)."""
+    numform F2 lesson).
+    """
     cases: list[dict[str, Any]] = []
     seen: set[str] = set()
     for index in range(_INSTRUCTIONDISTANCE_CASE_COUNT):
@@ -11761,6 +11936,7 @@ def _instructiondistance_generate(seed: int) -> list[dict[str, Any]]:
 
 def _instructiondistance_case_material_sha256() -> str:
     """Mirror of instructiondistance.case_material_sha256."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -11778,6 +11954,7 @@ def _instructiondistance_case_material_sha256() -> str:
 
 def _instructiondistance_ground_sha256(seed: int) -> str:
     """Mirror of instructiondistance.ground_sha256."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -11791,7 +11968,9 @@ def _instructiondistance_ground_sha256(seed: int) -> str:
 def _instructiondistance_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The instruction-distance protocol rebuilt from this
     module's own literals plus the payload's seed and backend
-    fingerprint, fingerprint included (compared whole)."""
+    fingerprint, fingerprint included (compared whole).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -11823,6 +12002,7 @@ def _instructiondistance_protocol(seed: int, backend_fingerprint: str) -> dict[s
 
 
 def _instructiondistance_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the instructiondistance cell get."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -11835,7 +12015,8 @@ def _instructiondistance_decompose(cell: dict[str, Any], expected_digest: str) -
     class from the recorded digests alone (amendment C --
     compliance rides on the answer and non-digit-projection
     digests, never on the descriptive integer counts, so a
-    forged digit_count cannot move a class)."""
+    forged digit_count cannot move a class).
+    """
     empty = _instructiondistance_digest("")
     answer_digest = cell.get("answer_digest")
     compliant = (
@@ -12028,7 +12209,8 @@ def _instructiondistance_cell_ok(cell: Any, expected_digest: str) -> bool:
     boundary_found`` plus the digest shapes of the
     amendment-C primitives (the descriptive counts are
     shape-checked and bounded by the span length, never
-    trusted as verdict inputs)."""
+    trusted as verdict inputs).
+    """
     if type(cell) is not dict or set(cell) != _INSTRUCTIONDISTANCE_CELL_FIELDS:
         return False
     if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
@@ -12074,6 +12256,7 @@ def _instructiondistance_recompute(payload: dict[str, Any]) -> dict[str, Any] | 
     recomputed from the recorded digests alone; the
     aggregates are recomputed and compared.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -12197,7 +12380,8 @@ def _valid_instruction_distance(payload: Any) -> bool:
     payload (recompute standard). The audit block is
     shape-checked only: its counts are stage observations
     (special-token findings against the run's own formats),
-    not recomputable from records."""
+    not recomputable from records.
+    """
     if type(payload) is not dict or payload.get("available") is not True:
         return False
     if set(payload) != {
@@ -12438,7 +12622,9 @@ _HISTORYFRAME_SEGMENT_RULE_TEXT = (
 
 def _historyframe_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
-    historyframe.py anywhere in this mirror)."""
+    historyframe.py anywhere in this mirror).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -12446,7 +12632,8 @@ def _historyframe_digest(text: str) -> str:
 
 def _historyframe_digest_ok(value: Any) -> bool:
     """Whether a stored digest is a well-formed SHA-256 hex
-    digest."""
+    digest.
+    """
     if type(value) is not str or len(value) != 64:
         return False
     return all(ch in "0123456789abcdef" for ch in value)
@@ -12454,7 +12641,9 @@ def _historyframe_digest_ok(value: Any) -> bool:
 
 def _historyframe_mcnemar_p(a: int, b: int) -> float | None:
     """Mirror of confidentiality.mcnemar_exact_p: two-sided
-    exact McNemar p; None when there are no discordant pairs."""
+    exact McNemar p; None when there are no discordant pairs.
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = a + b
@@ -12486,7 +12675,9 @@ def _historyframe_classify(n: int, own_only: int, foreign_only: int) -> str:
 def _historyframe_random_fire_rate(n: int) -> float:
     """Mirror of historyframe.random_labeller_fire_rate
     (exact enumeration over the discordant count and its
-    split under independent fair arms)."""
+    split under independent fair arms).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     if type(n) is not int or n < _HISTORYFRAME_MIN_N:
@@ -12519,7 +12710,9 @@ def _historyframe_familywise(rates: list[float]) -> dict[str, Any]:
 
 def _historyframe_history_material_sha256() -> str:
     """Mirror of historyframe's history-material digest over
-    the frozen transcript."""
+    the frozen transcript.
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -12534,7 +12727,9 @@ def _historyframe_protocol(
     seed: int, backend_fingerprint: str, fixture_ids: list[str]
 ) -> dict[str, Any]:
     """Mirror of historyframe.protocol_object, fingerprint
-    included (compared whole)."""
+    included (compared whole).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -12566,6 +12761,7 @@ def _historyframe_protocol(
 
 
 def _historyframe_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the historyframe cell get."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -12588,7 +12784,8 @@ def _historyframe_contrast(records: list[dict[str, Any]], contrast: str) -> dict
     digests (amendment A4), render-divergence from the
     recorded segment digests, and ``id_length_delta`` is
     recomputed from the recorded arm token counts -- a
-    carried flag or delta is never trusted."""
+    carried flag or delta is never trusted.
+    """
     n_render_identical = 0
     n_ids_identical = 0
     n_same_ids_flips = 0
@@ -12687,7 +12884,8 @@ def _historyframe_verbatim(records: list[dict[str, Any]]) -> dict[str, Any]:
     Applicability is derived from the recorded bos digests
     (amendment A1): equal digests mean the arm is
     byte-identical to its twin and the readout is
-    inapplicable."""
+    inapplicable.
+    """
     applicable = all(
         type(record.get("own_bos_digest")) is str
         and type(record.get("donor_bos_digest")) is str
@@ -12884,7 +13082,8 @@ def _historyframe_cell_ok(cell: Any, expected_digest: str) -> bool:
     """One cell's shape and verdict binding: ``verdict ==
     (answer_digest == expected_digest) and boundary_found``,
     with the answer digest either a well-formed digest or
-    None (no answer string was decoded)."""
+    None (no answer string was decoded).
+    """
     if type(cell) is not dict or set(cell) != _HISTORYFRAME_CELL_FIELDS:
         return False
     if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
@@ -12920,6 +13119,7 @@ def _historyframe_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     headlines, the primary flips, and the family-wise block
     are recomputed from the records and compared.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -13070,7 +13270,8 @@ def _historyframe_stratum_ok(stratum: Any) -> bool:
     """Shape check for the run-level stratum block: its
     per-literal token-real values are backend observations,
     not recomputable from records, so -- like the audit
-    block -- they are shape-checked only."""
+    block -- they are shape-checked only.
+    """
     if type(stratum) is not dict or set(stratum) != set(_HISTORYFRAME_CONTRASTS):
         return False
     for arm in _HISTORYFRAME_CONTRASTS:
@@ -13104,7 +13305,8 @@ def _valid_history_frame(payload: Any) -> bool:
     (recompute standard). The audit block and the stratum
     literals are shape-checked only: their values are stage
     observations against the run's own formats and backend,
-    not recomputable from records."""
+    not recomputable from records.
+    """
     if type(payload) is not dict or payload.get("available") is not True:
         return False
     if set(payload) != {
@@ -13492,18 +13694,23 @@ _PRUNESWEEP_AGGREGATE_KEYS = {
 
 
 def _prunesweep_digest(text: str) -> str:
+    """Return the prunesweep digest."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _prunesweep_digest_ok(value: Any) -> bool:
+    """Return whether the prunesweep digest is well-formed."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import re as _re
 
     return type(value) is str and _re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
 
 def _prunesweep_value_digests() -> frozenset[str]:
+    """Return the prunesweep value digests."""
     return frozenset(_prunesweep_digest(value) for value in _PRUNESWEEP_VALUES)
 
 
@@ -13528,7 +13735,8 @@ def _prunesweep_draw_sentence(seed: int, case_id: str, slot: int, seen: set[str]
 def _prunesweep_generate(seed: int) -> list[dict[str, Any]]:
     """Mirror of prunesweep.generate_cases: the frozen case
     set for a seed, regenerated from the protocol's own seed
-    so a fabricated set is rejected (the numform F2 lesson)."""
+    so a fabricated set is rejected (the numform F2 lesson).
+    """
     cases: list[dict[str, Any]] = []
     for index in range(_PRUNESWEEP_CASE_COUNT):
         case_id = f"prune-{index:02d}"
@@ -13555,7 +13763,8 @@ def _prunesweep_generate(seed: int) -> list[dict[str, Any]]:
 
 def _prunesweep_drop_order(seed: int, case_id: str) -> tuple[int, ...]:
     """Mirror of prunesweep.drop_order (amendment E: the
-    position is the eligible-list index in passage order)."""
+    position is the eligible-list index in passage order).
+    """
     return tuple(
         sorted(
             range(_PRUNESWEEP_ELIGIBLE_WORDS),
@@ -13606,6 +13815,7 @@ def _prunesweep_dropped_shares(case: dict[str, Any], seed: int) -> dict[str, Any
     words = [word for sentence in case["context_sentences"] for word in sentence.split(" ")]
 
     def _classes(word: str) -> tuple[bool, bool]:
+        """Return the classes."""
         bare = (word[:-1] if word.endswith(".") else word).lower()
         return any(char.isdigit() for char in bare), bare in _PRUNESWEEP_NEGATION_WORDS
 
@@ -13627,6 +13837,7 @@ def _prunesweep_dropped_shares(case: dict[str, Any], seed: int) -> dict[str, Any
 
 def _prunesweep_case_material_sha256() -> str:
     """Mirror of prunesweep.case_material_sha256."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     material = {
@@ -13649,6 +13860,7 @@ def _prunesweep_case_material_sha256() -> str:
 
 def _prunesweep_ground_sha256(seed: int) -> str:
     """Mirror of prunesweep.ground_sha256."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -13668,7 +13880,9 @@ def _prunesweep_ground_sha256(seed: int) -> str:
 def _prunesweep_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The prune-sweep protocol rebuilt from this module's
     own literals plus the payload's seed and backend
-    fingerprint, fingerprint included (compared whole)."""
+    fingerprint, fingerprint included (compared whole).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -13699,7 +13913,9 @@ def _prunesweep_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
 
 def _prunesweep_mcnemar_p(a: int, b: int) -> float | None:
     """Two-sided exact McNemar p (the confidentiality formula,
-    local, as in the sibling mirrors)."""
+    local, as in the sibling mirrors).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = a + b
@@ -13725,7 +13941,8 @@ def _prunesweep_decompose(cell: dict[str, Any], expected_digest: str) -> str:
     """Mirror of prunesweep.decompose_cell: the class from
     the recorded digest alone, in the frozen order
     (exact_pass, boundary_only, wrong_value, non_value --
-    amendment B)."""
+    amendment B).
+    """
     if cell.get("verdict") is True:
         return "exact_pass"
     digest = cell.get("answer_digest")
@@ -13737,6 +13954,7 @@ def _prunesweep_decompose(cell: dict[str, Any], expected_digest: str) -> str:
 
 
 def _prunesweep_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the prunesweep cell get."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -13745,6 +13963,7 @@ def _prunesweep_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | N
 
 
 def _prunesweep_detail_get(record: dict[str, Any], key: str) -> str:
+    """Return the prunesweep detail get."""
     details = record.get("cell_details")
     if not isinstance(details, dict):
         return ""
@@ -13753,18 +13972,21 @@ def _prunesweep_detail_get(record: dict[str, Any], key: str) -> str:
 
 
 def _prunesweep_verdict(record: dict[str, Any], key: str) -> bool:
+    """Return the prunesweep verdict."""
     cell = _prunesweep_cell_get(record, key)
     return bool(cell is not None and cell["verdict"])
 
 
 def _prunesweep_screened(record: dict[str, Any]) -> bool:
+    """Return the prunesweep screened."""
     cell = _prunesweep_cell_get(record, _PRUNESWEEP_SCREEN_ARM)
     return bool(cell is not None and cell["verdict"])
 
 
 def _prunesweep_ids_identical(record: dict[str, Any]) -> bool:
     """Mirror of prunesweep._ids_identical: derived from the
-    recorded id digests alone."""
+    recorded id digests alone.
+    """
     digests = record.get("id_digests")
     if not isinstance(digests, dict):
         return False
@@ -13772,6 +13994,7 @@ def _prunesweep_ids_identical(record: dict[str, Any]) -> bool:
 
 
 def _prunesweep_first_flip(record: dict[str, Any]) -> str:
+    """Return the prunesweep first flip."""
     for arm in _PRUNESWEEP_HEADLINE_ARMS[1:]:
         if not _prunesweep_verdict(record, arm):
             return arm
@@ -13976,7 +14199,8 @@ def _prunesweep_cell_ok(cell: Any, expected_digest: str) -> bool:
     verdict binding ``verdict == (answer_digest ==
     expected_digest) and boundary_found``, and the answer
     digest's shape (None when the backend produced no
-    answer)."""
+    answer).
+    """
     if type(cell) is not dict or set(cell) != _PRUNESWEEP_CELL_FIELDS:
         return False
     if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
@@ -14015,6 +14239,7 @@ def _prunesweep_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     from the recorded digests alone; the aggregates are
     recomputed and compared.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -14129,7 +14354,8 @@ def _valid_prune_sweep(payload: Any) -> bool:
     (recompute standard). The audit block is shape-checked
     only: its counts are stage observations (special-token
     findings against the run's own formats), not recomputable
-    from records."""
+    from records.
+    """
     if type(payload) is not dict or payload.get("available") is not True:
         return False
     if set(payload) != {
@@ -14391,8 +14617,11 @@ _RECORDNOTATION_OPERATING_CHARACTERISTICS: dict[str, Any] = {
     "panel96_bonferroni_power_gap25_marginals_85_60": 0.7452,
     "panel96_bonferroni_power_gap25_base_90": 0.8329,
     "panel96_generations": 6912,
+    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     "winner_pass_probability_95": 0.292,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
+    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     "winner_pass_probability_90": 0.08,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
+    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     "winner_pass_probability_80": 0.005,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
     "screen_guess_probability": 1 / 216000,
     "screen_expected_exclusions_per_candidate": 24 / 216000,
@@ -14412,7 +14641,9 @@ _RECORDNOTATION_AGGREGATE_KEYS = {
 
 def _recordnotation_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
-    recordnotation.py anywhere in this mirror)."""
+    recordnotation.py anywhere in this mirror).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -14420,7 +14651,8 @@ def _recordnotation_digest(text: str) -> str:
 
 def _recordnotation_digest_ok(value: Any) -> bool:
     """Whether a stored digest is a well-formed SHA-256 hex
-    digest."""
+    digest.
+    """
     if type(value) is not str or len(value) != 64:
         return False
     return all(ch in "0123456789abcdef" for ch in value)
@@ -14436,7 +14668,8 @@ def _recordnotation_generate(seed: int) -> list[dict[str, Any]]:
     case generator with its RNG call sequence frozen
     (amendment A) -- per value draw the word first, then the
     number; duplicates consumed; row-major fill; the queried
-    index is the next draw."""
+    index is the next draw.
+    """
     import random as _random
 
     cases: list[dict[str, Any]] = []
@@ -14472,7 +14705,9 @@ def _recordnotation_generate(seed: int) -> list[dict[str, Any]]:
 
 def _recordnotation_render_json(table: list[dict[str, str]]) -> str:
     """Mirror of recordnotation.render_json (the canonical
-    JSON parameters, applied to the record sequence)."""
+    JSON parameters, applied to the record sequence).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     return _json.dumps(table, sort_keys=True, separators=(", ", ": "), allow_nan=False)
@@ -14509,7 +14744,9 @@ def _recordnotation_arm_content(case: dict[str, Any], arm: str) -> str:
 
 def _recordnotation_embedding_audit() -> dict[str, Any]:
     """Mirror of recordnotation.audit_answer_embedding (the
-    guard set stated exactly, amendment B)."""
+    guard set stated exactly, amendment B).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import re as _re
 
     tokens = set(_RECORDNOTATION_FIELDS_4)
@@ -14532,6 +14769,7 @@ def _recordnotation_embedding_audit() -> dict[str, Any]:
 
 def _recordnotation_case_material_sha256() -> str:
     """Mirror of recordnotation.case_material_sha256."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     material = {
@@ -14553,6 +14791,7 @@ def _recordnotation_case_material_sha256() -> str:
 
 def _recordnotation_ground_sha256(seed: int) -> str:
     """Mirror of recordnotation.ground_sha256."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -14571,7 +14810,9 @@ def _recordnotation_ground_sha256(seed: int) -> str:
 
 def _recordnotation_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The record-notation protocol rebuilt from this module's
-    own literals, fingerprint included (compared whole)."""
+    own literals, fingerprint included (compared whole).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -14602,7 +14843,9 @@ def _recordnotation_protocol(seed: int, backend_fingerprint: str) -> dict[str, A
 
 def _recordnotation_scorer_r1(text: str) -> str:
     """Literal mirror of scorerlens._norm_r1: trim, collapse
-    space/tab runs, cap newline runs at two."""
+    space/tab runs, cap newline runs at two.
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import re as _re
 
     out = text.strip()
@@ -14614,7 +14857,9 @@ def _recordnotation_scorer_r1(text: str) -> str:
 
 def _recordnotation_scorer_fence(text: str) -> str:
     """Literal mirror of scorerlens._fence_strip: remove one
-    pair of line-anchored fences, if present."""
+    pair of line-anchored fences, if present.
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import re as _re
 
     lines = text.split("\n")
@@ -14624,6 +14869,7 @@ def _recordnotation_scorer_fence(text: str) -> str:
 
 
 def _recordnotation_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the recordnotation cell get."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -14632,6 +14878,7 @@ def _recordnotation_cell_get(record: dict[str, Any], key: str) -> dict[str, Any]
 
 
 def _recordnotation_detail_get(record: dict[str, Any], key: str) -> str:
+    """Return the recordnotation detail get."""
     details = record.get("cell_details")
     if not isinstance(details, dict):
         return ""
@@ -14640,18 +14887,21 @@ def _recordnotation_detail_get(record: dict[str, Any], key: str) -> str:
 
 
 def _recordnotation_verdict(record: dict[str, Any], key: str) -> bool:
+    """Return the recordnotation verdict."""
     cell = _recordnotation_cell_get(record, key)
     return bool(cell is not None and cell["verdict"])
 
 
 def _recordnotation_screened(record: dict[str, Any]) -> bool:
+    """Return the recordnotation screened."""
     cell = _recordnotation_cell_get(record, _RECORDNOTATION_SCREEN_ARM)
     return bool(cell is not None and cell["verdict"])
 
 
 def _recordnotation_ids_identical(record: dict[str, Any]) -> bool:
     """Mirror of recordnotation._ids_identical: derived from
-    the recorded id digests alone."""
+    the recorded id digests alone.
+    """
     digests = record.get("id_digests")
     if not isinstance(digests, dict):
         return False
@@ -14681,6 +14931,7 @@ def _recordnotation_decompose_pair(prose_cell: dict[str, Any], json_cell: dict[s
 
 def _recordnotation_parsed_hit(answer_text: str, expected: str) -> bool:
     """Mirror of recordnotation._parsed_hit."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     try:
@@ -14762,6 +15013,7 @@ def _recordnotation_aggregate(
     live_pairs = [record for record in unscreened_pairs if not _recordnotation_screened(record)]
 
     def _discordance(pairs: list[dict[str, Any]]) -> dict[str, Any]:
+        """Return the discordance."""
         prose_only = 0
         json_only = 0
         decomposition = dict.fromkeys(_RECORDNOTATION_PAIR_CLASSES, 0)
@@ -14887,7 +15139,8 @@ def _recordnotation_cell_ok(cell: Any, expected_digest: str, headline: bool) -> 
     checked by the caller (amendment D); a headline cell's
     carried ``answer_text`` must hash to its ``answer_digest``
     (the cycle-190 binding), and a screen cell carries no text
-    at all."""
+    at all.
+    """
     fields = (
         _RECORDNOTATION_HEADLINE_CELL_FIELDS if headline else _RECORDNOTATION_SCREEN_CELL_FIELDS
     )
@@ -14944,6 +15197,7 @@ def _recordnotation_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     certifies a completed evaluation and the verdict's status
     conjunct is discharged structurally (amendment D).
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -15064,7 +15318,8 @@ def _valid_record_notation(payload: Any) -> bool:
     (recompute standard). The audit block is shape-checked
     only: its counts are stage observations (special-token
     findings against the run's own formats), not recomputable
-    from records."""
+    from records.
+    """
     if type(payload) is not dict or payload.get("available") is not True:
         return False
     if set(payload) != {
@@ -15456,7 +15711,9 @@ _ROTATION_SCREENING_RULE_TEXT = (
 
 def _rotation_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
-    rotation.py anywhere in this mirror)."""
+    rotation.py anywhere in this mirror).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -15465,7 +15722,8 @@ def _rotation_digest(text: str) -> str:
 def _rotation_digest_ok(value: Any) -> bool:
     """Whether a stored digest is None or a well-formed SHA-256
     hex digest (fails closed on lone surrogates, the cycle-190
-    discipline)."""
+    discipline).
+    """
     if value is None:
         return True
     if type(value) is not str or len(value) != 64:
@@ -15475,6 +15733,7 @@ def _rotation_digest_ok(value: Any) -> bool:
 
 def _rotation_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """Mirror of rotation._derive (frozen material string)."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"{seed}|rotation|{index}|{slot}|{counter}"
@@ -15484,7 +15743,8 @@ def _rotation_derive(seed: int, index: int, slot: int, counter: int) -> int:
 def _rotation_generate(seed: int) -> list[dict[str, Any]]:
     """Mirror of rotation.generate_cases: the frozen case set
     for a seed, regenerated from the protocol's own seed so a
-    fabricated set is rejected (the numform F2 lesson)."""
+    fabricated set is rejected (the numform F2 lesson).
+    """
     cases: list[dict[str, Any]] = []
     used_asked: set[int] = set()
     seen_asked_values: set[str] = set()
@@ -15535,6 +15795,7 @@ def _rotation_generate(seed: int) -> list[dict[str, Any]]:
 
 def _rotation_case_material_sha256() -> str:
     """Mirror of rotation.case_material_sha256."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -15552,6 +15813,7 @@ def _rotation_case_material_sha256() -> str:
 
 def _rotation_ground_sha256(seed: int) -> str:
     """Mirror of rotation.ground_sha256."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -15565,7 +15827,9 @@ def _rotation_ground_sha256(seed: int) -> str:
 def _rotation_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The rotation protocol rebuilt from this module's own
     literals plus the payload's seed and backend fingerprint,
-    fingerprint included (compared whole)."""
+    fingerprint included (compared whole).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -15593,6 +15857,7 @@ def _rotation_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
 
 
 def _rotation_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the rotation cell get."""
     cells = record.get("cells")
     if not isinstance(cells, dict):
         return None
@@ -15601,6 +15866,7 @@ def _rotation_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | Non
 
 
 def _rotation_verdict(record: dict[str, Any], key: str) -> bool:
+    """Return the rotation verdict."""
     cell = _rotation_cell_get(record, key)
     return bool(cell is not None and cell["verdict"])
 
@@ -15617,11 +15883,13 @@ def _rotation_id_exact(record: dict[str, Any], arm: str) -> bool:
 
 
 def _rotation_screened(record: dict[str, Any]) -> bool:
+    """Return the rotation screened."""
     cell = _rotation_cell_get(record, "closed_book")
     return cell is not None and bool(cell["verdict"])
 
 
 def _rotation_boundary_screened(record: dict[str, Any]) -> bool:
+    """Return the rotation boundary screened."""
     details = record.get("cell_details")
     if not isinstance(details, dict):
         return False
@@ -15660,6 +15928,7 @@ def _rotation_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Mirror of rotation.aggregate_candidate."""
 
     def rate(n_pass: int, n: int) -> float | None:
+        """Return the rate."""
         return (n_pass / n) if n else None
 
     live = [r for r in records if not _rotation_screened(r) and not _rotation_boundary_screened(r)]
@@ -15917,7 +16186,8 @@ def _rotation_cell_ok(cell: Any, expected_digest: str) -> bool:
     """One cell's shape and the verdict binding
     ``verdict == (answer_digest == expected_digest) and
     boundary_found``. The expected digest is the record's,
-    itself checked against the mirror-regenerated case."""
+    itself checked against the mirror-regenerated case.
+    """
     if type(cell) is not dict or set(cell) != _ROTATION_CELL_FIELDS:
         return False
     if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
@@ -15949,6 +16219,7 @@ def _rotation_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     aggregates and the per-arm selections are recomputed and
     compared.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -16497,7 +16768,9 @@ _DENSITY_CHECKING_RULE_TEXT = (
 
 def _density_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
-    density.py anywhere in this mirror)."""
+    density.py anywhere in this mirror).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -16506,7 +16779,8 @@ def _density_digest(text: str) -> str:
 def _density_digest_ok(value: Any) -> bool:
     """Whether a stored digest is a well-formed SHA-256 hex
     digest (fails closed on lone surrogates, the cycle-190
-    discipline)."""
+    discipline).
+    """
     if type(value) is not str or len(value) != 64:
         return False
     return all(ch in "0123456789abcdef" for ch in value)
@@ -16514,6 +16788,7 @@ def _density_digest_ok(value: Any) -> bool:
 
 def _density_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """Mirror of density._derive (frozen material string)."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"{seed}|density|{index}|{slot}|{counter}"
@@ -16556,7 +16831,8 @@ def _density_generate(seed: int) -> list[dict[str, Any]]:
     """Mirror of density.generate_cases: the frozen case set
     for a seed, regenerated from the protocol's own seed so a
     payload cannot present a different instrument under the
-    same protocol."""
+    same protocol.
+    """
     cases: list[dict[str, Any]] = []
     for index in range(_DENSITY_CASE_COUNT):
         topic = _DENSITY_TOPICS[_density_derive(seed, index, 0, 0) % len(_DENSITY_TOPICS)]
@@ -16693,6 +16969,7 @@ def _density_arm_content(case: dict[str, Any], arm: str) -> str:
 
 def _density_case_material_sha256() -> str:
     """Mirror of density.case_material_sha256."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -16714,6 +16991,7 @@ def _density_case_material_sha256() -> str:
 
 def _density_ground_sha256(seed: int) -> str:
     """Mirror of density.ground_sha256."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows: list[list[Any]] = []
@@ -16737,7 +17015,9 @@ def _density_ground_sha256(seed: int) -> str:
 def _density_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """The density protocol rebuilt from this module's own
     literals plus the payload's seed and backend fingerprint,
-    fingerprint included (compared whole)."""
+    fingerprint included (compared whole).
+    """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -16767,6 +17047,7 @@ def _density_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
 
 def _density_commitment_digest(hashes: list[str]) -> str:
     """Mirror of density.commitment_digest."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(list(hashes), separators=(",", ":"), ensure_ascii=True)
@@ -16795,6 +17076,7 @@ def _density_task_present(case: dict[str, Any], hashes: list[str]) -> bool:
 
 def _density_sign_test_p(n_pos: int, n_neg: int) -> float:
     """Mirror of density.sign_test_p."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = n_pos + n_neg
@@ -16851,9 +17133,11 @@ def _density_aggregate(
     }
 
     def hashes_of(record: dict[str, Any]) -> list[str]:
+        """Return the word hashes recorded on a density record."""
         return list(record.get("word_hashes") or [])
 
     def case_of(record: dict[str, Any]) -> dict[str, Any]:
+        """Return the case a density record indexes."""
         return cases[int(record["case_index"])]
 
     density_rows: list[dict[str, Any]] = []
@@ -17086,6 +17370,7 @@ def _density_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     falsification decision is re-derived from the commitments
     and compared.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -17756,6 +18041,7 @@ _FO_AGGREGATE_KEYS = {
 
 def _fo_digest(text: str) -> str:
     """Mirror of fieldorder.digest_text (SHA-256 hex)."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -17763,22 +18049,26 @@ def _fo_digest(text: str) -> str:
 
 def _fo_canonical_json(document: Any) -> str:
     """Mirror of structured._canonical_json (the pinned form)."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     return _json.dumps(document, sort_keys=True, separators=(", ", ": "), allow_nan=False)
 
 
 def _fo_digest_ok(value: Any) -> bool:
+    """Return whether the fo digest is well-formed."""
     if type(value) is not str or len(value) != 64:
         return False
     return all(char in "0123456789abcdef" for char in value)
 
 
 def _fo_canonical_order(spec: dict[str, Any]) -> list[str]:
+    """Return the fo canonical order."""
     return sorted(spec["schema"]["properties"])
 
 
 def _fo_arm_order(spec: dict[str, Any], arm: str) -> list[str]:
+    """Return the fo arm order."""
     order = _fo_canonical_order(spec)
     if arm == "canonical":
         return order
@@ -17794,6 +18084,7 @@ def _fo_arm_order(spec: dict[str, Any], arm: str) -> list[str]:
 
 
 def _fo_describe_ordered(schema: dict[str, Any], order: list[str]) -> str:
+    """Return the fo describe ordered."""
     properties = schema["properties"]
     parts: list[str] = []
     for name in order:
@@ -17818,6 +18109,7 @@ def _fo_describe_ordered(schema: dict[str, Any], order: list[str]) -> str:
 
 
 def _fo_arm_prompt(spec: dict[str, Any], arm: str) -> str:
+    """Return the fo arm prompt."""
     return (
         f"{spec['question']}\n"
         f"Context: {spec['context']}\n"
@@ -17829,6 +18121,7 @@ def _fo_arm_prompt(spec: dict[str, Any], arm: str) -> str:
 
 
 def _fo_spec_by_id(spec_id: str) -> dict[str, Any]:
+    """Return the fo spec by id."""
     for spec in _FIELD_ORDER_SPECS:
         if spec["id"] == spec_id:
             return spec
@@ -17836,10 +18129,12 @@ def _fo_spec_by_id(spec_id: str) -> dict[str, Any]:
 
 
 def _fo_expected_value_digest(spec: dict[str, Any], field: str) -> str:
+    """Return the fo expected value digest."""
     return _fo_digest(_fo_canonical_json(spec["answer"][field]))
 
 
 def _fo_field_correct(spec: dict[str, Any], field: str, field_values: dict[str, Any]) -> bool:
+    """Return the fo field correct."""
     value = field_values.get(field)
     if type(value) is not str:
         return False
@@ -17847,8 +18142,10 @@ def _fo_field_correct(spec: dict[str, Any], field: str, field_values: dict[str, 
 
 
 def _fo_is_finite_number(value: object) -> bool:
+    """Return the fo is finite number."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
+    # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
     return value == value and abs(value) != float("inf")
 
 
@@ -17916,6 +18213,7 @@ def _fo_parse_stored(value: Any) -> tuple[bool, Any]:
     Total (design F10): ValueError (including the int/str digit
     limit), TypeError, and RecursionError all yield False.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     if type(value) is not str:
@@ -17927,6 +18225,7 @@ def _fo_parse_stored(value: Any) -> tuple[bool, Any]:
 
 
 def _fo_schema_ok(spec: dict[str, Any], kind: str, field_values: dict[str, Any]) -> bool:
+    """Return whether the fo schema is well-formed."""
     if kind != "object":
         return False
     if any(value is None for value in field_values.values()):
@@ -17941,6 +18240,7 @@ def _fo_schema_ok(spec: dict[str, Any], kind: str, field_values: dict[str, Any])
 
 
 def _fo_record_derived(spec: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
+    """Return the fo record derived."""
     kind = record["document_kind"]
     field_values = record["field_values"]
     parse_ok = kind in ("object", "non_object")
@@ -17963,6 +18263,8 @@ def _fo_record_derived(spec: dict[str, Any], record: dict[str, Any]) -> dict[str
 
 
 def _fo_sign_test_p(n_pos: int, n_neg: int) -> float:
+    """Return the fo sign test p."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = n_pos + n_neg
@@ -17974,10 +18276,12 @@ def _fo_sign_test_p(n_pos: int, n_neg: int) -> float:
 
 
 def _fo_rate(correct: int, n: int) -> float | None:
+    """Return the fo rate."""
     return float(correct / n) if n else None
 
 
 def _fo_decision(n_first_only: int, n_last_only: int) -> dict[str, Any]:
+    """Return the fo decision."""
     discordant = n_first_only + n_last_only
     p_value = _fo_sign_test_p(n_first_only, n_last_only)
     if discordant < _FO_MIN_DISCORDANT_SPECS:
@@ -18132,6 +18436,7 @@ def _fo_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
     extraction_decision["n_paired"] = sum(1 for s in extraction_ids if s in paired_first)
 
     def _field_count_split(min_fields: int, max_fields: int | None) -> dict[str, Any]:
+        """Return the field count split."""
         ids = [
             s["id"]
             for s in _FIELD_ORDER_SPECS
@@ -18218,6 +18523,7 @@ def _fo_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     and every readout and the endpoint decision is re-derived
     from the commitments and compared.
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -18551,6 +18857,7 @@ _CA_METHOD_KEYS = {
 
 def _ca_f32(value: float) -> float:
     """Mirror of scoring._f32 (struct-based float32 rounding)."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
     import struct as _struct
 
@@ -18561,6 +18868,7 @@ def _ca_f32(value: float) -> float:
 
 
 def _ca_donor_map_sha256(block: list[dict[str, Any]]) -> str:
+    """Return the ca donor map sha256."""
     canonical = json.dumps(block, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -18569,7 +18877,8 @@ def _ca_fixture_set_sha256(fixture_ids: list[str]) -> str | None:
     """SHA-256 over the sorted fixture id set, or None when an id
     cannot be UTF-8 encoded (a lone surrogate): the expected
     protocol then mismatches any recorded payload, so the recompute
-    fails closed instead of raising (cycle-190 discipline)."""
+    fails closed instead of raising (cycle-190 discipline).
+    """
     try:
         return hashlib.sha256("\n".join(sorted(fixture_ids)).encode("utf-8")).hexdigest()
     except UnicodeEncodeError:
@@ -18579,6 +18888,7 @@ def _ca_fixture_set_sha256(fixture_ids: list[str]) -> str | None:
 def _ca_protocol_object(
     fixture_ids: list[str], block: list[dict[str, Any]], backend_fingerprint: str
 ) -> dict[str, Any]:
+    """Return the ca protocol object."""
     return {
         "version": 1,
         "donor_rule": _CA_DONOR_RULE,
@@ -18595,12 +18905,14 @@ def _ca_protocol_object(
 
 
 def _ca_generation_verdict(status: Any, exact_match: Any, boundary_found: Any) -> str:
+    """Return the ca generation verdict."""
     if status != "completed":
         return "missing"
     return "pass" if (exact_match is True and boundary_found is True) else "fail"
 
 
 def _ca_ranking_values(cells: list[dict[str, Any]], ranking: str) -> list[float]:
+    """Return the ca ranking values."""
     if ranking == "total":
         return [float(cell["total"]) for cell in cells]
     if ranking == "mean":
@@ -18609,6 +18921,7 @@ def _ca_ranking_values(cells: list[dict[str, Any]], ranking: str) -> list[float]
 
 
 def _ca_rank_verdict(values: list[float]) -> str:
+    """Return the ca rank verdict."""
     top = max(values)
     if values[0] < top:
         return "incorrect"
@@ -18616,6 +18929,8 @@ def _ca_rank_verdict(values: list[float]) -> str:
 
 
 def _ca_record_evaluable(record: dict[str, Any], fixture_entry: dict[str, Any]) -> bool:
+    """Return the ca record evaluable."""
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     if not fixture_entry["constructible"]:
@@ -18634,6 +18949,7 @@ def _ca_record_evaluable(record: dict[str, Any], fixture_entry: dict[str, Any]) 
 
 
 def _ca_accuracy_block(verdicts: list[str]) -> dict[str, Any]:
+    """Return the ca accuracy block."""
     correct = sum(1 for verdict in verdicts if verdict == "correct")
     incorrect = sum(1 for verdict in verdicts if verdict == "incorrect")
     tied = sum(1 for verdict in verdicts if verdict == "tied")
@@ -18839,6 +19155,7 @@ def _choiceaudit_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     screen and donor provenance against the fixture texts
     (records carry digests, not texts).
     """
+    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     protocol = payload.get("protocol")
@@ -19251,6 +19568,7 @@ _PRECISION_WITHHELD = {
 
 
 def _precision_digest_ok(value: Any) -> bool:
+    """Return whether the precision digest is well-formed."""
     return type(value) is str and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
 
 
@@ -19268,6 +19586,7 @@ def _precision_cell_ok(cell: Any, expected_digest: str) -> bool:
     if logprob is not None and (
         type(logprob) not in (int, float)
         or isinstance(logprob, bool)
+        # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
         or (type(logprob) is float and logprob != logprob)
         or (type(logprob) is float and logprob in (float("inf"), float("-inf")))
     ):
@@ -19422,6 +19741,7 @@ def _precision_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     blocks: dict[str, Any] = {}
     flips_all: list[dict[str, Any]] = []
     total_paired = 0
+    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     total_cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
     total_diverged = 0
     for name in candidates:
@@ -19443,6 +19763,7 @@ def _precision_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             if passed is None and complete:
                 return None
         paired = [r for r in own if type(r["fp32"]) is dict and type(r["bf16"]) is dict]
+        # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
         cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
         flips: list[dict[str, Any]] = []
         n_diverged = 0
@@ -19785,6 +20106,7 @@ _CONFIDENCE_BIN_EDGES = [[0, 24], [25, 49], [50, 74], [75, 100]]
 
 
 def _confidence_digest_ok(value: Any) -> bool:
+    """Return whether the confidence digest is well-formed."""
     return type(value) is str and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
 
 
@@ -19857,10 +20179,12 @@ def _confidence_case_mirror(seed: int) -> list[dict[str, Any]]:
     """
 
     def _derive(tag: str, index: int, attempt: int = 0) -> str:
+        """Return the derive."""
         material = f"{seed}\0confidence-{tag}\0{index}\0{attempt}"
         return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
     def _text_digest(text: str) -> str:
+        """Return the text digest."""
         return hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
 
     pairs: list[tuple[str, str]] = []
@@ -19910,6 +20234,7 @@ def _confidence_block_mirror(cells: list[dict[str, Any]], n_population: int) -> 
     incorrect = [cell for cell in compliant if not cell["verdict"]]
 
     def _mean(values: list[int]) -> float | None:
+        """Return the mean."""
         return (sum(values) / len(values)) if values else None
 
     mean_correct = _mean([int(cell["confidence"]) for cell in correct])
@@ -20129,6 +20454,7 @@ def _confidence_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         own = [r for r in ordered if r["candidate"] == name]
         elicited = [r["elicited"] for r in own if type(r["elicited"]) is dict]
         operator = _confidence_block_mirror(elicited, n_population)
+        # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
         flips = {"n_compared": 0, "pass_to_fail": 0, "fail_to_pass": 0}  # nosec B105 -- 'pass' keys are verdict-flip counts in the frozen payload schema, not credentials
         for record in own:
             cell = record["elicited"]
@@ -20542,6 +20868,7 @@ def diff_cache_profile(old: Any, new: Any) -> dict[str, Any]:
         return result
 
     def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate view."""
         view: dict[str, dict[str, Any]] = {}
         for name, entry in (payload.get("per_candidate") or {}).items():
             # _valid_cache_profile guarantees str keys and dict/None
@@ -20787,7 +21114,8 @@ def _measurable_collision_cells(
     per_candidate: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
     """The measurable cells of an answer-collision payload: dict cells
-    whose reserved arm scored at least one observation."""
+    whose reserved arm scored at least one observation.
+    """
     out: dict[str, dict[str, Any]] = {}
     for name, entry in per_candidate.items():
         if type(entry) is not dict:
@@ -20961,9 +21289,11 @@ def _valid_template_robustness(payload: Any) -> bool:
     """
 
     def _ok_rate(value: Any) -> bool:
+        """Return the ok rate."""
         return value is None or (type(value) in (int, float) and 0.0 <= value <= 1.0)
 
     def _ok_report(rep: Any) -> bool:
+        """Return the ok report."""
         if type(rep) is not dict:
             return False
         if rep.get("status") != "ok":
@@ -21008,6 +21338,7 @@ def diff_template_robustness(old: Any, new: Any) -> dict[str, Any]:
         return result
 
     def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate view."""
         view: dict[str, dict[str, Any]] = {}
         for name, entry in payload["candidates"].items():
             # _valid_template_robustness guarantees str keys and dict
@@ -21167,6 +21498,7 @@ def diff_ablation(old: Any, new: Any) -> dict[str, Any]:
         return result
 
     def _candidate_view(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate view."""
         view: dict[str, dict[str, Any]] = {}
         for name, entry in payload["candidates"].items():
             # _valid_ablation guarantees str keys and dict entries, so no
@@ -21339,6 +21671,7 @@ def diff_prefill(old: Any, new: Any) -> dict[str, Any]:
     def _flip_key(flips: list[Any]) -> list[tuple[Any, ...]]:
         # ``flips`` is a list here: _valid_prefill rejects anything else
         # before this point, so no defensive branch is needed.
+        """Return the flip key."""
         keys = []
         for entry in flips:
             if type(entry) is not dict:
@@ -21356,6 +21689,7 @@ def diff_prefill(old: Any, new: Any) -> dict[str, Any]:
 
     # NOTE: phrased to stay textually distinct from diff_hierarchy's
     # flips_changed line (a cycle-147 mutation-gate anchor).
+    # skipcq: PY-D0003 - mirror text is pinned verbatim by the cycle-148 mutation-gate anchor
     old_flip_key = _flip_key(old.get("flips"))
     new_flip_key = _flip_key(new.get("flips"))
     flips_changed = old_flip_key != new_flip_key
@@ -21395,6 +21729,7 @@ def diff_prefill(old: Any, new: Any) -> dict[str, Any]:
                 )
 
     def _think_means(payload: Any) -> dict[str, Any]:
+        """Return the think means."""
         effect = payload.get("think_effect") or {}
         return {
             label: (group or {}).get("mean_honor_rate")
@@ -21503,6 +21838,7 @@ def diff_portfolio(old: Any, new: Any) -> dict[str, Any]:
         return result
 
     def _rate_triplet(payload: Any) -> tuple[Any, Any, Any]:
+        """Return the rate triplet."""
         oracle = payload.get("oracle") or {}
         return (
             oracle.get("gap"),
@@ -21528,6 +21864,7 @@ def diff_portfolio(old: Any, new: Any) -> dict[str, Any]:
     }
 
     def _solvable(payload: Any) -> set[str]:
+        """Return the solvable."""
         oracle = payload.get("oracle") or {}
         return set(oracle.get("solvable_fixture_ids") or [])
 
@@ -21539,6 +21876,7 @@ def diff_portfolio(old: Any, new: Any) -> dict[str, Any]:
     result["solvable_removed"] = solvable_removed
 
     def _members(payload: Any) -> list[str]:
+        """Return the members."""
         cover = payload.get("portfolio") or {}
         return list(cover.get("members") or [])
 
@@ -21550,6 +21888,7 @@ def diff_portfolio(old: Any, new: Any) -> dict[str, Any]:
     result["members_removed"] = members_removed
 
     def _fixture_winners(payload: Any) -> dict[str, list[str]]:
+        """Return the fixture winners."""
         oracle = payload.get("oracle") or {}
         winners = oracle.get("per_fixture_winners") or {}
         return {str(key): list(names) for key, names in winners.items()}
@@ -21569,6 +21908,7 @@ def diff_portfolio(old: Any, new: Any) -> dict[str, Any]:
     result["fixture_winner_drift"] = fixture_winner_drift
 
     def _covers(payload: Any) -> dict[str, list[str]]:
+        """Return the covers."""
         cover = payload.get("portfolio") or {}
         per_member = cover.get("per_member_covers") or {}
         return {str(key): sorted(fixtures) for key, fixtures in per_member.items()}
@@ -21727,6 +22067,7 @@ def diff_synthhistory(old: Any, new: Any) -> dict[str, Any]:
     def _history_flip_key(flips: list[Any]) -> list[tuple[Any, ...]]:
         # ``flips`` entries are all dicts here: _valid_synthhistory rejects
         # anything else before this point, so no defensive branch is needed.
+        """Return the history flip key."""
         keys = []
         for entry in flips:
             keys.append(
@@ -21743,6 +22084,7 @@ def diff_synthhistory(old: Any, new: Any) -> dict[str, Any]:
     flips_changed = _history_flip_key(old.get("flips")) != _history_flip_key(new.get("flips"))
 
     def _candidate_pass_rates(payload: Any) -> dict[str, dict[str, Any]]:
+        """Return the candidate pass rates."""
         rates: dict[str, dict[str, Any]] = {}
         per_condition = payload.get("per_condition") or {}
         for condition in sorted(per_condition):
@@ -21772,6 +22114,7 @@ def diff_synthhistory(old: Any, new: Any) -> dict[str, Any]:
                 )
 
     def _group_means(payload: Any) -> dict[str, Any]:
+        """Return the group means."""
         groups = payload.get("group_pass_rates") or {}
         return {
             label: (group or {}).get("mean_pass_rate")
@@ -21886,6 +22229,7 @@ def diff_batchinv(old: Any, new: Any) -> dict[str, Any]:
         return result
 
     def _diverged_set(payload: Any) -> set[str]:
+        """Return the diverged set."""
         per_prompt = payload.get("per_prompt") or {}
         return {
             pid
@@ -22146,6 +22490,7 @@ def _render_perturbation_summary(perturbation_diff: dict[str, Any] | None) -> li
         def _count(value: Any) -> str:
             # Counts are ints (control-char-free); None means "not
             # applicable" (e.g. no primary winner to retain).
+            """Return the count."""
             return "(n/a)" if value is None else str(value)
 
         lines.append(
@@ -22196,6 +22541,7 @@ def _render_healing_summary(healing_diff: dict[str, Any] | None) -> list[str]:
         new = flip.get("new") or {}
 
         def _verdict(side: dict[str, Any]) -> str:
+            """Return the verdict."""
             winner = side.get("healed_winner")
             return (
                 f"{_display_id(side.get('healed_decision'))}/"
@@ -22254,6 +22600,7 @@ def _render_hierarchy_summary(hierarchy_diff: dict[str, Any] | None) -> list[str
     lines: list[str] = []
 
     def _verdict(decision: Any, winner: Any) -> str:
+        """Return the verdict."""
         return f"{_display_id(decision)}/{_display_id('(none)' if winner is None else winner)}"
 
     conditions = hierarchy_diff.get("condition_changed") or {}
@@ -22275,6 +22622,7 @@ def _render_hierarchy_summary(hierarchy_diff: dict[str, Any] | None) -> list[str
         lines.append("Instruction-hierarchy flip pattern changed between runs.")
 
     def _fmt_rate(value: Any) -> str:
+        """Return the fmt rate."""
         return f"{value:.1%}" if type(value) in (int, float) else "(none)"
 
     drift = hierarchy_diff.get("candidate_drift") or []
@@ -22328,6 +22676,7 @@ def _render_position_summary(position_diff: dict[str, Any] | None) -> list[str]:
     lines: list[str] = []
 
     def _verdict(decision: Any, winner: Any) -> str:
+        """Return the verdict."""
         return f"{_display_id(decision)}/{_display_id('(none)' if winner is None else winner)}"
 
     conditions = position_diff.get("condition_changed") or {}
@@ -22349,6 +22698,7 @@ def _render_position_summary(position_diff: dict[str, Any] | None) -> list[str]:
         lines.append("Position flip pattern changed between runs.")
 
     def _fmt_index(value: Any) -> str:
+        """Return the fmt index."""
         return f"{value:+.2f}" if type(value) in (int, float) else "(none)"
 
     drift = position_diff.get("index_drift") or []
@@ -22391,6 +22741,7 @@ def _render_stop_cause_summary(stopcause_diff: dict[str, Any] | None) -> list[st
     lines: list[str] = []
 
     def _fmt_rate(value: Any) -> str:
+        """Return the fmt rate."""
         return f"{value:.0%}" if type(value) in (int, float) else "(none)"
 
     drift = stopcause_diff.get("cause_drift") or []
@@ -22438,6 +22789,7 @@ def _render_ws_canonical_summary(wscan_diff: dict[str, Any] | None) -> list[str]
     lines: list[str] = []
 
     def _fmt_rate(value: Any) -> str:
+        """Return the fmt rate."""
         return f"{value:.0%}" if type(value) in (int, float) else "(none)"
 
     drift = wscan_diff.get("rate_drift") or []
@@ -22499,6 +22851,7 @@ def _render_structured_summary(structured_diff: dict[str, Any] | None) -> list[s
     lines: list[str] = []
 
     def _fmt_rate(value: Any) -> str:
+        """Return the fmt rate."""
         return f"{value:.0%}" if type(value) in (int, float) else "(none)"
 
     drift = structured_diff.get("rate_drift") or []
@@ -22562,6 +22915,7 @@ def _render_deliforge_summary(deliforge_diff: dict[str, Any] | None) -> list[str
     lines: list[str] = []
 
     def _fmt_gap(value: Any) -> str:
+        """Return the fmt gap."""
         return f"{value:+.2f}" if type(value) in (int, float) else "(none)"
 
     drift = deliforge_diff.get("gap_drift") or []
@@ -22626,6 +22980,7 @@ def _render_fewshot_summary(fewshot_diff: dict[str, Any] | None) -> list[str]:
     lines: list[str] = []
 
     def _fmt_gain(value: Any) -> str:
+        """Return the fmt gain."""
         return f"{value:.2f}" if type(value) in (int, float) else "(none)"
 
     gain_drift = fewshot_diff.get("gain_drift") or []
@@ -22695,9 +23050,11 @@ def _render_faketurn_summary(faketurn_diff: dict[str, Any] | None) -> list[str]:
     lines: list[str] = []
 
     def _fmt_rate(value: Any) -> str:
+        """Return the fmt rate."""
         return f"{value:.2f}" if type(value) in (int, float) else "(none)"
 
     def _fmt_gap(value: Any) -> str:
+        """Return the fmt gap."""
         return f"{value:+.2f}" if type(value) in (int, float) else "(none)"
 
     cell_drift = faketurn_diff.get("cell_drift") or []
@@ -22767,6 +23124,7 @@ def _render_toolcall_summary(toolcall_diff: dict[str, Any] | None) -> list[str]:
     lines: list[str] = []
 
     def _fmt_rate(value: Any) -> str:
+        """Return the fmt rate."""
         return f"{value:.2f}" if type(value) in (int, float) else "(none)"
 
     for drift_key, label in (
@@ -22831,6 +23189,7 @@ def _render_confidentiality_summary(
         )
 
     def _fmt_gap(value: Any) -> str:
+        """Return the fmt gap."""
         return f"{value:.1%}" if type(value) in (int, float) else "(none)"
 
     drift = confidentiality_diff.get("gap_drift") or []
@@ -22897,6 +23256,7 @@ def _render_answer_collision_summary(
         )
 
     def _fmt_rate(value: Any) -> str:
+        """Return the fmt rate."""
         return f"{value:.1%}" if type(value) in (int, float) else "(none)"
 
     drift = answer_collision_diff.get("rate_drift") or []
@@ -22958,6 +23318,7 @@ def _render_template_robustness_summary(
     lines: list[str] = []
 
     def _fmt_rate(value: Any) -> str:
+        """Return the fmt rate."""
         return f"{value:.2f}" if type(value) in (int, float) else "(none)"
 
     drift = tr_diff.get("preservation_drift") or []
@@ -23064,6 +23425,7 @@ def _render_verbosity_summary(verbosity_diff: dict[str, Any] | None) -> list[str
     lines: list[str] = []
 
     def _fmt_tokens(value: Any) -> str:
+        """Return the fmt tokens."""
         return f"{value:.1f}" if type(value) in (int, float) else "(none)"
 
     for drift_key, label in (
@@ -23124,6 +23486,7 @@ def _render_refusals_summary(refusals_diff: dict[str, Any] | None) -> list[str]:
         )
 
     def _fmt_rate(value: Any) -> str:
+        """Return the fmt rate."""
         return f"{value:.0%}" if type(value) in (int, float) else "(none)"
 
     drift = refusals_diff.get("rate_drift") or []
@@ -23184,6 +23547,7 @@ def _render_cache_profile_summary(cache_profile_diff: dict[str, Any] | None) -> 
     lines: list[str] = []
 
     def _fmt_share(value: Any) -> str:
+        """Return the fmt share."""
         return f"{value:.1%}" if type(value) in (int, float) else "(none)"
 
     for drift_key, label in (
@@ -23238,6 +23602,7 @@ def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
     lines: list[str] = []
 
     def _verdict(decision: Any, winner: Any) -> str:
+        """Return the verdict."""
         return f"{_display_id(decision)}/{_display_id('(none)' if winner is None else winner)}"
 
     conditions = prefill_diff.get("condition_changed") or {}
@@ -23259,6 +23624,7 @@ def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
         lines.append("Assistant-prefill flip pattern changed between runs.")
 
     def _fmt_rate(value: Any) -> str:
+        """Return the fmt rate."""
         return f"{value:.1%}" if type(value) in (int, float) else "(none)"
 
     drift = prefill_diff.get("candidate_drift") or []
@@ -23310,6 +23676,7 @@ def _render_synthhistory_summary(synthhistory_diff: dict[str, Any] | None) -> li
     lines: list[str] = []
 
     def _verdict(decision: Any, winner: Any) -> str:
+        """Return the verdict."""
         return f"{_display_id(decision)}/{_display_id('(none)' if winner is None else winner)}"
 
     conditions = synthhistory_diff.get("condition_changed") or {}
@@ -23331,6 +23698,7 @@ def _render_synthhistory_summary(synthhistory_diff: dict[str, Any] | None) -> li
         lines.append("Synthetic-history flip pattern changed between runs.")
 
     def _fmt_rate(value: Any) -> str:
+        """Return the fmt rate."""
         return f"{value:.1%}" if type(value) in (int, float) else "(none)"
 
     drift = synthhistory_diff.get("pass_rate_drift") or []
@@ -23414,6 +23782,7 @@ def _render_boundary_audit_summary(audit_diff: dict[str, Any]) -> list[str]:
     lines: list[str] = []
 
     def _fmt(rate: Any) -> str:
+        """Return the fmt."""
         return f"{rate:.1%}" if type(rate) in (int, float) else "(none)"
 
     overall = audit_diff["overall_rate"]
@@ -23510,6 +23879,7 @@ def _render_held_out_floor_summary(floor_diff: dict[str, Any]) -> list[str]:
     lines: list[str] = []
 
     def _fmt(value: Any) -> str:
+        """Return the fmt."""
         return str(value) if type(value) is int else "(none)"
 
     robust = floor_diff["budget_robust"]
@@ -23554,6 +23924,7 @@ def _render_frontier_summary(frontier: dict[str, Any]) -> list[str]:
     floor = frontier.get("safe_budget_floor") or {}
 
     def _fmt_floor(value: Any) -> str:
+        """Return the fmt floor."""
         return str(value) if type(value) is int else "(none)"
 
     lines.append(
@@ -23718,7 +24089,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def run_diff_reports(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+def run_diff_reports(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
     """Implement ``mpl diff-reports``; returns the process exit code.
 
     JSON goes to stdout, the human-readable summary to stderr (mirroring

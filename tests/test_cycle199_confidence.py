@@ -64,10 +64,12 @@ class _ScriptedBackend:
         self.declared_dtype = "float32"
         self.calls = 0
 
-    def encode(self, text):
+    @staticmethod
+    def encode(text):
         return tuple(text.encode("utf-8"))
 
-    def decode(self, ids):
+    @staticmethod
+    def decode(ids):
         return bytes(int(i) % 256 for i in ids).decode("utf-8", "replace")
 
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
@@ -253,6 +255,7 @@ class TestParserMutationGate(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import model_protocol_lab.confidence as _cf
 
         cls.source = Path(_cf.__file__).read_text(encoding="utf-8")
@@ -669,7 +672,8 @@ class TestReportingSection(unittest.TestCase):
 
 
 class TestCliWrapper(unittest.TestCase):
-    def _result(self, decision="compatible_on_fixture_set"):
+    @staticmethod
+    def _result(decision="compatible_on_fixture_set"):
         return {
             "decision": decision,
             "selected_candidate": "alpha",
@@ -746,6 +750,8 @@ class TestTinyCheckpointEndToEnd(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         import tempfile
+
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from pathlib import Path
 
         from tests.test_adapter_integration import build_tiny_gpt2

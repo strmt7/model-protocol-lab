@@ -123,6 +123,7 @@ class StubBackend:
     def decode(self, token_ids: tuple[int, ...]) -> str:
         return self._tokenizer.decode(token_ids)
 
+    # skipcq: PYL-E0202 - the attribute deliberately shadows the method to fake a missing primitive
     def forward_logits(self, input_ids: tuple[int, ...]) -> torch.Tensor:
         self.forward_calls.append(tuple(input_ids))
         if self._forward_error is not None:
@@ -445,6 +446,7 @@ def build_tiny_bpe_gpt2(root: Path) -> None:
     encode("ab")`` -- a genuine merge-sensitive boundary -- while pairs
     like ``"a"`` / ``"c"`` concatenate cleanly for the aligned case.
     """
+    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import torch
     from tokenizers import Tokenizer, decoders
     from tokenizers.models import BPE

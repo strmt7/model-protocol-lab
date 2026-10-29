@@ -179,8 +179,8 @@ class PrivilegeBlockTests(unittest.TestCase):
 class BuildConflictFixturesTests(unittest.TestCase):
     def test_positions_order_content(self):
         specs = validate_conflict_specs(CONFLICT_SPECS)
-        first, exp_first = build_conflict_fixtures(specs, position="privilege_first")
-        last, exp_last = build_conflict_fixtures(specs, position="privilege_last")
+        first, _exp_first = build_conflict_fixtures(specs, position="privilege_first")
+        last, _exp_last = build_conflict_fixtures(specs, position="privilege_last")
         self.assertEqual(len(first), 8)
         content_first = first[0].messages[0].content
         content_last = last[0].messages[0].content
@@ -331,7 +331,8 @@ def _entry(system, user, neither, passed):
 
 
 class HierarchyAdherenceTests(unittest.TestCase):
-    def _stages(self):
+    @staticmethod
+    def _stages():
         return {
             "privilege_first": _adherence_stage(
                 {
@@ -653,7 +654,8 @@ class DiffHierarchyTests(unittest.TestCase):
 
 
 class HierarchyDiffIntegrationTests(unittest.TestCase):
-    def _reports(self, hierarchy_old, hierarchy_new):
+    @staticmethod
+    def _reports(hierarchy_old, hierarchy_new):
         base = {
             "decision": "select_best",
             "selected_candidate": "alpha",
@@ -700,7 +702,8 @@ class HierarchyDiffIntegrationTests(unittest.TestCase):
 
 
 class HierarchySectionTests(unittest.TestCase):
-    def _result(self):
+    @staticmethod
+    def _result():
         return {"hierarchy": _hierarchy_payload()}
 
     def test_renders_tables(self):
@@ -764,7 +767,8 @@ class HierarchyMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _flip_scenario(self, mod):
+    @staticmethod
+    def _flip_scenario(mod):
         stages = {
             "privilege_first": {
                 "position": "privilege_first",
@@ -797,7 +801,8 @@ class HierarchyMutationGateTests(unittest.TestCase):
             self._flip_scenario,
         )
 
-    def _diff_scenario(self, mod):
+    @staticmethod
+    def _diff_scenario(mod):
         old = _hierarchy_payload()
         new = _hierarchy_payload()
         new["flips"] = []
@@ -814,7 +819,8 @@ class HierarchyMutationGateTests(unittest.TestCase):
             self._diff_scenario,
         )
 
-    def _group_scenario(self, mod):
+    @staticmethod
+    def _group_scenario(mod):
         old = _hierarchy_payload()
         new = _hierarchy_payload()
         new["group_adherence"]["dedicated"]["mean_system_rate"] = 0.9
@@ -831,7 +837,8 @@ class HierarchyMutationGateTests(unittest.TestCase):
             self._group_scenario,
         )
 
-    def _swap_scenario(self, mod):
+    @staticmethod
+    def _swap_scenario(mod):
         specs = mod.validate_conflict_specs(mod.CONFLICT_SPECS)
         _, expectations = mod.build_conflict_fixtures(specs, position="privilege_first")
         fid = "hierarchy/privilege_first/color-word"
@@ -1244,10 +1251,12 @@ class HierarchyBranchCoverageTests(unittest.TestCase):
 
 
 class HierarchyCliProbeTests(unittest.TestCase):
-    def _result(self):
+    @staticmethod
+    def _result():
         return {"decision": "selected", "selected_candidate": "alpha"}
 
-    def _call(self, result, backend):
+    @staticmethod
+    def _call(result, backend):
         from model_protocol_lab.cli import _run_hierarchy_probe
 
         _run_hierarchy_probe(
@@ -1289,7 +1298,8 @@ if __name__ == "__main__":
 
 class HierarchyGroupLabelSanitizationTests(unittest.TestCase):
     """Wave-3 red-team A F2: hostile group_adherence labels must not
-    inject terminal escapes into the stderr summary."""
+    inject terminal escapes into the stderr summary.
+    """
 
     def test_group_label_terminal_escapes_stripped(self):
         base = {

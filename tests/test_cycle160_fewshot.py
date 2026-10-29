@@ -121,7 +121,8 @@ class BrokenBackend(FewshotScriptedBackend):
 
     fingerprint = "scripted-fewshot-broken-c160"
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel):
         raise RuntimeError("boom")
 
 
@@ -461,7 +462,8 @@ class OrderSensitivityTests(unittest.TestCase):
 
 
 class FewshotStageTests(unittest.TestCase):
-    def _run_stage(self, backend=None, formats=None):
+    @staticmethod
+    def _run_stage(backend=None, formats=None):
         backend = backend or FewshotScriptedBackend()
         formats = formats or (
             _format("tmpl_a"),
@@ -650,7 +652,8 @@ class FewshotStageTests(unittest.TestCase):
 
 
 class FewshotGainMalformedTests(unittest.TestCase):
-    def _stage(self, **overrides):
+    @staticmethod
+    def _stage(**overrides):
         per_candidate = {
             "c0": {
                 "n_eval": 1,
@@ -668,7 +671,8 @@ class FewshotGainMalformedTests(unittest.TestCase):
         base.update(overrides)
         return base
 
-    def _call(self, stage, **kwargs):
+    @staticmethod
+    def _call(stage, **kwargs):
         params = {
             "primary_winner": "c0",
             "primary_decision": "selected",
@@ -995,7 +999,8 @@ class FewshotMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _gain_mean_scenario(self, mod):
+    @staticmethod
+    def _gain_mean_scenario(mod):
         stage = {
             "available": True,
             "k": 2,
@@ -1026,7 +1031,8 @@ class FewshotMutationGateTests(unittest.TestCase):
             self._gain_mean_scenario,
         )
 
-    def _sensitivity_pstdev_scenario(self, mod):
+    @staticmethod
+    def _sensitivity_pstdev_scenario(mod):
         assert mod.order_sensitivity((1.0, 0.0)) == 0.5
         assert mod.order_sensitivity((0.25, 0.75)) == 0.25
 
@@ -1040,7 +1046,8 @@ class FewshotMutationGateTests(unittest.TestCase):
             self._sensitivity_pstdev_scenario,
         )
 
-    def _change_rate_none_excluded_scenario(self, mod):
+    @staticmethod
+    def _change_rate_none_excluded_scenario(mod):
         out = mod.change_rate({"f": True}, {"f": None})
         assert out["n_evaluable"] == 0, out
         assert out["rate"] is None, out
@@ -1055,7 +1062,8 @@ class FewshotMutationGateTests(unittest.TestCase):
             self._change_rate_none_excluded_scenario,
         )
 
-    def _diff_payload(self, winner):
+    @staticmethod
+    def _diff_payload(winner):
         return {
             "available": True,
             "k": 2,
@@ -1196,6 +1204,7 @@ class DiffFewshotTests(unittest.TestCase):
         self.assertTrue(diff["changed"])
         self.assertEqual(diff["candidates_added"], ["c2"])
         self.assertFalse(diff["gain_drift"])
+        # skipcq: PYL-W1114 - the reversed diff is the assertion: symmetry is what is audited
         diff = diffreports.diff_fewshot(new, old)
         self.assertEqual(diff["candidates_removed"], ["c2"])
         # Excluded added/removed.
@@ -1274,7 +1283,8 @@ class DiffFewshotTests(unittest.TestCase):
 
 
 class FewshotRenderSummaryTests(unittest.TestCase):
-    def _diff(self):
+    @staticmethod
+    def _diff():
         old = _diff_payload()
         new = _diff_payload(gain=0.0, sensitivity=0.5, winner=None, excluded=["c"])
         new["per_candidate"]["c2"] = _diff_candidate()
@@ -1385,7 +1395,8 @@ class FewshotCliProbeTests(unittest.TestCase):
 
 
 class FewshotReportingTests(unittest.TestCase):
-    def _result(self):
+    @staticmethod
+    def _result():
         return {
             "fewshot": {
                 "available": True,
@@ -1524,10 +1535,12 @@ class FewshotRedTeamTests(unittest.TestCase):
 
     def test_stage_never_raises_on_hostile_backend(self):
         class HostileBackend(FewshotScriptedBackend):
-            def encode(self, text):
+            @staticmethod
+            def encode(text):
                 raise RuntimeError("encode boom")
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
                 raise RuntimeError("generate boom")
 
         stage = fewshot_stage(

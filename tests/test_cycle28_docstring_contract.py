@@ -36,7 +36,8 @@ def _summary(planned: int, passes: int) -> dict[str, Any]:
 class EvidenceDuplicateNameContractTests(unittest.TestCase):
     """Verdicts first-wins, evidence last-wins on duplicate candidate names."""
 
-    def _dup_run(self) -> dict[str, Any]:
+    @staticmethod
+    def _dup_run() -> dict[str, Any]:
         first = {
             "format": {"name": "dup"},
             "summary": _summary(1, 1),
@@ -70,7 +71,8 @@ class EvidenceDuplicateNameContractTests(unittest.TestCase):
 
     def test_later_entry_without_usable_evidence_keeps_earlier(self) -> None:
         """A later duplicate with no usable observations leaves the earlier
-        entry's outcomes in place (no repeat-name guard AND no empty-overwrite)."""
+        entry's outcomes in place (no repeat-name guard AND no empty-overwrite).
+        """
         run = {
             "decision": "s",
             "search": [
@@ -99,7 +101,8 @@ class EvidenceDuplicateNameContractTests(unittest.TestCase):
 class FixtureSetDriftGatingContractTests(unittest.TestCase):
     """Any-stage evidence gating: per-stage entries fire on empty stages."""
 
-    def _search_evidence_only(self) -> dict[str, Any]:
+    @staticmethod
+    def _search_evidence_only() -> dict[str, Any]:
         return {
             "decision": "s",
             "search": [
@@ -119,7 +122,8 @@ class FixtureSetDriftGatingContractTests(unittest.TestCase):
             "held_out": None,
         }
 
-    def _held_out_evidence_only(self) -> dict[str, Any]:
+    @staticmethod
+    def _held_out_evidence_only() -> dict[str, Any]:
         return {
             "decision": "s",
             "search": [

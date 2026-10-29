@@ -854,11 +854,13 @@ def _set_field(doc, field, value):
 
 
 class TestBoundaries(unittest.TestCase):
-    def test_byte_limit_exact(self):
+    @staticmethod
+    def test_byte_limit_exact():
         doc = _doc_with_byte_length(datasets_mod.MAX_BYTES)
         _assert_agree("bytes-exact", doc, expect_valid=True)
 
-    def test_byte_limit_plus_one(self):
+    @staticmethod
+    def test_byte_limit_plus_one():
         doc = _doc_with_byte_length(datasets_mod.MAX_BYTES + 1)
         _assert_agree("bytes-plus-one", doc, expect_valid=False)
 
@@ -867,7 +869,8 @@ class TestBoundaries(unittest.TestCase):
             with self.subTest(count=count):
                 _assert_agree(f"cases-{count}", _doc_with_case_count(count), expect_valid=True)
 
-    def test_case_count_101_rejected(self):
+    @staticmethod
+    def test_case_count_101_rejected():
         _assert_agree("cases-101", _doc_with_case_count(101), expect_valid=False)
 
     def test_message_count_ok(self):
@@ -875,10 +878,12 @@ class TestBoundaries(unittest.TestCase):
             with self.subTest(count=count):
                 _assert_agree(f"msgs-{count}", _doc_with_message_count(count), expect_valid=True)
 
-    def test_message_count_22_rejected(self):
+    @staticmethod
+    def test_message_count_22_rejected():
         _assert_agree("msgs-22", _doc_with_message_count(22), expect_valid=False)
 
-    def test_message_count_20_rejected_ends_with_assistant(self):
+    @staticmethod
+    def test_message_count_20_rejected_ends_with_assistant():
         _assert_agree("msgs-20", _doc_with_message_count(20), expect_valid=False)
 
     def test_text_limit_exact_ok(self):
@@ -893,7 +898,8 @@ class TestBoundaries(unittest.TestCase):
                 doc = _set_field(_base_doc(), field, "x" * (datasets_mod.MAX_TEXT + 1))
                 _assert_agree(f"text-plus-one-{field}", doc, expect_valid=False)
 
-    def test_text_limit_counts_characters_not_bytes(self):
+    @staticmethod
+    def test_text_limit_counts_characters_not_bytes():
         doc = _set_field(_base_doc(), "content", "\u00e9" * datasets_mod.MAX_TEXT)
         assert len(doc.encode("utf-8")) > datasets_mod.MAX_TEXT
         _assert_agree("text-multibyte", doc, expect_valid=True)
@@ -971,25 +977,29 @@ class TestPinnedBehavior(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Blank identifier"):
             datasets_mod.parse_dataset(_dump(doc))
 
-    def test_whitespace_padded_id_accepted(self):
+    @staticmethod
+    def test_whitespace_padded_id_accepted():
         doc = _base_doc()
         doc["search"][0]["id"] = "  padded-id  "
         split = datasets_mod.parse_dataset(_dump(doc))
         assert split.search[0].id == "  padded-id  "
 
-    def test_empty_expected_accepted(self):
+    @staticmethod
+    def test_empty_expected_accepted():
         doc = _base_doc()
         doc["search"][0]["expected"] = ""
         split = datasets_mod.parse_dataset(_dump(doc))
         assert split.search[0].expected == ""
 
-    def test_top_level_key_order_irrelevant(self):
+    @staticmethod
+    def test_top_level_key_order_irrelevant():
         doc = _base_doc()
         text = _dump({"held_out": doc["held_out"], "search": doc["search"]})
         split = datasets_mod.parse_dataset(text)
         assert split == reference_parse_dataset(text)
 
-    def test_nfd_data_preserved_byte_exact(self):
+    @staticmethod
+    def test_nfd_data_preserved_byte_exact():
         doc = _base_doc()
         doc["search"][0]["id"] = "cafe\u0301"
         doc["search"][0]["messages"][0]["content"] = "nai\u0308ve"
@@ -1038,14 +1048,16 @@ class TestPinnedBehavior(unittest.TestCase):
         with self.assertRaises(ValueError):
             datasets_mod.parse_dataset("\ufeff" + _dump(_base_doc()))
 
-    def test_dunder_keys_are_inert_data(self):
+    @staticmethod
+    def test_dunder_keys_are_inert_data():
         doc = _base_doc()
         doc["search"][0]["id"] = "__proto__"
         doc["search"][0]["messages"][0]["content"] = "${jndi:ldap://x}"
         split = datasets_mod.parse_dataset(_dump(doc))
         assert split.search[0].id == "__proto__"
 
-    def test_parse_is_deterministic(self):
+    @staticmethod
+    def test_parse_is_deterministic():
         text = VALID_CASES[7]
         assert datasets_mod.parse_dataset(text) == datasets_mod.parse_dataset(text)
 
@@ -1285,7 +1297,8 @@ class TestRedTeam(unittest.TestCase):
         with self.assertRaises(ValueError):
             datasets_mod.parse_dataset('{"search": [], "held_out": []}')
 
-    def test_groups_may_repeat_within_one_split(self):
+    @staticmethod
+    def test_groups_may_repeat_within_one_split():
         doc = _base_doc()
         doc["search"].append(
             {
@@ -1304,13 +1317,15 @@ class TestRedTeam(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "globally unique"):
             datasets_mod.parse_dataset(_dump(doc))
 
-    def test_single_message_conversation_valid(self):
+    @staticmethod
+    def test_single_message_conversation_valid():
         doc = _base_doc()  # one user message, no assistant turn yet
         split = datasets_mod.parse_dataset(_dump(doc))
         assert len(split.search[0].messages) == 1
         assert split.search[0].messages[0].role == "user"
 
-    def test_maximal_conversation_shape(self):
+    @staticmethod
+    def test_maximal_conversation_shape():
         text = _doc_with_message_count(21)
         split = datasets_mod.parse_dataset(text)
         assert [m.role for m in split.search[0].messages] == ["user", "assistant"] * 10 + ["user"]

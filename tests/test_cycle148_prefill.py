@@ -115,6 +115,7 @@ class ScriptedPrefillBackend:
 
 
 def _run_stage(policy, prefill_id="answer-colon", cases=None, backend=None):
+    # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
     spec = next(s for s in validate_prefill_specs(PREFILL_SPECS) if s["id"] == prefill_id)
     return prefill_stage(
         ScriptedPrefillBackend(policy, spec["text"]) if backend is None else backend,
@@ -369,7 +370,8 @@ class PrefillBackendTests(unittest.TestCase):
         class BadFingerprint:
             fingerprint = 42
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
                 raise AssertionError("must not be called")
 
         with self.assertRaises(ValueError):
@@ -469,7 +471,8 @@ class PrefillStageTests(unittest.TestCase):
 
 
 class PrefillAdherenceTests(unittest.TestCase):
-    def _stages(self):
+    @staticmethod
+    def _stages():
         return {
             "answer-colon": _run_stage({"alpha": "honor", "beta": "restart"}),
             "final-answer": _run_stage(
@@ -716,7 +719,8 @@ class DiffPrefillTests(unittest.TestCase):
 
 
 class PrefillDiffIntegrationTests(unittest.TestCase):
-    def _reports(self, prefill_old, prefill_new):
+    @staticmethod
+    def _reports(prefill_old, prefill_new):
         base = {
             "decision": "select_best",
             "selected_candidate": "alpha",
@@ -763,7 +767,8 @@ class PrefillDiffIntegrationTests(unittest.TestCase):
 
 
 class PrefillSectionTests(unittest.TestCase):
-    def _result(self):
+    @staticmethod
+    def _result():
         return {"prefill": _prefill_payload()}
 
     def test_renders_tables(self):
@@ -827,7 +832,8 @@ class PrefillMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _flip_scenario(self, mod):
+    @staticmethod
+    def _flip_scenario(mod):
         stages = {
             "answer-colon": {
                 "prefill_id": "answer-colon",
@@ -875,7 +881,8 @@ class PrefillMutationGateTests(unittest.TestCase):
             self._flip_scenario,
         )
 
-    def _honor_scenario(self, mod):
+    @staticmethod
+    def _honor_scenario(mod):
         stage = mod.prefill_stage(
             ScriptedPrefillBackend({"alpha": "honor", "beta": "restart"}),
             tuple(_format(c) for c in CANDIDATES),
@@ -905,7 +912,8 @@ class PrefillMutationGateTests(unittest.TestCase):
             self._honor_scenario,
         )
 
-    def _diff_scenario(self, mod):
+    @staticmethod
+    def _diff_scenario(mod):
         old = _prefill_payload()
         new = _prefill_payload()
         new["flips"] = []
@@ -936,7 +944,8 @@ class PrefillMutationGateTests(unittest.TestCase):
             self._diff_scenario,
         )
 
-    def _think_scenario(self, mod):
+    @staticmethod
+    def _think_scenario(mod):
         old = _prefill_payload()
         new = _prefill_payload()
         new["think_effect"]["think_channel"]["mean_honor_rate"] = 0.9
@@ -1045,7 +1054,8 @@ def _oracle_prefill_adherence(primary_winner, primary_decision, candidates, stag
 
 
 class PrefillOracleTests(unittest.TestCase):
-    def _random_stages(self, rng):
+    @staticmethod
+    def _random_stages(rng):
         prefill_ids = rng.sample(
             ["answer-colon", "final-answer", "result-colon"], rng.randint(1, 3)
         )
@@ -1117,7 +1127,8 @@ class PrefillBranchCoverageTests(unittest.TestCase):
 
     def test_ineligible_report_degrades_cell(self):
         class Ineligible(ScriptedPrefillBackend):
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):
                 # Empty generation with reason "limit": _valid_generation
                 # rejects it (limit requires exactly cap tokens), so the
                 # observation fails, the report is not aggregate-eligible,
@@ -1204,10 +1215,12 @@ class PrefillBranchCoverageTests(unittest.TestCase):
 
 
 class PrefillCliProbeTests(unittest.TestCase):
-    def _result(self):
+    @staticmethod
+    def _result():
         return {"decision": "selected", "selected_candidate": "alpha"}
 
-    def _call(self, result, backend, cases):
+    @staticmethod
+    def _call(result, backend, cases):
         from model_protocol_lab.cli import _run_prefill_probe
 
         _run_prefill_probe(
@@ -1259,7 +1272,8 @@ if __name__ == "__main__":
 
 class PrefillGroupLabelSanitizationTests(unittest.TestCase):
     """Wave-3 red-team A F2: hostile think_effect labels must not
-    inject terminal escapes into the stderr summary."""
+    inject terminal escapes into the stderr summary.
+    """
 
     def test_group_label_terminal_escapes_stripped(self):
         base = {

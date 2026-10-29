@@ -585,6 +585,7 @@ def parse_document(text: object) -> dict[str, Any]:
     duplicates = False
 
     def _hook(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        """Return the hook."""
         nonlocal duplicates
         seen: dict[str, Any] = {}
         for key, value in pairs:
@@ -597,6 +598,7 @@ def parse_document(text: object) -> dict[str, Any]:
         # An integer literal beyond the int<->str digit limit has
         # no canonical form: keep the document parseable and let
         # the sentinel canonicalise to None (design section 4).
+        """Parse int."""
         try:
             return int(raw)
         except ValueError:
@@ -702,6 +704,7 @@ def sign_test_p(n_pos: int, n_neg: int) -> float:
 
 
 def _rate(correct: int, n: int) -> float | None:
+    """Return the rate."""
     return correct / n if n else None
 
 
@@ -731,6 +734,7 @@ def _decision(n_first_only: int, n_last_only: int) -> dict[str, Any]:
     }
 
 
+# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Aggregate one candidate's 60 records into the readout block.
 
@@ -872,6 +876,7 @@ def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     extraction_decision["n_paired"] = sum(1 for s in extraction_ids if s in paired_first)
 
     def _field_count_split(min_fields: int, max_fields: int | None) -> dict[str, Any]:
+        """Return the field count split."""
         ids = [
             s["id"]
             for s in FIELD_ORDER_SPECS

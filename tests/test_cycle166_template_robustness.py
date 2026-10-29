@@ -58,7 +58,8 @@ class AlwaysWrongBackend(MarkerBackend):
 
     fingerprint = "test-always-wrong/v1"
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel=None):
         return Generation(tuple(map(ord, "WRONG" + chr(7))), "limit")
 
 
@@ -67,7 +68,8 @@ class AlwaysErrorBackend(MarkerBackend):
 
     fingerprint = "test-always-error/v1"
 
-    def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+    @staticmethod
+    def generate(input_ids, *, max_new_tokens, seed, cancel=None):
         return Generation((), "error")
 
 
@@ -205,7 +207,7 @@ class FrozenProtocolTests(unittest.TestCase):
             )
 
     def test_verify_rejects_wrong_backend_fingerprint(self):
-        protocol, backend, fixtures = _protocol()
+        protocol, _backend, fixtures = _protocol()
         with self.assertRaises(ValueError):
             sn.verify_template_robustness_protocol(
                 protocol, backend_fingerprint="wrong", fixtures=fixtures
@@ -578,7 +580,7 @@ class MultiMessageTests(unittest.TestCase):
             recording_render, "t", (case,), backend, protocol, boundary=BOUNDARY
         )
         self.assertEqual(rep["status"], "ok")
-        base_messages, base_render = seen[0]
+        _base_messages, base_render = seen[0]
         for messages, _render in seen[1:]:
             self.assertEqual([m.role for m in messages], ["user", "assistant", "user"])
             # Assistant message byte-identical across all variants.
@@ -696,7 +698,9 @@ class RendererHashTests(unittest.TestCase):
 
 
 class EvaluateCaseTests(unittest.TestCase):
-    def _call(self, render, backend, messages=None, expected="BLUE"):
+    @staticmethod
+    def _call(render, backend, messages=None, expected="BLUE"):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import threading
 
         messages = messages or (Message(role="user", content="Say MAGICWORD"),)
@@ -725,7 +729,8 @@ class EvaluateCaseTests(unittest.TestCase):
 
     def test_generate_raises_abstains(self):
         class BoomGen(MarkerBackend):
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel=None):
                 raise RuntimeError("boom")
 
         self.assertEqual(self._call(_fragile_render, BoomGen()), "abstain")
@@ -735,7 +740,8 @@ class EvaluateCaseTests(unittest.TestCase):
 
     def test_invalid_gen_ids_abstain(self):
         class BadGenIds(MarkerBackend):
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel=None):
                 return Generation((1, -5), "limit")
 
         self.assertEqual(self._call(_fragile_render, BadGenIds()), "abstain")
@@ -758,7 +764,8 @@ class EvaluateCaseTests(unittest.TestCase):
 
     def test_cancelled_reason_abstains(self):
         class CancelledGen(MarkerBackend):
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel=None):
                 return Generation((), "cancelled")
 
         self.assertEqual(self._call(_fragile_render, CancelledGen()), "abstain")
@@ -976,13 +983,15 @@ class StageTests(unittest.TestCase):
         class ExplodingFormat:
             name = "exploding"
 
-            def render(self, messages):
+            @staticmethod
+            def render(messages):
                 raise RuntimeError("boom")
 
         class OkFormat:
             name = "ok"
 
-            def render(self, messages):
+            @staticmethod
+            def render(messages):
                 return _fragile_render(messages)
 
         stage = experiments.template_robustness_stage(
@@ -1023,7 +1032,8 @@ class StageTests(unittest.TestCase):
             def bos(self):
                 raise RuntimeError("boom")
 
-            def render(self, messages):
+            @staticmethod
+            def render(messages):
                 return _fragile_render(messages)
 
         stage = experiments.template_robustness_stage(
@@ -1113,7 +1123,8 @@ class CliTests(unittest.TestCase):
 
 
 class ReportingTests(unittest.TestCase):
-    def _payload(self, rate=0.75):
+    @staticmethod
+    def _payload(rate=0.75):
         return {
             "available": True,
             "candidates": {
@@ -1173,7 +1184,8 @@ class ReportingTests(unittest.TestCase):
 
 
 class DiffTests(unittest.TestCase):
-    def _payload(self, rate_a=0.75, rate_b=None):
+    @staticmethod
+    def _payload(rate_a=0.75, rate_b=None):
         candidates = {
             "tmpl-a": {
                 "status": "ok",
@@ -1282,7 +1294,8 @@ class TemplateRobustnessMutationGateTests(unittest.TestCase):
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
 
-    def _preservation_scenario(self, mod):
+    @staticmethod
+    def _preservation_scenario(mod):
         # all() vs any(): the fragile template flips whitespace variants
         # but preserves case_flip ones; only all() reports 0.0 overall.
         backend = MarkerBackend()
@@ -1305,7 +1318,8 @@ class TemplateRobustnessMutationGateTests(unittest.TestCase):
             self._preservation_scenario,
         )
 
-    def _baseline_conditioned_scenario(self, mod):
+    @staticmethod
+    def _baseline_conditioned_scenario(mod):
         # Removing the pass-baseline gate would report 0.0 instead of None.
         backend = AlwaysWrongBackend()
         fixtures = _fixtures()
@@ -1329,7 +1343,8 @@ class TemplateRobustnessMutationGateTests(unittest.TestCase):
             self._baseline_conditioned_scenario,
         )
 
-    def _operator_set_scenario(self, mod):
+    @staticmethod
+    def _operator_set_scenario(mod):
         # Dropping the operator-set check lets a typo-protocol through.
         backend = MarkerBackend()
         fixtures = _fixtures()
@@ -1404,6 +1419,7 @@ class FailClosedCoverageTests(unittest.TestCase):
         self.assertEqual(rep["reason"], "baseline_all_abstained")
 
     def test_pre_cancelled_control_backend_generate(self):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import threading
 
         backend = sn._ControlCalibrationBackend()
@@ -1424,7 +1440,8 @@ class FailClosedCoverageTests(unittest.TestCase):
 
     def test_keyboard_interrupt_propagates(self):
         class KbdBackend(MarkerBackend):
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel=None):
                 raise KeyboardInterrupt()
 
         protocol, _, fixtures = _protocol(backend=KbdBackend())
@@ -1444,7 +1461,8 @@ class FailClosedCoverageTests(unittest.TestCase):
             def decode(ids):
                 raise ValueError("nope")
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel=None):
                 # Bypass generate's own decode call: the failure under test
                 # is the answer-decode after generation.
                 return Generation(tuple(map(ord, "BLUE" + chr(7))), "limit")
@@ -1467,7 +1485,8 @@ class FailClosedCoverageTests(unittest.TestCase):
             def decode(ids):
                 return 42
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel=None):
                 return Generation(tuple(map(ord, "BLUE" + chr(7))), "limit")
 
         protocol, _, fixtures = _protocol(backend=NonStrDecodeBackend())
@@ -1553,7 +1572,8 @@ class FailClosedCoverageTests(unittest.TestCase):
             def encode(text):
                 return (1,)
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel=None):
                 return Generation(tuple(map(ord, "BLUE" + chr(7))), "limit")
 
         protocol, _, fixtures = _protocol(backend=ConstantBackend())
@@ -1571,6 +1591,7 @@ class FailClosedCoverageTests(unittest.TestCase):
         self.assertEqual(rep["n_unevaluable"], 2)
 
     def _cancel_probe(self, fire_on):
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import threading
 
         class CancelBackend(MarkerBackend):
@@ -1604,6 +1625,7 @@ class FailClosedCoverageTests(unittest.TestCase):
     def test_cancel_during_last_baseline_is_cancelled(self):
         # Wave-6 red-team A finding 4: a cancel landing during the last
         # baseline evaluation must report "cancelled", not "unavailable".
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Generation
 
         event = threading.Event()
@@ -1640,6 +1662,7 @@ class FailClosedCoverageTests(unittest.TestCase):
         # is_set() calls before the sweep: pre-baseline (1) + baseline tops
         # (2) + backend cancel checks during baseline generates (2) +
         # post-baseline check (1); the sweep's first top check is #7.
+        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import threading
 
         class CountingEvent(threading.Event):
@@ -1671,7 +1694,8 @@ class FailClosedCoverageTests(unittest.TestCase):
         rep = self._cancel_probe(fire_on=3)
         self.assertEqual(rep["status"], "cancelled")
 
-    def _mixed_fixtures(self):
+    @staticmethod
+    def _mixed_fixtures():
         # r0: baseline passes; r1: baseline fails ("Hello" has no marker).
         return (
             Fixture(
@@ -1750,7 +1774,8 @@ class FailClosedCoverageTests(unittest.TestCase):
             def encode(text):
                 return (1,)
 
-            def generate(self, input_ids, *, max_new_tokens, seed, cancel=None):
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel=None):
                 return Generation(tuple(map(ord, "WRONG" + chr(7))), "limit")
 
         protocol, _, fixtures = _protocol(backend=ConstantWrongBackend())
