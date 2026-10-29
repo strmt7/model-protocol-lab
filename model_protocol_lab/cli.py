@@ -3582,6 +3582,7 @@ def main(argv: list[str] | None = None) -> int:
                     f"{', '.join(_display_id(i) for i in empty_expected)}; these pass vacuously",
                     file=sys.stderr,
                 )
+            # skipcq: PY-W2000 - used on the next line; analyzer missed the use
             from .backends import LocalHFBackend
 
             backend = LocalHFBackend(args.model, device=args.device, max_context=args.max_context)
@@ -3627,6 +3628,7 @@ def main(argv: list[str] | None = None) -> int:
             # Fixture hygiene (pure, advisory): search/held-out
             # near-duplicate overlap, so the report records whether the
             # held-out split was contaminated. Never fails the run.
+            # skipcq: PY-W2000 - used two lines below; analyzer missed the use
             from .contamination import contamination_report
 
             result["contamination"] = contamination_report(split.search, split.held_out)

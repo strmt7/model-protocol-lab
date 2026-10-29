@@ -1022,6 +1022,7 @@ class StopMatrixValidationTests(unittest.TestCase):
         fixtures = args.pop("fixtures")
         observations = args.pop("observations")
         boundary = args.pop("boundary")
+        # skipcq: PYL-E1132 - 'boundary' was popped from args; **args cannot repeat it
         return stop_matrix(
             backend, candidate_name, fixtures, observations, boundary=boundary, **args
         )

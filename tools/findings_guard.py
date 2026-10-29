@@ -73,13 +73,16 @@ def github_page_fetcher(repo: str, token: str):
                 "User-Agent": "model-protocol-lab-Findings-Guard/1.0",
             },
         )
+        if not url.startswith("https://api.github.com/"):
+            raise ValueError("code-scanning API URL left the fixed GitHub host")
         try:
             # S310: the URL's host (api.github.com) and scheme (https)
             # are constants above; only the path carries the
             # operator-supplied repository slug (CI passes
             # GITHUB_REPOSITORY), so no attacker-controlled scheme or
-            # host can reach urlopen here.
-            with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310
+            # host can reach urlopen here. The startswith assertion
+            # above enforces that claim; it is not prose alone.
+            with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310  # nosec B310 -- URL asserted to the fixed https GitHub host above
                 if response.status != 200:
                     raise ValueError(f"code-scanning API HTTP {response.status}")
                 return json.load(response)
@@ -121,6 +124,7 @@ def deepsource_status(
         capture_output=True,
         text=True,
         timeout=600,
+        check=False,
     )
     if proc.returncode != 0:
         # Fail closed on an inventory failure even if a previous run

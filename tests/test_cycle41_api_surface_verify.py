@@ -187,6 +187,7 @@ class TestPackageSurface(unittest.TestCase):
         _, name = self._load_init_fresh("star")
         try:
             namespace: dict = {}
+            # skipcq: PYL-W0122 - import-* audit execs this repo's own modules only
             exec(f"from {name} import *", namespace)  # noqa: S102
             leaked = sorted(n for n in namespace if not n.startswith("__"))
             self.assertEqual(leaked, [], f"import * leaked names: {leaked}")
@@ -369,7 +370,8 @@ class TestFixturesBuild(unittest.TestCase):
 
     def test_readme_short_flag_is_invalid(self) -> None:
         """The ``-o`` shorthand does not exist (README used to show it;
-        fixed in cycle 41 to ``--output``). Pinning the rejection."""
+        fixed in cycle 41 to ``--output``). Pinning the rejection.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "fixtures.json"
             proc = run_mpl("fixtures", "build", str(EXAMPLE_CSV), "-o", str(out))
@@ -1170,7 +1172,8 @@ class TestSensitivityControls(unittest.TestCase):
 
     def test_mutant_boundary_grammar_widened_detected(self) -> None:
         """Copy the package to /tmp, widen parse_boundary to 17 IDs, and
-        show the CLI pin (17 IDs must exit 2) no longer fires."""
+        show the CLI pin (17 IDs must exit 2) no longer fires.
+        """
         pkg_src = REPO_ROOT / "model_protocol_lab"
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp) / "model_protocol_lab"
@@ -1204,7 +1207,8 @@ class TestSensitivityControls(unittest.TestCase):
 
     def test_mutant_catalog_family_removed_detected(self) -> None:
         """Remove one family from a /tmp package copy: the catalog pin
-        must stop matching EXPECTED_FAMILIES."""
+        must stop matching EXPECTED_FAMILIES.
+        """
         pkg_src = REPO_ROOT / "model_protocol_lab"
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp) / "model_protocol_lab"

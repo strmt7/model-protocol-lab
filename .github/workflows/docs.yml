@@ -1,9 +1,27 @@
-# Documentation site (cycle 214) — builds docs/ with MkDocs Material
-# in strict mode and deploys to GitHub Pages (Pages is configured
-# with build_type=workflow, so this workflow is the deployment
-# mechanism). Deliberately a separate workflow, not a ci.yml job:
-# ci.yml's job count is pinned at 4 by the suite, and a docs failure
-# must never block or be mistaken for the verification gate.
+# Documentation site — builds docs/ with MkDocs Material in strict
+# mode and publishes the built site to the `gh-pages` branch with a
+# plain git push. Pages serves the branch (build_type=legacy,
+# source gh-pages /). No job in this workflow references a
+# deployment environment and nothing calls the Pages deployment
+# API, so the pipeline itself creates no GitHub Deployment records
+# (records GitHub's platform may create for a branch publish are
+# platform-side, outside this repo's automation — see the migration
+# runbook in agents_out/docs_publishing/IMPLEMENTATION.md).
+#
+# History: cycle 214 shipped this pipeline on actions/deploy-pages
+# with build_type=workflow. Every deploy-pages run mints a Deployment
+# record in the github-pages environment — that mechanism is the only
+# reason this repo ever had deployments, and the owner has banned
+# them. The migration keeps everything else about the pipeline
+# (strict build, hashed installs, SHA pins, triggers, concurrency)
+# and replaces only the publish mechanism. The Pages settings flip
+# and the verification steps live in the cycle runbook; this file
+# alone does not change what Pages serves until the settings point
+# at the branch.
+#
+# Deliberately a separate workflow, not a ci.yml job: ci.yml's job
+# count is pinned at 4 by the suite, and a docs failure must never
+# block or be mistaken for the verification gate.
 name: Docs
 
 on:
@@ -11,16 +29,17 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Least privilege default: read-only. Each job declares the Pages
-# grants it needs in its own block — workflow-level write grants
-# would be inherited by every job, present and future (cycle 215,
-# zizmor excessive-permissions; through cycle 214 the Pages grants
-# sat at this top level).
+# Least privilege default: read-only. The publish job declares the
+# one write grant it needs in its own block — workflow-level write
+# grants would be inherited by every job, present and future (cycle
+# 215, zizmor excessive-permissions; through cycle 214 the Pages
+# grants sat at this top level).
 permissions:
   contents: read
 
-# One Pages deployment at a time; a newer push supersedes the queue,
-# never cancels a deployment mid-flight.
+# One publish at a time; a newer push supersedes the queue, never
+# cancels a publish mid-flight (a cancelled force-push could leave
+# the branch half-written).
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -32,8 +51,6 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read # checkout
-      pages: write # upload-pages-artifact publishes the site artifact
-      id-token: write # OIDC token upload-pages-artifact exchanges
     steps:
       # Pinned to SHAs (comments name the tag). Verify at
       # https://github.com/actions/checkout and
@@ -54,21 +71,58 @@ jobs:
       - run: mkdocs build --strict
         env:
           NO_MKDOCS_2_WARNING: "1"
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+      # Plain artifact, not a Pages artifact: the publish job below
+      # is a git push, so the site crosses jobs as ordinary files.
+      # Pinned to SHAs (comments name the tag). Verify at
+      # https://github.com/actions/upload-artifact before bumping.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          name: docs-site
           path: site
+          if-no-files-found: error
+          retention-days: 1
 
-  deploy:
-    name: deploy to GitHub Pages
+  publish:
+    name: publish site (push to gh-pages branch)
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      pages: write # deploy-pages publishes the deployment
-      id-token: write # OIDC token deploy-pages exchanges
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      contents: write # git push to the gh-pages branch — the only write in the pipeline
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      # Pinned to SHAs (comments name the tag). Verify at
+      # https://github.com/actions/download-artifact before bumping.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: docs-site
+          path: site
+      # The publish itself: turn the built site into a single orphan
+      # commit on a fresh gh-pages branch and force-push it. The site
+      # is a build artifact, fully reproducible from the main commit
+      # named in the commit message, so the branch keeps no history
+      # worth preserving — one commit, replaced on every publish.
+      #
+      # The token travels in an http extraheader set inside the
+      # throwaway repository in site/, never in the remote URL (URLs
+      # are echoed in git error output; headers are not). Checkout is
+      # absent from this job and credential persistence is used
+      # nowhere in the workflow. ${{ }} expansions appear only in the
+      # env block, never in the script (zizmor template-injection).
+      - name: push site to gh-pages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd site
+          # Branch publishing runs Jekyll unless told not to; the
+          # artifact deploy never did. An empty .nojekyll keeps the
+          # two mechanisms byte-equivalent for the reader.
+          : > .nojekyll
+          git init -q -b gh-pages .
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config http.https://github.com/.extraheader "Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w 0)"
+          git add -A
+          git commit -q -m "docs: publish site from $SOURCE_SHA"
+          git push --force https://github.com/strmt7/model-protocol-lab.git gh-pages

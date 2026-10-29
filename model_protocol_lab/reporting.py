@@ -4871,6 +4871,7 @@ def _ablation_section(result: dict[str, Any]) -> str:
                     + "</td><td>"
                     + ("yes" if arm.get("selection_bar_held") else "no")
                     + "</td><td>"
+                    # skipcq: PY-W0800 - payload fallback expression; no SQLAlchemy in this repo
                     + _escape(", ".join(arm.get("flipped_fixture_ids") or ()))
                     + "</td></tr>"
                 )

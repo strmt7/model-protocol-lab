@@ -1,0 +1,42 @@
+# DeepSource configuration for model-protocol-lab (cycle 222).
+#
+# The connection itself is the deepsource-io GitHub App (see
+# docs/SECURITY.md, "DeepSource analysis"). This file carries only
+# the settings the cycle-222 remediation adjudicated, each with its
+# justification recorded here and in docs/SECURITY.md. There is no
+# rule-skip list in this format; per-site suppressions live in the
+# code as `# skipcq: <CODE> - <reason>` comments at the flagged line.
+version = 1
+
+# Prose-only files. The secrets analyzer's only hits on this repo
+# were fragments of English prose: a backticked word in the changelog
+# and the boolean literal `False` in the security policy. Neither is
+# a credential. Both files are pure documentation (the Python
+# analyzer never reads Markdown), so excluding them costs no code
+# coverage; rewriting release history to dodge a matcher would
+# corrupt the record to satisfy a scanner.
+exclude_patterns = [
+  "CHANGELOG.md",
+  "docs/SECURITY.md",
+]
+
+test_patterns = ["tests/**"]
+
+[[analyzers]]
+name = "python"
+enabled = true
+
+[analyzers.meta]
+# The repo's own line-length standard is 100 (pyproject.toml, ruff).
+# Pin it provider-side so the applied limit is the documented repo
+# standard, not the provider default.
+max_line_length = 100
+# In this codebase, branch count is specification count: the
+# functions a complexity metric flags are overwhelmingly the
+# fail-closed validators, stage aggregators, and report sections
+# whose every branch is one frozen case of a payload contract, each
+# pinned by tests and cross-checked by independent oracles. The
+# "critical" band (flags only complexity above 50) keeps the metric
+# as a tripwire for genuinely exceptional functions; the few sites
+# above the band carry per-site adjudications in the code.
+cyclomatic_complexity_threshold = "critical"

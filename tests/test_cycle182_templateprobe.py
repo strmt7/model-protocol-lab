@@ -716,13 +716,15 @@ class DoctorIntegrationTests(unittest.TestCase):
 class MutationGateTests(unittest.TestCase):
     """Tempdir gates: each mutant of templateprobe.py must be killed
     by a named classify test above. Mutants are exec'd standalone
-    (the module is pure stdlib) under its package name."""
+    (the module is pure stdlib) under its package name.
+    """
 
     def _mutant_module(self, anchor: str, mutant: str):
         source = Path(tp.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(anchor), 1, "gate anchor not unique")
         mutated = source.replace(anchor, mutant)
         namespace: dict[str, object] = {"__name__": "model_protocol_lab.templateprobe_mut"}
+        # skipcq: PYL-W0122 - gate execs own module source mutated in memory only
         exec(  # noqa: S102 -- the gate's whole point: run a mutated copy of our own module
             compile(mutated, "templateprobe_mut", "exec"), namespace
         )
