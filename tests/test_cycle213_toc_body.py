@@ -37,6 +37,8 @@ from tests.test_cycle219_historyframe import _payload as _history_frame_payload
 from tests.test_cycle219_historyframe import _WordBackend as _HfWordBackend
 from tests.test_cycle220_prunesweep import _payload as _prune_sweep_payload
 from tests.test_cycle220_prunesweep import _WordBackend as _PsWordBackend
+from tests.test_cycle221_recordnotation import _payload as _record_notation_payload
+from tests.test_cycle221_recordnotation import _WordBackend as _RnWordBackend
 
 _SECTION_ID_RE = re.compile(r'<section[^>]*? id="([^"]+)"')
 
@@ -59,6 +61,7 @@ def _populated_result():
     result["instruction_distance"] = _instruction_distance_payload(_IdWordBackend("drop"))
     result["history_frame"] = _history_frame_payload(_HfWordBackend("frame_drop"))
     result["prune_sweep"] = _prune_sweep_payload(_PsWordBackend("dose72_drop"))
+    result["record_notation"] = _record_notation_payload(_RnWordBackend("json_drop"))
     return result
 
 
@@ -106,6 +109,16 @@ class PruneSweepBodyTests(unittest.TestCase):
         self.assertGreater(html.index('id="prune-sweep"'), html.index("</nav>"))
 
 
+class RecordNotationBodyTests(unittest.TestCase):
+    def test_record_notation_body_present_in_rendered_report(self):
+        html = reporting_mod.render_html(_populated_result())
+        self.assertIn('href="#record-notation"', html)
+        self.assertIn('<section class="card" id="record-notation">', html)
+        # Body-only copy from inside the section.
+        self.assertIn("no classification, no winner", html)
+        self.assertGreater(html.index('id="record-notation"'), html.index("</nav>"))
+
+
 class TocBodyCorrespondenceTests(unittest.TestCase):
     def test_populated_sections_match_toc_exactly(self):
         html = reporting_mod.render_html(_populated_result())
@@ -117,6 +130,7 @@ class TocBodyCorrespondenceTests(unittest.TestCase):
         self.assertIn("instruction-distance", hrefs)
         self.assertIn("history-frame", hrefs)
         self.assertIn("prune-sweep", hrefs)
+        self.assertIn("record-notation", hrefs)
         # Every link lands on a rendered section, every rendered
         # section is linked, in the same order.
         self.assertEqual(hrefs, body_ids)

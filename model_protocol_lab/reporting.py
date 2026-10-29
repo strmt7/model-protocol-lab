@@ -8419,6 +8419,360 @@ def _prune_sweep_section(result: dict[str, Any]) -> str:
     )
 
 
+def _record_notation_section(result: dict[str, Any]) -> str:
+    """Record-notation probe: the same generated table in two
+    frozen notations, described per candidate.
+
+    Renders the ``record_notation`` payload (see
+    experiments.record_notation_analysis). The first sentence
+    states the treatment exactly: identical records, two
+    notations. Per candidate, in the design's printed order:
+    the audit counts (closed-book screening) first; per-arm
+    pass rates with attrition and the completed-cell
+    decomposition; the echo and parsed-value rates beside the
+    failure counts they are shares of; the headline paired
+    discordance with its direction, decomposition, paired
+    per-arm rates, and resolution; the id report; and the
+    sensitivities (unscreened discordance; R1 and fence
+    regrade discordance). After the table: the estimand
+    sentence, the operating-characteristics paragraph (the
+    executed reason no classification ships, every power
+    figure with its marginals), and the printed limitations.
+    The instrument is descriptive -- there is no decision to
+    render. Counts and rates only; no table, prompt, or answer
+    text is rendered. Every payload-derived value below goes
+    through _escape_text, never bare escape().
+    """
+    probe: Any = result.get("record_notation")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return _escape_text(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        return _escape_text(str(value)) if type(value) is int else "n/a"
+
+    def _points(value: Any) -> str:
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return _escape_text(f"{float(value):.1f}")
+        return "n/a"
+
+    arm_names = ("prose", "canonical_json", "closed_book")
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + _escape_text(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        audit = entry.get("audit")
+        if type(audit) is dict:
+            bits.append(
+                "<div>Closed-book screen: "
+                + _count(audit.get("n_screened"))
+                + " cases screened out of this candidate's live "
+                "populations (passed with no table at all), "
+                + _count(audit.get("n_closed_book_incomplete"))
+                + " screen cells incomplete (never treated as "
+                "screened or as passed).</div>"
+            )
+        arms = entry.get("arms")
+        if type(arms) is dict:
+            for arm_name in arm_names:
+                arm = arms.get(arm_name)
+                if type(arm) is not dict:
+                    continue
+                decomp = arm.get("decomposition")
+                decomp_bit = ""
+                if type(decomp) is dict:
+                    decomp_bit = (
+                        " Decomposition of completed cells -- pass "
+                        + _count(decomp.get("pass"))
+                        + ", boundary-only "
+                        + _count(decomp.get("boundary_only"))
+                        + " (the answer digest still equals the "
+                        "expected one; the boundary event alone "
+                        "failed -- a boundary effect, never a "
+                        "notation effect), other failures "
+                        + _count(decomp.get("other_failure"))
+                        + "."
+                    )
+                diag_bit = ""
+                if arm_name != "closed_book":
+                    diag_bit = (
+                        " Of "
+                        + _count(arm.get("n_failures"))
+                        + " completed verdict failures, the echo "
+                        "rate (the answer contains the expected "
+                        "value as a substring) is "
+                        + _rate(arm.get("echo_rate"))
+                        + " and the parsed-value rate (the answer "
+                        "parses as a JSON object whose code value "
+                        "equals the expected value) is "
+                        + _rate(arm.get("parsed_rate"))
+                        + " -- two independent diagnostics, "
+                        "neither a subset of the other: JSON "
+                        "string escapes let a parsed hit occur "
+                        "with no literal substring hit."
+                    )
+                bits.append(
+                    "<div>"
+                    + _escape_text(arm_name)
+                    + " pass rate "
+                    + _rate(arm.get("rate"))
+                    + " ("
+                    + _count(arm.get("n_pass"))
+                    + " of "
+                    + _count(arm.get("n_completed"))
+                    + " completed), "
+                    + _count(arm.get("n_context_exceeded"))
+                    + " context-exceeded, "
+                    + _count(arm.get("n_evaluation_failed"))
+                    + " evaluation-failed."
+                    + decomp_bit
+                    + diag_bit
+                    + "</div>"
+                )
+        headline = entry.get("headline")
+        if type(headline) is dict:
+            decomp = headline.get("decomposition")
+            decomp_bit = ""
+            if type(decomp) is dict:
+                decomp_bit = (
+                    " Decomposition of the discordant pairs -- "
+                    "exact-only "
+                    + _count(decomp.get("exact_only"))
+                    + ", boundary-only "
+                    + _count(decomp.get("boundary_only"))
+                    + ", mixed "
+                    + _count(decomp.get("mixed"))
+                    + " (reported, never attributed)."
+                )
+            bits.append(
+                "<div>Headline over "
+                + _count(headline.get("n_paired"))
+                + " paired cases (live -- not closed-book "
+                "screened -- with both headline cells completed, "
+                "minus same-ids anomalies): discordant "
+                + _count(headline.get("discordant"))
+                + ", of which prose-only passes "
+                + _count(headline.get("n_prose_only"))
+                + " and canonical_json-only passes "
+                + _count(headline.get("n_canonical_json_only"))
+                + " (this instrument has no baseline arm; "
+                "neither arm is a control). Paired pass rates -- "
+                "prose "
+                + _rate(headline.get("prose_rate"))
+                + ", canonical_json "
+                + _rate(headline.get("canonical_json_rate"))
+                + ". Resolution: one paired case is "
+                + _points(headline.get("resolution_points"))
+                + " points of discordance rate at this paired "
+                "count; the count is the readout, and no finer "
+                "claim is printed." + decomp_bit + "</div>"
+            )
+        ids = entry.get("ids")
+        if type(ids) is dict:
+            deltas = ids.get("id_length_delta")
+            delta_bit = ""
+            if type(deltas) is list:
+                delta_bit = (
+                    " Per-case id-length deltas (canonical JSON "
+                    "minus prose, in case order): "
+                    + _escape_text(", ".join(str(d) for d in deltas))
+                    + "."
+                )
+            bits.append(
+                "<div>Token-ID report (reported, not gated): "
+                + _count(ids.get("n_ids_identical"))
+                + " ids-identical cases (excluded from the "
+                "headline as rendering anomalies), maximum "
+                "absolute id-length delta "
+                + _count(ids.get("max_abs_id_delta"))
+                + ", "
+                + _count(ids.get("n_same_ids_verdict_flips"))
+                + " same-ids verdict flips (a determinism "
+                "finding, never notation fragility)." + delta_bit + "</div>"
+            )
+        sensitivities = entry.get("sensitivities")
+        if type(sensitivities) is dict:
+            unscreened = sensitivities.get("unscreened")
+            unscreened_bit = ""
+            if type(unscreened) is dict:
+                unscreened_bit = (
+                    " Over the unscreened paired set ("
+                    + _count(unscreened.get("n_paired"))
+                    + " cases): discordant "
+                    + _count(unscreened.get("discordant"))
+                    + ", prose-only "
+                    + _count(unscreened.get("n_prose_only"))
+                    + ", canonical_json-only "
+                    + _count(unscreened.get("n_canonical_json_only"))
+                    + "."
+                )
+            bits.append(
+                "<div>Sensitivities:" + unscreened_bit + " Regrade discordance over the headline "
+                "population, boundary conjunct unchanged -- R1 "
+                "(whitespace trim/collapse) "
+                + _count(sensitivities.get("regrade_r1_discordant"))
+                + ", fence strip "
+                + _count(sensitivities.get("regrade_fence_discordant"))
+                + ".</div>"
+            )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + _escape_text(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    oc: dict[str, Any] = {}
+    for entry in candidates.values():
+        if type(entry) is dict and type(entry.get("operating_characteristics")) is dict:
+            oc = entry["operating_characteristics"]
+            break
+
+    def _oc(key: str) -> str:
+        return _rate(oc.get(key))
+
+    def _sci(key: str) -> str:
+        value = oc.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return _escape_text(f"{float(value):.2e}")
+        return "n/a"
+
+    tail_paragraphs = [
+        "<p>The estimand, stated once: discordance between "
+        "these two frozen renderings, over live cases both arms "
+        "completed, for this candidate's template family on "
+        "this checkpoint. The claim is descriptive pairwise "
+        "discordance between two named frozen renderings, and "
+        "nothing else -- never a causal claim, never a claim "
+        "about weights, never a claim about notations not "
+        "frozen here. The treatment is the two renderings as "
+        "wholes: token length, delimiters and punctuation, "
+        "lexical framing, field order as a reading sequence in "
+        "prose, and output priming move together and are named "
+        "as the bundle, never attributed individually.</p>",
+        "<p>Why no classification ships (exact multinomial "
+        "enumerations over per-case outcomes at 24 paired "
+        "cases, executed, not assumed): the canonical-form "
+        "transplant rule fires "
+        + _oc("transplant_fire_competent_independent")
+        + " on a competent independent null (family-wise "
+        "expectation "
+        + _rate(oc.get("transplant_familywise_expected"))
+        + " false labels per 24-candidate panel), "
+        + _oc("transplant_fire_competent_paired_phi05")
+        + " under a paired null at correlation 0.5, and "
+        + _oc("transplant_fire_delta_005")
+        + " under fair-direction noise at delta 0.05; Rule A "
+        "fires "
+        + _oc("rule_a_fire_competent_independent")
+        + " / "
+        + _oc("rule_a_fire_competent_paired_phi05")
+        + " / "
+        + _oc("rule_a_fire_delta_005")
+        + " on the same three nulls. The family-wise-controlled "
+        "rules are near-inert at the gaps that matter: McNemar "
+        "power is "
+        + _oc("mcnemar_power_gap25_marginals_85_60")
+        + " at a 25-point gap with marginals .85/.60 and "
+        + _oc("mcnemar_power_gap20_marginals_90_70")
+        + " at a 20-point gap with marginals .90/.70 -- gap "
+        "alone does not determine power; at the competent base "
+        ".90 a 25-point gap gives McNemar power "
+        + _oc("mcnemar_power_gap25_base_90")
+        + ". The Bonferroni sign rule's power is "
+        + _oc("sign_bonferroni_power_gap25_marginals_85_60")
+        + " at the 25-point gap. The larger panel that would "
+        "license a directional claim (96 cases: Bonferroni "
+        "false-fire "
+        + _oc("panel96_bonferroni_false_fire")
+        + ", power "
+        + _oc("panel96_bonferroni_power_gap25_marginals_85_60")
+        + " at marginals .85/.60 and "
+        + _oc("panel96_bonferroni_power_gap25_base_90")
+        + " at the .90 base) costs 6,912 generations for a "
+        "claim this readout does not consume. There is no "
+        "winner readout either: a candidate passes an arm only "
+        "by passing every completed case, so the pass "
+        "probability over 24 lookups is "
+        + _oc("winner_pass_probability_95")
+        + " at a per-case rate of .95 and "
+        + _oc("winner_pass_probability_80")
+        + " at .80 -- the winner headline would be undefined "
+        "or abstention in the large majority of runs; the "
+        "per-arm accuracies above are the selection-adjacent "
+        "readout.</p>",
+        "<p>The closed-book screen is retained as fail-closed "
+        "hygiene against generator or code-space drift: a "
+        "closed-book pass requires guessing one value of "
+        "216,000 (probability "
+        + _sci("screen_guess_probability")
+        + " per case), so expected exclusions are "
+        + _sci("screen_expected_exclusions_per_candidate")
+        + " per candidate; its cost (576 of 1,728 generations "
+        "at the legal maximum) is stated here as in the CLI "
+        "help. The question every case asks embeds the key "
+        "value: the answer's word equals the key's word in "
+        "about 4.17 percent of cases by construction (analytic "
+        "8999/215999) -- arm-symmetric, because the question is "
+        "byte-identical across arms, so it cannot manufacture "
+        "discordance; no redraw rule is applied, because a "
+        "redraw would change the population. Printed "
+        "limitations: no typed values, no CSV/XML/YAML arms, "
+        "no length matching and no component-level attribution; "
+        "no generalisation beyond the two frozen renderings, "
+        "the generated code-table population, and a candidate's "
+        "own template family. Records carry digests, except "
+        "headline cells' answer text, which is digest-bound "
+        "and never rendered here.</p>",
+    ]
+    return (
+        '<section class="card" id="record-notation">'
+        "<h2>Record notation (prose sentences vs canonical JSON)</h2>"
+        "<p>This probe renders the same generated data table "
+        "in two frozen notations: each of the 24 generated cases "
+        "is a code table (4 to 6 records of 3 to 4 fields; every "
+        "value a single token from a frozen 24-word list over a "
+        "216,000 code space, all values in a table distinct) "
+        "placed inside the user message as prose sentences in "
+        "one arm and as canonical JSON in the other, the record "
+        "sequence, the question, and the output contract held "
+        "byte-identical across arms, plus a closed-book screen "
+        "arm that sees the question alone. The prose rendering "
+        "is injective over this population -- it has an "
+        "exhibited inverse -- so a reader given either rendering "
+        "recovers the identical table. The scorer is byte-exact "
+        "conjoined with boundary presence; every arm is a "
+        "fixture with the same id, so request seeds are "
+        "identical across arms. Each cell is one greedy "
+        "generation. The readout is descriptive: paired "
+        "discordance counts, their direction, and their "
+        "decomposition -- no classification, no winner, scoped "
+        "for this checkpoint and this candidate's template family.</p>"
+        "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        + "".join(tail_paragraphs)
+        + "</section>"
+    )
+
+
 def _rotation_section(result: dict[str, Any]) -> str:
     """Context rotation probe: does cyclically rotating the block span move the verdict?
 
@@ -11048,6 +11402,7 @@ def render_html(result: dict[str, Any]) -> str:
     instruction_distance_html = _instruction_distance_section(result)
     history_frame_html = _history_frame_section(result)
     prune_sweep_html = _prune_sweep_section(result)
+    record_notation_html = _record_notation_section(result)
     choiceaudit_html = _choiceaudit_section(result)
     precision_html = _precision_section(result)
     confidence_html = _confidence_section(result)
@@ -11244,6 +11599,11 @@ def render_html(result: dict[str, Any]) -> str:
                 prune_sweep_html,
             ),
             (
+                "record-notation",
+                "Record notation (prose sentences vs canonical JSON)",
+                record_notation_html,
+            ),
+            (
                 "choice-audit",
                 "Choice-scoring audit (second opinion)",
                 choiceaudit_html,
@@ -11373,6 +11733,7 @@ def render_html(result: dict[str, Any]) -> str:
         + instruction_distance_html
         + history_frame_html
         + prune_sweep_html
+        + record_notation_html
         + choiceaudit_html
         + precision_html
         + confidence_html

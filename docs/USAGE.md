@@ -3082,6 +3082,109 @@ candidate (3,456 at the legal maximum: 24 candidates x
 the probe never affects selection, and the stage never
 fails the run.
 
+### 8.59 Record notation (`run --record-notation`)
+
+```sh
+model-protocol-lab run ... --record-notation
+```
+
+This probe renders the same generated data table in two
+frozen notations — prose sentences and canonical JSON —
+and reports where the verdicts disagree. A prompt
+engineer deciding how to serialise structured records
+into a prompt — prose or JSON — uses this, per candidate,
+to see whether the two serialisations of the identical
+records produce different verdicts on this checkpoint
+and this candidate's template family, with the
+discordance decomposed into answer-value and boundary
+causes, before standardising on a format.
+
+The panel is generated, not read from the run's
+fixtures: 24 cases, each a table of 4 to 6 records with
+3 or 4 fields (`code`, `label`, `zone`, plus `mark` on
+odd cases). Every field value is a single token from a
+frozen 24-word list over a 216,000 code space, all
+values in a table distinct, drawn by a frozen seeded
+generator whose exact RNG call sequence is part of the
+protocol. Each case asks for the `code` of the record
+whose `zone` is named. Three arms per case: `prose`
+(the table as English sentences — an injective rendering
+with an exhibited inverse, so a reader given either
+rendering recovers the identical table),
+`canonical_json` (the table as a JSON list of record
+objects, record sequence held constant), and
+`closed_book`, a screen arm that sees the question
+alone; a case a candidate answers closed-book is
+excluded from that candidate's headline population and
+counted, never silently dropped. The question and the
+output contract are byte-identical across arms, and
+every arm is a fixture with the same id, so request
+seeds are identical across arms. The scorer is the
+run's own verdict — byte-exact answer conjoined with
+boundary presence — per cell.
+
+The readout is descriptive; there is no classification
+and no winner. Per candidate, over live cases (not
+closed-book screened) with both headline cells
+completed, minus same-ids anomalies (the two headline
+renders tokenising identically — reported, expected to
+be zero, and excluded as rendering anomalies if they
+ever occur): the discordant count with its direction
+(prose-only vs canonical-JSON-only passes) and its
+resolution — one paired case is 100/n points of
+discordance rate at the printed paired count — and a
+total decomposition of the discordant pairs into
+exact-only (the values differ, both boundaries found),
+boundary-only (same value, the boundary event alone
+differs), and mixed. Per-arm pass rates print over
+completed cells and over the paired population, with
+per-arm attrition and a cell decomposition, plus two
+diagnostics over each arm's completed failures: the
+echo rate (the answer contains the expected value as a
+substring) and the parsed-value rate (the answer parses
+as a JSON object whose `code` value is the expected
+value). The two diagnostics are independent — neither
+contains the other: a JSON answer whose value carries
+an escaped hyphen parses to the expected value without
+containing it literally. Regrade sensitivities re-count
+the discordance after whitespace normalisation and
+after code-fence stripping, the boundary conjunct
+unchanged. Token-ID divergence is reported, not gated.
+
+No classification ships because none is honest at this
+panel size, and the design doc prints the executed
+arithmetic: the canonical-form transplant rule fires
+0.890 on a competent independent null (a family-wise
+expectation of 21.35 false labels per 24-candidate
+panel), Rule A fires 0.650 on the same null, and the
+family-wise-controlled rules are near-inert at the gaps
+that matter — McNemar power is 0.355 at a 25-point gap
+with marginals .85/.60 and 0.260 at a 20-point gap with
+marginals .90/.70 (at the competent base .90 a 25-point
+gap gives 0.400; gap alone does not determine power).
+The larger panel that would license a directional claim
+(96 cases: Bonferroni false-fire 0.0008, power 0.745 on
+marginals .85/.60 and 0.833 at the .90 base) costs
+6,912 generations for a claim this readout does not
+consume. There is no winner readout either: a candidate
+passes an arm only by passing every completed case, so
+the pass probability over 24 lookups is 0.292 at a
+per-case rate of .95 — the winner headline would be
+undefined or abstention in the large majority of runs.
+The treatment is the two renderings as wholes: token
+length, delimiters, lexical framing, and output priming
+move together and are never attributed individually.
+The question embeds the key value, whose word equals
+the answer's word in about 4.17 percent of cases by
+construction — arm-symmetric, printed in the report,
+and never redrawn. The full contract is in
+`docs/PAYLOADSERIALIZATION_DESIGN.md`. Costs 72
+generations per candidate (1,728 at the legal maximum:
+24 candidates x 24 cases x 3 arms; 1,152 headline, 576
+of them the closed-book screen). Informational only:
+the probe never affects selection, and the stage never
+fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

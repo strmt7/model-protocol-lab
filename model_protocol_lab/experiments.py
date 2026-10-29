@@ -11132,6 +11132,334 @@ def prune_sweep_analysis(
     }
 
 
+class _RecordNotationCancelled(Exception):
+    """Internal: the run's cancel event fired during the
+    record-notation stage; the stage unwinds to its fail-closed
+    payload rather than mislabelling the interruption."""
+
+
+def _record_notation_cell(
+    backend: Any,
+    fmt: Any,
+    fixture: Any,
+    ids: tuple[int, ...],
+    *,
+    boundary_ids: tuple[int, ...],
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Event | None,
+    carry_text: bool,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """One record-notation generation: (detail, cell).
+
+    Exactly one of the pair is set. ``ids`` are the arm
+    render's ids, measured by the stage at construction for
+    the record's arm token counts; the cell's ``input_tokens``
+    come from the evaluation's own observation, so a backend
+    whose encode disagreed with itself surfaces as a validator
+    rejection downstream, never a silently wrong record (the
+    mirror binds the two, amendment D). Headline-arm cells
+    carry ``answer_text`` -- the decoded pre-boundary answer,
+    verbatim, never normalised -- bound by the cell's
+    ``answer_digest`` (the cycle-190 pattern); screen-arm
+    cells omit it, and no text-derived quantity is reported
+    for the screen arm. A cell is built only from an
+    aggregate-eligible report, whose invariants force the
+    recorded observation's status to "completed", so the
+    section 4.1 verdict recomputes from the digest and the
+    boundary flag exactly (amendment D). The cancel event is
+    checked before and after ``evaluate`` (the multiturn rule:
+    a cancel observed during a generation is never mislabelled
+    an evaluation failure).
+    """
+    if len(ids) + max_new_tokens > max_context:
+        return "arm_context_exceeded", None
+    if cancel is not None and cancel.is_set():
+        raise _RecordNotationCancelled
+    report = evaluate(
+        backend,
+        fmt,
+        (fixture,),
+        boundary=boundary_ids,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        cancel=cancel,
+    )
+    if cancel is not None and cancel.is_set():
+        raise _RecordNotationCancelled
+    if report.aggregate_eligible and report.observations:
+        obs = report.observations[0]
+        cell: dict[str, Any] = {
+            "verdict": bool(obs.exact_match and obs.boundary_found),
+            "boundary_found": bool(obs.boundary_found),
+            "boundary_text_match": obs.boundary_text_match,
+            "input_tokens": len(obs.input_ids),
+            "answer_digest": _answer_digest(obs.answer),
+        }
+        if carry_text:
+            cell["answer_text"] = obs.answer
+        return None, cell
+    return "arm_evaluation_failed", None
+
+
+def record_notation_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Record-notation stage (cycle 221): a generated 24-case
+    panel of code tables, each rendered in two frozen notations
+    (prose sentences and canonical JSON) inside the user
+    message, plus the closed-book screen arm, per candidate.
+
+    The cases are generated from the run seed inside the stage;
+    there is no dependence on the user's fixtures or the primary
+    run. Surgery is at the fixture level: every arm of a case is
+    a Fixture with the same id, group, and expected, so request
+    seeds are identical across arms by construction
+    (``request_seed_for`` is id-derived) and ``core.evaluate``
+    is used unchanged. The pre-generation screens (the per-case
+    invariant battery, the special-token-literal audit over
+    every arm's full message content for every family, and
+    boundary-text containment) fail the whole stage closed with
+    ``record_notation_screen_failed``; their counts travel in
+    the payload's ``audit`` block, never silently dropped. The
+    serialised-records byte cap degrades the whole stage to
+    ``record_notation_record_budget_exceeded``. Design:
+    docs/PAYLOADSERIALIZATION_DESIGN.md.
+    """
+    from . import recordnotation as _rn
+    from .core import Fixture, Message
+    from .fixtures import audit_special_token_literals
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    names = [fmt.name for fmt in formats]
+    if len(set(names)) != len(names):
+        # Candidate records are keyed by name; two formats
+        # sharing a name would silently collapse into one
+        # candidate's records (red-team F7, cycle 193). The
+        # precondition is stated at this stage's own boundary.
+        raise ValueError("formats must have unique names")
+    protocol: dict[str, Any] = dict(_rn.protocol_object(seed, _backend_fingerprint(backend)))
+    protocol["fingerprint"] = _rn.protocol_fingerprint(seed, _backend_fingerprint(backend))
+    cases = _rn.generate_cases(seed)
+    audit: dict[str, Any] = {
+        "n_audit_excluded": 0,
+        "by_reason": {},
+        # nosec B105 -- integer audit counter field, not a credential
+        "special_token_findings": 0,
+    }
+    if len(formats) * len(cases) > _rn.MAX_GROUND_RECORDS:
+        return {
+            "available": False,
+            "detail": "record_notation_record_budget_exceeded",
+            "protocol": protocol,
+            "audit": audit,
+            "candidates": {},
+        }
+    invalid = sum(1 for case in cases if not _rn.validate_case(case, seed))
+    if invalid:
+        audit = {
+            "n_audit_excluded": 0,
+            "by_reason": {"case_invariant": invalid},
+            # nosec B105 -- integer audit counter field, not a credential
+            "special_token_findings": 0,
+        }
+        return {
+            "available": False,
+            "detail": "record_notation_screen_failed",
+            "protocol": protocol,
+            "audit": audit,
+            "candidates": {},
+        }
+    contents = tuple(_rn.arm_content(case, arm) for case in cases for arm in _rn.ARM_KEYS)
+    findings = audit_special_token_literals(contents, formats)
+    if findings:
+        # A special-token literal in an arm's content would
+        # forge turn structure in every cell of every run; the
+        # stage fails closed before any generation, with the
+        # count in the audit block (never silently dropped).
+        audit = {
+            "n_audit_excluded": 0,
+            "by_reason": {"special_token_literal": len(findings)},
+            "special_token_findings": len(findings),
+        }
+        return {
+            "available": False,
+            "detail": "record_notation_screen_failed",
+            "protocol": protocol,
+            "audit": audit,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    for fmt in formats:
+        try:
+            boundary_text = backend.decode(boundaries[fmt.name])
+        except Exception:  # noqa: BLE001 -- an undecodable boundary screens nothing
+            boundary_text = ""
+        if boundary_text and any(boundary_text in content for content in contents):
+            return {
+                "available": False,
+                "detail": "record_notation_screen_failed",
+                "protocol": protocol,
+                "audit": audit,
+                "candidates": {},
+            }
+
+    def _cancelled() -> bool:
+        return cancel is not None and cancel.is_set()
+
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        records: list[dict[str, Any]] = []
+        try:
+            for case in cases:
+                if _cancelled():
+                    raise _RecordNotationCancelled
+                case_id = str(case["fixture_id"])
+                n_records, fields = _rn.table_shape(int(case_id.rsplit("-", 1)[1]))
+                record: dict[str, Any] = {
+                    "fixture": case_id,
+                    "n_records": n_records,
+                    "n_fields": len(fields),
+                    "expected_digest": _rn.digest_text(str(case["expected"])),
+                    "content_digests": dict.fromkeys(_rn.ARM_KEYS),
+                    "arm_tokens": dict.fromkeys(_rn.ARM_KEYS),
+                    "id_digests": dict.fromkeys(_rn.ARM_KEYS),
+                    "ids_identical": False,
+                    "id_length_delta": 0,
+                    "cells": dict.fromkeys(_rn.ARM_KEYS),
+                    "cell_details": dict.fromkeys(_rn.ARM_KEYS, ""),
+                }
+                for arm in _rn.ARM_KEYS:
+                    content = _rn.arm_content(case, arm)
+                    fixture = Fixture(
+                        id=case_id,
+                        messages=(Message("user", content),),
+                        expected=str(case["expected"]),
+                        group=_rn.GROUP,
+                    )
+                    ids = tuple(backend.encode(fmt.render(fixture.messages)))
+                    record["arm_tokens"][arm] = len(ids)
+                    record["id_digests"][arm] = _rn.digest_ids(ids)
+                    record["content_digests"][arm] = _rn.digest_text(content)
+                    detail, cell = _record_notation_cell(
+                        backend,
+                        fmt,
+                        fixture,
+                        ids,
+                        boundary_ids=boundaries[name],
+                        max_new_tokens=max_new_tokens,
+                        max_context=max_context,
+                        seed=seed,
+                        cancel=cancel,
+                        carry_text=arm in _rn.HEADLINE_ARMS,
+                    )
+                    if detail is not None:
+                        record["cell_details"][arm] = detail
+                    elif cell is not None:
+                        record["cells"][arm] = cell
+                record["ids_identical"] = (
+                    record["id_digests"]["prose"] == record["id_digests"]["canonical_json"]
+                )
+                record["id_length_delta"] = int(record["arm_tokens"]["canonical_json"]) - int(
+                    record["arm_tokens"]["prose"]
+                )
+                records.append(record)
+        except _RecordNotationCancelled:
+            return {
+                "available": False,
+                "detail": "cancelled",
+                "protocol": protocol,
+                "audit": audit,
+                "candidates": {},
+            }
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    if _rn.records_bytes({name: entry["records"] for name, entry in candidates.items()}) > (
+        _rn.MAX_RECORDS_BYTES
+    ):
+        # The byte cap is a hard bound on what a results file
+        # may carry (a non-ASCII-stressed panel of answer texts
+        # reaches it; design Part I section 8): the whole stage
+        # degrades to the frozen budget detail, never a partial
+        # panel.
+        return {
+            "available": False,
+            "detail": "record_notation_record_budget_exceeded",
+            "protocol": protocol,
+            "audit": audit,
+            "candidates": {},
+        }
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": protocol,
+        "audit": audit,
+        "candidates": candidates,
+    }
+
+
+def record_notation_analysis(
+    stage: dict[str, Any],
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate a record-notation stage into the stored
+    payload (cycle 221).
+
+    Per-candidate readouts come from
+    recordnotation.aggregate_candidate over the candidate's
+    ground records and the regenerated panel: the audit counts,
+    per-arm rates with the section 4.4 diagnostics, the
+    headline paired discordance with its decomposition and
+    resolution, the id report, and the sensitivities. The
+    instrument is descriptive: there is no classification, no
+    selection, and no winner readout (design Part I sections 6.1
+    and 6.3). Design: docs/PAYLOADSERIALIZATION_DESIGN.md.
+    """
+    from . import recordnotation as _rn
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "record_notation_unavailable")),
+            "protocol": stage.get("protocol"),
+            "audit": stage.get("audit"),
+        }
+    stage_candidates = stage["candidates"]
+    cases = _rn.generate_cases(int(stage["protocol"]["seed"]))
+    candidates_out: dict[str, Any] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        aggregates = _rn.aggregate_candidate(entry["records"], cases)
+        aggregates.update({"status": "available", "detail": "", "records": entry["records"]})
+        candidates_out[name] = aggregates
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "audit": stage.get("audit"),
+        "candidates": candidates_out,
+        "n_candidates": len(candidate_names),
+        "n_cases": len(cases),
+    }
+
+
 class _RotationCancelled(Exception):
     """Internal: the run's cancel event fired during the
     rotation stage; the stage unwinds to its fail-closed

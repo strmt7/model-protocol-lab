@@ -5980,6 +5980,224 @@ def oracle_diff_reports(
             return False
         return bool(value.get("n_cases") == 24)
 
+    def _or_recordnotation_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_record_notation: exact
+        # top-level shape (the audit block shape-checked
+        # only), the protocol rebuilt through the producer
+        # module (recordnotation), every record checked
+        # against the producer-regenerated case in panel
+        # order, the recorded content digests rebound to the
+        # regenerated arm contents, the ids-identical flag and
+        # the id-length delta re-derived from the recorded
+        # digests and token counts, every cell's verdict
+        # re-derived from its digest identity, headline cells'
+        # answer texts verified against their answer digests,
+        # screen cells carrying no text, completed cells bound
+        # to the record's arm token count, and the aggregates
+        # recomputed through the producer's own aggregate
+        # function. A drift in either side's constants breaks
+        # the agreement.
+        import json as _json
+        import re as _re
+
+        from model_protocol_lab import recordnotation as _rnm
+
+        def _digest_ok(digest: Any) -> bool:
+            return type(digest) is str and _re.fullmatch(r"[0-9a-f]{64}", digest) is not None
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        if set(value) != {
+            "available",
+            "detail",
+            "protocol",
+            "audit",
+            "candidates",
+            "n_candidates",
+            "n_cases",
+        }:
+            return False
+        if value.get("detail") != "":
+            return False
+        protocol = value.get("protocol")
+        if type(protocol) is not dict:
+            return False
+        seed = protocol.get("seed")
+        backend_fp = protocol.get("backend_fingerprint")
+        if type(seed) is not int or isinstance(seed, bool):
+            return False
+        if type(backend_fp) is not str:
+            return False
+        expected_protocol = dict(_rnm.protocol_object(seed, backend_fp))
+        expected_protocol["fingerprint"] = _rnm.protocol_fingerprint(seed, backend_fp)
+        if protocol != expected_protocol:
+            return False
+        audit = value.get("audit")
+        if type(audit) is not dict or set(audit) != {
+            "n_audit_excluded",
+            "by_reason",
+            "special_token_findings",
+        }:
+            return False
+        if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+            return False
+        if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+            return False
+        if type(audit["by_reason"]) is not dict:
+            return False
+        for reason, count in audit["by_reason"].items():
+            if type(reason) is not str or type(count) is not int or count < 0:
+                return False
+        cases = _rnm.generate_cases(seed)
+        if len(cases) != _rnm.CASE_COUNT:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not dict or not candidates:
+            return False
+        if len(candidates) > _rnm.MAX_CANDIDATES:
+            return False
+        records_bytes = 0
+        total_records = 0
+        aggregate_keys = {
+            "arms",
+            "audit",
+            "headline",
+            "ids",
+            "sensitivities",
+            "operating_characteristics",
+            "n_cases",
+            "n_incomplete",
+        }
+        for entry in candidates.values():
+            if type(entry) is not dict:
+                return False
+            if entry.get("status") == "unavailable":
+                if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                    return False
+                continue
+            if entry.get("status") != "available" or entry.get("detail") != "":
+                return False
+            if set(entry) != aggregate_keys | {"status", "detail", "records"}:
+                return False
+            records = entry["records"]
+            if type(records) is not list or len(records) != len(cases):
+                return False
+            total_records += len(records)
+            records_bytes += len(
+                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            )
+            if records_bytes > _rnm.MAX_RECORDS_BYTES:
+                return False
+            for record, case in zip(records, cases, strict=True):
+                if type(record) is not dict or set(record) != {
+                    "fixture",
+                    "n_records",
+                    "n_fields",
+                    "expected_digest",
+                    "content_digests",
+                    "arm_tokens",
+                    "id_digests",
+                    "ids_identical",
+                    "id_length_delta",
+                    "cells",
+                    "cell_details",
+                }:
+                    return False
+                if record["fixture"] != case["fixture_id"]:
+                    return False
+                if record["n_records"] != len(case["table"]) or record["n_fields"] != len(
+                    case["table"][0]
+                ):
+                    return False
+                if record["expected_digest"] != _rnm.digest_text(case["expected"]):
+                    return False
+                if record["content_digests"] != {
+                    arm: _rnm.digest_text(_rnm.arm_content(case, arm)) for arm in _rnm.ARM_KEYS
+                }:
+                    return False
+                arm_tokens = record["arm_tokens"]
+                cells = record["cells"]
+                details = record["cell_details"]
+                for mapping in (
+                    arm_tokens,
+                    cells,
+                    details,
+                    record["id_digests"],
+                    record["content_digests"],
+                ):
+                    if type(mapping) is not dict or set(mapping) != set(_rnm.ARM_KEYS):
+                        return False
+                if any(not _digest_ok(digest) for digest in record["id_digests"].values()):
+                    return False
+                if any(not _digest_ok(digest) for digest in record["content_digests"].values()):
+                    return False
+                if record["ids_identical"] is not (
+                    record["id_digests"]["prose"] == record["id_digests"]["canonical_json"]
+                ):
+                    return False
+                for arm in _rnm.ARM_KEYS:
+                    tokens = arm_tokens[arm]
+                    if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                        return False
+                    detail = details[arm]
+                    if detail not in _rnm.CELL_DETAILS:
+                        return False
+                    cell = cells[arm]
+                    if cell is None:
+                        if detail == "":
+                            return False
+                        continue
+                    if detail != "":
+                        return False
+                    headline = arm in _rnm.HEADLINE_ARMS
+                    fields = {
+                        "verdict",
+                        "boundary_found",
+                        "boundary_text_match",
+                        "input_tokens",
+                        "answer_digest",
+                    } | ({"answer_text"} if headline else set())
+                    if type(cell) is not dict or set(cell) != fields:
+                        return False
+                    if (
+                        type(cell["verdict"]) is not bool
+                        or type(cell["boundary_found"]) is not bool
+                    ):
+                        return False
+                    if (
+                        cell["boundary_text_match"] is not None
+                        and type(cell["boundary_text_match"]) is not bool
+                    ):
+                        return False
+                    if type(cell["input_tokens"]) is not int or cell["input_tokens"] != tokens:
+                        return False
+                    digest = cell["answer_digest"]
+                    if digest is not None and not _digest_ok(digest):
+                        return False
+                    if headline:
+                        text = cell["answer_text"]
+                        if text is None:
+                            if digest is not None:
+                                return False
+                        elif type(text) is not str or _rnm.digest_text(text) != digest:
+                            return False
+                    verdict = (digest == record["expected_digest"]) and cell["boundary_found"]
+                    if cell["verdict"] != verdict:
+                        return False
+                if record["id_length_delta"] != (
+                    arm_tokens["canonical_json"] - arm_tokens["prose"]
+                ):
+                    return False
+            expected = _rnm.aggregate_candidate(records, cases)
+            for key, val in expected.items():
+                if entry.get(key) != val:
+                    return False
+        if total_records > _rnm.MAX_GROUND_RECORDS:
+            return False
+        if value.get("n_candidates") != len(candidates):
+            return False
+        return bool(value.get("n_cases") == len(cases))
+
     def _or_rotation_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_rotation: exact top-level
         # shape, the protocol rebuilt through the producer
@@ -7695,6 +7913,17 @@ def oracle_diff_reports(
     else:
         _o_ps_available = "neither"
     _o_ps_asymmetric = _o_ps_available not in ("both", "neither")
+    _rnot_old_ok = _or_recordnotation_valid(old.get("record_notation"))
+    _rnot_new_ok = _or_recordnotation_valid(new.get("record_notation"))
+    if _rnot_old_ok and _rnot_new_ok:
+        _o_rnot_available = "both"
+    elif _rnot_old_ok:
+        _o_rnot_available = "old"
+    elif _rnot_new_ok:
+        _o_rnot_available = "new"
+    else:
+        _o_rnot_available = "neither"
+    _o_rnot_asymmetric = _o_rnot_available not in ("both", "neither")
 
     _rt_old_ok = _or_rotation_valid(old.get("rotation"))
     _rt_new_ok = _or_rotation_valid(new.get("rotation"))
@@ -7936,6 +8165,8 @@ def oracle_diff_reports(
         "history_frame_changed": False,
         "prune_sweep_changed": False,
         "prune_sweep_asymmetric": _o_ps_asymmetric,
+        "record_notation_changed": False,
+        "record_notation_asymmetric": _o_rnot_asymmetric,
         "history_frame_asymmetric": _o_hf_asymmetric,
         "choice_audit_changed": False,
         "choice_audit_asymmetric": _o_ca_asymmetric,
@@ -8004,6 +8235,7 @@ def oracle_diff_reports(
         "instruction_distance": {"available": _o_idist_available, "changed": False},
         "history_frame": {"available": _o_hf_available, "changed": False},
         "prune_sweep": {"available": _o_ps_available, "changed": False},
+        "record_notation": {"available": _o_rnot_available, "changed": False},
         "choice_audit": {"available": _o_ca_available, "changed": False},
         "precision": {"available": _o_pr_available, "changed": False},
         "confidence": {"available": _o_cn_available, "changed": False},

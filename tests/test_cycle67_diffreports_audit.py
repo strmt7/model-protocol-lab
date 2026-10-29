@@ -295,6 +295,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "instruction_distance": {"available": "neither", "changed": False},
         "history_frame": {"available": "neither", "changed": False},
         "prune_sweep": {"available": "neither", "changed": False},
+        "record_notation": {"available": "neither", "changed": False},
         "choice_audit": {"available": "neither", "changed": False},
         "precision": {"available": "neither", "changed": False},
         "confidence": {"available": "neither", "changed": False},
@@ -396,6 +397,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "history_frame_asymmetric": False,
             "prune_sweep_changed": False,
             "prune_sweep_asymmetric": False,
+            "record_notation_changed": False,
+            "record_notation_asymmetric": False,
             "choice_audit_changed": False,
             "choice_audit_asymmetric": False,
             "precision_changed": False,
@@ -8911,6 +8914,855 @@ def _o_prunesweep(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+# ---------------------------------------------------------------------------
+# Record notation (cycle 221): independent oracle for
+# diffreports._valid_record_notation / diff_record_notation,
+# re-implemented from docs/PAYLOADSERIALIZATION_DESIGN.md
+# Part II as amended (Part III). The generator's RNG call
+# sequence is frozen (amendment A); the mirror binds every
+# completed cell's input_tokens to the record's arm token
+# count and every headline cell's answer_text to its
+# answer_digest (amendment D).
+
+
+_O_RN_WORDS = (
+    "amber",
+    "birch",
+    "cedar",
+    "copper",
+    "coral",
+    "falcon",
+    "garnet",
+    "harbor",
+    "indigo",
+    "juniper",
+    "lagoon",
+    "magnet",
+    "marble",
+    "nickel",
+    "onyx",
+    "pepper",
+    "quartz",
+    "saddle",
+    "saffron",
+    "summit",
+    "tundra",
+    "velvet",
+    "walnut",
+    "willow",
+)
+_O_RN_FIELDS_3 = ("code", "label", "zone")
+_O_RN_FIELDS_4 = ("code", "label", "mark", "zone")
+_O_RN_QUESTION_TEMPLATE = "What is the code of the record whose zone is {key}?"
+_O_RN_CONTRACT = "Answer with ONLY the value."
+_O_RN_GENERATOR_SPEC = (
+    "rng = random.Random(seed * 1000 + i); per value draw, in order: "
+    "word = WORDS[rng.randrange(24)], then number = rng.randrange(1000, 10000); "
+    "a duplicate value is consumed and discarded; the table fills row-major, "
+    "fields in alphabetical order; the queried record index is the next draw, "
+    "rng.randrange(n_records), after the table is complete"
+)
+_O_RN_HEADLINE = ("prose", "canonical_json")
+_O_RN_ARMS = ("prose", "canonical_json", "closed_book")
+_O_RN_CELL_DETAILS = ("", "arm_context_exceeded", "arm_evaluation_failed")
+_O_RN_HEADLINE_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+    "answer_text",
+}
+_O_RN_SCREEN_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+}
+_O_RN_MAX_BYTES = 12 * 1024 * 1024
+_O_RN_OC = {
+    "transplant_fire_competent_independent": 0.8897,
+    "transplant_fire_competent_paired_phi05": 0.5088,
+    "transplant_fire_delta_005": 0.2276,
+    "transplant_familywise_expected": 21.35,
+    "transplant_familywise_any": 1.0,
+    "rule_a_fire_competent_independent": 0.65,
+    "rule_a_fire_competent_paired_phi05": 0.1648,
+    "rule_a_fire_delta_005": 0.0298,
+    "rule_a_familywise_expected": 0.71,
+    "rule_a_familywise_any": 0.516,
+    "mcnemar_fire_competent_independent": 0.0061,
+    "mcnemar_fire_competent_paired_phi05": 0.0005,
+    "mcnemar_power_gap25_marginals_85_60": 0.3547,
+    "mcnemar_power_gap20_marginals_90_70": 0.2598,
+    "mcnemar_power_gap25_base_90": 0.4,
+    "sign_bonferroni_power_gap25_marginals_85_60": 0.0542,
+    "sign_bonferroni_power_gap20_marginals_90_70": 0.0242,
+    "panel96_bonferroni_false_fire": 0.0008,
+    "panel96_bonferroni_power_gap25_marginals_85_60": 0.7452,
+    "panel96_bonferroni_power_gap25_base_90": 0.8329,
+    "panel96_generations": 6912,
+    "winner_pass_probability_95": 0.292,
+    "winner_pass_probability_90": 0.08,
+    "winner_pass_probability_80": 0.005,
+    "screen_guess_probability": 1 / 216000,
+    "screen_expected_exclusions_per_candidate": 24 / 216000,
+    "screen_expected_exclusions_per_panel": 576 / 216000,
+}
+_O_RN_AGGREGATE_KEYS = {
+    "arms",
+    "audit",
+    "headline",
+    "ids",
+    "sensitivities",
+    "operating_characteristics",
+    "n_cases",
+    "n_incomplete",
+}
+
+
+def _o_rn_sha(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _o_rn_digest_ok(value: Any) -> bool:
+    return type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def _o_rn_table_shape(index: int):
+    return 4 + (index % 3), (_O_RN_FIELDS_4 if index % 2 else _O_RN_FIELDS_3)
+
+
+def _o_rn_generate_cases(seed: int) -> list:
+    cases = []
+    for index in range(24):
+        n_records, fields = _o_rn_table_shape(index)
+        rng = random.Random(seed * 1000 + index)  # noqa: S311 # nosec B311
+        values: list = []
+        seen: set = set()
+        while len(values) < n_records * len(fields):
+            word = _O_RN_WORDS[rng.randrange(len(_O_RN_WORDS))]
+            number = rng.randrange(1000, 10000)
+            value = f"{word}-{number}"
+            if value in seen:
+                continue
+            seen.add(value)
+            values.append(value)
+        table = [
+            {field: values[r * len(fields) + j] for j, field in enumerate(fields)}
+            for r in range(n_records)
+        ]
+        query_index = rng.randrange(n_records)
+        cases.append(
+            {
+                "fixture_id": f"record-{index:02d}",
+                "table": table,
+                "query_index": query_index,
+                "key": table[query_index]["zone"],
+                "expected": table[query_index]["code"],
+            }
+        )
+    return cases
+
+
+def _o_rn_render_json(table: list) -> str:
+    return json.dumps(table, sort_keys=True, separators=(", ", ": "), allow_nan=False)
+
+
+def _o_rn_render_prose(table: list) -> str:
+    sentences = []
+    for record in table:
+        parts = [f"the {field} is {record[field]}" for field in sorted(record)]
+        if len(parts) == 1:
+            sentence = f"The {parts[0][4:]}."
+        elif len(parts) == 2:
+            sentence = f"The {parts[0][4:]} and {parts[1]}."
+        else:
+            sentence = "The " + ", ".join([parts[0][4:], *parts[1:-1]]) + f", and {parts[-1]}."
+        sentences.append(sentence)
+    return " ".join(sentences)
+
+
+def _o_rn_arm_content(case: dict, arm: str) -> str:
+    question = _O_RN_QUESTION_TEMPLATE.format(key=case["key"])
+    if arm == "closed_book":
+        return f"{question} {_O_RN_CONTRACT}"
+    if arm == "prose":
+        rendering = _o_rn_render_prose(case["table"])
+    else:
+        rendering = _o_rn_render_json(case["table"])
+    return f"{rendering}\n\n{question} {_O_RN_CONTRACT}"
+
+
+def _o_rn_embedding_audit() -> dict:
+    tokens = set(_O_RN_FIELDS_4)
+    tokens.update(re.findall(r"[a-z]+", _O_RN_QUESTION_TEMPLATE.replace("{key}", " ").lower()))
+    tokens.update(re.findall(r"[a-z]+", _O_RN_CONTRACT.lower()))
+    violations = 0
+    for token in tokens:
+        for word in _O_RN_WORDS:
+            if token[:4] == word[:4] or word.startswith(token) or token.startswith(word):
+                violations += 1
+    return {
+        "template_violations": violations,
+        "key_word_prefix_cases": len(_O_RN_WORDS),
+        "key_word_prefix_of": len(_O_RN_WORDS),
+        "answer_key_same_word_rate": 8999 / 215999,
+    }
+
+
+def _o_rn_case_material() -> str:
+    material = {
+        "words": list(_O_RN_WORDS),
+        "fields_3": list(_O_RN_FIELDS_3),
+        "fields_4": list(_O_RN_FIELDS_4),
+        "answer_field": "code",
+        "key_field": "zone",
+        "question_template": _O_RN_QUESTION_TEMPLATE,
+        "contract": _O_RN_CONTRACT,
+        "generator_spec": _O_RN_GENERATOR_SPEC,
+        "case_count": 24,
+        "arm_keys": list(_O_RN_ARMS),
+        "embedding_audit": _o_rn_embedding_audit(),
+    }
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return _o_rn_sha(canonical)
+
+
+def _o_rn_ground(seed: int) -> str:
+    rows = [
+        [
+            case["fixture_id"],
+            [[[field, record[field]] for field in sorted(record)] for record in case["table"]],
+            case["query_index"],
+            case["key"],
+            case["expected"],
+        ]
+        for case in _o_rn_generate_cases(seed)
+    ]
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _o_rn_sha(canonical)
+
+
+def _o_rn_protocol(seed: int, backend_fp: str) -> dict:
+    protocol = {
+        "version": 1,
+        "arm_keys": list(_O_RN_ARMS),
+        "headline_arms": list(_O_RN_HEADLINE),
+        "screen_arm": "closed_book",
+        "answer_field": "code",
+        "key_field": "zone",
+        "case_count": 24,
+        "code_space": 216000,
+        "case_material_sha256": _o_rn_case_material(),
+        "ground_sha256": _o_rn_ground(seed),
+        "embedding_audit": _o_rn_embedding_audit(),
+        "generation_budget": 1728,
+        "headline_generations": 1152,
+        "screen_generations": 576,
+        "max_ground_records": 576,
+        "max_records_bytes": _O_RN_MAX_BYTES,
+        "max_candidates": 24,
+        "seed": seed,
+        "backend_fingerprint": backend_fp,
+    }
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _o_rn_sha(canonical)
+    return protocol
+
+
+def _o_rn_scorer_r1(text: str) -> str:
+    out = text.strip()
+    out = out.replace("\r\n", "\n").replace("\r", "\n")
+    out = re.sub(r"[ \t]+", " ", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out
+
+
+def _o_rn_scorer_fence(text: str) -> str:
+    lines = text.split("\n")
+    if len(lines) >= 3 and re.fullmatch(r"```[^`]*", lines[0]) and lines[-1] == "```":
+        return "\n".join(lines[1:-1]).strip("\n")
+    return text
+
+
+def _o_rn_cell(record: dict, arm: str):
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(arm)
+    return cell if isinstance(cell, dict) else None
+
+
+def _o_rn_detail(record: dict, arm: str) -> str:
+    details = record.get("cell_details")
+    if not isinstance(details, dict):
+        return ""
+    detail = details.get(arm, "")
+    return detail if type(detail) is str else ""
+
+
+def _o_rn_verdict(record: dict, arm: str) -> bool:
+    cell = _o_rn_cell(record, arm)
+    return bool(cell is not None and cell["verdict"])
+
+
+def _o_rn_screened(record: dict) -> bool:
+    cell = _o_rn_cell(record, "closed_book")
+    return bool(cell is not None and cell["verdict"])
+
+
+def _o_rn_ids_identical(record: dict) -> bool:
+    digests = record.get("id_digests")
+    if not isinstance(digests, dict):
+        return False
+    return digests.get("prose") is not None and digests.get("prose") == digests.get(
+        "canonical_json"
+    )
+
+
+def _o_rn_decompose_cell(cell: dict, expected_digest: str) -> str:
+    if cell.get("verdict") is True:
+        return "pass"
+    digest = cell.get("answer_digest")
+    if digest is not None and digest == expected_digest:
+        return "boundary_only"
+    return "other_failure"
+
+
+def _o_rn_decompose_pair(prose_cell: dict, json_cell: dict) -> str:
+    if prose_cell.get("answer_digest") == json_cell.get("answer_digest"):
+        return "boundary_only"
+    if prose_cell.get("boundary_found") and json_cell.get("boundary_found"):
+        return "exact_only"
+    return "mixed"
+
+
+def _o_rn_parsed_hit(answer_text: str, expected: str) -> bool:
+    try:
+        parsed = json.loads(answer_text)
+    except ValueError:
+        return False
+    return type(parsed) is dict and parsed.get("code") == expected
+
+
+def _o_rn_regrade_verdict(cell: dict, expected: str, transform) -> bool:
+    text = cell.get("answer_text")
+    if type(text) is not str:
+        return False
+    return transform(text) == expected and bool(cell.get("boundary_found"))
+
+
+def _o_rn_aggregate(records: list, cases: list) -> dict:
+    expected_by_fixture = {str(case["fixture_id"]): str(case["expected"]) for case in cases}
+    arms: dict = {}
+    for key in _O_RN_ARMS:
+        n_completed = 0
+        n_pass = 0
+        n_context = 0
+        n_failed = 0
+        decomposition = dict.fromkeys(("pass", "boundary_only", "other_failure"), 0)
+        n_failures = 0
+        echo_hits = 0
+        parsed_hits = 0
+        for record in records:
+            detail = _o_rn_detail(record, key)
+            if detail == "arm_context_exceeded":
+                n_context += 1
+            elif detail == "arm_evaluation_failed":
+                n_failed += 1
+            cell = _o_rn_cell(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell["verdict"]:
+                n_pass += 1
+            decomposition[_o_rn_decompose_cell(cell, str(record.get("expected_digest", "")))] += 1
+            if key in _O_RN_HEADLINE and not cell["verdict"]:
+                n_failures += 1
+                text = cell.get("answer_text")
+                expected = expected_by_fixture.get(str(record.get("fixture", "")), "")
+                if type(text) is str:
+                    if expected in text:
+                        echo_hits += 1
+                    if _o_rn_parsed_hit(text, expected):
+                        parsed_hits += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": (n_pass / n_completed) if n_completed else None,
+            "n_context_exceeded": n_context,
+            "n_evaluation_failed": n_failed,
+            "decomposition": decomposition,
+            "n_failures": n_failures,
+            "echo_rate": ((echo_hits / n_failures) if n_failures else None)
+            if key in _O_RN_HEADLINE
+            else None,
+            "parsed_rate": ((parsed_hits / n_failures) if n_failures else None)
+            if key in _O_RN_HEADLINE
+            else None,
+        }
+    both = [
+        record
+        for record in records
+        if _o_rn_cell(record, "prose") is not None
+        and _o_rn_cell(record, "canonical_json") is not None
+    ]
+    unscreened_pairs = [record for record in both if not _o_rn_ids_identical(record)]
+    live_pairs = [record for record in unscreened_pairs if not _o_rn_screened(record)]
+
+    def _discordance(pairs: list) -> dict:
+        prose_only = 0
+        json_only = 0
+        decomposition = dict.fromkeys(("exact_only", "boundary_only", "mixed"), 0)
+        for record in pairs:
+            prose_cell = _o_rn_cell(record, "prose")
+            json_cell = _o_rn_cell(record, "canonical_json")
+            if prose_cell is None or json_cell is None:
+                continue
+            if bool(prose_cell["verdict"]) == bool(json_cell["verdict"]):
+                continue
+            if prose_cell["verdict"]:
+                prose_only += 1
+            else:
+                json_only += 1
+            decomposition[_o_rn_decompose_pair(prose_cell, json_cell)] += 1
+        return {
+            "n_paired": len(pairs),
+            "discordant": prose_only + json_only,
+            "n_prose_only": prose_only,
+            "n_canonical_json_only": json_only,
+            "decomposition": decomposition,
+        }
+
+    headline_counts = _discordance(live_pairs)
+    headline = {
+        **headline_counts,
+        "prose_rate": (
+            (sum(1 for record in live_pairs if _o_rn_verdict(record, "prose")) / len(live_pairs))
+            if live_pairs
+            else None
+        ),
+        "canonical_json_rate": (
+            (
+                sum(1 for record in live_pairs if _o_rn_verdict(record, "canonical_json"))
+                / len(live_pairs)
+            )
+            if live_pairs
+            else None
+        ),
+        "resolution_points": (100.0 / len(live_pairs)) if live_pairs else None,
+    }
+    deltas: list = []
+    n_same_ids_flips = 0
+    for record in records:
+        tokens = record.get("arm_tokens")
+        tokens = tokens if isinstance(tokens, dict) else {}
+        prose_tokens = tokens.get("prose")
+        json_tokens = tokens.get("canonical_json")
+        if type(prose_tokens) is int and type(json_tokens) is int:
+            deltas.append(json_tokens - prose_tokens)
+        else:
+            deltas.append(0)
+        if _o_rn_ids_identical(record):
+            prose_cell = _o_rn_cell(record, "prose")
+            json_cell = _o_rn_cell(record, "canonical_json")
+            if (
+                prose_cell is not None
+                and json_cell is not None
+                and prose_cell["verdict"] != json_cell["verdict"]
+            ):
+                n_same_ids_flips += 1
+    ids = {
+        "n_ids_identical": sum(1 for record in records if _o_rn_ids_identical(record)),
+        "id_length_delta": deltas,
+        "max_abs_id_delta": max((abs(delta) for delta in deltas), default=0),
+        "n_same_ids_verdict_flips": n_same_ids_flips,
+    }
+    regrade: dict = {}
+    for label, transform in (("r1", _o_rn_scorer_r1), ("fence", _o_rn_scorer_fence)):
+        count = 0
+        for record in live_pairs:
+            prose_cell = _o_rn_cell(record, "prose")
+            json_cell = _o_rn_cell(record, "canonical_json")
+            if prose_cell is None or json_cell is None:
+                continue
+            expected = expected_by_fixture.get(str(record.get("fixture", "")), "")
+            if _o_rn_regrade_verdict(prose_cell, expected, transform) != _o_rn_regrade_verdict(
+                json_cell, expected, transform
+            ):
+                count += 1
+        regrade[label] = count
+    sensitivities = {
+        "unscreened": _discordance(unscreened_pairs),
+        "regrade_r1_discordant": regrade["r1"],
+        "regrade_fence_discordant": regrade["fence"],
+    }
+    return {
+        "arms": arms,
+        "audit": {
+            "n_screened": sum(1 for record in records if _o_rn_screened(record)),
+            "n_closed_book_incomplete": sum(
+                1 for record in records if _o_rn_cell(record, "closed_book") is None
+            ),
+        },
+        "headline": headline,
+        "ids": ids,
+        "sensitivities": sensitivities,
+        "operating_characteristics": dict(_O_RN_OC),
+        "n_cases": len(records),
+        "n_incomplete": sum(
+            1 for record in records if any(_o_rn_cell(record, arm) is None for arm in _O_RN_ARMS)
+        ),
+    }
+
+
+def _o_rn_recompute(payload: Any):
+    if type(payload) is not dict:
+        return None
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fp = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool):
+        return None
+    if type(backend_fp) is not str:
+        return None
+    if protocol != _o_rn_protocol(seed, backend_fp):
+        return None
+    cases = _o_rn_generate_cases(seed)
+    if len(cases) != protocol["case_count"]:
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    if len(candidates) > 24:
+        return None
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        if entry.get("status") == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if entry.get("status") != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _O_RN_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry.get("records")
+        if type(records) is not list or len(records) != len(cases):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _O_RN_MAX_BYTES:
+            return None
+        for record, case in zip(records, cases, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "n_records",
+                "n_fields",
+                "expected_digest",
+                "content_digests",
+                "arm_tokens",
+                "id_digests",
+                "ids_identical",
+                "id_length_delta",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"]:
+                return None
+            if record["n_records"] != len(case["table"]) or record["n_fields"] != len(
+                case["table"][0]
+            ):
+                return None
+            if record["expected_digest"] != _o_rn_sha(str(case["expected"])):
+                return None
+            for key in ("arm_tokens", "id_digests", "content_digests", "cells", "cell_details"):
+                mapping = record[key]
+                if type(mapping) is not dict or set(mapping) != set(_O_RN_ARMS):
+                    return None
+            if record["content_digests"] != {
+                arm: _o_rn_sha(_o_rn_arm_content(case, arm)) for arm in _O_RN_ARMS
+            }:
+                return None
+            if record["ids_identical"] is not (
+                record["id_digests"]["prose"] == record["id_digests"]["canonical_json"]
+            ):
+                return None
+            for arm in _O_RN_ARMS:
+                tokens = record["arm_tokens"][arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                    return None
+                if not _o_rn_digest_ok(record["id_digests"][arm]):
+                    return None
+                detail = record["cell_details"][arm]
+                if detail not in _O_RN_CELL_DETAILS:
+                    return None
+                cell = record["cells"][arm]
+                if cell is None:
+                    if detail == "":
+                        return None
+                    continue
+                if detail != "":
+                    return None
+                headline = arm in _O_RN_HEADLINE
+                fields = _O_RN_HEADLINE_CELL_FIELDS if headline else _O_RN_SCREEN_CELL_FIELDS
+                if type(cell) is not dict or set(cell) != fields:
+                    return None
+                if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+                    return None
+                if (
+                    cell["boundary_text_match"] is not None
+                    and type(cell["boundary_text_match"]) is not bool
+                ):
+                    return None
+                if type(cell["input_tokens"]) is not int or cell["input_tokens"] != tokens:
+                    return None
+                digest = cell["answer_digest"]
+                if digest is not None and not _o_rn_digest_ok(digest):
+                    return None
+                if headline:
+                    text = cell["answer_text"]
+                    if text is None:
+                        if digest is not None:
+                            return None
+                    elif type(text) is not str or _o_rn_sha(text) != digest:
+                        return None
+                if cell["verdict"] != (
+                    digest == record["expected_digest"] and cell["boundary_found"]
+                ):
+                    return None
+            if record["id_length_delta"] != (
+                record["arm_tokens"]["canonical_json"] - record["arm_tokens"]["prose"]
+            ):
+                return None
+        aggregates[name] = _o_rn_aggregate(records, cases)
+    if total_records > 576:
+        return None
+    if not aggregates:
+        return None
+    return {"aggregates": aggregates, "n_candidates": len(candidates), "n_cases": len(cases)}
+
+
+def _o_recordnotation_valid(value: Any) -> bool:
+    """Oracle record-notation validator: mirrors
+    diffreports._valid_record_notation."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if value.get("detail") != "":
+        return False
+    audit = value.get("audit")
+    if type(audit) is not dict or set(audit) != {
+        "n_audit_excluded",
+        "by_reason",
+        "special_token_findings",
+    }:
+        return False
+    if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+        return False
+    if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+        return False
+    by_reason = audit["by_reason"]
+    if type(by_reason) is not dict:
+        return False
+    for key, count in by_reason.items():
+        if type(key) is not str or type(count) is not int or count < 0:
+            return False
+    recomputed = _o_rn_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, val in expected.items():
+            if entry.get(key) != val:
+                return False
+    if value.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(value.get("n_cases") == recomputed["n_cases"])
+
+
+def _o_recordnotation(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle record-notation section: mirrors
+    diffreports.diff_record_notation."""
+    old_ok = _o_recordnotation_valid(old)
+    new_ok = _o_recordnotation_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    ) or old["protocol"].get("case_material_sha256") != new["protocol"].get("case_material_sha256")
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not generator_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        metrics: list = [
+            ("n_screened", old_entry["audit"]["n_screened"], new_entry["audit"]["n_screened"]),
+            (
+                "n_closed_book_incomplete",
+                old_entry["audit"]["n_closed_book_incomplete"],
+                new_entry["audit"]["n_closed_book_incomplete"],
+            ),
+            ("n_paired", old_entry["headline"]["n_paired"], new_entry["headline"]["n_paired"]),
+            (
+                "discordant",
+                old_entry["headline"]["discordant"],
+                new_entry["headline"]["discordant"],
+            ),
+            (
+                "n_prose_only",
+                old_entry["headline"]["n_prose_only"],
+                new_entry["headline"]["n_prose_only"],
+            ),
+            (
+                "n_canonical_json_only",
+                old_entry["headline"]["n_canonical_json_only"],
+                new_entry["headline"]["n_canonical_json_only"],
+            ),
+            (
+                "prose_rate",
+                old_entry["headline"]["prose_rate"],
+                new_entry["headline"]["prose_rate"],
+            ),
+            (
+                "canonical_json_rate",
+                old_entry["headline"]["canonical_json_rate"],
+                new_entry["headline"]["canonical_json_rate"],
+            ),
+            (
+                "decomposition_exact_only",
+                old_entry["headline"]["decomposition"]["exact_only"],
+                new_entry["headline"]["decomposition"]["exact_only"],
+            ),
+            (
+                "decomposition_boundary_only",
+                old_entry["headline"]["decomposition"]["boundary_only"],
+                new_entry["headline"]["decomposition"]["boundary_only"],
+            ),
+            (
+                "decomposition_mixed",
+                old_entry["headline"]["decomposition"]["mixed"],
+                new_entry["headline"]["decomposition"]["mixed"],
+            ),
+            (
+                "prose_echo_rate",
+                old_entry["arms"]["prose"]["echo_rate"],
+                new_entry["arms"]["prose"]["echo_rate"],
+            ),
+            (
+                "prose_parsed_rate",
+                old_entry["arms"]["prose"]["parsed_rate"],
+                new_entry["arms"]["prose"]["parsed_rate"],
+            ),
+            (
+                "canonical_json_echo_rate",
+                old_entry["arms"]["canonical_json"]["echo_rate"],
+                new_entry["arms"]["canonical_json"]["echo_rate"],
+            ),
+            (
+                "canonical_json_parsed_rate",
+                old_entry["arms"]["canonical_json"]["parsed_rate"],
+                new_entry["arms"]["canonical_json"]["parsed_rate"],
+            ),
+            (
+                "n_ids_identical",
+                old_entry["ids"]["n_ids_identical"],
+                new_entry["ids"]["n_ids_identical"],
+            ),
+            (
+                "max_abs_id_delta",
+                old_entry["ids"]["max_abs_id_delta"],
+                new_entry["ids"]["max_abs_id_delta"],
+            ),
+            (
+                "n_same_ids_verdict_flips",
+                old_entry["ids"]["n_same_ids_verdict_flips"],
+                new_entry["ids"]["n_same_ids_verdict_flips"],
+            ),
+            (
+                "unscreened_discordant",
+                old_entry["sensitivities"]["unscreened"]["discordant"],
+                new_entry["sensitivities"]["unscreened"]["discordant"],
+            ),
+            (
+                "regrade_r1_discordant",
+                old_entry["sensitivities"]["regrade_r1_discordant"],
+                new_entry["sensitivities"]["regrade_r1_discordant"],
+            ),
+            (
+                "regrade_fence_discordant",
+                old_entry["sensitivities"]["regrade_fence_discordant"],
+                new_entry["sensitivities"]["regrade_fence_discordant"],
+            ),
+        ]
+        for metric, old_value, new_value in metrics:
+            if old_value != new_value:
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    diff["candidate_drift"] = candidate_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["generator_drift"] = generator_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        candidate_drift or added or removed or protocol_drift or generator_drift or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_instructiondistance_valid(value: Any) -> bool:
     """Oracle instruction-distance validator: mirrors
     diffreports._valid_instruction_distance."""
@@ -13355,6 +14207,9 @@ def _oracle_diff(
     o_ps, o_ps_changed, o_ps_asymmetric = _o_prunesweep(
         old.get("prune_sweep"), new.get("prune_sweep")
     )
+    o_rn, o_rn_changed, o_rn_asymmetric = _o_recordnotation(
+        old.get("record_notation"), new.get("record_notation")
+    )
     o_ca, o_ca_changed, o_ca_asymmetric = _o_choiceaudit(
         old.get("choice_audit"), new.get("choice_audit")
     )
@@ -13523,6 +14378,7 @@ def _oracle_diff(
         "instruction_distance": o_idist,
         "history_frame": o_hf,
         "prune_sweep": o_ps,
+        "record_notation": o_rn,
         "choice_audit": o_ca,
         "precision": o_pr,
         "confidence": o_cfd,
@@ -13620,6 +14476,8 @@ def _oracle_diff(
             "history_frame_asymmetric": o_hf_asymmetric,
             "prune_sweep_changed": o_ps_changed,
             "prune_sweep_asymmetric": o_ps_asymmetric,
+            "record_notation_changed": o_rn_changed,
+            "record_notation_asymmetric": o_rn_asymmetric,
             "choice_audit_changed": o_ca_changed,
             "choice_audit_asymmetric": o_ca_asymmetric,
             "precision_changed": o_pr_changed,
@@ -14571,6 +15429,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "history_frame_asymmetric": False,
                 "prune_sweep_changed": False,
                 "prune_sweep_asymmetric": False,
+                "record_notation_changed": False,
+                "record_notation_asymmetric": False,
                 "choice_audit_changed": False,
                 "choice_audit_asymmetric": False,
                 "precision_changed": False,
@@ -18483,6 +19343,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not history_frame_asymmetric\n"
             '        and not prune_sweep_diff["changed"]\n'
             "        and not prune_sweep_asymmetric\n"
+            '        and not record_notation_diff["changed"]\n'
+            "        and not record_notation_asymmetric\n"
             '        and not choiceaudit_diff["changed"]\n'
             "        and not choiceaudit_asymmetric\n"
             '        and not precision_diff["changed"]\n'
@@ -18587,6 +19449,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or history_frame_asymmetric\n"
             '        or prune_sweep_diff["changed"]\n'
             "        or prune_sweep_asymmetric\n"
+            '        or record_notation_diff["changed"]\n'
+            "        or record_notation_asymmetric\n"
             '        or choiceaudit_diff["changed"]\n'
             "        or choiceaudit_asymmetric\n"
             '        or precision_diff["changed"]\n'
@@ -18952,6 +19816,92 @@ class PruneSweepOracleAgreementTests(unittest.TestCase):
         real = diffreports.diff_reports(old, new)
         self.assertEqual(oracle["prune_sweep"], real["prune_sweep"])
         self.assertEqual(real["prune_sweep"]["available"], "old")
+
+
+class RecordNotationOracleAgreementTests(unittest.TestCase):
+    """Cycle 221: the record-notation oracle must agree with
+    the real diff on REAL stage payloads, not just on the
+    neither stubs the fuzzer produces (the fuzzer emits no
+    record_notation section, so without this test the
+    oracle's recompute depth -- including the frozen-RNG
+    regeneration, the content-digest rebinding, the
+    input-token binding, and the answer-text binding --
+    would be unproven)."""
+
+    def _payload(self, mode):
+        from tests.test_cycle221_recordnotation import _payload, _WordBackend
+
+        return _payload(_WordBackend(mode))
+
+    def _pair(self, old_payload, new_payload):
+        old = _base_report()
+        new = _base_report()
+        old["record_notation"] = old_payload
+        new["record_notation"] = new_payload
+        return old, new
+
+    def test_identical_real_payloads_agree(self):
+        payload = self._payload("perfect")
+        old, new = self._pair(payload, copy.deepcopy(payload))
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["record_notation"], real["record_notation"])
+        self.assertEqual(
+            oracle["summary"]["record_notation_changed"],
+            real["summary"]["record_notation_changed"],
+        )
+        self.assertFalse(real["summary"]["record_notation_changed"])
+        self.assertTrue(real["summary"]["identical"])
+        self.assertTrue(oracle["summary"]["identical"])
+
+    def test_changed_real_payloads_agree(self):
+        first = self._payload("perfect")
+        second = self._payload("json_drop")
+        old, new = self._pair(first, second)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["record_notation"], real["record_notation"])
+        self.assertTrue(real["record_notation"]["changed"])
+        self.assertFalse(real["summary"]["identical"])
+
+    def test_tampered_payload_agreement_is_old(self):
+        first = self._payload("perfect")
+        bad = copy.deepcopy(first)
+        bad["candidates"]["chatml"]["records"][0]["cells"]["prose"]["verdict"] = False
+        old, new = self._pair(first, bad)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["record_notation"], real["record_notation"])
+        self.assertEqual(real["record_notation"]["available"], "old")
+        self.assertFalse(real["record_notation"]["changed"])
+
+    def test_input_tokens_forgery_agreement_is_old(self):
+        # Amendment D: a cell whose input_tokens disagree
+        # with the record's arm token count must invalidate
+        # the payload on both sides of the oracle boundary.
+        first = self._payload("perfect")
+        bad = copy.deepcopy(first)
+        bad["candidates"]["chatml"]["records"][0]["cells"]["prose"]["input_tokens"] += 1
+        old, new = self._pair(first, bad)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["record_notation"], real["record_notation"])
+        self.assertEqual(real["record_notation"]["available"], "old")
+
+    def test_answer_text_forgery_agreement_is_old(self):
+        # A headline cell whose answer_text no longer hashes
+        # to its answer_digest must invalidate the payload on
+        # both sides of the oracle boundary.
+        first = self._payload("perfect")
+        bad = copy.deepcopy(first)
+        bad["candidates"]["chatml"]["records"][0]["cells"]["canonical_json"]["answer_text"] = (
+            "tampered-0000"
+        )
+        old, new = self._pair(first, bad)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["record_notation"], real["record_notation"])
+        self.assertEqual(real["record_notation"]["available"], "old")
 
 
 if __name__ == "__main__":
