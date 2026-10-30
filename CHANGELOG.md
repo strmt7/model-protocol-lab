@@ -6,6 +6,43 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 224 — confusable-skeleton substitution probe, 2026-10-30)
+
+- A confusable-skeleton substitution probe
+  (`run --confusable-skeleton`,
+  `model_protocol_lab/confusableskeleton.py`): a
+  generated panel of 24 fact-recall cases (frozen topics,
+  a word-number inspection code, two neutral carrier
+  sentences, a question) is rendered verbatim and with
+  frozen UTS #39 skeleton-equivalent Cyrillic/Greek
+  letters substituted inside the fact sentence only —
+  `single_site` (the first eligible letter of the topic
+  and of the code's word), `whole_word` (every eligible
+  letter; 171 of 249 letters on seed 0's panel), and
+  `rarity_control` (the single-site sites filled with a
+  same-script non-confusable letter, U+0434 for the
+  Cyrillic seat and U+03B6 for the Greek seat, assigned
+  by the unicodedata.name prefix rule). The population is
+  frozen from confusables.txt pinned to Unicode 15.0.0
+  (16 of 25 panel letters eligible; both data files'
+  SHA-256 digests frozen in the module, and every record
+  carries the frozen-table version pin). The readout is a
+  guarded classification per candidate and arm over the
+  id-divergent paired population (at least 10 control
+  passes, at least 6 wrong-value discordants, acquittals
+  stable under worst-case completion of the missing
+  pairs, labels withheld above 6 incomplete divergent
+  cases), with a total seven-class decomposition of
+  completed cells, the whole-word dose, the per-arm
+  token-ID report, and the exact operating
+  characteristics (competent-null fire 0.0173 independent
+  / 0.004442 paired exact; family-wise expectation 1.2437
+  over 72 comparisons, paired 0.3199) printed beside the
+  licence. Records carry digest-bound answer text on
+  every cell. Design:
+  `docs/CONFUSABLESKELETON_DESIGN.md`, built as amended
+  (A1–A9) after the wave-12 fresh review.
+
 ### Added (cycle 223 — invisible-character insertion probe, 2026-10-30)
 
 - An invisible-character insertion probe

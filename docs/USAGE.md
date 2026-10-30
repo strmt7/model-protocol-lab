@@ -3254,6 +3254,94 @@ candidates x 24 cases x 7 arms). Informational only:
 the probe never affects selection, and the stage never
 fails the run.
 
+### 8.61 Confusable skeleton (`run --confusable-skeleton`)
+
+```sh
+model-protocol-lab run ... --confusable-skeleton
+```
+
+This probe replaces Latin letters in a generated fact
+sentence with their UTS #39 skeleton-equivalent
+Cyrillic/Greek letters and reports whether the
+substitution moves the model's answers to wrong values.
+It answers, for an eval owner deciding whether frozen
+benchmark fixtures and ingested documents need a
+confusable-screening pass at ingest, whether
+skeleton-class substitution in ordinary fact-recall text
+is worth screening for on this checkpoint. The claim is
+"skeleton-class substitution" -- substitution inside a
+standards-defined equivalence class -- never that a model
+is fooled like a human: the model never sees glyphs.
+
+The panel is generated, not read from the run's
+fixtures: 24 cases, each a fact-recall item (a frozen
+topic, a `word-number` inspection code from a frozen
+24-word pool over a 9,000 number space, two neutral
+carrier sentences, a question), drawn by a frozen seeded
+generator (SHA-256 derivations with the digest-to-integer
+conversion pinned in the design doc; values distinct
+across the panel by redraw). Four arms per case, with
+substitution inside the fact sentence only (the topic and
+the code's word part; the question and carriers are
+byte-identical across arms): `control` (verbatim),
+`single_site` (the first eligible letter of each treated
+word replaced by its frozen confusable -- exactly 2
+substitutions), `whole_word` (every eligible letter; on
+seed 0's panel 171 of 249 letters in treated words,
+0.6867), and `rarity_control` (the single-site sites
+filled with a same-script non-confusable letter -- U+0434
+for the Cyrillic seat, U+03B6 for the Greek seat -- the
+isolating control for rarity versus skeleton class). The
+population is frozen from confusables.txt pinned to
+Unicode 15.0.0: 16 of the 25 panel letters have a
+Cyrillic/Greek small-letter skeleton equivalent (the
+smallest code point wins); 9 are zero-eligible (b, f, g,
+k, l, m, n, t, z) and no arm can substitute them. Every
+arm is a fixture with the same id, group, and expected,
+so request seeds are identical across arms. The scorer is
+the run's own verdict -- byte-exact answer conjoined with
+boundary presence -- per cell, and every expected value
+is pure ASCII.
+
+The readout is a guarded classification per candidate and
+per treated arm over the token-id-divergent paired
+population (cases completed in both control and arm whose
+renders differ in token ids for that arm; ids-identical
+arms are reported instrument-inapplicable for that family,
+never as passes): `insufficient`,
+`no_discordance_observed`, `discordant_asymmetric` (the
+fire), `below_threshold`, from D (control passes) and J
+(in-grammar wrong-value discordants among them), floors
+D >= 10 and J >= 6, reverse discordants counted beside
+every label and never pooled. The completion guard closes
+the incompletion channel: fires issue on observed counts;
+acquittal labels issue only when stable under the
+worst-case completion of the incomplete id-divergent
+cases; every label is withheld above 6 incomplete. Each
+completed cell decomposes (pass / boundary-only /
+wrong-value / echo-confusable / echo-control / form-only
+/ non-answer) and the report prints the operating
+characteristics beside the licence (competent-null fire
+0.0173 by exact independent enumeration, 0.0044 by the
+exact paired computation; 25-point-drop power 0.8159,
+paired 0.6981; family-wise over the 72 labelled
+comparisons the competent expectation is 1.2437 false
+labels, paired 0.3199). A `single_site` fire is read as
+skeleton-class-specific only if `rarity_control` does not
+also fire for the same candidate; a whole-word solo fire
+reads "skeleton-class substitution at whole-word dose
+disrupts this candidate; rarity at that dose is unmeasured
+by this design". The full contract is in
+`docs/CONFUSABLESKELETON_DESIGN.md`. Costs 96 generations
+per candidate (2,304 at the legal maximum: 24 candidates
+x 24 cases x 4 arms), spent only when the flag is passed.
+Records carry digests, plus each cell's answer text bound
+by its digest (the decomposition classes are functions of
+the answer text; answer text never reaches a report), and
+each record carries the frozen-table version pin.
+Informational only: the probe never affects selection,
+and the stage never fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

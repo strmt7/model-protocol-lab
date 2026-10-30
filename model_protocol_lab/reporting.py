@@ -9253,6 +9253,409 @@ def _invisible_chars_section(result: dict[str, Any]) -> str:
     )
 
 
+def _confusable_skeleton_section(result: dict[str, Any]) -> str:
+    """Confusable-skeleton substitution probe: does replacing
+    Latin letters with their UTS #39 skeleton-equivalent
+    Cyrillic/Greek letters move answers to wrong values?
+
+    Renders the ``confusable_skeleton`` payload (see
+    experiments.confusable_skeleton_analysis). The first
+    sentences state the treatment exactly: frozen
+    substitutions inside the fact sentence only (the topic and
+    the value's word part), the question and carriers
+    byte-identical across arms, the population frozen from
+    confusables.txt at Unicode 15.0.0. Per candidate, in the
+    design's printed order: per-arm pass rates with attrition
+    and the seven-class completed-cell decomposition; the
+    whole-word dose; the per-arm token-ID report (the regime
+    gate); and per treated arm the guarded headline over the
+    id-divergent paired population -- label, D, J, reverse
+    discordants, incomplete count, the paired control rate
+    beside the label, the pair decomposition with the failing
+    cells' classes, and the non-answer count. After the table:
+    the estimand sentence (with both isolation readings,
+    including the whole-word sentence of amendment A5 printed
+    verbatim), the operating-characteristics paragraph (exact
+    figures, one convention, the family-wise price over the 72
+    labelled comparisons printed beside the licence), the
+    guard paragraph (what incompletion can and cannot do,
+    with the executed worlds and the pinned-domain caveat of
+    amendment A8), and the printed limitations. Counts and
+    rates only; no prompt or answer text is rendered. Every
+    payload-derived value below goes through _escape_text,
+    never bare escape().
+    """
+    probe: Any = result.get("confusable_skeleton")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        """Return the rate."""
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return _escape_text(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        """Return the count."""
+        return _escape_text(str(value)) if type(value) is int else "n/a"
+
+    def _exact(value: Any) -> str:
+        """Return the exact."""
+        return _escape_text(str(value)) if type(value) in (int, float) else "n/a"
+
+    arm_names = (
+        "control",
+        "single_site",
+        "whole_word",
+        "rarity_control",
+    )
+    class_names = (
+        "pass",
+        "boundary_only",
+        "wrong_value",
+        "echo_confusable",
+        "echo_control",
+        "form_only",
+        "non_answer",
+    )
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + _escape_text(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        arms = entry.get("arms")
+        if type(arms) is dict:
+            for arm_name in arm_names:
+                arm = arms.get(arm_name)
+                if type(arm) is not dict:
+                    continue
+                decomp = arm.get("decomposition")
+                decomp_bit = ""
+                if type(decomp) is dict:
+                    decomp_bit = (
+                        " Decomposition of completed cells -- "
+                        + ", ".join(
+                            class_name + " " + _count(decomp.get(class_name))
+                            for class_name in class_names
+                        )
+                        + " (in the frozen order: a boundary-only "
+                        "cell is a boundary effect, never a "
+                        "substitution effect; wrong-value counts "
+                        "only values inside the frozen grammar; "
+                        "echo and form classes are the model "
+                        "reproducing the treated surface with the "
+                        "value intact)."
+                    )
+                bits.append(
+                    "<div>"
+                    + _escape_text(arm_name)
+                    + " pass rate "
+                    + _rate(arm.get("rate"))
+                    + " ("
+                    + _count(arm.get("n_pass"))
+                    + " of "
+                    + _count(arm.get("n_completed"))
+                    + " completed), "
+                    + _count(arm.get("n_context_exceeded"))
+                    + " context-exceeded, "
+                    + _count(arm.get("n_evaluation_failed"))
+                    + " evaluation-failed."
+                    + decomp_bit
+                    + "</div>"
+                )
+        dose = entry.get("dose")
+        if type(dose) is dict and type(dose.get("whole_word")) is dict:
+            whole = dose["whole_word"]
+            bits.append(
+                "<div>Whole-word dose on this panel: "
+                + _count(whole.get("eligible_letters"))
+                + " of "
+                + _count(whole.get("total_letters"))
+                + " letters in treated words are eligible "
+                "(fraction "
+                + _rate(whole.get("fraction"))
+                + "); the remaining letters are zero-eligible "
+                "in the frozen population and no arm can "
+                "substitute them.</div>"
+            )
+        ids = entry.get("ids")
+        headline = entry.get("headline")
+        if type(ids) is dict and type(headline) is dict:
+            for arm_name in arm_names[1:]:
+                arm_ids = ids.get(arm_name)
+                arm_head = headline.get(arm_name)
+                if type(arm_ids) is not dict or type(arm_head) is not dict:
+                    continue
+                deltas = arm_ids.get("id_length_delta")
+                delta_bit = ""
+                if type(deltas) is list:
+                    delta_bit = (
+                        " Per-case id-length deltas (arm minus "
+                        "control, in case order): "
+                        + _escape_text(", ".join(str(d) for d in deltas))
+                        + "."
+                    )
+                pair = arm_head.get("pair_decomposition")
+                pair_bit = ""
+                if type(pair) is dict:
+                    pair_bit = (
+                        " Pair decomposition of the discordant "
+                        "pairs -- exact-only "
+                        + _count(pair.get("exact_only"))
+                        + ", boundary-only "
+                        + _count(pair.get("boundary_only"))
+                        + ", mixed "
+                        + _count(pair.get("mixed"))
+                        + " (reported, never attributed)."
+                    )
+                failing = arm_head.get("failing_classes")
+                failing_bit = ""
+                if type(failing) is dict:
+                    failing_bit = (
+                        " The discordant pairs' failing cells "
+                        "decompose as "
+                        + ", ".join(
+                            class_name + " " + _count(failing.get(class_name))
+                            for class_name in class_names
+                        )
+                        + "."
+                    )
+                bits.append(
+                    "<div>"
+                    + _escape_text(arm_name)
+                    + " headline over "
+                    + _count(arm_head.get("n_population"))
+                    + " paired cases (completed in both control "
+                    "and this arm and id-divergent for this arm; "
+                    + _count(arm_ids.get("n_ids_identical"))
+                    + " cases were ids-identical for this arm "
+                    "-- instrument-inapplicable for those, never "
+                    "passes -- and "
+                    + _count(arm_head.get("n_incomplete"))
+                    + " id-divergent cases were incomplete): "
+                    "label "
+                    + _escape_text(str(arm_head.get("label")))
+                    + ", D (control passes) "
+                    + _count(arm_head.get("control_passes"))
+                    + " at control rate "
+                    + _rate(arm_head.get("control_rate"))
+                    + ", J (wrong-value discordants) "
+                    + _count(arm_head.get("wrong_values"))
+                    + ", reverse discordants "
+                    + _count(arm_head.get("n_reverse"))
+                    + " (counted, never pooled into J), "
+                    "arm pass rate "
+                    + _rate(arm_head.get("arm_rate"))
+                    + ", non-answer arm cells in the population "
+                    + _count(arm_head.get("n_non_answer"))
+                    + ". Same-ids verdict flips for this arm: "
+                    + _count(arm_ids.get("n_same_ids_verdict_flips"))
+                    + " (a determinism finding, never substitution "
+                    "fragility); maximum absolute id-length delta "
+                    + _count(arm_ids.get("max_abs_id_delta"))
+                    + "."
+                    + delta_bit
+                    + pair_bit
+                    + failing_bit
+                    + "</div>"
+                )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + _escape_text(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    oc: dict[str, Any] = {}
+    for entry in candidates.values():
+        if type(entry) is dict and type(entry.get("operating_characteristics")) is dict:
+            oc = entry["operating_characteristics"]
+            break
+
+    def _oc(key: str) -> str:
+        """Return the oc."""
+        return _rate(oc.get(key))
+
+    tail_paragraphs = [
+        "<p>The estimand, stated once: value-changing "
+        "discordance between the verbatim control and one "
+        "treated rendering, over the id-divergent paired cases "
+        "both arms completed, for this candidate's template "
+        "family on this checkpoint. The claim is per candidate "
+        "and per arm; nothing is pooled, and a fire proves only "
+        "that this arm moved this checkpoint's answers to wrong "
+        "values inside the frozen grammar on this generated "
+        "population -- never a claim about weights, attacks, or "
+        "letters outside the frozen population. The claim is "
+        "skeleton-class substitution, never that a model is "
+        "fooled like a human: the model never sees glyphs. A "
+        "single_site fire is read as skeleton-class-specific "
+        "only if rarity_control does not also fire for the same "
+        "candidate; if both fire, the reading is that non-Latin "
+        "substitution at these sites disrupts this candidate, "
+        "not that skeleton equality is the mechanism. For "
+        "whole_word the isolation reading does not extend: a "
+        "whole-word solo fire reads verbatim -- "
+        "skeleton-class substitution at whole-word dose "
+        "disrupts this candidate; rarity at that dose is "
+        "unmeasured by this design.</p>",
+        "<p>Operating characteristics (exact enumeration under "
+        "per-case independence, q the arm's marginal in-grammar "
+        "wrong-value rate; the paired column couples the two "
+        "outcomes within each case at correlation 0.5 and is "
+        "computed exactly -- the design-phase Monte Carlo "
+        "understated it and is not printed): the competent "
+        "panel fires "
+        + _oc("fire_competent_independent")
+        + " independent and "
+        + _exact(oc.get("fire_competent_paired"))
+        + " paired; the weak panel (control rate 0.80) fires "
+        + _oc("fire_weak_independent")
+        + " and the random labeller "
+        + _oc("fire_random_independent")
+        + " -- the label is comparative evidence at a stated "
+        "base rate, which is why each candidate's control rate "
+        "prints beside its label above. Power at the 25-point "
+        "target effect is "
+        + _oc("power_drop25_base90")
+        + " at base .90 and "
+        + _oc("power_drop25_base85")
+        + " at base .85 (paired "
+        + _exact(oc.get("power_drop25_paired"))
+        + "); a 10-point drop fires only "
+        + _oc("power_drop10_base90")
+        + " of the time, so an acquittal is an observed null at "
+        "this panel's resolution, never proof of invariance. "
+        "Family-wise, over the 72 labelled comparisons (3 "
+        "treated arms x 24 candidates) the competent "
+        "expectation is "
+        + _rate(oc.get("familywise_competent_expected_72"))
+        + " false labels (probability of at least one "
+        + _oc("familywise_competent_any_72")
+        + "); paired, the expectation is "
+        + _exact(oc.get("familywise_paired_expected_72"))
+        + " (probability of at least one "
+        + _exact(oc.get("familywise_paired_any_72"))
+        + "); the random labeller's expectation is "
+        + _rate(oc.get("familywise_random_expected_72"))
+        + ". The rejected two-directional transplant rule "
+        "fires "
+        + _oc("transplant_fire_competent_independent")
+        + " on the same competent null, which is why the "
+        "floors are this instrument's own.</p>",
+        "<p>The completion guard, and what incompletion can "
+        "and cannot do: fires issue on observed counts over "
+        "completed cases, so removing a generation can never "
+        "create a wrong-value discordant; acquittal labels "
+        "issue only when stable under the worst-case completion "
+        "of the pair's incomplete id-divergent cases (the "
+        "completion ranges over divergent cases only -- an "
+        "encode-time property, decidable whether or not the "
+        "generation completed -- and counts each as a control "
+        "pass with an arm wrong value, a deliberate blanket "
+        "over-count), so removal can never manufacture an "
+        "acquittal either -- in the executed attack worlds "
+        "(10,000 trials each, ranging at design time over all "
+        "incomplete cases, the conservative direction; the "
+        "shipped battery re-executes them under the pinned "
+        "domain), sign-concentrated incompletion drives the "
+        "unguarded rule's below-threshold rate to "
+        + _oc("world_b_unguarded_below_threshold")
+        + " on a true drop while the guarded rate stays "
+        + _oc("world_b_guarded_below_threshold")
+        + ", the displaced mass withheld as insufficient. The "
+        "price of the guard is withholding: at the frozen cap "
+        "(incomplete id-divergent cases above 6 of 24 withhold "
+        "every label) the manufacture world fires "
+        + _oc("world_a_guarded_fire")
+        + " and the flat-incompletion drop world "
+        + _oc("world_c_guarded_fire")
+        + " against its unguarded "
+        + _oc("world_c_unguarded_fire")
+        + ". Printed limitations: the population is "
+        "single-version by construction (skeletons are not "
+        "version-stable; a Unicode bump is a population change, "
+        "never a silent upgrade); sequence-level skeleton "
+        "equivalence (the rn/m class) is outside the "
+        "single-code-point dose axis of v1; value changes "
+        "outside the frozen grammar print as non-answer and "
+        "are outside the headline claim; screening cost on "
+        "clean text is not measured by this arm set. Records "
+        "carry digests, except cells' answer text, which is "
+        "digest-bound and never rendered here.</p>",
+    ]
+    audit_letters: Any = {}
+    protocol = probe.get("protocol")
+    if type(protocol) is dict:
+        population = protocol.get("population_audit")
+        if type(population) is dict and type(population.get("letters")) is dict:
+            audit_letters = population["letters"]
+    legend_parts = []
+    for letter in sorted(audit_letters, key=str):
+        entry = audit_letters.get(letter)
+        if type(entry) is dict and entry.get("replacement"):
+            legend_parts.append(
+                f"{letter} -> {entry.get('replacement')} "
+                f"{entry.get('replacement_name')} "
+                f"(rarity control {entry.get('control')} "
+                f"{entry.get('control_name')})"
+            )
+    zero_eligible = [
+        letter
+        for letter in sorted(audit_letters, key=str)
+        if type(audit_letters.get(letter)) is dict and not audit_letters[letter].get("replacement")
+    ]
+    legend = (
+        "<p>The frozen population (confusables data, Unicode "
+        "15.0.0): "
+        + _escape_text("; ".join(legend_parts))
+        + ". Zero-eligible letters (no Cyrillic/Greek "
+        "small-letter skeleton equivalent): " + _escape_text(", ".join(zero_eligible)) + ".</p>"
+    )
+    return (
+        '<section class="card" id="confusable-skeleton">'
+        "<h2>Confusable skeleton (frozen UTS #39 skeleton-class substitution)</h2>"
+        "<p>This probe replaces Latin letters in a generated "
+        "fact sentence with their UTS #39 skeleton-equivalent "
+        "Cyrillic/Greek letters: each of the 24 generated cases "
+        "is a fact-recall item (a frozen topic, a word-number "
+        "inspection code, two neutral carrier sentences, a "
+        "question), rendered verbatim in the control arm and "
+        "with substitutions inside the fact sentence only in "
+        "three treated arms -- single-site (the first eligible "
+        "letter of the topic and of the code's word), "
+        "whole-word (every eligible letter), and a rarity "
+        "control (the single-site sites filled with a "
+        "same-script non-confusable letter: U+0434 for the "
+        "Cyrillic seat, U+03B6 for the Greek seat). The "
+        "question and carriers are byte-identical across arms; "
+        "the scorer is byte-exact conjoined with boundary "
+        "presence; every arm is a fixture with the same id, so "
+        "request seeds are identical across arms. Each cell is "
+        "one greedy generation. The readout is a guarded "
+        "classification per candidate and per arm over the "
+        "id-divergent paired population, with the operating "
+        "characteristics and the family-wise price printed "
+        "beside it.</p>" + legend + "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        + "".join(tail_paragraphs)
+        + "</section>"
+    )
+
+
 # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _rotation_section(result: dict[str, Any]) -> str:
     """Context rotation probe: does cyclically rotating the block span move the verdict?
@@ -11931,6 +12334,7 @@ def render_html(result: dict[str, Any]) -> str:
     prune_sweep_html = _prune_sweep_section(result)
     record_notation_html = _record_notation_section(result)
     invisible_chars_html = _invisible_chars_section(result)
+    confusable_skeleton_html = _confusable_skeleton_section(result)
     choiceaudit_html = _choiceaudit_section(result)
     precision_html = _precision_section(result)
     confidence_html = _confidence_section(result)
@@ -12137,6 +12541,11 @@ def render_html(result: dict[str, Any]) -> str:
                 invisible_chars_html,
             ),
             (
+                "confusable-skeleton",
+                "Confusable skeleton (frozen UTS #39 skeleton-class substitution)",
+                confusable_skeleton_html,
+            ),
+            (
                 "choice-audit",
                 "Choice-scoring audit (second opinion)",
                 choiceaudit_html,
@@ -12268,6 +12677,7 @@ def render_html(result: dict[str, Any]) -> str:
         + prune_sweep_html
         + record_notation_html
         + invisible_chars_html
+        + confusable_skeleton_html
         + choiceaudit_html
         + precision_html
         + confidence_html

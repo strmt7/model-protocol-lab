@@ -66,6 +66,7 @@ nav:
           - Prune sweep: PRUNESWEEP_DESIGN.md
           - Instruction distance: INSTRUCTIONDISTANCE_DESIGN.md
           - Invisible characters: INVISIBLECHARS_DESIGN.md
+          - Confusable skeleton: CONFUSABLESKELETON_DESIGN.md
           - Leading claim: LEADING_DESIGN.md
           - Multi-turn drift: MULTITURN_DESIGN.md
           - Needle depth: NEEDLE_DESIGN.md
