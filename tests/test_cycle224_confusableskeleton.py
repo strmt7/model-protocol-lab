@@ -280,10 +280,20 @@ class TestGeneratorFreeze(unittest.TestCase):
         self.assertEqual(cs.POPULATION_COUNTS["l"], (73, 0))
         self.assertEqual(cs.POPULATION_COUNTS["o"], (75, 3))
         self.assertEqual(cs.CONFUSABLES_VERSION, "15.0.0")
-        self.assertEqual(unicodedata.unidata_version, "15.0.0")
+        # The pin is on the DATA (the versioned file digests
+        # below plus the frozen literal tables), not on the
+        # host interpreter: the audit records the runtime UCD
+        # version as read, and the frozen characters' names,
+        # categories and normalization forms are stable
+        # across the supported interpreters' UCD versions.
+        self.assertEqual(cs.POPULATION_AUDIT["unicode_version"], unicodedata.unidata_version)
         self.assertEqual(
             cs.CONFUSABLES_SHA256,
             "2b10130885c3370b101c52d7baedc452ab7f0e257b86c1e52ee657ecfc29ce64",
+        )
+        self.assertEqual(
+            cs.CONFUSABLES_DERIVED_SHA256,
+            "d367290bc0867e6b484c68370530bdd1a08b6b32404601b8c7accaf83e05628d",
         )
 
     def test_rarity_assignment_is_the_name_prefix_rule(self):

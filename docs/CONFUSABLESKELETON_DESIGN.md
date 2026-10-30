@@ -174,6 +174,21 @@ weight:
    property claims to UCD 15.0.0 for the same interpreter reason
    (adjudicated sound).
 
+**Runtime posture (build clarification, cycle 224).** The
+derivation above happened once, at design time, under UCD
+15.0.0; the shipped module carries the population as frozen
+literal tables and file digests — it does not re-derive
+anything from the host's UCD at runtime. The runtime audit
+records the host's `unicodedata.unidata_version` as read and
+checks the frozen characters' names, categories and
+normalization forms, every one of which was assigned long
+before Unicode 14.0 and is unchanged in 14.0, 15.0 and 15.1;
+the audit's verdicts are therefore the same on every
+supported interpreter, and only the recorded version string
+differs. A future Unicode version that changed one of those
+frozen characters' properties would be a population change
+under reason 2, caught by the audit going red.
+
 **The skeleton function** (UTS #39 rev 27 §4, verbatim):
 skeleton(X) = (1) NFD; (2) remove Default_Ignorable_Code_Point
 characters; (3) concatenate per-character prototypes from the

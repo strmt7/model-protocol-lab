@@ -45,12 +45,17 @@ enforced by the generator battery, so the byte-exact scorer
 can never manufacture discordance out of the value itself.
 
 The population is derived from confusables.txt pinned to
-Unicode 15.0.0 -- the local interpreter's UCD version, so the
-derivation is single-version -- with the DICP set of skeleton
-step 2 from DerivedCoreProperties.txt 15.0.0; both files'
-SHA-256 digests are frozen constants below, and UTS #39 rev
-27 (a 15.1.0 draft) is cited for the section 4 algorithm only,
-never for data, because skeletons are not version-stable. A
+Unicode 15.0.0 -- the design-time interpreter's UCD version,
+so the derivation is single-version -- with the DICP set of
+skeleton step 2 from DerivedCoreProperties.txt 15.0.0; both
+files' SHA-256 digests are frozen constants below, and UTS
+#39 rev 27 (a 15.1.0 draft) is cited for the section 4
+algorithm only, never for data, because skeletons are not
+version-stable. The shipped tables are frozen literals: at
+runtime the audit records the host's UCD version as read and
+checks only properties of the frozen characters that are
+stable across the supported interpreters' UCD versions
+(14.0 / 15.0 / 15.1). A
 code point is an eligible replacement for a panel letter iff
 its skeleton equals the letter's under the pinned data, its
 unicodedata name starts with CYRILLIC SMALL LETTER or GREEK
