@@ -139,6 +139,7 @@ import os
 import random
 import re
 import tempfile
+import unicodedata
 import unittest
 from pathlib import Path
 from typing import Any
@@ -298,6 +299,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "history_frame": {"available": "neither", "changed": False},
         "prune_sweep": {"available": "neither", "changed": False},
         "record_notation": {"available": "neither", "changed": False},
+        "invisible_chars": {"available": "neither", "changed": False},
         "choice_audit": {"available": "neither", "changed": False},
         "precision": {"available": "neither", "changed": False},
         "confidence": {"available": "neither", "changed": False},
@@ -401,6 +403,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "prune_sweep_asymmetric": False,
             "record_notation_changed": False,
             "record_notation_asymmetric": False,
+            "invisible_chars_changed": False,
+            "invisible_chars_asymmetric": False,
             "choice_audit_changed": False,
             "choice_audit_asymmetric": False,
             "precision_changed": False,
@@ -9947,6 +9951,884 @@ def _o_recordnotation(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+# ---------------------------------------------------------------------------
+# Invisible characters (cycle 223): independent oracle for
+# diffreports._valid_invisible_chars / diff_invisible_chars,
+# re-implemented from docs/INVISIBLECHARS_DESIGN.md as
+# amended (A1-A10). The generator's digest-to-integer
+# conversion is frozen (amendment A1); every cell carries
+# digest-bound answer_text; the headline is the guarded
+# classification over the id-divergent paired population
+# (amendments A3/A4); the decomposition is the ordered
+# decision list (amendment A5) with the echo/form steps on
+# the five invisible arms only (amendment A6).
+
+
+_O_IC_TOPICS = (
+    "harbor",
+    "summit",
+    "quarry",
+    "tundra",
+    "granite",
+    "willow",
+    "copper",
+    "saddle",
+    "walnut",
+    "velvet",
+    "cobalt",
+    "marble",
+    "cinder",
+    "falcon",
+    "garnet",
+    "saffron",
+    "indigo",
+    "juniper",
+    "lagoon",
+    "magnet",
+    "nickel",
+    "pepper",
+    "quartz",
+    "birch",
+)
+_O_IC_WORDS = (
+    "alder",
+    "basalt",
+    "cedar",
+    "drift",
+    "elm",
+    "fern",
+    "glade",
+    "heath",
+    "iris",
+    "jade",
+    "kelp",
+    "loom",
+    "moss",
+    "nova",
+    "ochre",
+    "pine",
+    "quill",
+    "reed",
+    "sage",
+    "tide",
+    "urn",
+    "vale",
+    "wren",
+    "yew",
+)
+_O_IC_NEUTRAL_STATEMENTS = (
+    "The weather changed slowly during the afternoon hours.",
+    "A wooden fence runs along the edge of the property.",
+    "She placed the documents inside a plain folder yesterday.",
+    "The train arrived later than the schedule suggested.",
+    "Fresh bread was cooling on the counter near the sink.",
+    "He repaired the bicycle with tools from the garage.",
+    "The bookshop extends its opening hours during summer.",
+    "Several chairs were arranged around the long table.",
+    "The recipe calls for a pinch of salt and herbs.",
+    "They walked along the path beside the lake at dawn.",
+    "The committee postponed its decision until next week.",
+    "A thick layer of dust covered the old furniture.",
+    "The children played quietly in the courtyard after lunch.",
+    "His handwriting was difficult to read in places.",
+    "The farmer harvested the fields before the rain came.",
+    "An old map hung framed on the wall of the hallway.",
+    "The accountant reviewed the figures a second time.",
+    "Birds gathered on the rooftops as the sun went down.",
+    "The mechanic inspected the engine and changed the oil.",
+    "A narrow staircase led up to the attic.",
+    "The orchestra rehearsed the piece several times over.",
+    "Someone left a bicycle leaning against the railing.",
+    "The soup simmered gently on the stove all morning.",
+    "Visitors signed the guest book near the entrance.",
+)
+_O_IC_ARM_CODEPOINTS = {
+    "control": None,
+    "zwsp": "\u200b",
+    "vs16": "\ufe0f",
+    "tag": "\U000e0001",
+    "softhyphen": "\u00ad",
+    "wj": "\u2060",
+    "visible_hyphen": "-",
+}
+_O_IC_ARM_KEYS = ("control", "zwsp", "vs16", "tag", "softhyphen", "wj", "visible_hyphen")
+_O_IC_TREATED_ARMS = _O_IC_ARM_KEYS[1:]
+_O_IC_INVISIBLE_ARMS = ("zwsp", "vs16", "tag", "softhyphen", "wj")
+_O_IC_CASE_COUNT = 24
+_O_IC_MIN_D = 10
+_O_IC_MIN_J = 6
+_O_IC_MAX_INCOMPLETE = 6
+_O_IC_REDRAW_LIMIT = 1000
+_O_IC_GENERATOR_SPEC = (
+    "draw(seed, index, slot, counter) = int.from_bytes("
+    "sha256(f'{seed}|invisiblechars|{index}|{slot}|{counter}')"
+    ".digest()[:8], 'big'); slot 0: word = WORDS[draw % len(WORDS)]; "
+    "slot 1: number = 1000 + draw % 9000; a value colliding with an "
+    "earlier case redraws both slots at counter+1, giving up after "
+    "1000 consecutive redraws (the stage fails closed); slots 2/3: "
+    "neutral indices = draw % len(NEUTRAL_STATEMENTS), the second "
+    "advancing +1 on collision"
+)
+_O_IC_MAX_CANDIDATES = 24
+_O_IC_MAX_GROUND_RECORDS = _O_IC_MAX_CANDIDATES * _O_IC_CASE_COUNT
+_O_IC_GENERATION_BUDGET = len(_O_IC_ARM_KEYS) * _O_IC_MAX_GROUND_RECORDS
+_O_IC_MAX_RECORDS_BYTES = 12 * 1024 * 1024
+_O_IC_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+    "answer_text",
+}
+_O_IC_DETAILS = ("arm_context_exceeded", "arm_evaluation_failed")
+_O_IC_CELL_CLASSES = (
+    "pass",
+    "boundary_only",
+    "wrong_value",
+    "echo_invisible",
+    "form_only",
+    "non_answer",
+)
+_O_IC_PAIR_CLASSES = ("exact_only", "boundary_only", "mixed")
+_O_IC_OC = {
+    "fire_competent_independent": 0.0173,
+    "fire_competent_paired": 0.0044,
+    "fire_weak_independent": 0.1743,
+    "fire_random_independent": 0.5503,
+    "power_drop10_base90": 0.2542,
+    "power_drop25_base90": 0.8159,
+    "power_drop25_base85": 0.8761,
+    "power_drop25_paired": 0.6981,
+    "power_drop50_base90": 0.999,
+    "sensitivity18_drop25": 0.5214,
+    "sensitivity18_competent": 0.0038,
+    "panel_sweep_16_drop25": 0.3904,
+    "panel_sweep_20_drop25": 0.6395,
+    "transplant_fire_competent_independent": 0.8897,
+    "familywise_competent_expected_120": 2.07,
+    "familywise_competent_any_120": 0.8764,
+    "familywise_competent_expected_144": 2.49,
+    "familywise_competent_any_144": 0.9187,
+    "familywise_paired_expected_120": 0.53,
+    "familywise_paired_any_120": 0.4139,
+    "familywise_random_expected_120": 66.04,
+    "world_a_guarded_fire": 0.0014,
+    "world_b_unguarded_below_threshold": 0.7285,
+    "world_b_guarded_below_threshold": 0.0133,
+    "world_c_guarded_fire": 0.8932,
+    "world_c_unguarded_fire": 0.9408,
+}
+_O_IC_AGGREGATE_KEYS = {
+    "arms",
+    "ids",
+    "headline",
+    "operating_characteristics",
+    "n_cases",
+    "n_incomplete",
+}
+
+
+def _o_ic_sha(text: str) -> str:
+    """O ic sha."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _o_ic_digest_ok(value: Any) -> bool:
+    """O ic digest ok."""
+    if type(value) is not str or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in value)
+
+
+def _o_ic_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    """O ic derive."""
+    material = f"{seed}|invisiblechars|{index}|{slot}|{counter}"
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+
+
+def _o_ic_generate(seed: int):
+    """O ic generate."""
+    cases: list = []
+    seen: set = set()
+    for index in range(_O_IC_CASE_COUNT):
+        counter = 0
+        while True:
+            word = _O_IC_WORDS[_o_ic_derive(seed, index, 0, counter) % len(_O_IC_WORDS)]
+            number = 1000 + _o_ic_derive(seed, index, 1, counter) % 9000
+            value = f"{word}-{number}"
+            if value not in seen:
+                break
+            counter += 1
+            if counter > _O_IC_REDRAW_LIMIT:
+                return None
+        seen.add(value)
+        first = _o_ic_derive(seed, index, 2, 0) % len(_O_IC_NEUTRAL_STATEMENTS)
+        second = _o_ic_derive(seed, index, 3, 0) % len(_O_IC_NEUTRAL_STATEMENTS)
+        if second == first:
+            second = (first + 1) % len(_O_IC_NEUTRAL_STATEMENTS)
+        cases.append(
+            {
+                "fixture_id": f"invisiblechars-{index:02d}",
+                "topic": _O_IC_TOPICS[index],
+                "value": value,
+                "expected": value,
+                "neutral_indices": [first, second],
+            }
+        )
+    return cases
+
+
+def _o_ic_fact(case: dict) -> str:
+    """O ic fact."""
+    return f"The {case['topic']} inspection code is {case['value']}."
+
+
+def _o_ic_question(case: dict) -> str:
+    """O ic question."""
+    return f"What is the {case['topic']} inspection code?"
+
+
+def _o_ic_treated_fact(case: dict, code_point: str) -> str:
+    """O ic treated fact."""
+    topic = str(case["topic"])
+    word, _, number = str(case["value"]).partition("-")
+    treated_topic = topic[:2] + code_point + topic[2:]
+    treated_value = word[:2] + code_point + word[2:] + "-" + number
+    return f"The {treated_topic} inspection code is {treated_value}."
+
+
+def _o_ic_arm_content(case: dict, arm: str) -> str:
+    """O ic arm content."""
+    first, second = (int(i) for i in case["neutral_indices"])
+    code_point = _O_IC_ARM_CODEPOINTS[arm]
+    fact = _o_ic_fact(case) if code_point is None else _o_ic_treated_fact(case, code_point)
+    return (
+        f"{_O_IC_NEUTRAL_STATEMENTS[first]} {fact} "
+        f"{_O_IC_NEUTRAL_STATEMENTS[second]} {_o_ic_question(case)}"
+    )
+
+
+def _o_ic_population_audit() -> dict:
+    """O ic population audit."""
+    arms: dict = {}
+    ok = True
+    for arm in (*_O_IC_INVISIBLE_ARMS, "visible_hyphen"):
+        code_point = _O_IC_ARM_CODEPOINTS[arm]
+        try:
+            name = unicodedata.name(code_point)
+        except ValueError:
+            name = ""
+        category = unicodedata.category(code_point)
+        combining = unicodedata.combining(code_point)
+        satisfies = bool(name) and category in ("Cf", "Mn") and combining == 0
+        if arm in _O_IC_INVISIBLE_ARMS and not satisfies:
+            ok = False
+        arms[arm] = {
+            "code_point": f"U+{ord(code_point):04X}",
+            "name": name,
+            "category": category,
+            "combining_class": combining,
+            "satisfies_predicate": satisfies,
+        }
+    return {"arms": arms, "ok": ok, "unicode_version": unicodedata.unidata_version}
+
+
+def _o_ic_case_material_sha256() -> str:
+    """O ic case material sha256."""
+    material = {
+        "topics": list(_O_IC_TOPICS),
+        "words": list(_O_IC_WORDS),
+        "neutral_statements": list(_O_IC_NEUTRAL_STATEMENTS),
+        "arm_codepoints": {arm: _O_IC_ARM_CODEPOINTS[arm] for arm in _O_IC_ARM_KEYS},
+        "generator_spec": _O_IC_GENERATOR_SPEC,
+        "case_count": _O_IC_CASE_COUNT,
+        "arm_keys": list(_O_IC_ARM_KEYS),
+        "min_d": _O_IC_MIN_D,
+        "min_j": _O_IC_MIN_J,
+        "max_incomplete": _O_IC_MAX_INCOMPLETE,
+        "redraw_limit": _O_IC_REDRAW_LIMIT,
+        "population_audit": _o_ic_population_audit(),
+    }
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return _o_ic_sha(canonical)
+
+
+def _o_ic_ground_sha256(seed: int):
+    """O ic ground sha256."""
+    generated = _o_ic_generate(seed)
+    if generated is None:
+        return None
+    rows = [
+        [case["fixture_id"], case["topic"], case["value"], list(case["neutral_indices"])]
+        for case in generated
+    ]
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _o_ic_sha(canonical)
+
+
+def _o_ic_protocol(seed: int, backend_fingerprint: str):
+    """O ic protocol."""
+    ground = _o_ic_ground_sha256(seed)
+    if ground is None:
+        return None
+    protocol: dict = {
+        "version": 1,
+        "arm_keys": list(_O_IC_ARM_KEYS),
+        "treated_arms": list(_O_IC_TREATED_ARMS),
+        "invisible_arms": list(_O_IC_INVISIBLE_ARMS),
+        "case_count": _O_IC_CASE_COUNT,
+        "min_d": _O_IC_MIN_D,
+        "min_j": _O_IC_MIN_J,
+        "max_incomplete": _O_IC_MAX_INCOMPLETE,
+        "case_material_sha256": _o_ic_case_material_sha256(),
+        "ground_sha256": ground,
+        "population_audit": _o_ic_population_audit(),
+        "generation_budget": _O_IC_GENERATION_BUDGET,
+        "max_ground_records": _O_IC_MAX_GROUND_RECORDS,
+        "max_records_bytes": _O_IC_MAX_RECORDS_BYTES,
+        "max_candidates": _O_IC_MAX_CANDIDATES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _o_ic_sha(canonical)
+    return protocol
+
+
+def _o_ic_cell(record: dict, key: str):
+    """O ic cell."""
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(key)
+    return cell if isinstance(cell, dict) else None
+
+
+def _o_ic_detail(record: dict, key: str) -> str:
+    """O ic detail."""
+    details = record.get("cell_details")
+    if not isinstance(details, dict):
+        return ""
+    detail = details.get(key, "")
+    return detail if type(detail) is str else ""
+
+
+def _o_ic_verdict(record: dict, key: str) -> bool:
+    """O ic verdict."""
+    cell = _o_ic_cell(record, key)
+    return bool(cell is not None and cell["verdict"])
+
+
+def _o_ic_ids_identical(record: dict, arm: str) -> bool:
+    """O ic ids identical."""
+    digests = record.get("id_digests")
+    if not isinstance(digests, dict):
+        return False
+    control = digests.get("control")
+    return type(control) is str and control != "" and control == digests.get(arm)
+
+
+def _o_ic_decompose_cell(cell: dict, expected: str, expected_digest: str, arm: str) -> str:
+    """O ic decompose cell."""
+    if cell.get("verdict") is True:
+        return "pass"
+    digest = cell.get("answer_digest")
+    if digest is not None and digest == expected_digest:
+        return "boundary_only"
+    text = cell.get("answer_text")
+    if type(text) is not str:
+        return "non_answer"
+    if text != expected and re.match(r"^[a-z]+-[0-9]{4}$", text):
+        word, _, number = text.partition("-")
+        if word in _O_IC_WORDS and 1000 <= int(number) <= 9999:
+            return "wrong_value"
+    code_point = _O_IC_ARM_CODEPOINTS[arm]
+    if arm in _O_IC_INVISIBLE_ARMS and code_point is not None:
+        word, _, number = expected.partition("-")
+        site_echo = word[:2] + code_point + word[2:] + "-" + number
+        if text == site_echo:
+            return "echo_invisible"
+        if text != expected and text.replace(code_point, "") == expected:
+            return "form_only"
+    return "non_answer"
+
+
+def _o_ic_decompose_pair(control_cell: dict, arm_cell: dict) -> str:
+    """O ic decompose pair."""
+    if control_cell.get("answer_digest") == arm_cell.get("answer_digest"):
+        return "boundary_only"
+    if control_cell.get("boundary_found") and arm_cell.get("boundary_found"):
+        return "exact_only"
+    return "mixed"
+
+
+def _o_ic_classify(control_passes: int, wrong_values: int, n_incomplete: int) -> str:
+    """O ic classify."""
+    if n_incomplete > _O_IC_MAX_INCOMPLETE:
+        return "insufficient"
+    if control_passes < _O_IC_MIN_D:
+        return "insufficient"
+    if wrong_values >= _O_IC_MIN_J:
+        return "discordant_asymmetric"
+    if wrong_values == 0:
+        return "no_discordance_observed" if n_incomplete == 0 else "insufficient"
+    return "below_threshold" if wrong_values + n_incomplete < _O_IC_MIN_J else "insufficient"
+
+
+def _o_ic_rate(numerator: int, denominator: int):
+    """O ic rate."""
+    return (numerator / denominator) if denominator else None
+
+
+def _o_ic_aggregate(records: list, cases: list) -> dict:
+    """O ic aggregate."""
+    expected_by_fixture = {str(case["fixture_id"]): str(case["expected"]) for case in cases}
+    arms: dict = {}
+    for key in _O_IC_ARM_KEYS:
+        n_completed = 0
+        n_pass = 0
+        n_context = 0
+        n_failed = 0
+        decomposition = dict.fromkeys(_O_IC_CELL_CLASSES, 0)
+        for record in records:
+            detail = _o_ic_detail(record, key)
+            if detail == "arm_context_exceeded":
+                n_context += 1
+            elif detail == "arm_evaluation_failed":
+                n_failed += 1
+            cell = _o_ic_cell(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell["verdict"]:
+                n_pass += 1
+            decomposition[
+                _o_ic_decompose_cell(
+                    cell,
+                    expected_by_fixture.get(str(record.get("fixture", "")), ""),
+                    str(record.get("expected_digest", "")),
+                    key,
+                )
+            ] += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": _o_ic_rate(n_pass, n_completed),
+            "n_context_exceeded": n_context,
+            "n_evaluation_failed": n_failed,
+            "decomposition": decomposition,
+        }
+    ids: dict = {}
+    for arm in _O_IC_TREATED_ARMS:
+        deltas: list = []
+        n_ids_identical = 0
+        n_same_ids_flips = 0
+        for record in records:
+            tokens = record.get("arm_tokens")
+            tokens = tokens if isinstance(tokens, dict) else {}
+            treated = tokens.get(arm)
+            baseline = tokens.get("control")
+            if type(treated) is int and type(baseline) is int:
+                deltas.append(treated - baseline)
+            else:
+                deltas.append(0)
+            if _o_ic_ids_identical(record, arm):
+                n_ids_identical += 1
+                control_cell = _o_ic_cell(record, "control")
+                arm_cell = _o_ic_cell(record, arm)
+                if (
+                    control_cell is not None
+                    and arm_cell is not None
+                    and control_cell["verdict"] != arm_cell["verdict"]
+                ):
+                    n_same_ids_flips += 1
+        ids[arm] = {
+            "n_ids_identical": n_ids_identical,
+            "n_ids_divergent": len(records) - n_ids_identical,
+            "id_length_delta": deltas,
+            "max_abs_id_delta": max((abs(delta) for delta in deltas), default=0),
+            "n_same_ids_verdict_flips": n_same_ids_flips,
+        }
+    headline: dict = {}
+    for arm in _O_IC_TREATED_ARMS:
+        domain = [record for record in records if not _o_ic_ids_identical(record, arm)]
+        paired = [
+            record
+            for record in domain
+            if _o_ic_cell(record, "control") is not None and _o_ic_cell(record, arm) is not None
+        ]
+        n_incomplete = len(domain) - len(paired)
+        control_passes = 0
+        wrong_values = 0
+        reverse = 0
+        non_answer = 0
+        pair_decomposition = dict.fromkeys(_O_IC_PAIR_CLASSES, 0)
+        failing_classes = dict.fromkeys(_O_IC_CELL_CLASSES, 0)
+        for record in paired:
+            control_cell = _o_ic_cell(record, "control")
+            arm_cell = _o_ic_cell(record, arm)
+            if control_cell is None or arm_cell is None:
+                continue
+            expected = expected_by_fixture.get(str(record.get("fixture", "")), "")
+            expected_digest = str(record.get("expected_digest", ""))
+            arm_class = _o_ic_decompose_cell(arm_cell, expected, expected_digest, arm)
+            if arm_class == "non_answer":
+                non_answer += 1
+            if control_cell["verdict"]:
+                control_passes += 1
+                if arm_class == "wrong_value":
+                    wrong_values += 1
+            elif arm_cell["verdict"]:
+                reverse += 1
+            if control_cell["verdict"] != arm_cell["verdict"]:
+                pair_decomposition[_o_ic_decompose_pair(control_cell, arm_cell)] += 1
+                failing = arm_cell if control_cell["verdict"] else control_cell
+                failing_arm = arm if control_cell["verdict"] else "control"
+                failing_classes[
+                    _o_ic_decompose_cell(failing, expected, expected_digest, failing_arm)
+                ] += 1
+        headline[arm] = {
+            "label": _o_ic_classify(control_passes, wrong_values, n_incomplete),
+            "n_population": len(paired),
+            "n_incomplete": n_incomplete,
+            "control_passes": control_passes,
+            "wrong_values": wrong_values,
+            "n_reverse": reverse,
+            "control_rate": _o_ic_rate(control_passes, len(paired)),
+            "arm_rate": _o_ic_rate(
+                sum(1 for record in paired if _o_ic_verdict(record, arm)), len(paired)
+            ),
+            "n_non_answer": non_answer,
+            "pair_decomposition": pair_decomposition,
+            "failing_classes": failing_classes,
+        }
+    return {
+        "arms": arms,
+        "ids": ids,
+        "headline": headline,
+        "operating_characteristics": dict(_O_IC_OC),
+        "n_cases": len(records),
+        "n_incomplete": sum(
+            1
+            for record in records
+            if any(_o_ic_cell(record, arm) is None for arm in _O_IC_ARM_KEYS)
+        ),
+    }
+
+
+def _o_ic_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """O ic cell ok."""
+    if type(cell) is not dict or set(cell) != _O_IC_CELL_FIELDS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    digest = cell["answer_digest"]
+    if digest is not None and not _o_ic_digest_ok(digest):
+        return False
+    text = cell["answer_text"]
+    if text is None:
+        if digest is not None:
+            return False
+    elif type(text) is not str or _o_ic_sha(text) != digest:
+        return False
+    verdict = (digest == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _o_ic_recompute(payload: Any):
+    """O ic recompute."""
+    if type(payload) is not dict:
+        return None
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
+        return None
+    expected_protocol = _o_ic_protocol(seed, backend_fingerprint)
+    if expected_protocol is None or protocol != expected_protocol:
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    if len(candidates) > _O_IC_MAX_CANDIDATES:
+        return None
+    generated = _o_ic_generate(seed)
+    if generated is None:
+        return None
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _O_IC_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _O_IC_MAX_RECORDS_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "content_digests",
+                "arm_tokens",
+                "id_digests",
+                "ids_identical",
+                "id_length_delta",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"]:
+                return None
+            if record["topic"] != case["topic"]:
+                return None
+            expected_digest = _o_ic_sha(str(case["expected"]))
+            if record["expected_digest"] != expected_digest:
+                return None
+            arm_tokens = record["arm_tokens"]
+            id_digests = record["id_digests"]
+            content_digests = record["content_digests"]
+            ids_identical = record["ids_identical"]
+            id_length_delta = record["id_length_delta"]
+            cells = record["cells"]
+            details = record["cell_details"]
+            for mapping in (arm_tokens, id_digests, content_digests, cells, details):
+                if type(mapping) is not dict or set(mapping) != set(_O_IC_ARM_KEYS):
+                    return None
+            for mapping in (ids_identical, id_length_delta):
+                if type(mapping) is not dict or set(mapping) != set(_O_IC_TREATED_ARMS):
+                    return None
+            for arm in _O_IC_TREATED_ARMS:
+                if ids_identical[arm] is not (id_digests[arm] == id_digests["control"]):
+                    return None
+                if id_length_delta[arm] != arm_tokens[arm] - arm_tokens["control"]:
+                    return None
+            for arm in _O_IC_ARM_KEYS:
+                tokens = arm_tokens[arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                    return None
+                if not _o_ic_digest_ok(id_digests[arm]):
+                    return None
+                if content_digests[arm] != _o_ic_sha(_o_ic_arm_content(case, arm)):
+                    return None
+                cell = cells[arm]
+                detail = details[arm]
+                if detail not in ("", *_O_IC_DETAILS):
+                    return None
+                if cell is None:
+                    if detail == "":
+                        return None
+                    continue
+                if detail != "":
+                    return None
+                if not _o_ic_cell_ok(cell, expected_digest):
+                    return None
+                if cell["input_tokens"] != tokens:
+                    return None
+        aggregates[name] = _o_ic_aggregate(records, generated)
+    if total_records > _O_IC_MAX_GROUND_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    return {
+        "aggregates": aggregates,
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _o_invisiblechars_valid(value: Any) -> bool:
+    """Oracle invisible-chars validator: mirrors
+    diffreports._valid_invisible_chars.
+    """
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if value.get("detail") != "":
+        return False
+    audit = value.get("audit")
+    if type(audit) is not dict or set(audit) != {
+        "n_audit_excluded",
+        "by_reason",
+        "special_token_findings",
+    }:
+        return False
+    if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+        return False
+    if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+        return False
+    by_reason = audit["by_reason"]
+    if type(by_reason) is not dict:
+        return False
+    for key, count in by_reason.items():
+        if type(key) is not str or type(count) is not int or count < 0:
+            return False
+    recomputed = _o_ic_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, val in expected.items():
+            if entry.get(key) != val:
+                return False
+    if value.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(value.get("n_cases") == recomputed["n_cases"])
+
+
+def _o_invisiblechars(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle invisible-chars section: mirrors
+    diffreports.diff_invisible_chars.
+    """
+    old_ok = _o_invisiblechars_valid(old)
+    new_ok = _o_invisiblechars_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    ) or old["protocol"].get("case_material_sha256") != new["protocol"].get("case_material_sha256")
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not generator_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        metrics: list = []
+        for arm in _O_IC_ARM_KEYS:
+            metrics.append(
+                (f"{arm}_rate", old_entry["arms"][arm]["rate"], new_entry["arms"][arm]["rate"])
+            )
+        for arm in _O_IC_TREATED_ARMS:
+            old_head = old_entry["headline"][arm]
+            new_head = new_entry["headline"][arm]
+            old_ids = old_entry["ids"][arm]
+            new_ids = new_entry["ids"][arm]
+            metrics.extend(
+                [
+                    (f"{arm}_label", old_head["label"], new_head["label"]),
+                    (
+                        f"{arm}_control_passes",
+                        old_head["control_passes"],
+                        new_head["control_passes"],
+                    ),
+                    (f"{arm}_wrong_values", old_head["wrong_values"], new_head["wrong_values"]),
+                    (f"{arm}_n_reverse", old_head["n_reverse"], new_head["n_reverse"]),
+                    (f"{arm}_n_population", old_head["n_population"], new_head["n_population"]),
+                    (f"{arm}_n_incomplete", old_head["n_incomplete"], new_head["n_incomplete"]),
+                    (f"{arm}_n_non_answer", old_head["n_non_answer"], new_head["n_non_answer"]),
+                    (f"{arm}_control_rate", old_head["control_rate"], new_head["control_rate"]),
+                    (f"{arm}_arm_rate", old_head["arm_rate"], new_head["arm_rate"]),
+                    (
+                        f"{arm}_pair_exact_only",
+                        old_head["pair_decomposition"]["exact_only"],
+                        new_head["pair_decomposition"]["exact_only"],
+                    ),
+                    (
+                        f"{arm}_pair_boundary_only",
+                        old_head["pair_decomposition"]["boundary_only"],
+                        new_head["pair_decomposition"]["boundary_only"],
+                    ),
+                    (
+                        f"{arm}_pair_mixed",
+                        old_head["pair_decomposition"]["mixed"],
+                        new_head["pair_decomposition"]["mixed"],
+                    ),
+                    (
+                        f"{arm}_n_ids_identical",
+                        old_ids["n_ids_identical"],
+                        new_ids["n_ids_identical"],
+                    ),
+                    (
+                        f"{arm}_max_abs_id_delta",
+                        old_ids["max_abs_id_delta"],
+                        new_ids["max_abs_id_delta"],
+                    ),
+                    (
+                        f"{arm}_n_same_ids_verdict_flips",
+                        old_ids["n_same_ids_verdict_flips"],
+                        new_ids["n_same_ids_verdict_flips"],
+                    ),
+                ]
+            )
+        for metric, old_value, new_value in metrics:
+            if old_value != new_value:
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    diff["candidate_drift"] = candidate_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["generator_drift"] = generator_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        candidate_drift or added or removed or protocol_drift or generator_drift or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_instructiondistance_valid(value: Any) -> bool:
     """Oracle instruction-distance validator: mirrors
     diffreports._valid_instruction_distance.
@@ -14439,6 +15321,9 @@ def _oracle_diff(
     o_rn, o_rn_changed, o_rn_asymmetric = _o_recordnotation(
         old.get("record_notation"), new.get("record_notation")
     )
+    o_ic, o_ic_changed, o_ic_asymmetric = _o_invisiblechars(
+        old.get("invisible_chars"), new.get("invisible_chars")
+    )
     o_ca, o_ca_changed, o_ca_asymmetric = _o_choiceaudit(
         old.get("choice_audit"), new.get("choice_audit")
     )
@@ -14608,6 +15493,7 @@ def _oracle_diff(
         "history_frame": o_hf,
         "prune_sweep": o_ps,
         "record_notation": o_rn,
+        "invisible_chars": o_ic,
         "choice_audit": o_ca,
         "precision": o_pr,
         "confidence": o_cfd,
@@ -14707,6 +15593,8 @@ def _oracle_diff(
             "prune_sweep_asymmetric": o_ps_asymmetric,
             "record_notation_changed": o_rn_changed,
             "record_notation_asymmetric": o_rn_asymmetric,
+            "invisible_chars_changed": o_ic_changed,
+            "invisible_chars_asymmetric": o_ic_asymmetric,
             "choice_audit_changed": o_ca_changed,
             "choice_audit_asymmetric": o_ca_asymmetric,
             "precision_changed": o_pr_changed,
@@ -15685,6 +16573,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "prune_sweep_asymmetric": False,
                 "record_notation_changed": False,
                 "record_notation_asymmetric": False,
+                "invisible_chars_changed": False,
+                "invisible_chars_asymmetric": False,
                 "choice_audit_changed": False,
                 "choice_audit_asymmetric": False,
                 "precision_changed": False,
@@ -19791,6 +20681,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not prune_sweep_asymmetric\n"
             '        and not record_notation_diff["changed"]\n'
             "        and not record_notation_asymmetric\n"
+            '        and not invisible_chars_diff["changed"]\n'
+            "        and not invisible_chars_asymmetric\n"
             '        and not choiceaudit_diff["changed"]\n'
             "        and not choiceaudit_asymmetric\n"
             '        and not precision_diff["changed"]\n'
@@ -19897,6 +20789,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or prune_sweep_asymmetric\n"
             '        or record_notation_diff["changed"]\n'
             "        or record_notation_asymmetric\n"
+            '        or invisible_chars_diff["changed"]\n'
+            "        or invisible_chars_asymmetric\n"
             '        or choiceaudit_diff["changed"]\n'
             "        or choiceaudit_asymmetric\n"
             '        or precision_diff["changed"]\n'
@@ -20406,6 +21300,105 @@ class RecordNotationOracleAgreementTests(unittest.TestCase):
         real = diffreports.diff_reports(old, new)
         self.assertEqual(oracle["record_notation"], real["record_notation"])
         self.assertEqual(real["record_notation"]["available"], "old")
+
+
+class InvisibleCharsOracleAgreementTests(unittest.TestCase):
+    """Cycle 223: the invisible-chars oracle must agree with
+    the real diff on REAL stage payloads, not just on the
+    neither stubs the fuzzer produces (the fuzzer emits no
+    invisible_chars section, so without this test the
+    oracle's recompute depth -- including the frozen
+    digest-derivation regeneration (amendment A1), the
+    per-arm content-digest rebinding, the ids-flag
+    derivation (amendment A3), and the answer-text binding
+    -- would be unproven).
+    """
+
+    @staticmethod
+    def _payload(mode):
+        """Payload."""
+        from tests.test_cycle223_invisiblechars import _payload, _WordBackend
+
+        return _payload(_WordBackend(mode))
+
+    @staticmethod
+    def _pair(old_payload, new_payload):
+        """Pair."""
+        old = _base_report()
+        new = _base_report()
+        old["invisible_chars"] = old_payload
+        new["invisible_chars"] = new_payload
+        return old, new
+
+    def test_identical_real_payloads_agree(self):
+        """Identical real payloads agree."""
+        payload = self._payload("perfect")
+        old, new = self._pair(payload, copy.deepcopy(payload))
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["invisible_chars"], real["invisible_chars"])
+        self.assertEqual(
+            oracle["summary"]["invisible_chars_changed"],
+            real["summary"]["invisible_chars_changed"],
+        )
+        self.assertFalse(real["summary"]["invisible_chars_changed"])
+        self.assertTrue(real["summary"]["identical"])
+        self.assertTrue(oracle["summary"]["identical"])
+
+    def test_changed_real_payloads_agree(self):
+        """Changed real payloads agree."""
+        first = self._payload("perfect")
+        second = self._payload("echo")
+        old, new = self._pair(first, second)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["invisible_chars"], real["invisible_chars"])
+        self.assertTrue(real["invisible_chars"]["changed"])
+        self.assertFalse(real["summary"]["identical"])
+
+    def test_tampered_payload_agreement_is_old(self):
+        """Tampered payload agreement is old."""
+        first = self._payload("perfect")
+        bad = copy.deepcopy(first)
+        bad["candidates"]["chatml"]["records"][0]["cells"]["zwsp"]["verdict"] = False
+        old, new = self._pair(first, bad)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["invisible_chars"], real["invisible_chars"])
+        self.assertEqual(real["invisible_chars"]["available"], "old")
+        self.assertFalse(real["invisible_chars"]["changed"])
+
+    def test_ids_flag_forgery_agreement_is_old(self):
+        # Amendment A3: a record whose stored ids_identical
+        # flag disagrees with the derivation from its own
+        # id digests must invalidate the payload on both
+        # sides of the oracle boundary.
+        """Ids flag forgery agreement is old."""
+        first = self._payload("perfect")
+        bad = copy.deepcopy(first)
+        record = bad["candidates"]["chatml"]["records"][0]
+        record["ids_identical"]["zwsp"] = not record["ids_identical"]["zwsp"]
+        old, new = self._pair(first, bad)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["invisible_chars"], real["invisible_chars"])
+        self.assertEqual(real["invisible_chars"]["available"], "old")
+
+    def test_answer_text_forgery_agreement_is_old(self):
+        # A cell whose answer_text no longer hashes to its
+        # answer_digest must invalidate the payload on both
+        # sides of the oracle boundary.
+        """Answer text forgery agreement is old."""
+        first = self._payload("perfect")
+        bad = copy.deepcopy(first)
+        bad["candidates"]["chatml"]["records"][0]["cells"]["control"]["answer_text"] = (
+            "tampered-0000"
+        )
+        old, new = self._pair(first, bad)
+        oracle = _oracle_diff(old, new)
+        real = diffreports.diff_reports(old, new)
+        self.assertEqual(oracle["invisible_chars"], real["invisible_chars"])
+        self.assertEqual(real["invisible_chars"]["available"], "old")
 
 
 if __name__ == "__main__":

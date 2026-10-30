@@ -117,6 +117,7 @@ STAGE_FLAGS = [
     ("--history-frame", "history_frame", None),
     ("--prune-sweep", "prune_sweep", None),
     ("--record-notation", "record_notation", None),
+    ("--invisible-chars", "invisible_chars", None),
     ("--rotate", "rotate", None),
     ("--density", "density", None),
     ("--field-order", "field_order", None),
@@ -340,6 +341,12 @@ HELPER_DISPATCH = [
         "record_notation",
         "record_notation_unavailable",
         ["record_notation_stage", "record_notation_analysis"],
+    ),
+    (
+        "_run_invisible_chars_probe",
+        "invisible_chars",
+        "invisible_chars_unavailable",
+        ["invisible_chars_stage", "invisible_chars_analysis"],
     ),
     (
         "_run_rotation_probe",

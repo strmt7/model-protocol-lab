@@ -6,6 +6,38 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 223 — invisible-character insertion probe, 2026-10-30)
+
+- An invisible-character insertion probe
+  (`run --invisible-chars`,
+  `model_protocol_lab/invisiblechars.py`): a generated
+  panel of 24 fact-recall cases (frozen topics, a
+  word-number inspection code, two neutral carrier
+  sentences, a question) is rendered verbatim and with
+  one frozen invisible code point (U+200B, U+FE0F,
+  U+E0001, U+00AD, U+2060) — or a matched visible hyphen
+  — inserted after the second letter of the topic and
+  of the code's word. The readout is a guarded
+  classification per candidate and arm over the
+  id-divergent paired population (at least 10 control
+  passes, at least 6 wrong-value discordants, acquittals
+  stable under worst-case completion of the missing
+  pairs, labels withheld above 6 incomplete divergent
+  cases), with a total six-class decomposition of
+  completed cells, the per-arm token-ID report, and the
+  exact operating characteristics (competent-null fire
+  0.0173 independent / 0.0044 paired; family-wise
+  expectation 2.07 over 120 comparisons) printed beside
+  the licence. Records carry digest-bound answer text
+  on every cell. Design:
+  `docs/INVISIBLECHARS_DESIGN.md`, built as amended
+  (A1–A10) after the wave-12 fresh review.
+- `docs/MULTIQUESTION_DESIGN.md` gains the second
+  fresh-review adjudication (coordinator #70) as an
+  appendix: the multi-question line stays parked, with
+  the bundled-incompletion settlement obligation
+  recorded in the design document itself.
+
 ### Changed (cycle 222 — DeepSource remediation, docs-publishing migration, 2026-10-29)
 
 - The active DeepSource inventory was remediated to zero

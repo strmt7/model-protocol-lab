@@ -39,6 +39,8 @@ from tests.test_cycle220_prunesweep import _payload as _prune_sweep_payload
 from tests.test_cycle220_prunesweep import _WordBackend as _PsWordBackend
 from tests.test_cycle221_recordnotation import _payload as _record_notation_payload
 from tests.test_cycle221_recordnotation import _WordBackend as _RnWordBackend
+from tests.test_cycle223_invisiblechars import _payload as _invisible_chars_payload
+from tests.test_cycle223_invisiblechars import _WordBackend as _IcWordBackend
 
 _SECTION_ID_RE = re.compile(r'<section[^>]*? id="([^"]+)"')
 
@@ -65,6 +67,7 @@ def _populated_result():
     result["history_frame"] = _history_frame_payload(_HfWordBackend("frame_drop"))
     result["prune_sweep"] = _prune_sweep_payload(_PsWordBackend("dose72_drop"))
     result["record_notation"] = _record_notation_payload(_RnWordBackend("json_drop"))
+    result["invisible_chars"] = _invisible_chars_payload(_IcWordBackend("echo"))
     return result
 
 
@@ -137,6 +140,19 @@ class RecordNotationBodyTests(unittest.TestCase):
         self.assertGreater(html.index('id="record-notation"'), html.index("</nav>"))
 
 
+class InvisibleCharsBodyTests(unittest.TestCase):
+    """Invisible chars body tests."""
+
+    def test_invisible_chars_body_present_in_rendered_report(self):
+        """Invisible chars body present in rendered report."""
+        html = reporting_mod.render_html(_populated_result())
+        self.assertIn('href="#invisible-chars"', html)
+        self.assertIn('<section class="card" id="invisible-chars">', html)
+        # Body-only copy from inside the section.
+        self.assertIn("U+200B ZERO WIDTH SPACE", html)
+        self.assertGreater(html.index('id="invisible-chars"'), html.index("</nav>"))
+
+
 class TocBodyCorrespondenceTests(unittest.TestCase):
     """Toc body correspondence tests."""
 
@@ -152,6 +168,7 @@ class TocBodyCorrespondenceTests(unittest.TestCase):
         self.assertIn("history-frame", hrefs)
         self.assertIn("prune-sweep", hrefs)
         self.assertIn("record-notation", hrefs)
+        self.assertIn("invisible-chars", hrefs)
         # Every link lands on a rendered section, every rendered
         # section is linked, in the same order.
         self.assertEqual(hrefs, body_ids)

@@ -10767,3 +10767,115 @@ code-scanning open 24 = 5 CodeQL + 19 Scorecard) and the
   headline as a rendering anomaly and a same-ids
   verdict flip is recorded as a determinism finding,
   never as notation fragility.
+
+## Cycle 223 — invisible-character insertion probe: one invisible code point in a fact sentence (2026-10-30)
+
+- **What shipped:** `run --invisible-chars`
+  (`model_protocol_lab/invisiblechars.py`, the package's
+  70th source file): a generated 24-case fact-recall
+  panel (frozen topics, a word-number inspection code
+  over a frozen 24-word list, two neutral carrier
+  sentences, a question), each case rendered verbatim
+  and with one frozen code point inserted after the
+  second letter of the topic and of the code's word —
+  five invisible arms (U+200B, U+FE0F, U+E0001, U+00AD,
+  U+2060, a frozen Default-Ignorable list verified
+  against the stdlib Unicode 15.0.0 database by an
+  assigned-and-Cf/Mn-and-combining-class-0 predicate)
+  plus a matched visible hyphen control at the same
+  sites. The readout is a guarded classification per
+  candidate and arm over the id-divergent paired
+  population (floors D ≥ 10 control passes and J ≥ 6
+  wrong-value discordants, both derived under the
+  instrument's own null; acquittals issue only when
+  stable under the worst-case completion of the arm's
+  incomplete id-divergent pairs; every label is withheld
+  above 6 incomplete divergent cases), with a total
+  six-class decomposition of completed cells (pass,
+  boundary-only, wrong-value in the frozen grammar,
+  echo, form-only, non-answer — an ordered decision
+  list), the per-arm token-ID report as the regime gate,
+  and the exact operating characteristics printed
+  beside the licence (competent-null fire 0.0173 under
+  independence, 0.0044 under the per-case paired copula;
+  power 0.8159 at a 25-point drop at base .90; the
+  family-wise expectation 2.07 false labels over the
+  120 labelled invisible comparisons). The wave-12
+  fresh review's ten binding amendments are all
+  implemented and each carries named test evidence: the
+  generator's digest-to-integer conversion and the
+  `1000 + draw % 9000` number derivation are pinned in
+  the protocol text and in executed freeze values (A1);
+  the operating characteristics are re-derived by exact
+  enumeration under the marginal convention and by
+  exact per-case bivariate quadrature for the paired
+  rows, correcting the candidate's mislabelled
+  concentrated-dependence power figures to the honest
+  marginal 0.8159/0.8761 and the 10-point figure to
+  0.2542 (A2); the completion domain is pinned to the
+  id-divergent domain and exercised by a guard battery
+  with an ids dimension (A3); the incomplete cap is
+  re-derived as >6 from the printed sensitivity floor,
+  and the attack worlds re-executed at it (guarded fire
+  0.0014 in the manufacture world; guarded
+  below-threshold 0.0133 against the unguarded 0.7285 in
+  the attrition world; guarded fire 0.8932 in the
+  flat-incompletion drop world) (A4); the decomposition
+  is pinned as an ordered decision list with executed
+  precedence witnesses (A5); the visible arm's battery
+  example is corrected (`al-der-1234` classifies
+  non_answer) and its form_only is empty by construction
+  — the echo/form steps run on the five invisible arms
+  only (A6); wrong-value is scoped to the frozen
+  grammar, out-of-grammar value changes printing as
+  non_answer and never counting toward J (A7); MIN_D =
+  10 is recorded as a plateau choice on [9, 16] (A8);
+  sentence-level corrections are folded in, including
+  the family-wise paired figure printed from the exact
+  paired rate — 0.4139, superseding the candidate's
+  0.4144, which traced to a Monte Carlo point estimate
+  (A9); and the shipped operating characteristics are
+  reproduced by a test in the build suite (A10).
+- **Uniqueness (combination, verified in the design
+  round against primary sources):** no shipped probe
+  found in the review inserts invisible code points
+  into a fact sentence inside a frozen generated panel
+  and classifies the result per candidate under a
+  completion-guarded paired rule gated on token-ID
+  divergence, with a matched visible-insertion control
+  at the same sites. The nearest prior art is attack
+  literature, not measurement: Sarabamoun,
+  "Special-Character Adversarial Attacks on Open-Source
+  Language Models", arXiv:2508.14070 — cited in the
+  design doc only via the ar5iv rendering actually
+  opened, with its caveats (single author, arXiv-only,
+  heuristic success criterion) printed beside the one
+  figure used (zero-width injection 54.2 percent
+  success, ar5iv section 4.1). The claim made is the
+  combination, in `docs/INVISIBLECHARS_DESIGN.md`.
+- **Naming audit (executed by parser instantiation of
+  `cli.build_parser()` at build time).** Pre-build the
+  tree carried 80 distinct long options including
+  `--help`, 63 of them on `run`; `--invisible-chars`
+  was absent and no existing option contains the stem
+  "invisible". Post-build census: 81 distinct long
+  options, 64 on `run`. The coinage was free under
+  every counting method, and the name's plain reading
+  is accurate — the probe varies the presence of
+  invisible characters in the prompt text — with the
+  help text's first sentence saying exactly that.
+- **Honest limits, printed in the report itself:** the
+  claim is per candidate and per arm over this
+  generated population on this checkpoint — a fire
+  proves only that this arm moved this checkpoint's
+  answers to wrong values inside the frozen grammar,
+  never a claim about weights, attacks, or code points
+  outside the frozen list; an invisible arm is read as
+  invisibility-specific only when the visible control
+  does not also fire; the soft-hyphen arm is the
+  weakest member of the frozen list (a renderer may
+  show it at a line-break opportunity; the frozen sites
+  are never at one); value changes outside the frozen
+  grammar print as non-answer and are outside the
+  headline claim; sanitizer cost on clean text is not
+  measured by this arm set.

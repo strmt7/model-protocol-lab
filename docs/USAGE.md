@@ -3185,6 +3185,75 @@ of them the closed-book screen). Informational only:
 the probe never affects selection, and the stage never
 fails the run.
 
+### 8.60 Invisible characters (`run --invisible-chars`)
+
+```sh
+model-protocol-lab run ... --invisible-chars
+```
+
+This probe inserts one invisible character into a
+generated fact sentence and reports whether the
+insertion moves the model's answer to a wrong value. A
+practitioner deciding whether pasted or retrieved text
+needs sanitising before it reaches the model uses this,
+per candidate, to see whether a single invisible code
+point in otherwise clean text makes this checkpoint
+return a wrong inspection code it would have returned
+correctly verbatim — separating "the insertion changed
+the value the model read" from "the model's rendering
+of the answer changed" — before setting a sanitisation
+policy.
+
+The panel is generated, not read from the run's
+fixtures: 24 cases, each a fact-recall item — a frozen
+topic, an inspection code of the form `word-number`
+over a frozen 24-word list, two neutral carrier
+sentences, and a question. Seven arms per case: the
+verbatim control; five invisible arms inserting one
+frozen code point (U+200B zero-width space, U+FE0F
+variation selector-16, U+E0001 language tag, U+00AD
+soft hyphen, U+2060 word joiner) after the second
+letter of the topic and of the code's word; and a
+visible control inserting a hyphen at the same two
+sites. The question and carriers are byte-identical
+across arms, and every arm is a fixture with the same
+id, so request seeds are identical across arms. The
+scorer is the run's own verdict — byte-exact answer
+conjoined with boundary presence — per cell.
+
+The readout is a guarded classification per candidate
+and per treated arm, over the cases where the arm's
+token ids actually diverged from the control and both
+cells completed (a case whose ids did not move was
+never treated in any sense the model can see; it is
+reported as ids-identical, never counted as a pass).
+Labels: `discordant_asymmetric` (at least 10 control
+passes and at least 6 wrong-value discordants),
+`no_discordance_observed`, `below_threshold`, and
+`insufficient` — the last also whenever more than 6 of
+the arm's id-divergent cases are incomplete, or the
+control-pass floor is unmet, or an acquittal would not
+survive the worst-case completion of the missing
+pairs. Completed cells decompose in a frozen order —
+pass, boundary-only, wrong-value (values inside the
+frozen grammar only), echo, form-only, non-answer —
+and discordant pairs decompose as exact-only,
+boundary-only, or mixed. The operating characteristics
+print beside every label: the rule fires on 1.7 percent
+of competent panels under independence (0.4 percent
+paired), its power at a 25-point drop is 0.82 at a .90
+control base, and the family-wise price over the 120
+labelled invisible comparisons is an expectation of
+2.07 false labels for a competent checkpoint. An
+invisible arm is read as invisibility-specific only
+when the visible hyphen arm does not also fire for the
+same candidate. The full contract is in
+`docs/INVISIBLECHARS_DESIGN.md`. Costs 168 generations
+per candidate (4,032 at the legal maximum: 24
+candidates x 24 cases x 7 arms). Informational only:
+the probe never affects selection, and the stage never
+fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out
