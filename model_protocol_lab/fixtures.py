@@ -129,7 +129,6 @@ def _expected_message_headers(count: int) -> tuple[str, ...]:
     return tuple(headers)
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def parse_fixture_csv(text: str) -> tuple[Split, list[str]]:
     """Parse authoring CSV into a validated :class:`Split`.
 

@@ -180,7 +180,6 @@ class _OracleFormat:
         self.assistant_turn_end = assistant_turn_end
         self.open_suffix = open_suffix
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def spec_render(self, messages: object) -> str:
         """Render per the render() docstring + code-pinned acceptance rules."""
         # Docstring is silent on acceptance; code pins exact tuple,
@@ -928,7 +927,6 @@ class TestFormatValidation(unittest.TestCase):
         self.assertEqual(variant.name, "f2")
         self.assertIs(variant.repeat_bos, True)
         self.assertEqual(variant.bos, "<b>")
-        # skipcq: PTC-W0050 - the duplicate is the assertion (frozen-value hash collapse)
         self.assertEqual(len({fmt, fmt}), 1)
         self.assertNotEqual(fmt, variant)
 

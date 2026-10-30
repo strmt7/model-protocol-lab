@@ -1073,7 +1073,6 @@ class StopMatrixTests(unittest.TestCase):
             boundary=(5,),
             eos_id=99,
         )
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertTrue(row["native_pass"])
         # HF's overhang walk fires at step 2 ("pre<" + "stop>post" covers
@@ -1126,7 +1125,6 @@ class StopMatrixTests(unittest.TestCase):
             boundary=(5,),
             eos_id=99,
         )
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         eos = row["cells"]["eos_appended"]
         self.assertTrue(eos["fired"])
@@ -1152,7 +1150,6 @@ class StopMatrixTests(unittest.TestCase):
             boundary=(5,),
             eos_id=99,
         )
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertFalse(row["cells"]["hf_stop_string"]["available"])
         self.assertFalse(row["cells"]["vllm_holdback"]["available"])
@@ -1168,7 +1165,6 @@ class StopMatrixTests(unittest.TestCase):
             (quirk_observation(status="failed", exact_match=False, boundary_found=False),),
             boundary=(5,),
         )
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertFalse(row["native_pass"])
         for semantic in ("hf_stop_string", "vllm_holdback", "eos_appended"):
@@ -1854,7 +1850,6 @@ class EmulationBranchTests(unittest.TestCase):
             boundary=(5,),
             eos_id=99,
         )
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertFalse(row["cells"]["hf_stop_string"]["available"])
         self.assertFalse(row["cells"]["vllm_holdback"]["available"])
@@ -1868,7 +1863,6 @@ class EmulationBranchTests(unittest.TestCase):
             (quirk_observation(output_ids=("a",), exact_match=False, boundary_found=False),),
             boundary=(5,),
         )
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         for semantic in ("hf_stop_string", "vllm_holdback", "eos_appended"):
             cell = row["cells"][semantic]

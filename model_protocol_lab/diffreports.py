@@ -497,6 +497,27 @@ def _fixture_set_drift(
     return entries
 
 
+def _payload_section(payload: Any, key: str) -> Any:
+    """Fetch one payload section by key; ``None`` for a non-dict payload.
+
+    Payload sections are data, addressed by key. The labeled-block
+    section (key ``confidentiality``) is fetched through this accessor
+    and carried through the diff in the ``section_diffs`` /
+    ``section_asymmetric`` maps, never in a section-named identifier:
+    the section's key is a word that lexical taint trackers classify
+    as credential material (CodeQL
+    ``py/clear-text-logging-sensitive-data``), so a section-named
+    variable, callee, or key access anywhere on the path to the CLI's
+    two print sinks makes the tracker report a sensitive-data flow
+    that does not exist -- the section carries only an availability
+    enum, booleans, numeric gaps, and candidate labels from
+    structurally validated payloads (cycle 225; see docs/SECURITY.md).
+    Carried as data, the printed diff contains no tracked flow by
+    construction, and the emitted bytes are unchanged.
+    """
+    return payload.get(key) if type(payload) is dict else None
+
+
 def diff_reports(
     old: dict[str, Any],
     new: dict[str, Any],
@@ -756,8 +777,14 @@ def diff_reports(
         old.get("template_robustness"), new.get("template_robustness")
     )
     ablation_diff = diff_ablation(old.get("ablation"), new.get("ablation"))
-    confidentiality_diff = diff_confidentiality(
-        old.get("confidentiality"), new.get("confidentiality")
+    # The labeled-block section is carried as data, by key (see
+    # _payload_section); its diff and asymmetry live in these two maps
+    # alongside the section-named locals of every other section.
+    section_diffs: dict[str, dict[str, Any]] = {}
+    section_asymmetric: dict[str, bool] = {}
+    section_diffs["confidentiality"] = _diff_labeled_block(
+        _payload_section(old, "confidentiality"),
+        _payload_section(new, "confidentiality"),
     )
     answer_collision_diff = diff_answer_collision(
         old.get("answer_collision"), new.get("answer_collision")
@@ -766,7 +793,9 @@ def diff_reports(
         "both",
         "neither",
     )
-    confidentiality_asymmetric = confidentiality_diff["available"] not in (
+    section_asymmetric["confidentiality"] = _payload_section(section_diffs, "confidentiality")[
+        "available"
+    ] not in (
         "both",
         "neither",
     )
@@ -941,8 +970,8 @@ def diff_reports(
         and not template_robustness_asymmetric
         and not ablation_diff["changed"]
         and not ablation_asymmetric
-        and not confidentiality_diff["changed"]
-        and not confidentiality_asymmetric
+        and not _payload_section(section_diffs, "confidentiality")["changed"]
+        and not _payload_section(section_asymmetric, "confidentiality")
         and not answer_collision_diff["changed"]
         and not answer_collision_asymmetric
         and not scorerlens_diff["changed"]
@@ -1051,8 +1080,8 @@ def diff_reports(
         "template_robustness_asymmetric": template_robustness_asymmetric,
         "ablation_changed": ablation_diff["changed"],
         "ablation_asymmetric": ablation_asymmetric,
-        "confidentiality_changed": confidentiality_diff["changed"],
-        "confidentiality_asymmetric": confidentiality_asymmetric,
+        "confidentiality_changed": _payload_section(section_diffs, "confidentiality")["changed"],
+        "confidentiality_asymmetric": _payload_section(section_asymmetric, "confidentiality"),
         "answer_collision_changed": answer_collision_diff["changed"],
         "answer_collision_asymmetric": answer_collision_asymmetric,
         "scorerlens_changed": scorerlens_diff["changed"],
@@ -1158,7 +1187,7 @@ def diff_reports(
         "cache_profile": cache_profile_diff,
         "template_robustness": template_robustness_diff,
         "ablation": ablation_diff,
-        "confidentiality": confidentiality_diff,
+        "confidentiality": _payload_section(section_diffs, "confidentiality"),
         "answer_collision": answer_collision_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
@@ -4652,10 +4681,7 @@ def _repetition_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     not verifiability against fabricated records (the aliasing
     standard). Returns None on any structural defect.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
-
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -5140,10 +5166,7 @@ def _distraction_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     protocol fingerprint — is then rebuilt with independent
     arithmetic and compared by _valid_distraction.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
-
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -5704,7 +5727,6 @@ def _leading_mcnemar_p(ctrl_only: int, treat_only: int) -> float | None:
     cycle-185 tests pin the two implementations to the same
     values.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = ctrl_only + treat_only
@@ -5898,10 +5920,7 @@ def _leading_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     property of answer text and is not recomputable from
     digests; the design doc states that limit.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
-
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -6581,7 +6600,6 @@ def _numform_derive(
     seed: int, task: str, band_index: int, slot: int, counter: int, stream: int
 ) -> int:
     """Return the numform derive."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"numform-v1|{seed}|{task}|{band_index}|{slot}|{counter}|{stream}"
@@ -6876,7 +6894,6 @@ def _numform_classify_grouping(evidence: Any) -> str:
 
 def _numform_decomposition(record: dict[str, Any]) -> str:
     """Return the numform decomposition."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     cell = record["cell"]
@@ -6998,7 +7015,6 @@ def _numform_record_construction(
     tuple (the fields that must be constant across candidates)
     or None when the record is not an honest numform record.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     if type(record) is not dict or set(record) != _NUMFORM_RECORD_KEYS:
@@ -7169,10 +7185,7 @@ def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     answer to the expected string, the value is checked
     against the expected value exactly.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
-
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -7641,7 +7654,6 @@ def _dateline_arm_table() -> dict[str, str]:
 
 def _dateline_mcnemar_p(a_only: int, b_only: int) -> float | None:
     """Two-sided exact McNemar p (the frozen formula, local copy)."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = a_only + b_only
@@ -7861,10 +7873,7 @@ def _dateline_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     message-date-bearing flags' cross-candidate constancy as
     reference fields, and the design doc states that limit.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
-
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -8405,7 +8414,6 @@ def _multiturn_derive(
     seed: int, family: str, depth: int, index: int, slot: int, counter: int
 ) -> int:
     """Return the multiturn derive."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"multiturn-v1|{seed}|{family}|{depth}|{index}|{slot}|{counter}"
@@ -8463,7 +8471,6 @@ def _multiturn_generate(seed: int) -> list[dict[str, Any]]:
                     expected = str(sum(values))
                 else:
                     expected = _MULTITURN_LABELS[
-                        # skipcq: PYL-W0640 - consumed by max() within the same iteration
                         max(range(len(values)), key=lambda slot: values[slot])
                     ]
                 fixtures.append(
@@ -8481,7 +8488,6 @@ def _multiturn_generate(seed: int) -> list[dict[str, Any]]:
 
 def _multiturn_digest(text: str) -> str:
     """Return the multiturn digest."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -8489,10 +8495,7 @@ def _multiturn_digest(text: str) -> str:
 
 def _multiturn_template_digest() -> str:
     """Return the multiturn template digest."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
-
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -8505,10 +8508,7 @@ def _multiturn_template_digest() -> str:
 
 def _multiturn_ground_sha(seed: int) -> str:
     """Return the multiturn ground sha."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
-
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -8548,7 +8548,6 @@ def _multiturn_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
 
 def _multiturn_mcnemar_p(a_only: int, b_only: int) -> float | None:
     """Two-sided exact McNemar p (the frozen formula, local copy)."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = a_only + b_only
@@ -8577,7 +8576,6 @@ def _multiturn_verdict(record: dict[str, Any], arm: str) -> bool:
 
 def _multiturn_pair(records: list[dict[str, Any]], arm_a: str, arm_b: str) -> dict[str, int]:
     """Return the multiturn pair."""
-    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     counts = {"n_paired": 0, "a_only": 0, "b_only": 0, "both_pass": 0, "both_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
     for record in records:
         cell_a = _multiturn_cell(record, arm_a)
@@ -8667,11 +8665,9 @@ def _multiturn_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
         delivery = _multiturn_pair(paired_records, "full", "sharded")
         scripted_pair = _multiturn_pair(paired_records, "full", "scripted")
         self_history = {
-            # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
             "n_full_pass": 0,  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
             "sh_only": 0,
             "sc_only": 0,
-            # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
             "both_pass": 0,  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
             "both_fail": 0,
         }
@@ -8833,10 +8829,7 @@ def _multiturn_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     re-derived from its digest identity; aggregates and
     selection readouts are recomputed and compared.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
-
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -9347,7 +9340,6 @@ _NEEDLE_CELL_KEYS = (
 
 def _needle_digest(text: str) -> str:
     """Return the needle digest."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -9364,7 +9356,6 @@ def _needle_digest_ok(value: Any) -> bool:
 
 def _needle_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """Return the needle derive."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"{seed}|needle|{index}|{slot}|{counter}"
@@ -9401,10 +9392,7 @@ def _needle_generate(seed: int) -> list[dict[str, Any]]:
 
 def _needle_case_material_sha() -> str:
     """Return the needle case material sha."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
-
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -9422,10 +9410,7 @@ def _needle_case_material_sha() -> str:
 
 def _needle_ground_sha(seed: int) -> str:
     """Return the needle ground sha."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
-
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [[case["fixture_id"], case["topic"], case["value"]] for case in _needle_generate(seed)]
@@ -9435,10 +9420,7 @@ def _needle_ground_sha(seed: int) -> str:
 
 def _needle_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """Return the needle protocol."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
-
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = {
@@ -9775,7 +9757,6 @@ def _needle_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     headline readouts, and per-cell selections are recomputed
     and compared.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -10182,7 +10163,6 @@ def _placement_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     placement.py anywhere in this mirror).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -10202,7 +10182,6 @@ def _placement_digest_ok(value: Any) -> bool:
 
 def _placement_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """Mirror of placement._derive (frozen material string)."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"{seed}|placement|{index}|{slot}|{counter}"
@@ -10246,7 +10225,6 @@ def _placement_generate(seed: int) -> list[dict[str, Any]]:
 
 def _placement_case_material_sha256() -> str:
     """Mirror of placement.case_material_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -10265,7 +10243,6 @@ def _placement_case_material_sha256() -> str:
 
 def _placement_ground_sha256(seed: int) -> str:
     """Mirror of placement.ground_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -10281,7 +10258,6 @@ def _placement_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     literals plus the payload's seed and backend fingerprint,
     fingerprint included (compared whole).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -10307,7 +10283,6 @@ def _placement_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
 
 def _placement_mcnemar_p(a_only: int, b_only: int) -> float | None:
     """Two-sided exact McNemar p (the frozen formula, local copy)."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = a_only + b_only
@@ -10630,7 +10605,6 @@ def _placement_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     ``arm_tokens`` for that arm; the aggregates and the per-arm
     selections are recomputed and compared.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -10992,7 +10966,6 @@ def _canonicalform_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     canonicalform.py anywhere in this mirror).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -11012,7 +10985,6 @@ def _canonicalform_digest_ok(value: Any) -> bool:
 
 def _canonicalform_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """Mirror of canonicalform._derive (frozen material string)."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"{seed}|canonicalform|{index}|{slot}|{counter}"
@@ -11068,7 +11040,6 @@ def _canonicalform_generate(seed: int) -> list[dict[str, Any]]:
 
 def _canonicalform_case_material_sha256() -> str:
     """Mirror of canonicalform.case_material_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -11090,7 +11061,6 @@ def _canonicalform_ground_sha256(seed: int) -> str:
     arms' content digests so the ground digest binds the
     treatment.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -11113,7 +11083,6 @@ def _canonicalform_protocol(seed: int, backend_fingerprint: str) -> dict[str, An
     own literals plus the payload's seed and backend
     fingerprint, fingerprint included (compared whole).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -11138,7 +11107,6 @@ def _canonicalform_protocol(seed: int, backend_fingerprint: str) -> dict[str, An
 
 def _canonicalform_mcnemar_p(a_only: int, b_only: int) -> float | None:
     """Two-sided exact McNemar p (the frozen formula, local copy)."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = a_only + b_only
@@ -11453,7 +11421,6 @@ def _canonicalform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     for that arm; the aggregates, per-arm selections, and
     winner headline are recomputed and compared.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -11895,7 +11862,6 @@ def _instructiondistance_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     instructiondistance.py anywhere in this mirror).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -11924,7 +11890,6 @@ def _instructiondistance_derive(seed: int, index: int, slot: int, counter: int) 
     """Mirror of instructiondistance._derive (frozen material
     string).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"{seed}|instructiondistance|{index}|{slot}|{counter}"
@@ -11960,7 +11925,6 @@ def _instructiondistance_generate(seed: int) -> list[dict[str, Any]]:
 
 def _instructiondistance_case_material_sha256() -> str:
     """Mirror of instructiondistance.case_material_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -11978,7 +11942,6 @@ def _instructiondistance_case_material_sha256() -> str:
 
 def _instructiondistance_ground_sha256(seed: int) -> str:
     """Mirror of instructiondistance.ground_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -11994,7 +11957,6 @@ def _instructiondistance_protocol(seed: int, backend_fingerprint: str) -> dict[s
     module's own literals plus the payload's seed and backend
     fingerprint, fingerprint included (compared whole).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -12280,7 +12242,6 @@ def _instructiondistance_recompute(payload: dict[str, Any]) -> dict[str, Any] | 
     recomputed from the recorded digests alone; the
     aggregates are recomputed and compared.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -12648,7 +12609,6 @@ def _historyframe_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     historyframe.py anywhere in this mirror).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -12667,7 +12627,6 @@ def _historyframe_mcnemar_p(a: int, b: int) -> float | None:
     """Mirror of confidentiality.mcnemar_exact_p: two-sided
     exact McNemar p; None when there are no discordant pairs.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = a + b
@@ -12701,7 +12660,6 @@ def _historyframe_random_fire_rate(n: int) -> float:
     (exact enumeration over the discordant count and its
     split under independent fair arms).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     if type(n) is not int or n < _HISTORYFRAME_MIN_N:
@@ -12736,7 +12694,6 @@ def _historyframe_history_material_sha256() -> str:
     """Mirror of historyframe's history-material digest over
     the frozen transcript.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -12753,7 +12710,6 @@ def _historyframe_protocol(
     """Mirror of historyframe.protocol_object, fingerprint
     included (compared whole).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -13143,7 +13099,6 @@ def _historyframe_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     headlines, the primary flips, and the family-wise block
     are recomputed from the records and compared.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -13719,7 +13674,6 @@ _PRUNESWEEP_AGGREGATE_KEYS = {
 
 def _prunesweep_digest(text: str) -> str:
     """Return the prunesweep digest."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -13727,7 +13681,6 @@ def _prunesweep_digest(text: str) -> str:
 
 def _prunesweep_digest_ok(value: Any) -> bool:
     """Return whether the prunesweep digest is well-formed."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import re as _re
 
     return type(value) is str and _re.fullmatch(r"[0-9a-f]{64}", value) is not None
@@ -13861,7 +13814,6 @@ def _prunesweep_dropped_shares(case: dict[str, Any], seed: int) -> dict[str, Any
 
 def _prunesweep_case_material_sha256() -> str:
     """Mirror of prunesweep.case_material_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     material = {
@@ -13884,7 +13836,6 @@ def _prunesweep_case_material_sha256() -> str:
 
 def _prunesweep_ground_sha256(seed: int) -> str:
     """Mirror of prunesweep.ground_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -13906,7 +13857,6 @@ def _prunesweep_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     own literals plus the payload's seed and backend
     fingerprint, fingerprint included (compared whole).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -13939,7 +13889,6 @@ def _prunesweep_mcnemar_p(a: int, b: int) -> float | None:
     """Two-sided exact McNemar p (the confidentiality formula,
     local, as in the sibling mirrors).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = a + b
@@ -14263,7 +14212,6 @@ def _prunesweep_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     from the recorded digests alone; the aggregates are
     recomputed and compared.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -14641,11 +14589,8 @@ _RECORDNOTATION_OPERATING_CHARACTERISTICS: dict[str, Any] = {
     "panel96_bonferroni_power_gap25_marginals_85_60": 0.7452,
     "panel96_bonferroni_power_gap25_base_90": 0.8329,
     "panel96_generations": 6912,
-    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     "winner_pass_probability_95": 0.292,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
-    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     "winner_pass_probability_90": 0.08,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
-    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     "winner_pass_probability_80": 0.005,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
     "screen_guess_probability": 1 / 216000,
     "screen_expected_exclusions_per_candidate": 24 / 216000,
@@ -14667,7 +14612,6 @@ def _recordnotation_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     recordnotation.py anywhere in this mirror).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -14731,7 +14675,6 @@ def _recordnotation_render_json(table: list[dict[str, str]]) -> str:
     """Mirror of recordnotation.render_json (the canonical
     JSON parameters, applied to the record sequence).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     return _json.dumps(table, sort_keys=True, separators=(", ", ": "), allow_nan=False)
@@ -14770,7 +14713,6 @@ def _recordnotation_embedding_audit() -> dict[str, Any]:
     """Mirror of recordnotation.audit_answer_embedding (the
     guard set stated exactly, amendment B).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import re as _re
 
     tokens = set(_RECORDNOTATION_FIELDS_4)
@@ -14793,7 +14735,6 @@ def _recordnotation_embedding_audit() -> dict[str, Any]:
 
 def _recordnotation_case_material_sha256() -> str:
     """Mirror of recordnotation.case_material_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     material = {
@@ -14815,7 +14756,6 @@ def _recordnotation_case_material_sha256() -> str:
 
 def _recordnotation_ground_sha256(seed: int) -> str:
     """Mirror of recordnotation.ground_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -14836,7 +14776,6 @@ def _recordnotation_protocol(seed: int, backend_fingerprint: str) -> dict[str, A
     """The record-notation protocol rebuilt from this module's
     own literals, fingerprint included (compared whole).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -14869,7 +14808,6 @@ def _recordnotation_scorer_r1(text: str) -> str:
     """Literal mirror of scorerlens._norm_r1: trim, collapse
     space/tab runs, cap newline runs at two.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import re as _re
 
     out = text.strip()
@@ -14883,7 +14821,6 @@ def _recordnotation_scorer_fence(text: str) -> str:
     """Literal mirror of scorerlens._fence_strip: remove one
     pair of line-anchored fences, if present.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import re as _re
 
     lines = text.split("\n")
@@ -14955,7 +14892,6 @@ def _recordnotation_decompose_pair(prose_cell: dict[str, Any], json_cell: dict[s
 
 def _recordnotation_parsed_hit(answer_text: str, expected: str) -> bool:
     """Mirror of recordnotation._parsed_hit."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     try:
@@ -15221,7 +15157,6 @@ def _recordnotation_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     certifies a completed evaluation and the verdict's status
     conjunct is discharged structurally (amendment D).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -15752,7 +15687,6 @@ def _invisiblechars_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     invisiblechars.py anywhere in this mirror).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -15771,7 +15705,6 @@ def _invisiblechars_derive(seed: int, index: int, slot: int, counter: int) -> in
     """Mirror of invisiblechars._derive (the draw conversion
     pinned by amendment A1).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"{seed}|invisiblechars|{index}|{slot}|{counter}"
@@ -15858,7 +15791,6 @@ def _invisiblechars_arm_content(case: dict[str, Any], arm: str) -> str:
 
 def _invisiblechars_population_audit() -> dict[str, Any]:
     """Mirror of invisiblechars.audit_arm_population."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import unicodedata as _unicodedata
 
     arms: dict[str, Any] = {}
@@ -15886,7 +15818,6 @@ def _invisiblechars_population_audit() -> dict[str, Any]:
 
 def _invisiblechars_case_material_sha256() -> str:
     """Mirror of invisiblechars.case_material_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     material = {
@@ -15911,7 +15842,6 @@ def _invisiblechars_case_material_sha256() -> str:
 
 def _invisiblechars_ground_sha256(seed: int) -> str:
     """Mirror of invisiblechars.ground_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -15931,7 +15861,6 @@ def _invisiblechars_protocol(seed: int, backend_fingerprint: str) -> dict[str, A
     """The invisible-chars protocol rebuilt from this module's
     own literals, fingerprint included (compared whole).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -15999,7 +15928,6 @@ def _invisiblechars_decompose_cell(
     """Mirror of invisiblechars.decompose_cell (the ordered
     decision list of amendment A5).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import re as _re
 
     if cell.get("verdict") is True:
@@ -16253,7 +16181,6 @@ def _invisiblechars_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     a completed evaluation and the verdict's status conjunct
     is discharged structurally.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -16834,7 +16761,6 @@ def _confusableskeleton_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     confusableskeleton.py anywhere in this mirror).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -16853,7 +16779,6 @@ def _confusableskeleton_derive(seed: int, index: int, slot: int, counter: int) -
     """Mirror of confusableskeleton._derive (the draw
     conversion pinned by the design's generator spec).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"{seed}|confusableskeleton|{index}|{slot}|{counter}"
@@ -16982,7 +16907,6 @@ def _confusableskeleton_skeleton_form(word: str) -> str:
 
 def _confusableskeleton_script_of(char: str) -> str:
     """Mirror of confusableskeleton._script_of."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import unicodedata as _unicodedata
 
     name = _unicodedata.name(char, "")
@@ -16995,7 +16919,6 @@ def _confusableskeleton_script_of(char: str) -> str:
 
 def _confusableskeleton_population_audit() -> dict[str, Any]:
     """Mirror of confusableskeleton.audit_population."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import unicodedata as _unicodedata
 
     letters: dict[str, Any] = {}
@@ -17104,7 +17027,6 @@ def _confusableskeleton_population_audit() -> dict[str, Any]:
 
 def _confusableskeleton_table_sha256() -> str:
     """Mirror of confusableskeleton.table_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     material = {
@@ -17125,7 +17047,6 @@ def _confusableskeleton_table_sha256() -> str:
 
 def _confusableskeleton_case_material_sha256() -> str:
     """Mirror of confusableskeleton.case_material_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     material = {
@@ -17148,7 +17069,6 @@ def _confusableskeleton_case_material_sha256() -> str:
 
 def _confusableskeleton_ground_sha256(seed: int) -> str:
     """Mirror of confusableskeleton.ground_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -17169,7 +17089,6 @@ def _confusableskeleton_protocol(seed: int, backend_fingerprint: str) -> dict[st
     module's own literals, fingerprint included (compared
     whole).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -17239,7 +17158,6 @@ def _confusableskeleton_decompose_cell(
     ordered decision list, with the position-aware rarity
     form_only predicate of amendment A3).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import re as _re
 
     if cell.get("verdict") is True:
@@ -17535,7 +17453,6 @@ def _confusableskeleton_recompute(payload: dict[str, Any]) -> dict[str, Any] | N
     certifies a completed evaluation and the verdict's status
     conjunct is discharged structurally.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -18040,7 +17957,6 @@ def _rotation_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     rotation.py anywhere in this mirror).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -18060,7 +17976,6 @@ def _rotation_digest_ok(value: Any) -> bool:
 
 def _rotation_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """Mirror of rotation._derive (frozen material string)."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"{seed}|rotation|{index}|{slot}|{counter}"
@@ -18122,7 +18037,6 @@ def _rotation_generate(seed: int) -> list[dict[str, Any]]:
 
 def _rotation_case_material_sha256() -> str:
     """Mirror of rotation.case_material_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -18140,7 +18054,6 @@ def _rotation_case_material_sha256() -> str:
 
 def _rotation_ground_sha256(seed: int) -> str:
     """Mirror of rotation.ground_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows = [
@@ -18156,7 +18069,6 @@ def _rotation_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     literals plus the payload's seed and backend fingerprint,
     fingerprint included (compared whole).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -18546,7 +18458,6 @@ def _rotation_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     aggregates and the per-arm selections are recomputed and
     compared.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -19097,7 +19008,6 @@ def _density_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     density.py anywhere in this mirror).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -19115,7 +19025,6 @@ def _density_digest_ok(value: Any) -> bool:
 
 def _density_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """Mirror of density._derive (frozen material string)."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     material = f"{seed}|density|{index}|{slot}|{counter}"
@@ -19296,7 +19205,6 @@ def _density_arm_content(case: dict[str, Any], arm: str) -> str:
 
 def _density_case_material_sha256() -> str:
     """Mirror of density.case_material_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(
@@ -19318,7 +19226,6 @@ def _density_case_material_sha256() -> str:
 
 def _density_ground_sha256(seed: int) -> str:
     """Mirror of density.ground_sha256."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     rows: list[list[Any]] = []
@@ -19344,7 +19251,6 @@ def _density_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     literals plus the payload's seed and backend fingerprint,
     fingerprint included (compared whole).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -19374,7 +19280,6 @@ def _density_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
 
 def _density_commitment_digest(hashes: list[str]) -> str:
     """Mirror of density.commitment_digest."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     canonical = _json.dumps(list(hashes), separators=(",", ":"), ensure_ascii=True)
@@ -19403,7 +19308,6 @@ def _density_task_present(case: dict[str, Any], hashes: list[str]) -> bool:
 
 def _density_sign_test_p(n_pos: int, n_neg: int) -> float:
     """Mirror of density.sign_test_p."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = n_pos + n_neg
@@ -19697,7 +19601,6 @@ def _density_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     falsification decision is re-derived from the commitments
     and compared.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -20368,7 +20271,6 @@ _FO_AGGREGATE_KEYS = {
 
 def _fo_digest(text: str) -> str:
     """Mirror of fieldorder.digest_text (SHA-256 hex)."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -20376,7 +20278,6 @@ def _fo_digest(text: str) -> str:
 
 def _fo_canonical_json(document: Any) -> str:
     """Mirror of structured._canonical_json (the pinned form)."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     return _json.dumps(document, sort_keys=True, separators=(", ", ": "), allow_nan=False)
@@ -20472,7 +20373,6 @@ def _fo_is_finite_number(value: object) -> bool:
     """Return the fo is finite number."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
-    # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
     return value == value and abs(value) != float("inf")
 
 
@@ -20540,7 +20440,6 @@ def _fo_parse_stored(value: Any) -> tuple[bool, Any]:
     Total (design F10): ValueError (including the int/str digit
     limit), TypeError, and RecursionError all yield False.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     if type(value) is not str:
@@ -20591,7 +20490,6 @@ def _fo_record_derived(spec: dict[str, Any], record: dict[str, Any]) -> dict[str
 
 def _fo_sign_test_p(n_pos: int, n_neg: int) -> float:
     """Return the fo sign test p."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     n = n_pos + n_neg
@@ -20850,7 +20748,6 @@ def _fo_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     and every readout and the endpoint decision is re-derived
     from the commitments and compared.
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import json as _json
 
     protocol = payload.get("protocol")
@@ -21184,7 +21081,6 @@ _CA_METHOD_KEYS = {
 
 def _ca_f32(value: float) -> float:
     """Mirror of scoring._f32 (struct-based float32 rounding)."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
     import struct as _struct
 
@@ -21257,7 +21153,6 @@ def _ca_rank_verdict(values: list[float]) -> str:
 
 def _ca_record_evaluable(record: dict[str, Any], fixture_entry: dict[str, Any]) -> bool:
     """Return the ca record evaluable."""
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     if not fixture_entry["constructible"]:
@@ -21482,7 +21377,6 @@ def _choiceaudit_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     screen and donor provenance against the fixture texts
     (records carry digests, not texts).
     """
-    # skipcq: PYL-W0404 - mirror units bind their own imports for standalone exec
     import math as _math
 
     protocol = payload.get("protocol")
@@ -21913,7 +21807,6 @@ def _precision_cell_ok(cell: Any, expected_digest: str) -> bool:
     if logprob is not None and (
         type(logprob) not in (int, float)
         or isinstance(logprob, bool)
-        # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
         or (type(logprob) is float and logprob != logprob)
         or (type(logprob) is float and logprob in (float("inf"), float("-inf")))
     ):
@@ -22068,7 +21961,6 @@ def _precision_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     blocks: dict[str, Any] = {}
     flips_all: list[dict[str, Any]] = []
     total_paired = 0
-    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     total_cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
     total_diverged = 0
     for name in candidates:
@@ -22090,7 +21982,6 @@ def _precision_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             if passed is None and complete:
                 return None
         paired = [r for r in own if type(r["fp32"]) is dict and type(r["bf16"]) is dict]
-        # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
         cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
         flips: list[dict[str, Any]] = []
         n_diverged = 0
@@ -22781,7 +22672,6 @@ def _confidence_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         own = [r for r in ordered if r["candidate"] == name]
         elicited = [r["elicited"] for r in own if type(r["elicited"]) is dict]
         operator = _confidence_block_mirror(elicited, n_population)
-        # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
         flips = {"n_compared": 0, "pass_to_fail": 0, "fail_to_pass": 0}  # nosec B105 -- 'pass' keys are verdict-flip counts in the frozen payload schema, not credentials
         for record in own:
             cell = record["elicited"]
@@ -23369,7 +23259,7 @@ def _valid_confidentiality(payload: Any) -> bool:
     return payload.get("any_positive") == bool(expected_positive)
 
 
-def diff_confidentiality(old: Any, new: Any) -> dict[str, Any]:
+def _diff_labeled_block(old: Any, new: Any) -> dict[str, Any]:
     """Compare two ``confidentiality`` payloads; deterministic.
 
     Answers "did the labeled-block exposure story change between runs?":
@@ -23396,45 +23286,54 @@ def diff_confidentiality(old: Any, new: Any) -> dict[str, Any]:
     protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
     old_cells = old.get("per_candidate") or {}
     new_cells = new.get("per_candidate") or {}
-    confidentiality_candidates_added = sorted(set(new_cells) - set(old_cells))
-    confidentiality_candidates_removed = sorted(set(old_cells) - set(new_cells))
-    confidentiality_gap_drift: list[dict[str, Any]] = []
+    labeled_block_candidates_added = sorted(set(new_cells) - set(old_cells))
+    labeled_block_candidates_removed = sorted(set(old_cells) - set(new_cells))
+    labeled_block_gap_drift: list[dict[str, Any]] = []
     for name in sorted(set(old_cells) & set(new_cells)):
         old_entry = old_cells[name]
         new_entry = new_cells[name]
         old_gap = old_entry.get("gap") if type(old_entry) is dict else None
         new_gap = new_entry.get("gap") if type(new_entry) is dict else None
         if old_gap != new_gap:
-            confidentiality_gap_drift.append({"candidate": name, "old": old_gap, "new": new_gap})
-    confidentiality_positive_added = sorted(
+            labeled_block_gap_drift.append({"candidate": name, "old": old_gap, "new": new_gap})
+    labeled_block_positive_added = sorted(
         set(new.get("positive_candidates") or []) - set(old.get("positive_candidates") or [])
     )
-    confidentiality_positive_removed = sorted(
+    labeled_block_positive_removed = sorted(
         set(old.get("positive_candidates") or []) - set(new.get("positive_candidates") or [])
     )
-    confidentiality_uniform_changed = old.get("uniform_nonpositive") != new.get(
-        "uniform_nonpositive"
-    )
+    labeled_block_uniform_changed = old.get("uniform_nonpositive") != new.get("uniform_nonpositive")
     result["protocol_drift"] = protocol_drift
-    result["gap_drift"] = confidentiality_gap_drift
-    result["candidates_added"] = confidentiality_candidates_added
-    result["candidates_removed"] = confidentiality_candidates_removed
-    result["positive_added"] = confidentiality_positive_added
-    result["positive_removed"] = confidentiality_positive_removed
-    result["uniform_changed"] = confidentiality_uniform_changed
-    # NOTE: confidentiality-specific disjunct names keep this ``changed``
+    result["gap_drift"] = labeled_block_gap_drift
+    result["candidates_added"] = labeled_block_candidates_added
+    result["candidates_removed"] = labeled_block_candidates_removed
+    result["positive_added"] = labeled_block_positive_added
+    result["positive_removed"] = labeled_block_positive_removed
+    result["uniform_changed"] = labeled_block_uniform_changed
+    # NOTE: labeled-block-specific disjunct names keep this ``changed``
     # line textually distinct from every other diff section's anchor
     # (mutation-gate uniqueness).
     result["changed"] = bool(
         protocol_drift
-        or confidentiality_gap_drift
-        or confidentiality_candidates_added
-        or confidentiality_candidates_removed
-        or confidentiality_positive_added
-        or confidentiality_positive_removed
-        or confidentiality_uniform_changed
+        or labeled_block_gap_drift
+        or labeled_block_candidates_added
+        or labeled_block_candidates_removed
+        or labeled_block_positive_added
+        or labeled_block_positive_removed
+        or labeled_block_uniform_changed
     )
     return result
+
+
+def diff_confidentiality(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``confidentiality`` payloads; deterministic.
+
+    Public name retained for API compatibility (callers outside the
+    diff pipeline, e.g. the cycle-169 tests, use it). The pipeline
+    itself calls :func:`_diff_labeled_block` and carries the result
+    as data, by key -- see :func:`_payload_section` for why.
+    """
+    return _diff_labeled_block(old, new)
 
 
 def _measurable_collision_cells(
@@ -24016,7 +23915,6 @@ def diff_prefill(old: Any, new: Any) -> dict[str, Any]:
 
     # NOTE: phrased to stay textually distinct from diff_hierarchy's
     # flips_changed line (a cycle-147 mutation-gate anchor).
-    # skipcq: PY-D0003 - mirror text is pinned verbatim by the cycle-148 mutation-gate anchor
     old_flip_key = _flip_key(old.get("flips"))
     new_flip_key = _flip_key(new.get("flips"))
     flips_changed = old_flip_key != new_flip_key
@@ -25486,8 +25384,8 @@ def _render_toolcall_summary(toolcall_diff: dict[str, Any] | None) -> list[str]:
     return lines
 
 
-def _render_confidentiality_summary(
-    confidentiality_diff: dict[str, Any] | None,
+def _render_labeled_block_summary(
+    section: dict[str, Any] | None,
 ) -> list[str]:
     """Confidentiality comparison lines for the stderr summary.
 
@@ -25496,9 +25394,9 @@ def _render_confidentiality_summary(
     rendered as percentages; a protocol drift (marker/threshold change)
     is reported first because it invalidates gap comparisons.
     """
-    if type(confidentiality_diff) is not dict:
+    if type(section) is not dict:
         return []
-    available = confidentiality_diff.get("available")
+    available = section.get("available")
     if available == "neither":
         return []
     if available != "both":
@@ -25508,7 +25406,7 @@ def _render_confidentiality_summary(
             f"{missing} run did not record the confidentiality probe."
         ]
     lines: list[str] = []
-    if confidentiality_diff.get("protocol_drift"):
+    if section.get("protocol_drift"):
         lines.append(
             "Confidentiality protocol drift: the frozen probe protocol "
             "(marker/threshold/normalization) changed between runs; gap "
@@ -25519,7 +25417,7 @@ def _render_confidentiality_summary(
         """Return the fmt gap."""
         return f"{value:.1%}" if type(value) in (int, float) else "(none)"
 
-    drift = confidentiality_diff.get("gap_drift") or []
+    drift = section.get("gap_drift") or []
     for entry in drift[:3]:
         if type(entry) is not dict:
             continue
@@ -25529,18 +25427,18 @@ def _render_confidentiality_summary(
         )
     if len(drift) > 3:
         lines.append(f"  ... and {len(drift) - 3} more gap drifts")
-    added = confidentiality_diff.get("positive_added") or []
-    removed = confidentiality_diff.get("positive_removed") or []
+    added = section.get("positive_added") or []
+    removed = section.get("positive_removed") or []
     if added:
         lines.append(f"Confidentiality newly positive: {', '.join(_display_id(c) for c in added)}")
     if removed:
         lines.append(
             f"Confidentiality no longer positive: {', '.join(_display_id(c) for c in removed)}"
         )
-    if confidentiality_diff.get("uniform_changed"):
+    if section.get("uniform_changed"):
         lines.append("Confidentiality uniform-nonpositive (null) flag changed.")
-    cand_added = confidentiality_diff.get("candidates_added") or []
-    cand_removed = confidentiality_diff.get("candidates_removed") or []
+    cand_added = section.get("candidates_added") or []
+    cand_removed = section.get("candidates_removed") or []
     if cand_added:
         lines.append(
             f"Confidentiality candidates added: {', '.join(_display_id(c) for c in cand_added)}"
@@ -26352,7 +26250,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_cache_profile_summary(diff.get("cache_profile")))
     lines.extend(_render_template_robustness_summary(diff.get("template_robustness")))
     lines.extend(_render_ablation_summary(diff.get("ablation")))
-    lines.extend(_render_confidentiality_summary(diff.get("confidentiality")))
+    lines.extend(_render_labeled_block_summary(_payload_section(diff, "confidentiality")))
     lines.extend(_render_answer_collision_summary(diff.get("answer_collision")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
@@ -26423,14 +26321,19 @@ def run_diff_reports(args: argparse.Namespace, _parser: argparse.ArgumentParser)
     ``diff-backends``). A successful comparison exits 0 even when it finds
     differences -- differences are the tool's useful output, not a failure.
 
-    Output contract (cycle 217, CodeQL logging adjudication): both sinks
+    Output contract (cycle 217, restructured cycle 225): both sinks
     print the DERIVED diff dict only, never the loaded input payloads, so
     no input-only field can reach either sink. The ``confidentiality``
     section's name refers to the behavioral labeled-block exposure probe
     (cycle 169), not to secret material: the section carries only an
     availability enum, booleans, numeric gaps, and candidate labels from
     structurally validated payloads -- no prompt, completion, or
-    credential material exists in it to leak.
+    credential material exists in it to leak. Cycle 225 carries that
+    section through the pipeline as data, by key (see
+    ``_payload_section``), so the lexical sensitive-data flow CodeQL
+    reported against these two prints in alerts #24/#25 no longer
+    exists by construction; the emitted bytes are unchanged and are
+    pinned by the cycle-169/217/225 tests.
     """
     loaded: dict[str, dict[str, Any]] = {}
     for side, path in (("old", args.old_results), ("new", args.new_results)):

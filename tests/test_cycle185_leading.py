@@ -2054,7 +2054,6 @@ class TestValidatorFinalBranches(unittest.TestCase):
         backend = _ClaimBackend(expected_by_marker=EXPECTED_BY_MARKER)
         payload = _payload(backend, _run_stage(backend))
         self.assertTrue(_valid_leading(payload))
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         blank = next(
             r for r in payload["candidates"]["ld-a"]["records"] if r["fixture"] == "fx-blank"
         )

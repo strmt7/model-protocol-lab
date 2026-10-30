@@ -723,7 +723,6 @@ class TestBackendDtype(unittest.TestCase):
 
 def _event():
     """Event."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     from threading import Event
 
     return Event()

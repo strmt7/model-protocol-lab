@@ -261,7 +261,6 @@ class ScriptedBackend:
 # ---------------------------------------------------------------------------
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_evaluate(plan, candidate, cases, *, boundary, max_new_tokens, seed, event):
     """Simulate ``evaluate`` from the docstring + triple-checked code reading.
 
@@ -1624,7 +1623,6 @@ class EvaluateFuzz(unittest.TestCase):
         )
 
     @staticmethod
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def _script_behavior(rng, kind, case, boundary, cap, decode_raises, answers):
         """Script behavior."""
         ans = case.expected

@@ -131,7 +131,6 @@ def _write_dataset(path: Path, *, special_literal: bool = False) -> None:
     path.write_text(json.dumps(split), encoding="utf-8")
 
 
-# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class _Base(unittest.TestCase):
     """Base."""
 

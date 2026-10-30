@@ -69,7 +69,6 @@ def first_position(output_ids: object, token_id: int) -> int | None:
     return None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def classify_cause(
     *,
     output_len: int,

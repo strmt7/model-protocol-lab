@@ -131,7 +131,6 @@ class _WordBackend:
         inv = {v: k for k, v in self._vocab.items()}
         return " ".join(inv.get(i, "?") for i in ids)
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def generate(
         self, input_ids: Any, *, max_new_tokens: int, seed: int, cancel: Any = None
     ) -> Generation:

@@ -134,7 +134,6 @@ class DiffBackendsTests(unittest.TestCase):
         # The gated vLLM cell disagrees with HF about the firing step too.
         self.assertIn("FIRING_STEP_DIFFERS", classes)
         self.assertEqual(result["verdict"], "diverge")
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         gated = next(
             finding for finding in result["divergences"] if finding["class"] == "MIN_TOKENS_GATED"
         )

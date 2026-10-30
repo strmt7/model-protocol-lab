@@ -46,8 +46,6 @@ from unittest import mock
 from model_protocol_lab import backends, diffreports, experiments, refusals, reporting
 from model_protocol_lab import cli as cli_module
 from model_protocol_lab import doctor as doctor_mod
-
-# skipcq: PYL-W0404 - test-local import isolates the module under audit
 from model_protocol_lab import reporting as reporting_mod
 from model_protocol_lab.cli import main as cli_main
 
@@ -640,7 +638,6 @@ class TestDiffRefusals(unittest.TestCase):
         # a changed opener list with its own matching digest. A bare
         # digest edit is list/digest corruption and validates as
         # neither (asserted below), not drift.
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib
 
         old = self._profile()
@@ -671,7 +668,6 @@ class TestDiffRefusals(unittest.TestCase):
         diff = diffreports.diff_refusals(old, new)
         self.assertEqual(diff["excluded_added"], ["a"])
         self.assertTrue(diff["changed"])
-        # skipcq: PYL-W1114 - the reversed diff is the assertion: symmetry is what is audited
         back = diffreports.diff_refusals(new, old)
         self.assertEqual(back["excluded_removed"], ["a"])
 
@@ -716,7 +712,6 @@ def _exec_variant(original: str, mutant: str, tag: str):  # type: ignore[no-unty
     module.__package__ = "model_protocol_lab"
     sys.modules[name] = module
     try:
-        # skipcq: PYL-W0122 - gate execs own module source mutated in memory only
         exec(  # noqa: S102 -- the gate's whole point: run a mutated copy of our own module
             compile(source.replace(original, mutant), f"<mutant {tag}>", "exec"),
             module.__dict__,

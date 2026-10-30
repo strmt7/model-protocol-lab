@@ -17,30 +17,17 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
 from model_protocol_lab.catalog import candidates
-
-# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
 from model_protocol_lab.core import Generation, Message
-
-# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
 from model_protocol_lab.datasets import load_dataset
-
-# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
 from model_protocol_lab.experiments import run_experiment
-
-# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
 from model_protocol_lab.reporting import save_report
-
-# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
 from model_protocol_lab.structured import (
     STRUCTURED_SPECS,
     build_structured_fixtures,
     schema_map,
     validate_structured_specs,
 )
-
-# skipcq: FLK-E402 - sys.path bootstrap must precede the package import in this entry point
 from model_protocol_lab.toolcall import (
     TOOLCALL_QUERIES,
     build_toolcall_fixtures,
@@ -119,7 +106,6 @@ class HierarchyDemoBackend(DemoBackend):
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
         """Generate exactly the cap unless cancelled or failed."""
-        # skipcq: PYL-W0404 - deferred import keeps the package import graph acyclic
         import re
 
         from model_protocol_lab.hierarchy import PRIVILEGE_CLOSE, PRIVILEGE_OPEN
@@ -368,7 +354,6 @@ class PositionDemoBackend(DemoBackend):
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
         """Generate exactly the cap unless cancelled or failed."""
-        # skipcq: PYL-W0404 - deferred import keeps the package import graph acyclic
         import re
 
         prompt = self.decode(input_ids)
@@ -647,7 +632,6 @@ class FewshotDemoBackend(DemoBackend):
         return Generation(tuple(map(ord, text)), "limit")
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def build_sample_report(output_dir: Path) -> dict[str, Any]:
     """Build sample report."""
     split = load_dataset(REPO_ROOT / "examples" / "fixtures.json")

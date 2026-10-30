@@ -285,7 +285,6 @@ def _o_request_seed(seed: int, case_id: str) -> int:
     return int.from_bytes(sha256(material).digest()[:4], "big")
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_evaluate(
     backend: ScriptBackend,
     candidate: Format,
@@ -541,7 +540,6 @@ def _contains_boundary(tokens: tuple[int, ...], boundary: tuple[int, ...]) -> bo
     )
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _build_trial(
     rng: random.Random,
 ) -> tuple[list[Fixture], list[CaseScript], tuple[int, ...], int, int]:
@@ -1063,7 +1061,6 @@ class EvaluateAuditTests(unittest.TestCase):
         assert obs.error is None
         assert obs.status == "completed"
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_validation_parity(self):
         """Test validation parity."""
         for breakage in [

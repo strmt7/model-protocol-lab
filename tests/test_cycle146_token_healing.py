@@ -917,7 +917,6 @@ class HealingDeltaTests(unittest.TestCase):
                 self.assertEqual(got, want)
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_healing_delta(primary_winner, primary_decision, candidates, native, healed, audit):
     """Independent reimplementation of healing_delta (different structure)."""
     if not (

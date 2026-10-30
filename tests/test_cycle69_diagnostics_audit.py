@@ -379,7 +379,6 @@ def _oracle_first_boundary(tokens: tuple[int, ...], stop: tuple[int, ...]) -> in
     return None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_budget_frontier(
     search: list[dict[str, Any]],
     *,
@@ -1015,7 +1014,6 @@ def _oracle_aggregate(per_fixture: list[dict]) -> dict:
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_interpretation(fixture_scores: list[dict]) -> dict:
     """Band interpretation re-derived from the documented thresholds."""
     failures = [s for s in fixture_scores if not s["native_pass"]]
@@ -1182,9 +1180,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         sc2 = _logprob_scenario(means2, self.BEHAVIOR, exp_seed=21)
         result2 = run_search_experiment(sc2)
         diag2 = logprob_diagnostic(sc2.backend, result2, sc2.split.search)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         cand1 = next(c for c in diag1["candidates"] if c["name"] == "cand-A")
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         cand2 = next(c for c in diag2["candidates"] if c["name"] == "cand-A")
         fs1 = {s["fixture"]: s for s in cand1["fixture_scores"]}
         fs2 = {s["fixture"]: s for s in cand2["fixture_scores"]}
@@ -1197,9 +1193,7 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         assert cand1["interpretation"]["kind"] == "greedy_derailed"
         assert cand2["interpretation"]["kind"] == "weights_dont_know"
         # cand-B untouched end to end.
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         b1 = next(c for c in diag1["candidates"] if c["name"] == "cand-B")
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         b2 = next(c for c in diag2["candidates"] if c["name"] == "cand-B")
         assert b1 == b2
 
@@ -1476,7 +1470,6 @@ class TestCliWiring(unittest.TestCase):
     def _run_options() -> dict[str, argparse.Action]:
         """Run options."""
         parser = build_parser()
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
         run_parser = sub.choices["run"]
         return {name: action for action in run_parser._actions for name in action.option_strings}

@@ -78,7 +78,6 @@ class FuzzCase:
     warn_id: str | None = None
     file_kind: str = "regular"
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def __post_init__(self) -> None:
         """Validate the fuzz target and outcome vocabulary."""
         if self.target not in TARGETS:
@@ -284,12 +283,10 @@ def _observe(
         return ("accept_warn" if warnings else "accept"), split, warnings, None
     except ValueError as exc:
         return "reject", None, [], exc
-    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     except Exception as exc:  # noqa: BLE001 -- deliberate: any non-ValueError escape IS the crash finding this harness exists to report; it is classified, never propagated
         return "crash", None, [], exc
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def evaluate_case(
     case: FuzzCase,
     workdir: Path,
@@ -422,7 +419,6 @@ def run_fixtures_fuzz(args: argparse.Namespace, parser: argparse.ArgumentParser)
     (the doctor/pack convention). Exit 0 when every case conforms,
     1 on any finding.
     """
-    # skipcq: PTC-W0043 - the del is a deliberate tripwire: the protocol parameter is unused
     del parser  # the subcommand takes no parser-level validation
     seed = int(args.seed)
     report = run_fuzz(seed)

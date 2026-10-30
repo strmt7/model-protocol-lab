@@ -158,7 +158,6 @@ def _require_torch() -> Any:
     return torch
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def score_span_from_logits(
     logits: Any,
     *,
@@ -295,7 +294,6 @@ def _provider_code(exc: BaseException) -> str:
     return "forward_failed"
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def score_target_logprobs(
     backend: Backend, prompt_ids: tuple[int, ...], target_ids: tuple[int, ...]
 ) -> TargetScore:

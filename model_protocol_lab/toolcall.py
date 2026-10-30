@@ -191,7 +191,6 @@ def _tool_map() -> dict[str, dict[str, Any]]:
     return {tool["name"]: tool for tool in TOOLS}
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def validate_tool_def(tool: object) -> dict[str, Any]:
     """Validate one tool definition; returns the normalized definition.
 
@@ -302,7 +301,6 @@ def _check_arg_value(value: object, param: dict[str, Any], *, where: str) -> Non
     elif ptype == "number":
         ok = (
             (type(value) is int or type(value) is float)
-            # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
             and value == value
             and value not in (float("inf"), float("-inf"))
         )

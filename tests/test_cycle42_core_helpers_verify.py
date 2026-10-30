@@ -279,7 +279,6 @@ def _oracle_check_boundary_portability(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_template_tokenizer_compatibility(
     name: object, inventory: object, registered_tokens: object, secondary_encode: object
 ) -> dict[str, object]:

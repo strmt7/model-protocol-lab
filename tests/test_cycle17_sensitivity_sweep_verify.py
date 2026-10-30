@@ -333,7 +333,6 @@ _EXPECTED_POOL = ("yes", "no", "42", "a", "ok")
 _WRONG_POOL = ("WRONG", "nope", "0", "maybe", "")
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _build_fuzz_scenario(
     rng: random.Random, core_mod: Any
 ) -> tuple[ScriptedBackend, tuple[Any, ...], Any, dict[str, Any]]:

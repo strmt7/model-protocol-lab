@@ -121,7 +121,6 @@ class ScriptedPrefillBackend:
 
 def _run_stage(policy, prefill_id="answer-colon", cases=None, backend=None):
     """Run stage."""
-    # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
     spec = next(s for s in validate_prefill_specs(PREFILL_SPECS) if s["id"] == prefill_id)
     return prefill_stage(
         ScriptedPrefillBackend(policy, spec["text"]) if backend is None else backend,
@@ -1070,7 +1069,6 @@ class PrefillMutationGateTests(unittest.TestCase):
         )
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_prefill_adherence(primary_winner, primary_decision, candidates, stages):
     """Independent brute-force reimplementation of prefill_adherence.
 

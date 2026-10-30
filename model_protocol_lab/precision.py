@@ -200,7 +200,6 @@ def _expected_of(records: Sequence[dict[str, Any]], candidate: str, fixture: str
     raise KeyError((candidate, fixture))
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _candidate_block(
     records: Sequence[dict[str, Any]],
     candidate: str,
@@ -210,7 +209,6 @@ def _candidate_block(
     """Every per-candidate derived value, from the records alone."""
     own = [r for r in records if r["candidate"] == candidate]
     paired = [r for r in own if type(r["fp32"]) is dict and type(r["bf16"]) is dict]
-    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
     flips: list[dict[str, Any]] = []
     n_diverged = 0
@@ -254,7 +252,6 @@ def _candidate_block(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def compute_derived(
     records: Sequence[dict[str, Any]],
     candidates: Sequence[str],
@@ -298,7 +295,6 @@ def compute_derived(
             )
     flips_all.sort(key=lambda f: (str(f["candidate"]), str(f["fixture"])))
     total_paired = sum(blocks[name]["n_paired"] for name in candidates)
-    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     total_cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
     for name in candidates:
         for key in total_cells:

@@ -144,7 +144,6 @@ class ValidationTests(unittest.TestCase):
         bidi_prompt = "a\u202eb"
         report = sn.probe_surface_noise(bidi_prompt, fixtures, backend, protocol, boundary=(7,))
         self.assertEqual(report["status"], "ok")
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         bidi = next(c for c in report["static_lint"]["checks"] if c["name"] == "no_bidi_controls")
         self.assertFalse(bidi["passed"])
 
@@ -664,7 +663,6 @@ class StaticLintTests(unittest.TestCase):
     def test_lint_flags_bidi(self):
         """Test lint flags bidi."""
         lint = sn.static_lint("a\u202eb")
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         bidi = next(c for c in lint["checks"] if c["name"] == "no_bidi_controls")
         self.assertFalse(bidi["passed"])
         self.assertIn("U+202E", bidi["detail"])
@@ -674,14 +672,12 @@ class StaticLintTests(unittest.TestCase):
         # Fully-duplicated two-sentence prompt: dup_ratio = 0.5, and the
         # predicate is < 0.5, so it flags.
         lint = sn.static_lint("Say it twice. Say it twice.")
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         rep = next(c for c in lint["checks"] if c["name"] == "sentence_repetition")
         self.assertFalse(rep["passed"])
 
     def test_lint_flags_empty(self):
         """Test lint flags empty."""
         lint = sn.static_lint("   ")
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         nonempty = next(c for c in lint["checks"] if c["name"] == "nonempty")
         self.assertFalse(nonempty["passed"])
 
@@ -1581,7 +1577,6 @@ class Wave5FixesTests(unittest.TestCase):
 
     def test_finding5_fixture_content_capped(self):
         """Test finding5 fixture content capped."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Fixture, Message
 
         big_content = "x" * (sn.MAX_FIXTURE_MESSAGE_CHARS + 1)
@@ -1795,7 +1790,6 @@ class CoverageGapTests2(unittest.TestCase):
         """Test controls handles probe failure."""
         # If a control's probe is cancelled, the control reports its
         # status and mean_stability stays None.
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import threading
 
         cancel = threading.Event()
@@ -2013,7 +2007,6 @@ class FailClosedCoverageWave6Tests(unittest.TestCase):
         """Test cancel during last baseline is cancelled."""
         # Wave-6 red-team A finding 4: a cancel landing during the baseline
         # must report "cancelled" (exit 2), not "unavailable" (exit 3).
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import threading
 
         from model_protocol_lab.core import Generation
@@ -2025,7 +2018,6 @@ class FailClosedCoverageWave6Tests(unittest.TestCase):
 
             fingerprint = "wave6-cancel-on-last/v1"
 
-            # skipcq: PYL-W0231 - base init would shadow the class fingerprint this fake carries
             def __init__(self):
                 self.calls = 0
 

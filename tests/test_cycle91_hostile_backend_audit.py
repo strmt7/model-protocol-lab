@@ -823,7 +823,6 @@ class MixedHostileTaxonomyTest(unittest.TestCase):
             assert all(
                 v == 0 for k, v in counts.items() if k not in ("no-boundary-in-N", "backend-error")
             )
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             entry = next(e for e in result["search"] if e["format"]["name"] == name)
             observations = entry["observations"]
             non_passing = sum(

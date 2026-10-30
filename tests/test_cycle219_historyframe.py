@@ -395,7 +395,6 @@ class AggregateTests(unittest.TestCase):
     @staticmethod
     def _records(count: int, **kwargs):
         """Build synthetic records with per-record cell kwargs."""
-        # skipcq: PYL-E1125 - 'own'/'foreign' arrive via the **kwargs unpacking
         return [_record(f"fx-{i:02d}", **kwargs) for i in range(count)]
 
     def test_render_identical_contrast_is_inapplicable(self):
@@ -764,7 +763,6 @@ class ValidatorTests(unittest.TestCase):
         dropped = _payload(_WordBackend("frame_drop"))
         diff = diffreports.diff_history_frame(perfect, dropped)
         self.assertTrue(diff["changed"])
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         metric = next(
             entry
             for entry in diff["candidate_drift"]
@@ -832,12 +830,10 @@ class CliTests(unittest.TestCase):
         from model_protocol_lab.cli import build_parser
 
         parser = build_parser()
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         run = next(
             action for action in parser._actions if action.__class__.__name__ == "_SubParsersAction"
         )
         help_text = run.choices["run"].format_help()  # raises on a bare %
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         flag = next(a for a in run.choices["run"]._actions if "--history-frame" in a.option_strings)
         self.assertIsNotNone(flag)
         # Naming condition: the prepend disclosure sits in
@@ -1237,7 +1233,6 @@ class GapValidatorBatteryTests(unittest.TestCase):
                 "records": [],
             }
         self.assertFalse(diffreports._valid_history_frame(forged))
-        # skipcq: PTC-W0043 - deliberate tripwire: removing the entry is the audited behavior
         del entry
 
     def test_diff_candidates_added_removed_and_stratum_drift(self):

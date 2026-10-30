@@ -546,7 +546,6 @@ class SynthhistoryStabilityTests(unittest.TestCase):
         self.assertFalse(out["available"])
         self.assertEqual(out["detail"], "fixture_count_mismatch")
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_brute_force_oracle_differential(self):
         """Test brute force oracle differential."""
         # Independent reimplementation: selection re-application, flips,
@@ -732,7 +731,6 @@ class SynthhistoryMutationGateTests(unittest.TestCase):
         # The experiments mutant reuses the real synthhistory module
         # (only experiments.py is rewritten), so build fixtures from the
         # real module here.
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.synthhistory import build_history_fixtures as real_build
 
         real_built, _ = real_build((_case("f1", expected),), condition="history_2")
@@ -1270,7 +1268,6 @@ class SynthhistoryValidatorTests(unittest.TestCase):
         """Mutants."""
         good = _synthhistory_payload()
         cond = good["per_condition"]["history_2"]
-        # skipcq: PY-W0070 - mutants are built from the base payload; appends are the battery
         mutants = []
         mutants.append(("not_a_dict", "nope"))
         mutants.append(("available_false", {**good, "available": False}))

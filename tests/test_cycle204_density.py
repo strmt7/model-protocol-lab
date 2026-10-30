@@ -456,11 +456,9 @@ class TestAggregate(unittest.TestCase):
         records = _synthetic_records(self.cases, lambda case: [])
         agg = density.aggregate_candidate(records, self.cases)
         self.assertEqual(agg["n_zero_word"], 20)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         count_row = next(r for r in agg["by_kind"] if r["kind"] == "count")
         self.assertEqual(count_row["k16_checked"], 0)
         self.assertIsNone(count_row["k16_rate"])
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         include_row = next(r for r in agg["by_kind"] if r["kind"] == "include")
         self.assertEqual(include_row["k16_checked"], 80)
 
@@ -847,14 +845,11 @@ class TestGapCoverage(unittest.TestCase):
         records = _synthetic_records(cases, _perfect_hashes, solo_hashes=lambda case, j: [])
         agg = density.aggregate_candidate(records, cases)
         self.assertEqual(agg["n_zero_word"], 320)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         count_row = next(r for r in agg["by_kind"] if r["kind"] == "count")
         self.assertEqual(count_row["solo_checked"], 0)
         self.assertIsNone(count_row["solo_rate"])
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         include_row = next(r for r in agg["by_kind"] if r["kind"] == "include")
         self.assertEqual(include_row["solo_checked"], 80)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         k16_row = next(r for r in agg["by_density"] if r["density"] == 16)
         self.assertEqual(k16_row["solo_checked"], 240)
 

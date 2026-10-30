@@ -2872,10 +2872,7 @@ def _o_dst_int(value: Any) -> bool:
 
 def _o_distraction_recompute(value: dict) -> dict | None:
     """Oracle distraction recompute: aggregates/conditions from records."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _h
-
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _j
 
     protocol = value.get("protocol")
@@ -3393,7 +3390,6 @@ def _o_lead_int(item: Any) -> bool:
 
 def _o_lead_mcnemar(ctrl_only: int, treat_only: int) -> float | None:
     """O lead mcnemar."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import math as _math
 
     n = ctrl_only + treat_only
@@ -3554,10 +3550,7 @@ def _o_lead_aggregate(records: list) -> dict[str, Any]:
 
 def _o_leading_recompute(value: dict) -> dict | None:
     """Oracle leading recompute: aggregates/conditions/common from records."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _h
-
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _j
 
     protocol = value.get("protocol")
@@ -4543,7 +4536,6 @@ def _o_dateline_recompute(value: Any) -> dict[str, Any] | None:
     it from literal tables -- a drift in either side's constants
     breaks the agreement the fuzz harness asserts.
     """
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol = value.get("protocol")
@@ -5714,10 +5706,7 @@ def _o_placement_recompute(value: Any) -> dict[str, Any] | None:
     literal tables -- a drift in either side's constants breaks
     the agreement the fuzz harness asserts.
     """
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _hashlib
-
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol = value.get("protocol")
@@ -6057,7 +6046,6 @@ _O_CF_AGGREGATE_KEYS = {
 
 def _o_cf_digest(text: str) -> str:
     """O cf digest."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -6074,7 +6062,6 @@ def _o_cf_digest_ok(value: Any) -> bool:
 
 def _o_cf_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """O cf derive."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _hashlib
 
     material = f"{seed}|canonicalform|{index}|{slot}|{counter}"
@@ -6121,7 +6108,6 @@ def _o_cf_generate(seed: int) -> list[dict[str, Any]]:
 
 def _o_cf_case_material_sha256() -> str:
     """O cf case material sha256."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     canonical = _json.dumps(
@@ -6140,7 +6126,6 @@ def _o_cf_case_material_sha256() -> str:
 
 def _o_cf_ground_sha256(seed: int) -> str:
     """O cf ground sha256."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     rows = [
@@ -6160,7 +6145,6 @@ def _o_cf_ground_sha256(seed: int) -> str:
 
 def _o_cf_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """O cf protocol."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -6185,7 +6169,6 @@ def _o_cf_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
 
 def _o_cf_mcnemar_p(a_only: int, b_only: int) -> float | None:
     """O cf mcnemar p."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import math as _math
 
     n = a_only + b_only
@@ -6467,7 +6450,6 @@ def _o_cf_cell_ok(cell: Any, expected_digest: str) -> bool:
 
 def _o_cf_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     """O cf recompute."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol = payload.get("protocol")
@@ -6896,7 +6878,6 @@ _O_ID_COMPLIANT = ("compliant_correct", "compliant_wrong")
 
 def _o_id_digest(text: str) -> str:
     """O id digest."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _hashlib
 
     return _hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -6918,7 +6899,6 @@ def _o_id_run_digest_ok(value: Any) -> bool:
 
 def _o_id_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """O id derive."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _hashlib
 
     material = f"{seed}|instructiondistance|{index}|{slot}|{counter}"
@@ -6946,7 +6926,6 @@ def _o_id_generate(seed: int) -> list[dict[str, Any]]:
 
 def _o_id_case_material_sha256() -> str:
     """O id case material sha256."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     canonical = _json.dumps(
@@ -6959,7 +6938,6 @@ def _o_id_case_material_sha256() -> str:
 
 def _o_id_ground_sha256(seed: int) -> str:
     """O id ground sha256."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     rows = [[case["fixture_id"], case["topic"], case["value"]] for case in _o_id_generate(seed)]
@@ -6969,7 +6947,6 @@ def _o_id_ground_sha256(seed: int) -> str:
 
 def _o_id_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """O id protocol."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol: dict[str, Any] = {
@@ -7206,7 +7183,6 @@ def _o_id_cell_ok(cell: Any, expected_digest: str) -> bool:
 
 def _o_id_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     """O id recompute."""
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol = payload.get("protocol")
@@ -12175,10 +12151,7 @@ def _o_rotation_recompute(value: Any) -> dict[str, Any] | None:
     literal tables -- a drift in either side's constants breaks
     the agreement the fuzz harness asserts.
     """
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import hashlib as _hashlib
-
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol = value.get("protocol")
@@ -12447,7 +12420,6 @@ def _o_density_recompute(value: Any) -> dict[str, Any] | None:
     literal tables -- a drift in either side's constants breaks
     the agreement the fuzz harness asserts.
     """
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import json as _json
 
     protocol = value.get("protocol")
@@ -13041,7 +13013,6 @@ def _o_choiceaudit_recompute(value: Any) -> dict[str, Any] | None:
     float32-representable. A drift in either side's constants
     breaks the agreement.
     """
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import math as _math
     import struct as _struct
 
@@ -13395,7 +13366,6 @@ def _o_precision_recompute(value: Any) -> dict[str, Any] | None:
     independently here. A drift in either side's constants
     breaks the agreement.
     """
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     from model_protocol_lab import precision as _prec
 
     def _dig(v: Any) -> bool:
@@ -13420,7 +13390,6 @@ def _o_precision_recompute(value: Any) -> dict[str, Any] | None:
         if lp is not None and (
             type(lp) not in (int, float)
             or isinstance(lp, bool)
-            # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
             or (type(lp) is float and (lp != lp or lp in (float("inf"), float("-inf"))))
         ):
             return False
@@ -13875,7 +13844,6 @@ def _o_confidence_recompute(value: Any) -> dict[str, Any] | None:
     (compliance, joint tables, gap, bins, flips, knowability)
     is mirrored independently here.
     """
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     from model_protocol_lab import confidence as _cf
 
     def _dig(v: Any) -> bool:
@@ -16862,7 +16830,6 @@ def _o_confidentiality_cell_valid(entry: Any) -> bool:
     # Derived-value recomputation (cycle 177, F6c mirror). The
     # McNemar p-value is recomputed from the binomial definition
     # here, not by calling the producer's function.
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import math
 
     from model_protocol_lab.confidentiality import control_block, treatment_block
@@ -20457,7 +20424,6 @@ class _FuzzMultiturnBackend:
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
         """Generate."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import re as _re
 
         text = self.decode(list(input_ids))
@@ -20555,7 +20521,6 @@ class _FuzzNeedleBackend:
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
         """Generate."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import re as _re
 
         text = self.decode(list(input_ids))
@@ -20652,7 +20617,6 @@ class _FuzzPlacementBackend:
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
         """Generate."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import re as _re
 
         text = self.decode(list(input_ids))
@@ -20750,7 +20714,6 @@ class _FuzzRotationBackend:
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
         """Generate."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import re as _re
 
         text = self.decode(list(input_ids))
@@ -20977,7 +20940,6 @@ class _FuzzPrecisionBackend:
 
     def generate(self, prompt_ids, *, max_new_tokens, seed, cancel):
         """Generate."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Generation
 
         prompt = self.decode(prompt_ids)
@@ -21152,7 +21114,6 @@ class _FuzzConfidenceBackend:
 
     def generate(self, prompt_ids, *, max_new_tokens, seed, cancel):
         """Generate."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Generation
 
         prompt = self.decode(prompt_ids)
@@ -21820,8 +21781,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not template_robustness_asymmetric\n"
             '        and not ablation_diff["changed"]\n'
             "        and not ablation_asymmetric\n"
-            '        and not confidentiality_diff["changed"]\n'
-            "        and not confidentiality_asymmetric\n"
+            '        and not _payload_section(section_diffs, "confidentiality")["changed"]\n'
+            '        and not _payload_section(section_asymmetric, "confidentiality")\n'
             '        and not answer_collision_diff["changed"]\n'
             "        and not answer_collision_asymmetric\n"
             '        and not scorerlens_diff["changed"]\n'
@@ -21930,8 +21891,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or template_robustness_asymmetric\n"
             '        or ablation_diff["changed"]\n'
             "        or ablation_asymmetric\n"
-            '        or confidentiality_diff["changed"]\n'
-            "        or confidentiality_asymmetric\n"
+            '        or _payload_section(section_diffs, "confidentiality")["changed"]\n'
+            '        or _payload_section(section_asymmetric, "confidentiality")\n'
             '        or answer_collision_diff["changed"]\n'
             "        or answer_collision_asymmetric\n"
             '        or scorerlens_diff["changed"]\n'
@@ -22039,7 +22000,6 @@ class CanonicalFormOracleAgreementTests(unittest.TestCase):
 
     def _backend(self, mode="perfect", fail_count=0):
         """Backend."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import re as _re
 
         class _WordBackend:

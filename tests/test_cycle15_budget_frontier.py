@@ -79,7 +79,6 @@ def _passes_at(observation, entry_boundary, budget):
     return cut is not None and cut + len(entry_boundary) <= budget
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_budget_frontier(search, *, boundary, max_new_tokens, native_decision, native_winner):
     """Brute-force oracle: recompute the frontier from per-budget pass/fail."""
     names = []

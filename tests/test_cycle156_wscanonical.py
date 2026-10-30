@@ -1414,7 +1414,6 @@ class WsCoverageGapTests(unittest.TestCase):
 
     def test_native_input_ids_malformed_entries(self):
         """Test native input ids malformed entries."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import native_search_input_ids
 
         # Non-dict entry: candidate degrades to None.
@@ -1527,7 +1526,6 @@ class WsCoverageGapTests(unittest.TestCase):
 
     def test_canonicalization_rejects_malformed_native(self):
         """Test canonicalization rejects malformed native."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import ws_canonicalization
 
         out = ws_canonicalization("nope", {}, self._good_stage(), ("c1",))
@@ -1537,7 +1535,6 @@ class WsCoverageGapTests(unittest.TestCase):
 
     def test_canonicalization_rejects_malformed_stage(self):
         """Test canonicalization rejects malformed stage."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import ws_canonicalization
 
         out = ws_canonicalization({}, {}, "nope", ("c1",))
@@ -1551,7 +1548,6 @@ class WsCoverageGapTests(unittest.TestCase):
 
     def test_canonicalization_malformed_variant_cell(self):
         """Test canonicalization malformed variant cell."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import ws_canonicalization
 
         stage = {
@@ -1579,7 +1575,6 @@ class WsCoverageGapTests(unittest.TestCase):
 
     def test_canonicalization_skips_bad_fixture_rows(self):
         """Test canonicalization skips bad fixture rows."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import ws_canonicalization
 
         stage = {

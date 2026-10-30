@@ -84,7 +84,6 @@ class _WordBackend:
         """Decode word ids back to text, rendering unknown ids as '?'."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
         """Scripted generate: answer from the decoded prompt per the mode; 'explode' raises."""
         self.calls += 1
@@ -648,7 +647,6 @@ class OperatingTests(unittest.TestCase):
         self.assertEqual(min(a for _, a, _ in triples), 6)
         self.assertEqual(max(b for _, _, b in triples), 6)
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_shape_gates_rederived_with_printed_interpolation(self):
         # Amendment I: the graded interpolation is
         # q_d = q72 * d / 72 (printed in the design); the
@@ -990,7 +988,6 @@ class StageTests(unittest.TestCase):
 
     def test_cancelled_stage(self):
         """A pre-set cancel event yields the cancelled, unavailable payload."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import threading
 
         cancel = threading.Event()
@@ -1343,7 +1340,6 @@ class CliTests(unittest.TestCase):
         # The run subparser's own help carries the disclosure
         # (rendering it exercises argparse's percent expansion
         # of help strings).
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         subparsers = next(
             action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
         )

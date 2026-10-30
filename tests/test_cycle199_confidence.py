@@ -262,7 +262,6 @@ def _load_confidence_variant(source: str) -> dict:
 
     module = types.ModuleType("model_protocol_lab.confidence_variant")
     module.__package__ = "model_protocol_lab"
-    # skipcq: PYL-W0122 - gate execs own module source mutated in memory only
     exec(compile(source, "confidence_variant", "exec"), module.__dict__)  # noqa: S102 -- the gate execs this repo's own module source, mutated in memory only
     return module.__dict__
 
@@ -276,7 +275,6 @@ class TestParserMutationGate(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up the test fixture."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import model_protocol_lab.confidence as _cf
 
         cls.source = Path(_cf.__file__).read_text(encoding="utf-8")
@@ -826,8 +824,6 @@ class TestTinyCheckpointEndToEnd(unittest.TestCase):
     def setUpClass(cls):
         """Set up the test fixture."""
         import tempfile
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from pathlib import Path
 
         from tests.test_adapter_integration import build_tiny_gpt2

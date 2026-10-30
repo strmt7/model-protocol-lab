@@ -708,7 +708,6 @@ class BoundaryTextMatchTests(unittest.TestCase):
     @staticmethod
     def _case():
         """Case."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from tests.test_workflows import split
 
         return split().search[0]
@@ -729,7 +728,6 @@ class BoundaryTextMatchTests(unittest.TestCase):
         # The model emits the boundary TEXT ("|") as token 2000 while the
         # configured boundary is token 1000: the ID-level match misses, but
         # the text cross-check catches it.
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Generation
 
         class MismatchBackend(FakeBackend):
@@ -753,7 +751,6 @@ class BoundaryTextMatchTests(unittest.TestCase):
 
     def test_genuine_miss_has_no_text_match(self):
         """Test genuine miss has no text match."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Generation
 
         backend = FakeBackend(generate_script=[Generation(ids("nope"), "limit")])
@@ -768,7 +765,6 @@ class BoundaryTextMatchTests(unittest.TestCase):
         class FlakyBackend(FakeBackend):
             """Flaky backend."""
 
-            # skipcq: PYL-R0201 - zero-arg super() requires an instance method
             def decode(self, token_ids):
                 """Decode."""
                 if token_ids == (1000,):
@@ -806,10 +802,8 @@ class AdversarialLoaderTests(unittest.TestCase):
     @settings(max_examples=500, suppress_health_check=[HealthCheck.differing_executors])
     def test_loader_never_crashes_on_adversarial_json(self, data):
         """Test loader never crashes on adversarial json."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.datasets import load_dataset
 
         with TemporaryDirectory() as tmp:
@@ -850,7 +844,6 @@ class AdversarialLoaderTests(unittest.TestCase):
     @settings(suppress_health_check=[HealthCheck.differing_executors])
     def test_loader_rejects_garbage_bytes(self, payload):
         """Test loader rejects garbage bytes."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.datasets import load_dataset
 
         with TemporaryDirectory() as tmp:
@@ -865,7 +858,6 @@ class SecurityFixTests(unittest.TestCase):
 
     def test_deeply_nested_json_raises_value_error(self):
         """Test deeply nested json raises value error."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.datasets import parse_dataset
 
         payload = "[" * 200000 + "]" * 200000
@@ -877,7 +869,6 @@ class SecurityFixTests(unittest.TestCase):
         """Test character device fixture rejected."""
         import os
 
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.datasets import load_dataset
 
         # /dev/null is a character device on POSIX; skip where it is absent.
@@ -894,7 +885,6 @@ class SecurityFixTests(unittest.TestCase):
         import os
         import threading
 
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.datasets import load_dataset
 
         with TemporaryDirectory() as tmp:
@@ -920,7 +910,6 @@ class SecurityFixTests(unittest.TestCase):
 
     def test_missing_fixture_file_is_value_error(self):
         """Test missing fixture file is value error."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.datasets import load_dataset
 
         with (
@@ -934,10 +923,7 @@ class SecurityFixTests(unittest.TestCase):
         import os as _os
         import stat as _stat
 
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.reporting import save_report
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from tests.test_workflows import experiment
 
         with TemporaryDirectory() as tmp:
@@ -949,10 +935,7 @@ class SecurityFixTests(unittest.TestCase):
 
     def test_report_refuses_to_overwrite(self):
         """Test report refuses to overwrite."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.reporting import save_report
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from tests.test_workflows import experiment
 
         with TemporaryDirectory() as tmp:
@@ -968,7 +951,6 @@ class InspectDiagnosticTests(unittest.TestCase):
 
     def test_inspect_reports_validation_reason(self):
         """Test inspect reports validation reason."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         with TemporaryDirectory() as tmp:
@@ -1041,13 +1023,9 @@ class RenderRobustnessTests(unittest.TestCase):
         """Test output dir claimed before backend init and released on failure."""
         # M1: an unwritable output path must fail before model loading, and a
         # claimed-but-unused directory must not block a retry.
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import io
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from unittest.mock import patch
 
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.cli import main
 
         with TemporaryDirectory() as tmp:
@@ -1075,13 +1053,9 @@ class RenderRobustnessTests(unittest.TestCase):
     def test_output_through_regular_file_fails_before_backend_init(self):
         """Test output through regular file fails before backend init."""
         # M1: --output beneath a regular file is a pre-detectable error.
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import io
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from unittest.mock import patch
 
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.cli import main
 
         with TemporaryDirectory() as tmp:
@@ -1110,7 +1084,6 @@ class RenderRobustnessTests(unittest.TestCase):
         """Test fingerprint normalizes null bos repeat."""
         # L2: behaviorally identical hypotheses share a fingerprint, matching
         # local_repairs' dedup key.
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Format
         from model_protocol_lab.experiments import candidate_fingerprint
 
@@ -1143,7 +1116,6 @@ class RenderRobustnessTests(unittest.TestCase):
         # Requires the hf stack: without transformers the deep check is skipped.
         if not HAS_HF:
             self.skipTest("the 'hf' extra is not installed")
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json
 
         from model_protocol_lab.doctor import examine_model
@@ -1165,16 +1137,10 @@ class RenderRobustnessTests(unittest.TestCase):
     def test_inspect_warns_on_empty_expected(self):
         """Test inspect warns on empty expected."""
         # L1: empty expected answers are flagged as vacuously passing.
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import io
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from unittest.mock import patch
 
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.cli import main
 
         payload = {
@@ -1232,7 +1198,6 @@ class RenderRobustnessTests(unittest.TestCase):
             with patch("socket.socket", BlockedSocket):
                 report = examine_model(root)
                 self.assertEqual(report["verdict"], "ok")
-                # skipcq: PYL-W0404 - test-local import isolates the module under audit
                 from threading import Event
 
                 from model_protocol_lab.backends import LocalHFBackend
@@ -1248,16 +1213,10 @@ class RenderRobustnessTests(unittest.TestCase):
         """Test run warns on empty expected before backend init."""
         # The run-path empty-expected warning fires even when backend init
         # later fails (warning precedes expensive work).
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import io
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from unittest.mock import patch
 
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.cli import main
 
         payload = {
@@ -1304,13 +1263,9 @@ class RenderRobustnessTests(unittest.TestCase):
     def test_run_value_error_shows_sanitized_code(self):
         """Test run value error shows sanitized code."""
         # A fixture ValueError in run surfaces the fixed vocabulary (line 191).
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import io
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from unittest.mock import patch
 
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.cli import main
 
         with TemporaryDirectory() as tmp:
@@ -1339,13 +1294,9 @@ class RenderRobustnessTests(unittest.TestCase):
         """Test deep nested output chain released on failure."""
         # QA round 2, issue 1: a failed run with --output a/b/c removes the
         # whole created chain, not just the leaf.
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import io
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from unittest.mock import patch
 
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.cli import main
 
         with TemporaryDirectory() as tmp:
@@ -1448,7 +1399,6 @@ class RoundTwoFixTests(unittest.TestCase):
 
     def test_split_rejects_nfc_nfd_duplicate_ids(self):
         """Test split rejects nfc nfd duplicate ids."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Fixture, Message, Split
 
         def fx(fid, content):
@@ -1460,7 +1410,6 @@ class RoundTwoFixTests(unittest.TestCase):
 
     def test_split_rejects_nfc_nfd_cross_split_message_leak(self):
         """Test split rejects nfc nfd cross split message leak."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Fixture, Message, Split
 
         search = Fixture("s1", (Message("user", "caf\u00e9 au lait?"),), "a", "gs")
@@ -1470,7 +1419,6 @@ class RoundTwoFixTests(unittest.TestCase):
 
     def test_split_rejects_nfc_nfd_group_overlap(self):
         """Test split rejects nfc nfd group overlap."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Fixture, Message, Split
 
         search = Fixture("s1", (Message("user", "q1"),), "a", "caf\u00e9")
@@ -1482,10 +1430,7 @@ class RoundTwoFixTests(unittest.TestCase):
         """Test inspect warning strips terminal escapes."""
         # A hostile fixture ID must not inject terminal escape sequences
         # into the empty-expected stderr warning.
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import io
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from unittest.mock import patch
 
         payload = {
@@ -1617,7 +1562,6 @@ class RoundThreeFixTests(unittest.TestCase):
         # evaluate's uniqueness check used raw string equality while Split
         # compares NFC-normalized keys (red-team round 2): canonically
         # equivalent IDs evaded evaluate's check.
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.core import Fixture, Message
 
         fx1 = Fixture("caf\u00e9", (Message("user", "q"),), "a", "g")

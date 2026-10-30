@@ -99,7 +99,6 @@ def healing_biases(extensions: tuple[int, ...], tail_id: int) -> dict[int, float
     return biases
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def heal_prompt_ids(
     input_ids: tuple[int, ...],
     *,

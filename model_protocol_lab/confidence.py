@@ -416,7 +416,6 @@ def _mean(values: list[int]) -> float | None:
     return (sum(values) / len(values)) if values else None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _population_block(cells: Sequence[dict[str, Any]], n_population: int) -> dict[str, Any]:
     """Every readout over one population of completed cells.
 
@@ -473,7 +472,6 @@ def _population_block(cells: Sequence[dict[str, Any]], n_population: int) -> dic
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _candidate_block(
     records: Sequence[dict[str, Any]],
     control_records: Sequence[dict[str, Any]],
@@ -484,7 +482,6 @@ def _candidate_block(
     own = [r for r in records if r["candidate"] == candidate]
     elicited = [r["elicited"] for r in own if type(r["elicited"]) is dict]
     operator = _population_block(elicited, n_operator_population)
-    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     flips = {"n_compared": 0, "pass_to_fail": 0, "fail_to_pass": 0}  # nosec B105 -- 'pass' keys are verdict-flip counts in the frozen payload schema, not credentials
     for record in own:
         cell = record["elicited"]

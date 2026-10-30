@@ -237,7 +237,6 @@ def _oracle_text(decode: Callable[[tuple[int, ...]], Any], snap: _Snap) -> Any:
     return result if type(result) is str else None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_divergences(
     stops: list[str],
     spec: dict[tuple[str, str], Any],
@@ -1355,7 +1354,6 @@ _FUZZ_STOP_POOL = ["STOP", "END", "。", "fin🔚", "x", "STOP "]
 _FUZZ_TEXT_POOL = ["plain output", "has STOP inside", "END", "。", "", "out", "outSTOP", "clean"]
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _fuzz_case(rng: random.Random) -> dict[str, Any]:
     """Fuzz case."""
     n_stops = rng.randint(1, 4)

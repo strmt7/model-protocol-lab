@@ -250,7 +250,6 @@ class ScriptedBackend:
             return cast(str, 12345)
         return "".join(chr(i) for i in token_ids)
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
@@ -297,7 +296,6 @@ class ScriptedBackend:
         raise AssertionError(f"bad outcome kind: {kind}")
 
 
-# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class EvaluateHarness(unittest.TestCase):
     """Evaluate harness."""
 

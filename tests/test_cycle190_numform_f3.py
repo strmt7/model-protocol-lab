@@ -216,7 +216,6 @@ class TestF0Regression(unittest.TestCase):
         """Test single candidate variant rejected."""
         payload = _base_payload()
         name = next(iter(payload["candidates"]))
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         record = next(
             r
             for r in payload["candidates"][name]["records"]
@@ -264,7 +263,6 @@ class TestBindingBattery(unittest.TestCase):
         base = experiments.numform_analysis(stage, (FORMATS[0].name,))
         for field, value in (("answer_value", 5), ("answer_text", "5")):
             payload = copy.deepcopy(base)
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             record = next(
                 r for r in payload["candidates"][FORMATS[0].name]["records"] if r["cell"] is None
             )

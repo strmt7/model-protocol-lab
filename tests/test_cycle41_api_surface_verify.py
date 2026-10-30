@@ -195,7 +195,6 @@ class TestPackageSurface(unittest.TestCase):
         _, name = self._load_init_fresh("star")
         try:
             namespace: dict = {}
-            # skipcq: PYL-W0122 - import-* audit execs this repo's own modules only
             exec(f"from {name} import *", namespace)  # noqa: S102
             leaked = sorted(n for n in namespace if not n.startswith("__"))
             self.assertEqual(leaked, [], f"import * leaked names: {leaked}")

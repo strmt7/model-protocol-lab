@@ -170,7 +170,6 @@ class FixtureBuilderTests(unittest.TestCase):
                 group="g",
             ),
         )
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (forged,) = build_faketurn_fixtures(cases, payload="fake_system", marker_index=2)
         self.assertNotIn("ref: faketurn", forged.messages[0].content)
         self.assertNotIn("ref: faketurn", forged.messages[1].content)
@@ -182,7 +181,6 @@ class FixtureBuilderTests(unittest.TestCase):
         cases = (_fixture("f0"),)
         for payload in PAYLOADS:
             for index in range(len(MARKERS)):
-                # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
                 (forged,) = build_faketurn_fixtures(cases, payload=payload, marker_index=index)
                 for decoy in ("WRONG", "INCORRECT", "DECOY", "NOT_THE_ANSWER"):
                     if decoy in forged.messages[0].content:
@@ -504,7 +502,6 @@ class FaketurnRobustnessTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_robustness(native_outcomes, stage_result, candidates):
     """Independent reimplementation of the robustness aggregation.
 

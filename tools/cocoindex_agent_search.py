@@ -217,7 +217,6 @@ def source_digest(entries: list[tuple[str, Path]]) -> str:
     for name, source in sorted(entries, key=lambda entry: entry[0]):
         digest.update(name.encode("utf-8", "surrogateescape") + b"\0")
         with source.open("rb") as stream:
-            # skipcq: PYL-W0640 - the stream lambda is consumed by iter() in the same iteration
             for block in iter(lambda: stream.read(1024 * 1024), b""):
                 digest.update(block)
         digest.update(b"\0")

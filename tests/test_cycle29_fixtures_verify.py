@@ -146,7 +146,6 @@ def _oracle_check_discipline(search: list[Fixture], held_out: list[Fixture]) -> 
         raise _OracleRejected("message leakage")
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_parse_fixture_csv(text: str) -> tuple[list[Fixture], list[Fixture], list[str]]:
     """Independent re-implementation of ``parse_fixture_csv`` from its
     docstring.  Returns (search, held_out, empty_expected_ids); raises

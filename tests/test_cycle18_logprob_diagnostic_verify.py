@@ -254,7 +254,6 @@ class NoLogitsBackend(ScriptedBackend):
     forward_logits = None  # type: ignore[assignment]
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_score_expected(
     backend: object,
     prompt_ids: tuple[int, ...],
@@ -466,7 +465,6 @@ def _oracle_aggregate(scores: list[TargetScore]) -> dict:
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_interpret_kind(fixture_scores: list[dict]) -> str:
     """Independent reimplementation of the band interpretation, from the
     ``_interpret_logprob_candidate`` docstring: mean >= DERAILED reads
@@ -499,7 +497,6 @@ _METHOD = (
 )
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_diagnostic(
     backend: object,
     result: dict,
@@ -638,7 +635,6 @@ def _interpretation_mean(fixture_scores: list[dict]) -> float | None:
     return total / tokens if tokens else None
 
 
-# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class DiagnosticCase(unittest.TestCase):
     """Shared differential assertion: implementation vs independent oracle."""
 
@@ -1171,7 +1167,6 @@ class EngineeredBoundaryEndToEndTests(DiagnosticCase):
                 fixture = _make_fixture("f1", "c")
                 result = {"search": [_candidate_entry("cand", [_make_obs("f1", prompt_ids)])]}
                 diag = self.assert_diagnostic_matches(backend, result, (fixture,), vocab_size=128)
-                # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
                 (cand,) = diag["candidates"]
                 self.assertEqual(cand["interpretation"]["kind"], expected_kind)
                 self.assertEqual(cand["aggregate"]["mean_logprob"], mean_p)
@@ -1186,7 +1181,6 @@ class EngineeredBoundaryEndToEndTests(DiagnosticCase):
                 fixture = _make_fixture("f1", "dcd")
                 result = {"search": [_candidate_entry("cand", [_make_obs("f1", prompt_ids)])]}
                 diag = self.assert_diagnostic_matches(backend, result, (fixture,), vocab_size=128)
-                # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
                 (cand,) = diag["candidates"]
                 self.assertEqual(cand["interpretation"]["kind"], expected_kind)
                 self.assertEqual(cand["aggregate"]["mean_logprob"], mean_p)
@@ -1277,7 +1271,6 @@ class InterpretationEndToEndTests(DiagnosticCase):
         diag = self.assert_diagnostic_matches(
             backend, result, (_make_fixture("f1", "c"),), vocab_size=128
         )
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (cand,) = diag["candidates"]
         self.assertEqual(cand["interpretation"]["kind"], "no_failures")
         self.assertEqual(cand["aggregate"]["scored_fixtures"], 0)

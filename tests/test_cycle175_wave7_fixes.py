@@ -211,7 +211,6 @@ class TestDeterminismBlockingSet(unittest.TestCase):
         audit = determinism.audit_determinism(_artifact([good, bad]), _PureBackend())
         self.assertNotEqual(audit["verdict"], "deterministic")
         self.assertIsNone(audit["certificate"])
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         bad_cell = next(c for c in audit["cells"] if c["fixture"] == "f2")
         self.assertEqual(bad_cell["detail"], "recorded_ids_invalid")
 
@@ -234,7 +233,6 @@ class TestDeterminismBlockingSet(unittest.TestCase):
         audit = determinism.audit_determinism(_artifact([good, aborted]), _PureBackend())
         self.assertEqual(audit["verdict"], "deterministic")
         self.assertIsNotNone(audit["certificate"])
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         aborted_cell = next(c for c in audit["cells"] if c["fixture"] == "f2")
         self.assertEqual(aborted_cell["detail"], "observation_not_completed")
 

@@ -37,7 +37,6 @@ class CrawlerContracts(unittest.TestCase):
                     command,
                     env,
                     timeout=900,
-                    # skipcq: PYL-W0102 - The list default binds the shared observed list by design.
                     _calls=observed,
                     _home=home,
                     _failure=failure,

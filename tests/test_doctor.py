@@ -339,7 +339,6 @@ class DoctorBranchTests(unittest.TestCase):
 
     def test_dataset_examination_reports_counts(self):
         """Test dataset examination reports counts."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab.doctor import examine_dataset

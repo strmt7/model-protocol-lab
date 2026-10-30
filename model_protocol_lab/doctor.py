@@ -418,7 +418,6 @@ def portability_matrix(second_checkpoint: str | Path) -> dict[str, Any]:
 # deliberately preserved for diagnostic fidelity, mirroring debug.py and
 # cli.py (kept local so doctor.py stays importable without cli).
 _CONTROL_CHARS = re.compile(
-    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]"
 )
 
@@ -467,7 +466,6 @@ def render_portability_table(section: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def examine_model(
     model_path: str | Path,
     *,
@@ -948,7 +946,6 @@ def template_firewall(model_path: str | Path) -> dict[str, Any]:
     return {"status": "allowed", "detail": "no_rce_primitives_found", "findings": []}
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def template_conformance(
     model_path: str | Path,
     formats: tuple[Format, ...],
@@ -1077,7 +1074,6 @@ class _TemplateProbeBudgetExceeded(Exception):
     """The probe's global render / wall-clock budget ran out."""
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def template_probe_section(model_path: str | Path) -> dict[str, Any]:
     """Behavioural probe of the checkpoint's chat template (cycle 182).
 
@@ -1249,7 +1245,6 @@ def template_probe_section(model_path: str | Path) -> dict[str, Any]:
         return section
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def marker_isolation(
     model_path: str | Path,
     formats: tuple[Format, ...],
@@ -1424,13 +1419,9 @@ def _longest_prompt_tokens(tokenizer: Any, dataset_path: str | Path) -> int | No
     budget.
     """
     try:
-        # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
         from .catalog import CATALOG, candidates
-
-        # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
         from .datasets import load_dataset
 
-        # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
         split = load_dataset(Path(dataset_path))  # nosec B615 -- own bounded JSON reader, not HF datasets
         fixtures = (*split.search, *split.held_out)
         longest = 0
@@ -1446,7 +1437,6 @@ def _longest_prompt_tokens(tokenizer: Any, dataset_path: str | Path) -> int | No
         return None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _next_command(
     model_path: str | Path,
     dataset_path: str | Path | None,
@@ -1480,7 +1470,6 @@ def _next_command(
     window = model.get("context_window") if type(model) is dict else None
     if type(window) is not int:
         return None
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .catalog import CATALOG
 
     new_tokens = _DEFAULT_NEW_TOKENS

@@ -280,7 +280,6 @@ class TestProfileClasses(unittest.TestCase):
         self.assertEqual(payload["n_effective_measurement"], 2)
         self.assertEqual(payload["n_redundant_completed_observations"], 2)
         self.assertEqual(payload["n_redundant_render_observations"], 2)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         pair = next(p for p in payload["pairs"] if p["candidates"] == ["A", "B"])
         self.assertEqual(pair["n_common_completed"], 2)
         self.assertEqual(pair["n_shared"], 2)
@@ -336,7 +335,6 @@ class TestProfileClasses(unittest.TestCase):
         self.assertEqual(payload["n_primary_cohort"], 2)
         self.assertEqual(payload["excluded_candidates"], ["Z"])
         self.assertEqual(payload["n_effective_measurement"], 1)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         zed = next(c for c in payload["candidates"] if c["candidate"] == "Z")
         self.assertFalse(zed["in_primary_cohort"])
         self.assertIsNone(zed["measurement_class_members"])
@@ -891,8 +889,6 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
     def test_aliasing_dispatches_through_main(self):
         """Test aliasing dispatches through main."""
         from model_protocol_lab import backends, doctor, experiments
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab import reporting as reporting_mod
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1243,9 +1239,7 @@ class TestValidatorGapBattery(unittest.TestCase):
     def test_evaluable_status_coupling(self):
         """Test evaluable status coupling."""
         payload = self._interrupted_payload()
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         zed = next(c for c in payload["candidates"] if c["candidate"] == "Z")
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         failed_record = next(r for r in zed["records"] if r["status"] == "failed")
         failed_record["evaluable"] = True  # evaluable but not completed
         self.assertFalse(_valid_aliasing(payload))
@@ -1253,9 +1247,7 @@ class TestValidatorGapBattery(unittest.TestCase):
     def test_non_evaluable_digest_must_be_none(self):
         """Test non evaluable digest must be none."""
         payload = self._interrupted_payload()
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         zed = next(c for c in payload["candidates"] if c["candidate"] == "Z")
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         failed_record = next(r for r in zed["records"] if r["status"] == "failed")
         failed_record["input_sha256"] = "a" * 64
         self.assertFalse(_valid_aliasing(payload))

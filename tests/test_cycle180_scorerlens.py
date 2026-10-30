@@ -614,8 +614,6 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
     def test_scorer_lens_dispatches_through_main(self):
         """Test scorer lens dispatches through main."""
         from model_protocol_lab import backends, doctor, experiments
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab import reporting as reporting_mod
 
         with tempfile.TemporaryDirectory() as tmp:

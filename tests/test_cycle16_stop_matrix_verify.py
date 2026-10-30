@@ -103,7 +103,6 @@ class TextBackend:
         return "".join(self._texts[token] for token in token_ids)
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_outcome(
     backend: TextBackend,
     semantic: str,
@@ -194,7 +193,6 @@ def _expected_cell(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def check_matrix_against_oracle(
     stop_matrix_fn: Callable[..., list[dict[str, Any]]],
     backend: TextBackend,

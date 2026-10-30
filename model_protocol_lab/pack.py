@@ -369,7 +369,6 @@ def load_bundle_bytes(path: Path) -> bytes:
     return content
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _preparse_container(data: bytes) -> tuple[bytes, int]:
     """Validate the strict container shape and return ``(comment,
     entry_count)`` before ``ZipFile`` parses anything.
@@ -422,7 +421,6 @@ def _preparse_container(data: bytes) -> tuple[bytes, int]:
     return comment, total_entries
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _valid_manifest(manifest: Any) -> str | None:
     """Return ``None`` when the manifest matches the format-1 schema,
     else a short fixed detail token. Exact types throughout; unknown
@@ -511,7 +509,6 @@ def _read_entry(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> tuple[bytes,
     return b"".join(chunks), digest.hexdigest()
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def verify_bundle_bytes(data: bytes, expect_digest: str | None = None) -> dict[str, Any]:
     """Verify a bundle's seal and replay its ``results.json``.
 

@@ -97,7 +97,6 @@ class LogitStubBackend:
         """Decode."""
         return self._tokenizer.decode(token_ids)
 
-    # skipcq: PYL-E0202 - the attribute deliberately shadows the method to fake a missing primitive
     def forward_logits(self, input_ids: tuple[int, ...]):
         """Forward logits."""
         self.forward_calls.append(tuple(input_ids))
@@ -196,7 +195,6 @@ class DiagnosticEngineTests(unittest.TestCase):
             backend, make_result("cand", [make_obs("f1", prompt_ids)]), (fixture,)
         )
         self.assertTrue(diag["available"])
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (cand,) = diag["candidates"]
         self.assertEqual(cand["name"], "cand")
         (score,) = cand["fixture_scores"]
@@ -220,7 +218,6 @@ class DiagnosticEngineTests(unittest.TestCase):
         diag = logprob_diagnostic(
             backend, make_result("cand", [make_obs("f1", prompt_ids)]), (fixture,)
         )
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (cand,) = diag["candidates"]
         (score,) = cand["fixture_scores"]
         self.assertEqual(score["status"], "unavailable")

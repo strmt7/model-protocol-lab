@@ -27,7 +27,6 @@ class _BurnTokenizer:
     ) -> str:
         """Apply chat template."""
         end = time.monotonic() + self._seconds
-        # skipcq: PTC-W0047 - burning cycles until the deadline is the fixture
         while time.monotonic() < end:
             pass
         return "burned"

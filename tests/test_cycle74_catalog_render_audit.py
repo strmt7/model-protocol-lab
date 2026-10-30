@@ -344,7 +344,6 @@ class CatalogRenderAuditTests(unittest.TestCase):
     @staticmethod
     def test_crosscheck_hy4_no_think_variant():
         """Test crosscheck hy4 no think variant."""
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         variant = next(f for f in candidates("hy4", mutate=True) if f.name == "hy4/no-think")
         assert variant.render(_one_turn("U1")) == _HY4_USER + _HY4_NOTHINK_GEN
 

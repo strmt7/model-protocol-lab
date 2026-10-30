@@ -336,7 +336,6 @@ def _cell(
     )
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def diff_backends(
     *,
     prompt_ids: tuple[int, ...],
@@ -707,7 +706,6 @@ def _observation_ids(observation: dict[str, Any], key: str) -> tuple[int, ...] |
         return None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def divergence_section_data(
     *,
     observations: list[dict[str, Any]] | tuple[dict[str, Any], ...],
@@ -892,19 +890,23 @@ def run_diff_backends(args: argparse.Namespace, parser: argparse.ArgumentParser)
             parser.error(f"{label} must be at most 1MB")
     try:
         from .doctor import _build_primary_tokenizer, _loader_failure_code
-
-        tokenizer = _build_primary_tokenizer(args.model)
     except ImportError:
         print(
             "diff-backends: transformers is required for tokenizer loading",
             file=sys.stderr,
         )
         return 1
+    # The import is its own try so _loader_failure_code is provably
+    # bound whenever the failure handler below runs (cycle 225: the
+    # combined try made the binding conditional in flow analysis --
+    # DeepSource PYL-E0601 -- and would have masked a non-ImportError
+    # import failure behind a NameError).
+    try:
+        tokenizer = _build_primary_tokenizer(args.model)
     except Exception as exc:  # noqa: BLE001 -- sanitization boundary, never leak loader text
         # Only exact-match fixed codes (e.g. oversized_tokenizer_file)
         # reach the terminal; a parse failure echoing checkpoint bytes
         # collapses to the fixed code.
-        # skipcq: PYL-E0601 - bound by the try import whenever this handler runs
         print(f"diff-backends: {_loader_failure_code(exc)}", file=sys.stderr)
         return 1
     try:

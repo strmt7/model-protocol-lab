@@ -341,11 +341,8 @@ OPERATING_CHARACTERISTICS: dict[str, Any] = {
     "panel96_bonferroni_power_gap25_marginals_85_60": 0.7452,
     "panel96_bonferroni_power_gap25_base_90": 0.8329,
     "panel96_generations": 6912,
-    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     "winner_pass_probability_95": 0.292,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
-    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     "winner_pass_probability_90": 0.08,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
-    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     "winner_pass_probability_80": 0.005,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
     "screen_guess_probability": 1 / 216000,
     "screen_expected_exclusions_per_candidate": 24 / 216000,
@@ -628,7 +625,6 @@ def records_bytes(records_by_candidate: dict[str, list[dict[str, Any]]]) -> int:
     )
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def validate_case(case: dict[str, Any], seed: int) -> bool:
     """The pre-generation invariant battery over one case
     (candidate sections 2 and 3), executed by the stage before
@@ -804,7 +800,6 @@ def _regrade_verdict(cell: dict[str, Any], expected: str, transform: Any) -> boo
     return transform(text) == expected and bool(cell.get("boundary_found"))
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def aggregate_candidate(
     records: list[dict[str, Any]], cases: tuple[dict[str, Any], ...]
 ) -> dict[str, Any]:

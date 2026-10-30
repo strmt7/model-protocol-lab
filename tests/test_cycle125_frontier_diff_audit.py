@@ -193,7 +193,6 @@ class TestDiffFrontiers(unittest.TestCase):
             [[1, "selected", "alpha"]],
         )
         first = json.dumps(diff_frontiers(old, new), sort_keys=True)
-        # skipcq: PYL-W1114 - the reversed diff is the assertion: symmetry is what is audited
         second = json.dumps(diff_frontiers(new, old), sort_keys=True)
         self.assertEqual(json.dumps(diff_frontiers(old, new), sort_keys=True), first)
         self.assertNotEqual(first, second)  # direction matters

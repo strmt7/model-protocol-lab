@@ -378,7 +378,6 @@ class _DivergenceOracle:
             and eos.firing_step == sglang.firing_step
         )
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def _classify_stop(
         self,
         *,
@@ -426,7 +425,6 @@ class _DivergenceOracle:
             for kind in kinds
         ]
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def _classify_selection(
         self, per_stop: list[tuple[str, _OracleCell, _OracleCell, _OracleCell]]
     ) -> _OracleDivergence | None:
@@ -533,7 +531,6 @@ class _DivergenceOracle:
             "verdict": "diverge" if divergences else "agree",
         }
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def section_data(
         self,
         *,

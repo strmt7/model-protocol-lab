@@ -103,7 +103,6 @@ def _dependency_closure(declared: set[str]) -> set[str]:
     return closure
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _module_level_third_party_imports() -> dict[str, set[str]]:
     """Map test module name -> module-level third-party import roots."""
     stdlib = sys.stdlib_module_names

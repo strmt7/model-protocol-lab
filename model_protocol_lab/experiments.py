@@ -169,7 +169,6 @@ def classify_observation(obs: dict[str, Any], eos_id: int | None) -> str | None:
     return "no-boundary-in-N"
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def failure_taxonomy(result: dict[str, Any], eos_id: int | None) -> dict[str, Any]:
     """Per-candidate failure-mode counts for a ``run_experiment`` result.
 
@@ -259,7 +258,6 @@ def _stop_cell(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def stop_matrix(
     backend: Backend,
     candidate_name: str,
@@ -374,7 +372,6 @@ def stop_matrix(
     return rows
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def selection_robustness(
     backend: Backend,
     result: dict[str, Any],
@@ -519,7 +516,6 @@ def selection_robustness(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def transfer_portability(
     primary_winner: str | None,
     primary_decision: str,
@@ -632,7 +628,6 @@ def transfer_portability(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def transfer_stage(
     backend_factory: Callable[[str], Backend],
     checkpoint_ids: tuple[str, ...],
@@ -711,7 +706,6 @@ def transfer_stage(
     return transfer
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def perturbation_stage(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -808,7 +802,6 @@ def perturbation_stage(
     }
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def perturbation_robustness(
     primary_winner: str | None,
     primary_decision: str,
@@ -973,7 +966,6 @@ def perturbation_robustness(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def healing_stage(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -1064,7 +1056,6 @@ def healing_stage(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def native_search_outcomes(
     search_entries: list[dict[str, Any]] | tuple[dict[str, Any], ...],
     candidates: tuple[str, ...],
@@ -1124,7 +1115,6 @@ def native_search_outcomes(
     return outcomes
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def healing_delta(
     primary_winner: str | None,
     primary_decision: str,
@@ -1301,7 +1291,6 @@ def healing_delta(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def hierarchy_stage(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -1432,7 +1421,6 @@ def _hierarchy_entry_valid(entry: Any, n_fixtures: int) -> bool:
     return type(entry.get("pass")) is bool
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def hierarchy_adherence(
     primary_winner: str | None,
     primary_decision: str,
@@ -1612,7 +1600,6 @@ def hierarchy_adherence(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def position_stage(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -1705,7 +1692,6 @@ def _position_entry_valid(entry: Any, n_fixtures: int) -> bool:
     return type(entry.get("pass")) is bool
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def position_sensitivity(
     primary_winner: str | None,
     primary_decision: str,
@@ -1864,7 +1850,6 @@ def position_sensitivity(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def synthhistory_stage(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -1957,7 +1942,6 @@ def _synthhistory_entry_valid(entry: Any, n_fixtures: int) -> bool:
     return type(entry.get("pass")) is bool
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def synthhistory_stability(
     primary_winner: str | None,
     primary_decision: str,
@@ -2114,7 +2098,6 @@ def synthhistory_stability(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def fewshot_stage(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -2248,7 +2231,6 @@ def _fewshot_entry_valid(entry: Any, n_eval: int) -> bool:
     return True
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _fewshot_arm_verdict(
     per_candidate: dict[str, Any], candidates: tuple[str, ...]
 ) -> tuple[str, str | None, dict[str, dict[str, Any] | None]]:
@@ -2284,7 +2266,6 @@ def _fewshot_arm_verdict(
     return "no_candidate", None, rates
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def fewshot_gain(
     primary_winner: str | None,
     primary_decision: str,
@@ -2448,7 +2429,6 @@ def fewshot_gain(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def prefill_stage(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -2605,7 +2585,6 @@ def _prefill_entry_valid(entry: Any, n_fixtures: int) -> bool:
     return type(entry.get("pass")) is bool
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def prefill_adherence(
     primary_winner: str | None,
     primary_decision: str,
@@ -2806,7 +2785,6 @@ def _observation_min_budget(obs: dict[str, Any], boundary: tuple[int, ...]) -> i
     return cut + len(boundary)
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def budget_frontier(
     search: list[dict[str, Any]] | tuple[dict[str, Any], ...],
     *,
@@ -3057,7 +3035,6 @@ def budget_frontier(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def held_out_budget_floor(
     observations: list[dict[str, Any]] | tuple[dict[str, Any], ...],
     *,
@@ -3252,7 +3229,6 @@ def _plural_fixtures(count: int) -> str:
     return f"{count} fixture" + ("" if count == 1 else "s")
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _interpret_logprob_candidate(fixture_scores: list[dict[str, Any]]) -> dict[str, str]:
     """Plain-language reading of one candidate's diagnostic (§9.3-§9.5).
 
@@ -3383,7 +3359,6 @@ def _diagnostic_observation(
     return scored, score
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def logprob_diagnostic(
     backend: Backend,
     result: dict[str, Any],
@@ -4019,7 +3994,6 @@ def _require_native_match(
         raise ValueError("native configuration_digest does not match this sweep configuration")
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def run_experiment(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -4161,7 +4135,6 @@ def run_experiment(
     return finish()
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def portfolio_analysis(
     result: dict[str, Any],
     cases: tuple[Fixture, ...],
@@ -4258,7 +4231,6 @@ def portfolio_analysis(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def batch_stage(
     backend: Backend,
     prompts: dict[str, tuple[int, ...]],
@@ -4400,7 +4372,6 @@ def batch_stage(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def stop_stage(
     result: dict[str, Any],
     cases: tuple[Any, ...],
@@ -4562,7 +4533,6 @@ def stop_stage(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def native_search_input_ids(
     search_entries: list[dict[str, Any]] | tuple[dict[str, Any], ...],
     candidates: tuple[str, ...],
@@ -4623,7 +4593,6 @@ def native_search_input_ids(
     return result
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def ws_stage(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -4714,7 +4683,6 @@ def ws_stage(
     return {"mutations": list(mutation_names), "per_mutation": per_mutation}
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def ws_canonicalization(
     native_outcomes: dict[str, dict[str, Any]],
     native_input_ids: dict[str, dict[str, list[int]] | None],
@@ -4884,7 +4852,6 @@ def ws_canonicalization(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def structured_stage(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -5004,7 +4971,6 @@ def _structured_cell_valid(entry: Any) -> bool:
     )
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def structured_adherence(
     candidates: tuple[str, ...],
     stage: dict[str, Any],
@@ -5082,7 +5048,6 @@ def _deliforge_cell_unsupported(detail: str) -> dict[str, Any]:
     return {"supported": False, "detail": detail}
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def deliforge_stage(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -5379,7 +5344,6 @@ def _deliforge_cell_view(entry: Any) -> dict[str, Any] | None:
     return {"supported": True, "verdicts": verdicts}
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def deliforge_authority(
     native_outcomes: dict[str, dict[str, Any]],
     stage_result: dict[str, Any],
@@ -5528,7 +5492,6 @@ def _faketurn_original_id(forged_id: str) -> str:
     return forged_id
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def faketurn_stage(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -5720,7 +5683,6 @@ def _faketurn_cell_view(entry: Any) -> dict[str, Any] | None:
     return {"supported": True, "token_source": token_source, "verdicts": verdicts}
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def faketurn_robustness(
     native_outcomes: dict[str, dict[str, Any]],
     stage_result: dict[str, Any],
@@ -5882,7 +5844,6 @@ def faketurn_robustness(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def toolcall_stage(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -6002,7 +5963,6 @@ def _toolcall_cell_valid(entry: Any) -> bool:
     )
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def toolcall_adherence(
     candidates: tuple[str, ...],
     stage: dict[str, Any],
@@ -6114,7 +6074,6 @@ def _verbosity_minimal_tokens(
     return minimal
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def verbosity_stage(
     *,
     observations: tuple[dict[str, Any], ...] | list[dict[str, Any]],
@@ -6202,7 +6161,6 @@ def verbosity_stage(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _verbosity_cell_valid(entry: Any) -> bool:
     """Structural check for one candidate cell of a verbosity stage."""
     if entry is None:
@@ -6250,7 +6208,6 @@ def _verbosity_cell_valid(entry: Any) -> bool:
     )
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def verbosity_profile(
     candidates: tuple[str, ...],
     stage: dict[str, Any],
@@ -6349,7 +6306,6 @@ def verbosity_profile(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def refusal_profile(result: dict[str, Any]) -> dict[str, Any]:
     """Per-candidate suspected-refusal profile (pure post-hoc).
 
@@ -6422,7 +6378,6 @@ def refusal_profile(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def scorerlens_profile(
     result: dict[str, Any], expected_by_fixture: dict[str, str]
 ) -> dict[str, Any]:
@@ -6527,7 +6482,6 @@ def scorerlens_profile(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def aliasing_profile(result: dict[str, Any]) -> dict[str, Any]:
     """Candidate aliasing audit of the recorded search entries (pure post-hoc).
 
@@ -6717,7 +6671,6 @@ def _aliasing_flag(
     return False, "boundaries_differ_within_passing_set", []
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def repetition_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -6981,8 +6934,6 @@ def repetition_stage(
 def _fixture_with_content(fixture: Any, content: str) -> Any:
     """A copy of ``fixture`` whose target message carries ``content``."""
     from . import repetition as _rep
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
 
     index = _rep.target_index(fixture)
@@ -6993,7 +6944,6 @@ def _fixture_with_content(fixture: Any, content: str) -> Any:
     return Fixture(id=fixture.id, messages=messages, expected=fixture.expected, group=fixture.group)
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def repetition_analysis(
     stage: dict[str, Any],
     primary_decision: Any,
@@ -7142,7 +7092,6 @@ def _answer_digest(value: Any) -> str | None:
     return sha256(value.encode("utf-8")).hexdigest()
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def distraction_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -7426,7 +7375,6 @@ def _condition_all_pass(records: list[dict[str, Any]], key: str) -> bool | None:
     return all(record["cells"][key]["verdict"] for record in completed)
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def distraction_analysis(
     stage: dict[str, Any],
     primary_decision: Any,
@@ -7526,7 +7474,6 @@ def distraction_analysis(
     }
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def leading_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -7750,7 +7697,6 @@ def leading_stage(
     return {"available": True, "detail": "", "protocol": protocol, "candidates": candidates}
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def leading_analysis(
     stage: dict[str, Any],
     primary_decision: Any,
@@ -7875,7 +7821,6 @@ def leading_analysis(
     }
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def dateline_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -8212,7 +8157,6 @@ def _dateline_run_cell(
         record["cell_details"][arm_key] = "arm_evaluation_failed"
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def dateline_analysis(
     stage: dict[str, Any],
     primary_decision: Any,
@@ -8369,8 +8313,6 @@ def _multiturn_turn(
     digests only.
     """
     from . import multiturn as _mt
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture
 
     fixture = Fixture(id=case_id, messages=messages, expected=expected, group=_mt.GROUP)
@@ -8403,7 +8345,6 @@ def _multiturn_turn(
     return "arm_evaluation_failed", None, None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def multiturn_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -8430,8 +8371,6 @@ def multiturn_stage(
     docs/MULTITURN_DESIGN.md.
     """
     from . import multiturn as _mt
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Message
     from .fixtures import audit_special_token_literals
 
@@ -8611,7 +8550,6 @@ def multiturn_stage(
     return {"available": True, "detail": "", "protocol": protocol, "candidates": candidates}
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def multiturn_analysis(
     stage: dict[str, Any],
     candidate_names: tuple[str, ...],
@@ -8797,8 +8735,6 @@ def _needle_run_cell(
     ``cell_details`` and the cell itself stays None.
     """
     from . import needle as _nd
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
 
     if any(_nd.filler_screened(span, value, boundary_text) for span in spans if span):
@@ -8828,7 +8764,6 @@ def _needle_run_cell(
         record["cells"][key] = cell
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def needle_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -8860,8 +8795,6 @@ def needle_stage(
     fail-closed payload. Design: docs/NEEDLE_DESIGN.md.
     """
     from . import needle as _nd
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .distraction import NEUTRAL_CORPUS, span_candidates, span_text
     from .fixtures import audit_special_token_literals
@@ -9359,7 +9292,6 @@ def _placement_cell(
     return "arm_evaluation_failed", None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def placement_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -9385,8 +9317,6 @@ def placement_stage(
     fail-closed payload. Design: docs/PLACEMENT_DESIGN.md.
     """
     from . import placement as _pl
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
@@ -9617,7 +9547,6 @@ def _canonical_form_cell(
     return "arm_evaluation_failed", None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def canonicalform_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -9644,8 +9573,6 @@ def canonicalform_stage(
     Design: docs/CANONICALFORM_DESIGN.md.
     """
     from . import canonicalform as _cf
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
@@ -9898,7 +9825,6 @@ def _negation_cell(
     return "arm_evaluation_failed", None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def negation_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -9933,8 +9859,6 @@ def negation_stage(
     Design: docs/NEGATION_DESIGN.md.
     """
     from . import negation as _ng
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
     from .numform import margin_class
@@ -10225,7 +10149,6 @@ def _instruction_distance_cell(
     return "arm_evaluation_failed", None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def instruction_distance_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -10265,8 +10188,6 @@ def instruction_distance_stage(
     docs/INSTRUCTIONDISTANCE_DESIGN.md.
     """
     from . import instructiondistance as _id
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .distraction import NEUTRAL_CORPUS, span_candidates, span_text
     from .fixtures import audit_special_token_literals
@@ -10623,7 +10544,6 @@ def _history_frame_cell(
     return "arm_evaluation_failed", None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def history_frame_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -10669,8 +10589,6 @@ def history_frame_stage(
     docs/HISTORYFRAME_DESIGN.md.
     """
     from . import historyframe as _hf
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
     from .synthhistory import SYNTHETIC_TURNS
@@ -11013,7 +10931,6 @@ def _prune_sweep_cell(
     return "arm_evaluation_failed", None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def prune_sweep_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -11047,8 +10964,6 @@ def prune_sweep_stage(
     Design: docs/PRUNESWEEP_DESIGN.md.
     """
     from . import prunesweep as _ps
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
@@ -11326,7 +11241,6 @@ def _record_notation_cell(
     return "arm_evaluation_failed", None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def record_notation_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -11360,8 +11274,6 @@ def record_notation_stage(
     docs/PAYLOADSERIALIZATION_DESIGN.md.
     """
     from . import recordnotation as _rn
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
@@ -11655,7 +11567,6 @@ def _invisible_chars_cell(
     return "arm_evaluation_failed", None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def invisible_chars_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -11691,8 +11602,6 @@ def invisible_chars_stage(
     docs/INVISIBLECHARS_DESIGN.md.
     """
     from . import invisiblechars as _ic
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
@@ -12020,7 +11929,6 @@ def _confusable_skeleton_cell(
     return "arm_evaluation_failed", None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def confusable_skeleton_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -12057,8 +11965,6 @@ def confusable_skeleton_stage(
     docs/CONFUSABLESKELETON_DESIGN.md.
     """
     from . import confusableskeleton as _cs
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
@@ -12381,7 +12287,6 @@ def _rotation_cell(
     return "arm_evaluation_failed", None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def rotation_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -12412,8 +12317,6 @@ def rotation_stage(
     payload. Design: docs/ROTATION_DESIGN.md.
     """
     from . import rotation as _rot
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
@@ -12655,7 +12558,6 @@ def _density_cell(
     return "arm_evaluation_failed", None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def density_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -12684,8 +12586,6 @@ def density_stage(
     docs/DENSITY_DESIGN.md.
     """
     from . import density as _den
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
@@ -12927,7 +12827,6 @@ def _fieldorder_cell(
     return "arm_evaluation_failed", None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def fieldorder_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -12954,8 +12853,6 @@ def fieldorder_stage(
     docs/FIELDORDER_DESIGN.md.
     """
     from . import fieldorder as _fo
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
     from .structured import _canonical_json
@@ -13135,7 +13032,6 @@ def fieldorder_analysis(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def numform_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -13474,7 +13370,6 @@ def _nonnegative_number(value: Any) -> bool:
     return type(value) in (int, float) and isinstance(value, (int, float)) and value >= 0
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _cache_profile_cell_valid(entry: Any, block_size: int | None = None) -> bool:
     """Structural check for one candidate cell of a cache-profile stage.
 
@@ -13581,7 +13476,6 @@ def _cache_profile_cell_valid(entry: Any, block_size: int | None = None) -> bool
     )
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def cache_profile_profile(
     candidates: tuple[str, ...],
     stage: dict[str, Any],
@@ -13741,7 +13635,6 @@ def template_robustness_stage(
     return {"candidates": candidates, "protocol": protocol}
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def ablation_stage(
     formats: tuple[Any, ...],
     fixtures: tuple[Any, ...],
@@ -13856,7 +13749,6 @@ def ablation_stage(
     return {"candidates": candidates, "n_focus": len(focus)}
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def confidentiality_stage(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -13984,7 +13876,6 @@ def _in_closed_range(value: Any, lo: float, hi: float) -> bool:
     return type(value) in (int, float) and isinstance(value, (int, float)) and lo <= value <= hi
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def _confidentiality_cell_valid(entry: Any) -> bool:
     """Structural check for one candidate cell of a confidentiality stage."""
     if entry is None:
@@ -14130,7 +14021,6 @@ def _confidentiality_cell_valid(entry: Any) -> bool:
     return True
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def confidentiality_profile(
     candidates: tuple[str, ...],
     stage: dict[str, Any],
@@ -14204,7 +14094,6 @@ class _ScriptedEmissionBackend:
         return Generation(tuple(self._emission[:max_new_tokens]), "limit")
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def answer_collision_stage(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -14240,8 +14129,6 @@ def answer_collision_stage(
         score_observation,
         subword_emission,
     )
-
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .core import Fixture, Message, first_boundary
 
     if backend is None:
@@ -14360,7 +14247,6 @@ def answer_collision_stage(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _answer_collision_arm_valid(arm: Any, *, control: bool) -> bool:
     """Structural + invariant check for one arm of an answer-collision cell."""
     if type(arm) is not dict:
@@ -14404,7 +14290,6 @@ def _answer_collision_arm_valid(arm: Any, *, control: bool) -> bool:
     return True
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _answer_collision_cell_valid(entry: Any) -> bool:
     """Structural check for one candidate cell of an answer-collision stage."""
     if entry is None:
@@ -14460,7 +14345,6 @@ def _answer_collision_cell_valid(entry: Any) -> bool:
     return evaluable == (n_evaluable >= 1)
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def answer_collision_profile(
     candidates: tuple[str, ...],
     stage: dict[str, Any],
@@ -14537,7 +14421,6 @@ def _choiceaudit_cell(score: TargetScore) -> dict[str, Any]:
     }
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def choiceaudit_stage(
     backend: Any,
     formats: tuple[Any, ...],
@@ -14790,7 +14673,6 @@ def choiceaudit_analysis(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _precision_completed_obs(entry: Any) -> dict[str, dict[str, Any]]:
     """fixture -> recorded observation for one native search entry.
 
@@ -14855,7 +14737,6 @@ def _precision_logprob(backend: Any, prompt_ids: tuple[int, ...], expected: str)
     any non-ok score (alignment, provider, context) degrades this
     cell's logprob to None -- never a stage failure, never a guess.
     """
-    # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
     from .scoring import score_target_logprobs
 
     if not callable(getattr(backend, "forward_logits", None)):
@@ -14868,13 +14749,11 @@ def _precision_logprob(backend: Any, prompt_ids: tuple[int, ...], expected: str)
     if getattr(score, "status", None) != "ok":
         return None
     total = getattr(score, "total_logprob", None)
-    # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
     if isinstance(total, (int, float)) and not isinstance(total, bool) and total == total:
         return float(total)
     return None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def precision_stage(
     native_backend: Any,
     bf16_backend: Any,
@@ -15107,7 +14986,6 @@ def _confidence_completed_obs(report: Any) -> dict[str, Any]:
     return out
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def confidence_stage(
     backend: Any,
     formats: tuple[Any, ...],

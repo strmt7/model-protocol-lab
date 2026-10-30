@@ -38,7 +38,6 @@ from model_protocol_lab.reporting import (
 )
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _quadratic_reference(frontier: dict[str, Any]) -> list[tuple[int, Any, int]]:
     """The pre-C1 O(B*C) sweep, kept as a semantic oracle.
 
@@ -131,7 +130,6 @@ class TestMarginTrajectoryComplexity(unittest.TestCase):
             start = time.perf_counter()
             margin_trajectory(frontier)
             timings.append(time.perf_counter() - start)
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         small, large = timings
         if small < 1e-3:
             self.skipTest(f"timer resolution too coarse ({small:.2e}s)")

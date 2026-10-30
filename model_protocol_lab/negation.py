@@ -418,7 +418,6 @@ def _rate(numerator: int, denominator: int) -> float | None:
     return (numerator / denominator) if denominator else None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-candidate aggregates over its ground records.
 

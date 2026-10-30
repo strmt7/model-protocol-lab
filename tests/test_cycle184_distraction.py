@@ -979,7 +979,6 @@ class TestSizingBudget(unittest.TestCase):
         class _FlatBackend(_WordBackend):
             """Flat backend."""
 
-            # skipcq: PYL-R0201 - zero-arg super() requires an instance method
             def encode(self, text):
                 """Encode."""
                 super().encode(text)
@@ -1116,8 +1115,6 @@ class TestValidatorAndDiff(unittest.TestCase):
         # The fingerprint is rebuilt over the payload's own
         # components, exactly as the validator rebuilds it.
         import hashlib as _h
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _j
 
         rebuilt = {k: v for k, v in foreign["protocol"].items() if k != "fingerprint"}
@@ -1818,7 +1815,6 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
             self._record0(p)["cell_details"]["neutral_1024_before"] = "bogus"
             yield "detail_vocabulary", p
             p = copy.deepcopy(self.payload)
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             vac = next(r for r in p["candidates"]["dst-a"]["records"] if r["vacuous"])
             vac["cells"]["neutral_64_before"] = {
                 "verdict": True,
@@ -1985,7 +1981,6 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
 
     def test_stage_sizing_skips_plant_cutting_suffix(self):
         """Test stage sizing skips plant cutting suffix."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from unittest import mock
 
         backend = _CharBackend()
@@ -2006,7 +2001,6 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
 
     def test_stage_sizing_skips_empty_span(self):
         """Test stage sizing skips empty span."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from unittest import mock
 
         backend = _WordBackend(RULES, EXPECTED_BY_MARKER)

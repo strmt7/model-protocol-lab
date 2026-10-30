@@ -499,6 +499,110 @@ The end state is proven the same way the baseline was: a complete
 inventory capture at the cycle's final head, read with the tool
 above, reporting zero occurrences.
 
+### Findings integrity (cycle 225)
+
+On 2026-10-30 the owner restated the findings rule in absolute
+form: address every code-scanning and DeepSource finding without
+suppressing, closing, or hiding anything, and reopen anything
+previously dismissed. A finding now closes only when a scanner
+auto-closes it as fixed after a code change, or it stands open and
+enumerated. This section is the cycle-225 record under that rule;
+it supersedes the cycle-222 disposition wherever the two differ
+(the cycle-222 text above stays as the historical record of that
+cycle's terms).
+
+**CodeQL #24/#25.** The two `py/clear-text-logging-sensitive-data`
+alerts (the standalone diff tool's two print statements) had been
+dismissed as false positives in cycle 217; the owner reopened both
+on 2026-10-30 (they were the only two dismissals in the repo's
+history). Cycle 225 fixed them in code: the labeled-block section
+of a results payload now travels through
+`model_protocol_lab/diffreports.py` as data addressed by key (the
+`_payload_section` accessor and the `section_diffs` /
+`section_asymmetric` maps inside `diff_reports`), so the lexical
+sensitive-data flow the query tracks — payload access through
+section-named identifiers and functions into the print sinks — no
+longer exists by construction. The CLI's JSON and summary output
+are byte-identical to the pre-fix pipeline (pinned by
+`tests/test_cycle225_findings_integrity.py`, the cycle-67
+differential fuzz and mutation gates, and the cycle-169 diff
+tests). A local CodeQL run (bundle 2.27.3, the query that produced
+the alerts) reproduced exactly the two alerts on the pre-fix file
+and reports zero on the fixed file; the alerts' post-push
+auto-closure as fixed is verified in the cycle-225 report.
+
+**Why the DeepSource SUCCESS count moved 2 → 112.** The complete
+capture at `e2f9c3aa` (cycle 222's final head) reported 2
+occurrences; the complete capture at `75d359cb` (cycle 224's head)
+reported 112. The open hypothesis was analyzer-scope drift.
+Provenance checks against the two commits refute it: every one of
+the 110 new occurrences sits in code created by cycles 223–224,
+after the `e2f9c3aa` capture — the two test files did not exist at
+`e2f9c3aa`; `reporting.py`'s two flagged section functions and
+`experiments.py`'s `_RedrawExhausted` (0 occurrences at `e2f9c3aa`,
+4 at `75d359cb`) were added by those cycles; `test_cycle67` grew
+from 20,412 to 22,582 lines, its third `unicodedata` import among
+the additions. The analyzer did not widen; cycles 223–224 shipped
+new code that had not passed through a remediation pass. The 2
+remaining occurrences are the previously adjudicated prose items.
+
+**Disposition of the 112** (fix-or-open, per occurrence class):
+
+- Fixed in code (99): FLK-D209 ×69 (docstring closing quotes moved
+  to their own line in the cycle-223/224 test files), PY-D0003 ×18
+  and PY-D0002 ×1 (truthful docstrings inserted), PYL-R0201 ×6
+  (methods converted to static methods), PYL-W0612 ×3 (unused
+  unpack member renamed to a discard), PY-R1000 ×2 (two
+  over-complexity functions in
+  `model_protocol_lab/confusableskeleton.py` decomposed into
+  predicate helpers, computation unchanged).
+- Standing open (13): PY-R1000 ×4 (the two `reporting.py` section
+  composers — one uniform pattern across the report's section
+  builders, whose refactor the 2026-10-29 diff-reports audit
+  rejected — and two test oracle/world functions whose flatness is
+  the measured property), PYL-W0212 ×4 (the deliberate
+  `_RedrawExhausted` protocol double shared across cycles),
+  PYL-W0404 ×2 (function-local re-imports inside the cycle-67
+  mutation-gate machinery), PTC-W0063 ×1 (a `next()` whose
+  `StopIteration` is the test's intended failure), SCT-A000 ×2
+  (the prose false positives adjudicated in cycle 222; the records
+  are not edited to dodge a scanner).
+
+**The per-site annotation surface is withdrawn.** Cycle 222's
+`# skipcq` comments — 874 lines across 165 files — were removed in
+full in cycle 225, and no other suppression mechanism replaces
+them: no dismissals, no dashboard ignores, no repo config file.
+One annotated class was fixed in code instead: PYL-E0601 ×1
+(`model_protocol_lab/diffbackends.py` — the loader import split
+into its own try, so the failure-code helper is provably bound
+when the tokenizer failure handler runs). Every other annotated
+class stands open at its sites, enumerated here by rule with the
+cycle-222 adjudication as its reason: PY-R1000 ×319 (above-band
+complexity in gate-pinned oracle, mirror, and stage functions
+whose branch count is specification count), PYL-W0404 ×285
+(function-local imports that keep validator mirrors self-contained,
+mutation gates working on copied modules, and the import graph
+acyclic), PTC-W0063 ×102 (`next()` calls whose `StopIteration` is
+the intended failure), PYL-W0632 ×41 (single-element unpacks that
+are the assertion being tested), PYL-W0621 ×33 (fixture-argument
+shadowing by design), FLK-E501 ×24 (frozen literal text pinned by
+tests), PYL-R0124 ×10 (self-comparisons that are the assertion,
+including total-NaN checks), PTC-W0046 ×9, FLK-E402 ×7 (deliberate
+import placement), PYL-R0201 ×5 (zero-argument `super()` method
+shapes where conversion changes the call), PYL-W0122 ×5
+(`exec` of this repo's own module source inside mutation gates,
+never external input), PYL-W1114 ×4 (argument-order mirrors of the
+functions under test), PYL-W0640 ×3 (cell-variable mirrors),
+PYL-E0202 ×3, PYL-W0603 ×3 (test-only global fixtures), PY-W2000
+×2, PTC-W0043 ×2, PYL-E1125 ×2, PYL-W0102 ×2, PYL-W0622 ×2
+(builtin-name parameters mirroring the measured APIs), PY-W0800
+×1, PY-D0003 ×1 (a docstring inside gate-pinned mirror text),
+PTC-W0060 ×1, PTC-W0050 ×1, PTC-W0047 ×1, PY-W0070 ×1,
+PYL-W0231 ×1, PY-W0072 ×1, PYL-R0401 ×1. The next complete capture
+at the cycle's final head enumerates these at line level; the
+findings guard continues to fail on any DeepSource finding, as
+designed, until the inventory is genuinely empty.
+
 ## Reporting defects
 
 For public issues, provide a minimal synthetic reproduction and dependency versions. Exclude credentials, proprietary prompts, private model files and personally identifying data. For sensitive defects, use GitHub's private vulnerability reporting for this repository — it is enabled (verified through the GitHub API, 2026-10-23): open the repository's **Security** tab and choose **Report a vulnerability**, or go to `https://github.com/strmt7/model-protocol-lab/security/advisories/new`. Reports there are visible only to the maintainer until a fix ships.

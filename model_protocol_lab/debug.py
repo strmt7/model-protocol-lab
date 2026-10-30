@@ -69,7 +69,6 @@ _ROLE_RE = re.compile(r"^([A-Za-z]+)\s*:\s*(.*)$", re.DOTALL)
 # rationale (which strips all controls from short IDs); kept local so
 # debug.py stays importable without cli.
 _CONTROL_CHARS = re.compile(
-    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]"
 )
 

@@ -132,7 +132,6 @@ class Ling30OfficialLiteralsTests(unittest.TestCase):
 
     def test_thinking_off_suffix_matches_official_30(self) -> None:
         """Test thinking off suffix matches official 30."""
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         off = next(v for v in candidates("ling", mutate=True) if v.name == "ling/thinking-off")
         self.assertEqual(off.open_suffix, _OFFICIAL_GEN_PROMPT_OFF)
 
@@ -158,7 +157,6 @@ class Ling30RenderAuditTests(unittest.TestCase):
 
     def test_thinking_off_render_tail_matches_official(self) -> None:
         """Test thinking off render tail matches official."""
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         off = next(v for v in candidates("ling", mutate=True) if v.name == "ling/thinking-off")
         rendered = off.render(_SINGLE)
         self.assertTrue(rendered.endswith(_OFFICIAL_GEN_PROMPT_OFF))
@@ -189,7 +187,6 @@ class Ling30VerdictTests(unittest.TestCase):
         for name, documented, actual in pairs:
             if documented != actual:
                 diffs.append(f"{name}: DOCUMENTED {documented!r} -> ACTUAL {actual!r}")
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         off = next(v for v in candidates("ling", mutate=True) if v.name == "ling/thinking-off")
         if off.open_suffix != _OFFICIAL_GEN_PROMPT_OFF:
             diffs.append(

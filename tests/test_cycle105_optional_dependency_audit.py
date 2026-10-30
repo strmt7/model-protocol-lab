@@ -62,8 +62,6 @@ def _block_hf_imports():
     """
     real_import = builtins.__import__
 
-    # skipcq: PYL-W0622 - the fake mirrors the dunder signature parameter-for-parameter
-    # skipcq: PYL-W0622 - the fake mirrors the dunder signature parameter-for-parameter
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
         """Fake import."""
         # noqa: ANN001, ANN202
@@ -77,7 +75,6 @@ def _block_hf_imports():
 class TestNoModuleLevelThirdPartyImports(unittest.TestCase):
     """AST guard: third-party imports must be deferred or TYPE_CHECKING-only."""
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_package_has_no_top_level_third_party_imports(self) -> None:
         """Test package has no top level third party imports."""
         stdlib = _stdlib_names()

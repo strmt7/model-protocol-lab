@@ -229,11 +229,9 @@ def _is_finite_number(value: object) -> bool:
     """Return whether finite number."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
-    # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
     return value == value and abs(value) != float("inf")
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def validate_field_def(field: object, *, where: str) -> dict[str, Any]:
     """Validate one flat field definition; returns the normalized form.
 
@@ -283,7 +281,6 @@ def validate_field_def(field: object, *, where: str) -> dict[str, Any]:
     return normalized
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def validate_schema_def(schema: object) -> dict[str, Any]:
     """Validate a flat object schema definition; returns the normalized form.
 
@@ -347,7 +344,6 @@ def _canonical_json(document: object) -> str:
     return json.dumps(document, sort_keys=True, separators=(", ", ": "), allow_nan=False)
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def validate_structured_specs(specs: object) -> tuple[dict[str, object], ...]:
     """Validate synthetic structured-output fixture specifications.
 
@@ -531,7 +527,6 @@ def check_schema(document: object, schema: object) -> str:
     return "schema_ok"
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _field_value_ok(value: object, field: dict[str, Any]) -> bool:
     """Check one JSON value against one flat field definition."""
     field_type = field["type"]

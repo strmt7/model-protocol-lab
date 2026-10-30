@@ -6,6 +6,35 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (cycle 225 — findings integrity, 2026-10-30)
+
+- Code-scanning alerts #24/#25 (`py/clear-text-logging-sensitive-data`
+  on the standalone diff tool's two print statements) are fixed in
+  code, not dismissed: the labeled-block (confidentiality) section
+  of a results payload now travels through
+  `model_protocol_lab/diffreports.py` as data addressed by key (the
+  new `_payload_section` accessor and the `section_diffs` /
+  `section_asymmetric` maps), so the lexical sensitive-data flow to
+  the print sinks no longer exists by construction. The CLI's JSON
+  (stdout) and summary (stderr) output are byte-identical to the
+  pre-fix pipeline; the behavior is pinned by
+  `tests/test_cycle225_findings_integrity.py`, and the local CodeQL
+  run that reproduced both alerts on the pre-fix file reports zero
+  on the fixed file.
+- The repository's per-site `# skipcq` DeepSource annotations (874
+  comment lines across 165 files) are removed in full. Under the
+  owner's no-suppression order they are not replaced by any other
+  suppression mechanism: the underlying findings stand open in the
+  analyzer, enumerated per class in `docs/SECURITY.md` and in the
+  cycle-225 report. What could be fixed honestly in code was fixed
+  in the same cycle: the diff-backends loader import was split so
+  its failure-code helper is provably bound whenever the failure
+  handler runs (PYL-E0601), two over-complexity functions in
+  `model_protocol_lab/confusableskeleton.py` were decomposed into
+  predicate helpers (PY-R1000), and the cycle-223/224 test files
+  were brought to the repository's docstring and style standard
+  (FLK-D209, PY-D0002, PY-D0003, PYL-R0201, PYL-W0612).
+
 ### Added (cycle 224 — confusable-skeleton substitution probe, 2026-10-30)
 
 - A confusable-skeleton substitution probe

@@ -167,7 +167,6 @@ def is_echo_fixture(fixture: Fixture) -> bool:
     return bool(expected) and expected in target_content(fixture)
 
 
-# skipcq: PYL-W0621 - the name mirrors the frozen payload field it consumes
 def build_arm_fixture(fixture: Fixture, arm: str, filler_text: str = "") -> Fixture:
     """A copy of ``fixture`` with the target content surgically rewritten.
 
@@ -290,7 +289,6 @@ def _arm_verdict(record: dict[str, Any], arm: str) -> bool | None:
     return bool(cell["verdict"])
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-candidate aggregates over ground records (paired contrasts).
 

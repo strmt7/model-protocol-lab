@@ -218,7 +218,6 @@ def build_donor_map(cases: tuple[Fixture, ...]) -> dict[str, dict[str, Any]]:
                 and _eligible_plant(other.expected, group_expecteds)
             )
             if donors:
-                # skipcq: PTC-W0063 - donors derive from cases; the match exists by construction
                 donor = next(other for other in cases if other.id == donors[0])
                 entry = {
                     "donor_fixture": donor.id,
@@ -414,7 +413,6 @@ def _arm_rate(live: list[dict[str, Any]], key: str, *, wrong: bool) -> dict[str,
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _caving_block(population: list[dict[str, Any]], framing: str) -> dict[str, Any]:
     """Caving counts and classification over one paired population.
 
@@ -485,7 +483,6 @@ def _by_plant_source(population: list[dict[str, Any]], framing: str) -> dict[str
     return out
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-candidate aggregates over its ground records.
 

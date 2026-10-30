@@ -1178,7 +1178,6 @@ class VerbosityCoverageGapTests(unittest.TestCase):
 
     def test_profile_stage_invalid_branches(self):
         """Test profile stage invalid branches."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import verbosity_profile
 
         base = {
@@ -1204,7 +1203,6 @@ class VerbosityCoverageGapTests(unittest.TestCase):
 
     def test_profile_non_dict_entry_is_stage_invalid(self):
         """Test profile non dict entry is stage invalid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import verbosity_profile
 
         stage = {
@@ -1219,7 +1217,6 @@ class VerbosityCoverageGapTests(unittest.TestCase):
 
     def test_diff_valid_verbosity_rejections(self):
         """Test diff valid verbosity rejections."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab import diffreports
 
         base = _vb_diff_payload()

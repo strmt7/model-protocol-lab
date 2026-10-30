@@ -152,7 +152,6 @@ def _exclusion(case: Fixture) -> str | None:
     return None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def build_choice_sets(cases: Sequence[Fixture]) -> list[dict[str, Any]]:
     """The per-fixture choice construction block (pure, deterministic).
 
@@ -361,7 +360,6 @@ def _accuracy_block(verdicts: list[str]) -> dict[str, Any]:
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def aggregate_candidate(
     records: list[dict[str, Any]], fixtures: Sequence[dict[str, Any]]
 ) -> dict[str, Any]:
@@ -475,7 +473,6 @@ def aggregate_candidate(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def method_comparison(
     aggregates: dict[str, dict[str, Any]],
     candidate_names: Sequence[str],

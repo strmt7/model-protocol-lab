@@ -202,7 +202,6 @@ class MultiStopSelectionTests(unittest.TestCase):
         # divergence, mirroring the vLLM #49391 repro.
         result = self._run(("a", "is"))
         self.assertIn("MULTI_STOP_SELECTION", self._classes(result))
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         finding = next(
             finding
             for finding in result["divergences"]
@@ -407,7 +406,6 @@ class NoTgiCellRationaleTests(unittest.TestCase):
             stop_texts=("a", "is"),
             backend=backend,
         )
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         finding = next(
             finding
             for finding in result["divergences"]
@@ -446,7 +444,6 @@ class NoTgiCellRationaleTests(unittest.TestCase):
             eos_id=1,
             backend=backend,
         )
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         finding = next(
             finding
             for finding in result["divergences"]

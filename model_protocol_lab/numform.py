@@ -418,7 +418,6 @@ def _compare_partner(a: int, target: str, derived: int) -> int:
     return int(digits[:position] + str(replacement) + digits[position + 1 :])
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _add_partner(a: int, target: str, derived: int) -> int:
     """Construct an add partner for ``a`` in the target carry
     class, digit by digit from the units position (verified by
@@ -522,7 +521,6 @@ def _gen_copy(seed: int) -> list[dict[str, Any]]:
     return entries
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _gen_pairs(seed: int, task: str) -> list[dict[str, Any]]:
     """Return the gen pairs."""
     entries: list[dict[str, Any]] = []
@@ -788,7 +786,6 @@ def classify_grouping(evidence: dict[str, int]) -> str:
     return "unknown"
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def measure_grouping(
     encode: Callable[[str], Sequence[int]],
     value_set: dict[str, list[dict[str, Any]]],
@@ -892,7 +889,6 @@ def _rate(numerator: int, denominator: int) -> float | None:
     return (numerator / denominator) if denominator else None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def aggregate_records(records: list[dict[str, Any]], task: str, form: str) -> dict[str, Any]:
     """Aggregates for one candidate x task x form over its
     ground records. Rates are plain ratios with their

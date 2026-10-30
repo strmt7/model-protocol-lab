@@ -100,7 +100,6 @@ class TestConstruction(unittest.TestCase):
             _fx("b3", "wolf", "animal"),
         ]
         block = build_choice_sets(cases)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in block if e["fixture"] == "a1")
         self.assertTrue(target["constructible"])
         self.assertIsNone(target["excluded"])
@@ -126,7 +125,6 @@ class TestConstruction(unittest.TestCase):
             _fx("d4", "frog", "wild"),
         ]
         block = build_choice_sets(cases)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in block if e["fixture"] == "t1")
         self.assertEqual(_donor_ids(target), ["d2", "d3", "d4"])
 
@@ -141,7 +139,6 @@ class TestConstruction(unittest.TestCase):
             _fx("d5", "Miami", "other"),
         ]
         block = build_choice_sets(cases)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in block if e["fixture"] == "t1")
         self.assertEqual(_donor_ids(target), ["d3", "d4", "d5"])
 
@@ -155,7 +152,6 @@ class TestConstruction(unittest.TestCase):
             _fx("d4", "Madrid", "other"),
         ]
         block = build_choice_sets(cases)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in block if e["fixture"] == "t1")
         self.assertNotIn("d1", _donor_ids(target))
         self.assertTrue(target["constructible"])
@@ -171,7 +167,6 @@ class TestConstruction(unittest.TestCase):
             _fx("d5", "mars", "night"),
         ]
         block = build_choice_sets(cases)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in block if e["fixture"] == "t1")
         self.assertEqual(_donor_ids(target), ["d1", "d4", "d5"])
 
@@ -183,7 +178,6 @@ class TestConstruction(unittest.TestCase):
             _fx("d2", "three", "h"),
         ]
         block = build_choice_sets(cases)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in block if e["fixture"] == "t1")
         self.assertFalse(target["constructible"])
         # The realised (partial) choices stay on the record.
@@ -220,7 +214,6 @@ class TestConstruction(unittest.TestCase):
             _fx("d3", "delta", "h"),
         ]
         block = build_choice_sets(cases)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in block if e["fixture"] == "t1")
         self.assertNotIn("e1", _donor_ids(target))
         self.assertEqual(_donor_ids(target), ["d1", "d2", "d3"])
@@ -238,7 +231,6 @@ class TestConstruction(unittest.TestCase):
         import copy
 
         altered = copy.deepcopy(block)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         target = next(e for e in altered if e["fixture"] == "t1")
         target["choices"][1]["group"] = "elsewhere"
         self.assertNotEqual(donor_map_sha256(altered), digest_a)
@@ -446,7 +438,6 @@ class TestAggregation(unittest.TestCase):
 
     def _entry(self, fixture):
         """Entry."""
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         return next(e for e in self.fixtures if e["fixture"] == fixture)
 
     def test_denominators_and_discordance(self):
@@ -1069,7 +1060,6 @@ class TestValidatorBattery(unittest.TestCase):
 
         def mutate(p):
             """Mutate."""
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             entry = next(e for e in p["fixtures"] if e["constructible"])
             entry["choices"][1]["digest"] = "0" * 64
 
@@ -1080,7 +1070,6 @@ class TestValidatorBattery(unittest.TestCase):
 
         def mutate(p):
             """Mutate."""
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             entry = next(e for e in p["fixtures"] if e["constructible"])
             entry["choices"][1]["group"] = entry["group"]
 
@@ -1091,7 +1080,6 @@ class TestValidatorBattery(unittest.TestCase):
 
         def mutate(p):
             """Mutate."""
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             entry = next(e for e in p["fixtures"] if e["constructible"])
             digest = entry["choices"][0]["digest"]
             for choice in entry["choices"]:
@@ -1285,10 +1273,8 @@ class TestReportingAndCli(unittest.TestCase):
         import argparse
 
         parser = cli.build_parser()
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
         run_parser = subparsers.choices["run"]
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         action = next(a for a in run_parser._actions if a.dest == "choice_audit")
         self.assertIn("9,600", action.help)
         self.assertIn("acc_norm", action.help)
@@ -1456,7 +1442,6 @@ class TestValidatorGuardBattery(unittest.TestCase):
     def test_excluded_payload_is_valid(self):
         """Test excluded payload is valid."""
         self.assertTrue(diffreports._valid_choiceaudit(self.excluded))
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         entry = next(e for e in self.excluded["fixtures"] if e["fixture"] == "f8")
         self.assertEqual(entry["excluded"], "blank_expected")
 
@@ -1545,7 +1530,6 @@ class TestValidatorGuardBattery(unittest.TestCase):
 
         def mutate(p):
             """Mutate."""
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             entry = next(e for e in p["fixtures"] if e["fixture"] == "f8")
             entry["constructible"] = True
 
@@ -1889,7 +1873,6 @@ class TestReportingStates(unittest.TestCase):
         stage, base = _run_stage(_KeyedBackend())
         top = base["method_comparison"]["choice_top_candidate"]
         self.assertEqual(top, "chatml")
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         other = next(n for n in ("chatml", "plain") if n != top)
         agree = choiceaudit_analysis(
             stage, "compatible_on_fixture_set", top, tuple(f.name for f in _FORMATS)

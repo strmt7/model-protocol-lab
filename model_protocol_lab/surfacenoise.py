@@ -315,7 +315,6 @@ def whitespace_modes(text: str) -> tuple[str, ...]:
     return tuple(mode_text for _, mode_text in _whitespace_mode_pairs(text))
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def token_edit_distance(a: tuple[int, ...], b: tuple[int, ...]) -> int:
     """Indel edit distance via Myers' O(ND) greedy algorithm.
 
@@ -515,7 +514,6 @@ def _unavailable(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def probe_surface_noise(
     prompt_text: str,
     fixtures: tuple[Fixture, ...],
@@ -796,7 +794,6 @@ def static_lint(prompt_text: str) -> dict[str, Any]:
     return {"advisory_only": True, "checks": checks}
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def hardening_notes(probe_result: dict[str, Any]) -> dict[str, Any]:
     """Informational counterfactual surfacing from a probe result.
 
@@ -1152,7 +1149,6 @@ def _excerpt(text: str, limit: int = 200) -> str:
     return text if len(text) <= limit else text[:limit] + "…"
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def render_surface_noise_dashboard(report: dict[str, Any], prompt_text: str | None = None) -> str:
     """Self-contained HTML dashboard for a probe report.
 
@@ -1543,7 +1539,6 @@ def _load_probe_json(path: Path) -> Any:
         raise ValueError(f"{path} is not valid JSON: {exc}") from exc
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def run_surface_noise(args: Any, _parser: Any) -> int:
     """Implement ``mpl surface-noise``; returns the process exit code.
 
@@ -1922,7 +1917,6 @@ def _content_span_ids(backend: Backend, contents: tuple[str, ...]) -> tuple[int,
     return tuple(backend.encode("\n".join(contents)))
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _evaluate_template_case(
     render: Any,
     messages: tuple[Message, ...],
@@ -1996,7 +1990,6 @@ def _with_perturbed_contents(case: Fixture, perturbed: tuple[str, ...]) -> tuple
     return tuple(out)
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def probe_template_robustness(
     render: Any,
     template_name: str,

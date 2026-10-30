@@ -431,7 +431,6 @@ def oracle_classify(obs, eos_id):
     return "no-boundary-in-N"
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_failure_taxonomy(result, eos_id):
     """Per failure_taxonomy docstring: per-candidate classification of search
     observations; held-out classified only when the decision is
@@ -1068,7 +1067,6 @@ class RunExperimentFuzz(unittest.TestCase):
 
     FUZZ_SEEDS = 48
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_fuzz_oracle_agreement(self):
         """Test fuzz oracle agreement."""
         for fuzz_seed in range(self.FUZZ_SEEDS):

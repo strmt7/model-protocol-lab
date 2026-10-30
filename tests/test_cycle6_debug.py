@@ -188,7 +188,6 @@ class TestRender(unittest.TestCase):
             offset = int(end)
         self.assertEqual(offset, len(rendered))
         # Exact per-segment token IDs from the attached tokenizer.
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         content_line = next(line for line in out.splitlines() if "user_content" in line)
         self.assertIn("tokens=[104, 101, 108, 108, 111]", content_line)
 
