@@ -41,6 +41,7 @@ from tests.test_cycle221_recordnotation import _payload as _record_notation_payl
 from tests.test_cycle221_recordnotation import _WordBackend as _RnWordBackend
 from tests.test_cycle223_invisiblechars import _payload as _invisible_chars_payload
 from tests.test_cycle223_invisiblechars import _WordBackend as _IcWordBackend
+from tests.test_cycle224_confusableskeleton import _payload as _confusable_skeleton_payload
 
 _SECTION_ID_RE = re.compile(r'<section[^>]*? id="([^"]+)"')
 
@@ -68,6 +69,7 @@ def _populated_result():
     result["prune_sweep"] = _prune_sweep_payload(_PsWordBackend("dose72_drop"))
     result["record_notation"] = _record_notation_payload(_RnWordBackend("json_drop"))
     result["invisible_chars"] = _invisible_chars_payload(_IcWordBackend("echo"))
+    result["confusable_skeleton"] = _confusable_skeleton_payload("echo")[0]
     return result
 
 
@@ -153,6 +155,19 @@ class InvisibleCharsBodyTests(unittest.TestCase):
         self.assertGreater(html.index('id="invisible-chars"'), html.index("</nav>"))
 
 
+class ConfusableSkeletonBodyTests(unittest.TestCase):
+    """Confusable skeleton body tests."""
+
+    def test_confusable_skeleton_body_present_in_rendered_report(self):
+        """Confusable skeleton body present in rendered report."""
+        html = reporting_mod.render_html(_populated_result())
+        self.assertIn('href="#confusable-skeleton"', html)
+        self.assertIn('<section class="card" id="confusable-skeleton">', html)
+        # Body-only copy from inside the section.
+        self.assertIn("U+0434 CYRILLIC SMALL LETTER DE", html)
+        self.assertGreater(html.index('id="confusable-skeleton"'), html.index("</nav>"))
+
+
 class TocBodyCorrespondenceTests(unittest.TestCase):
     """Toc body correspondence tests."""
 
@@ -169,6 +184,7 @@ class TocBodyCorrespondenceTests(unittest.TestCase):
         self.assertIn("prune-sweep", hrefs)
         self.assertIn("record-notation", hrefs)
         self.assertIn("invisible-chars", hrefs)
+        self.assertIn("confusable-skeleton", hrefs)
         # Every link lands on a rendered section, every rendered
         # section is linked, in the same order.
         self.assertEqual(hrefs, body_ids)

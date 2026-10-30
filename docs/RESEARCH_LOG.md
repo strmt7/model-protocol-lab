@@ -10879,3 +10879,154 @@ code-scanning open 24 = 5 CodeQL + 19 Scorecard) and the
   grammar print as non-answer and are outside the
   headline claim; sanitizer cost on clean text is not
   measured by this arm set.
+
+## Cycle 224 — confusable-skeleton substitution probe: UTS #39 skeleton-equivalent letters in a fact sentence (2026-10-30)
+
+- **What shipped:** `run --confusable-skeleton`
+  (`model_protocol_lab/confusableskeleton.py`, the
+  package's 71st source file): a generated 24-case
+  fact-recall panel (frozen topics, a word-number
+  inspection code over a frozen 24-word list, two neutral
+  carrier sentences, a question), each case rendered
+  verbatim and with frozen UTS #39 skeleton-equivalent
+  Cyrillic/Greek letters substituted inside the fact
+  sentence only — `single_site` (the first eligible
+  letter of the topic and of the code's word), `whole_word`
+  (every eligible letter; 171 of 249 letters on seed 0's
+  panel, 0.6867), and `rarity_control` (the single-site
+  sites filled with a same-script non-confusable letter,
+  U+0434 for the Cyrillic seat and U+03B6 for the Greek
+  seat, assigned by the unicodedata.name prefix rule).
+  The population is frozen from confusables.txt pinned to
+  Unicode 15.0.0 — the local interpreter's UCD version, so
+  the derivation is single-version — with both data
+  files' SHA-256 digests frozen in the module: 16 of the
+  25 panel letters freeze (smallest code point), 9 are
+  zero-eligible (b, f, g, k, l, m, n, t, z). The readout
+  is a guarded classification per candidate and arm over
+  the id-divergent paired population (floors D ≥ 10
+  control passes and J ≥ 6 wrong-value discordants, both
+  derived under the instrument's own null; acquittals
+  issue only when stable under the worst-case completion
+  of the arm's incomplete id-divergent pairs; every label
+  is withheld above 6 incomplete divergent cases), with a
+  total seven-class decomposition of completed cells
+  (pass, boundary-only, wrong-value in the frozen
+  grammar, echo-confusable, echo-control, form-only,
+  non-answer — an ordered decision list whose rarity
+  form-only step is the position-aware predicate), the
+  per-arm token-ID report as the regime gate, the
+  whole-word dose, and the exact operating
+  characteristics printed beside the licence
+  (competent-null fire 0.0173 under independence, 0.004442
+  under the exact paired computation; power 0.8159 at a
+  25-point drop at base .90, paired 0.698078; the
+  family-wise expectation 1.2437 false labels independent
+  and 0.3199 paired over the 72 labelled comparisons).
+  The wave-12 fresh review's nine binding amendments are
+  all implemented and each carries named test evidence:
+  the consolidated design doc is the build contract with
+  the rarity definition written in full, checked by a
+  named doc-completeness test (A1); the rarity assignment
+  is the name-prefix script rule, not the design round's
+  executed code-point-range proxy — the Cyrillic
+  Supplement seats d and q take the Cyrillic control —
+  frozen by script-agreement tests on the regenerated
+  populations of all five evidence seeds (A2); the rarity
+  form-only class is decidable by the position-aware
+  inverse, pinned by its battery witness (`дlder-1234`
+  against `alder-1234`: form_only on the rarity arm,
+  non_answer on single_site) (A3); the cap's suppressed
+  completion-stable fire states are 264 over the reachable
+  space, enumerated in the tests (A4); the whole-word
+  isolation reading is scoped out, its printed sentence
+  verbatim in the design doc, the report, and the tests
+  (A5); the exact paired figures replace the design's
+  Monte Carlo values everywhere (A6); the controls'
+  non-confusability claim is restated as the properties
+  relied on and executed — skeleton-distinctness under the
+  frozen tables — with U+03B6's six-member skeleton class
+  disclosed (A7); the sentence-level corrections are in
+  (the worlds' no-ids caveat with the battery re-executed
+  under the pinned domain — world B's guarded
+  below-threshold executes at 0.0548 there, against the
+  unguarded 0.7277; the blanket over-count disclosure; the
+  §7 guard qualifier; the form-only frozen-table scope;
+  the plateau qualifier — whose gap figure the build
+  corrected by exact rational arithmetic to 3.3e-14, the
+  adjudication's 2.8e-11 not reproducing under either q
+  convention) (A8); the redraw path is exercised by a
+  forced collision in the freeze tests, value collisions
+  being zero on every natural seed (A9).
+- **Why this shape (utility):** an eval owner deciding
+  whether frozen benchmark fixtures and ingested documents
+  need a confusable-screening pass gets, per template
+  family and arm, a measured answer on whether
+  skeleton-class substitution in ordinary text moves this
+  checkpoint's answers — and the probe's own regime gate
+  makes the ids-identical outcome (a skeleton-screening
+  tokenizer) a first-class reported result, not a null.
+- **Uniqueness (the combination, never "first"):**
+  skeleton-equal Latin→Cyrillic/Greek substitution as a
+  labelled, dose-controlled independent variable on a
+  generated fact-recall panel (named control, single-site,
+  whole-word arms at frozen sites with a dose printed
+  beside the arm, and a script-matched rarity control
+  separating skeleton class from script rarity), under an
+  exact-match scorer with a completion-guarded
+  classification whose floors are derived under its own
+  null, against primary sources each resolved in full:
+  UTS #39 rev 27 section 4 (skeleton equality's two-sided
+  definition; its own warning that canonically equivalent
+  strings may have different skeletons and that
+  mixed-script detection is a heuristic — the design
+  doc's §9 register carries both, and the instrument
+  makes no detection claim); UAX #15 (cited only to
+  delimit NFKC, which cannot produce this population);
+  confusables.txt 15.0.0 (MA/LA header scope semantics;
+  the population's enumeration source); Sarabamoun,
+  "Invisible Prompts, Visible Threats" (arXiv
+  2602.24647v1: the skeleton/heuristic flagging passage
+  quoted and used as a screening-step component at
+  DESIGN.md §1/§10 — the check this probe prices —
+  carried with its full context: Table 3's 92.1/92.9/97.9
+  figures are Claude Sonnet 4.5's detection rates on
+  NEXT-AGENT chain-of-thought, §4.2+§4.5's 45–52 percent
+  is Sonnet self-reports of noticing, and §4.1's 30.2
+  percent is a user-report statistic; the identity
+  between the ar5iv HTML rendering and the v2 PDF was
+  verified by extracting the passage from both); Patsakis
+  et al. (arXiv 2509.22294v1: the abstract's
+  malicious-instruction colon, the 85-percent figure
+  scoped to its encoding-search methodology). The claim
+  made is the combination, in
+  `docs/CONFUSABLESKELETON_DESIGN.md`.
+- **Naming audit (executed by parser instantiation of
+  `cli.build_parser()` at build time).** Pre-build the
+  tree carried 81 distinct long options including
+  `--help`, 64 of them on `run`; `--confusable-skeleton`
+  was absent (census- and grep-verified in the design
+  round). Post-build census: 82 distinct long options, 65
+  on `run`. The coinage was free under every counting
+  method, and the name's plain reading is accurate — the
+  probe varies skeleton-equivalent confusable letters in
+  the prompt text.
+- **Honest limits, printed in the report itself:** the
+  claim is per candidate and per arm over this generated
+  population on this checkpoint — a fire proves only that
+  this arm moved this checkpoint's answers to wrong
+  values inside the frozen grammar, never a claim about
+  weights, attacks, or letters outside the frozen
+  population; the claim is skeleton-class substitution,
+  never that a model is fooled like a human (the model
+  never sees glyphs); a single_site fire is read as
+  skeleton-class-specific only when the rarity control
+  does not also fire, and the whole-word isolation reading
+  does not extend (rarity at that dose is unmeasured by
+  this design); the population is single-version by
+  construction (skeletons are not version-stable);
+  sequence-level skeleton equivalence (the rn/m class) is
+  outside v1's single-code-point dose axis; value changes
+  outside the frozen grammar print as non-answer and are
+  outside the headline claim; screening cost on clean text
+  is not measured by this arm set.

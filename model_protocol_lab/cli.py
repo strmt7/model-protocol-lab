@@ -980,6 +980,41 @@ def build_parser() -> argparse.ArgumentParser:
         "touches selection. The stage never fails the run.",
     )
     run.add_argument(
+        "--confusable-skeleton",
+        action="store_true",
+        help=(
+            "also run the confusable-skeleton substitution probe: a stage-local "
+            "generated 24-case fact-recall panel per candidate, rendered in four arms "
+            "(verbatim control; single-site substitution of the first eligible letter "
+            "of the topic and value words by its frozen UTS #39 skeleton-equivalent "
+            "Cyrillic/Greek letter from the pinned Unicode 15.0.0 population; "
+            "whole-word substitution of every eligible letter; and a rarity control "
+            "at the single-site sites with a same-script non-confusable letter), "
+            "scored with the tree's own exact-match-plus-boundary scorer, and "
+            "classified per (candidate, arm) over the token-id-divergent paired "
+            "population by a completion-guarded rule (floors: at least 10 divergent "
+            "control passes and at least 6 in-grammar wrong-value discordants; "
+            "acquittal labels issue only when stable under the worst-case "
+            "completion of the id-divergent incomplete cases, and every label is "
+            "withheld above 6 incomplete) into insufficient / "
+            "no_discordance_observed / discordant_asymmetric / below_threshold, "
+            "with the answer decomposition per arm (pass / boundary-only / "
+            "wrong-value / echo-confusable / echo-control / form-only / "
+            "non-answer), the whole-word dose, the id-divergence report, the "
+            "operating characteristics (competent-null fire 0.0173 by exact "
+            "independent enumeration, 0.0044 by the exact paired computation; "
+            "25-point-drop power 0.8159 independent, 0.6981 paired; the "
+            "family-wise price over the 72 labelled comparisons printed beside "
+            "the licence), a byte cap on the serialised records, and "
+            "informational reporting only (never affects selection; a family "
+            "whose treated renders are token-id-identical to control is reported "
+            "instrument-inapplicable for that arm, not as passing; records carry "
+            "answer digests plus the answer text the decomposition classes are "
+            "functions of, bound by the digest; answer text never reaches a "
+            "report)"
+        ),
+    )
+    run.add_argument(
         "--rotate",
         action="store_true",
         help="Context rotation probe (cycle 203, research wave-9 "
@@ -2591,6 +2626,49 @@ def _run_invisible_chars_probe(
         result["invisible_chars"] = {
             "available": False,
             "detail": "invisible_chars_unavailable",
+        }
+
+
+def _run_confusable_skeleton_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the confusable-skeleton probe; never raises.
+
+    The probe is self-contained: its cases are generated from
+    the run seed, so it consults neither the recorded search
+    nor the primary decision, and a failed user run cannot
+    silently suppress it. The run's cancel event is threaded
+    dispatch -> wrapper -> stage -> evaluate, so SIGINT/
+    SIGTERM stop the stage cooperatively.
+    """
+    try:
+        from .experiments import confusable_skeleton_analysis, confusable_skeleton_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = confusable_skeleton_stage(
+            backend,
+            formats,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["confusable_skeleton"] = confusable_skeleton_analysis(stage, names)
+    except Exception:  # noqa: BLE001 -- confusable-skeleton must not fail the run
+        result["confusable_skeleton"] = {
+            "available": False,
+            "detail": "confusable_skeleton_unavailable",
         }
 
 
@@ -4693,6 +4771,26 @@ def main(argv: list[str] | None = None) -> int:
                 # changes selection. Never fails the run.
                 if args.invisible_chars:
                     _run_invisible_chars_probe(
+                        backend,
+                        formats,
+                        result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Confusable-skeleton probe (cycle 224, research
+                # wave-12 candidate 2): a generated fact-recall
+                # panel whose fact sentences carry frozen UTS #39
+                # skeleton-equivalent Cyrillic/Greek substitutions
+                # (single-site, whole-word, and a rarity control),
+                # the run's cancel event threaded into the stage
+                # loop. Informational only -- never changes
+                # selection. Never fails the run.
+                if args.confusable_skeleton:
+                    _run_confusable_skeleton_probe(
                         backend,
                         formats,
                         result,

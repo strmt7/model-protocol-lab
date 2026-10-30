@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–223 (executed 2026-10-14 → 2026-10-30, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–224 (executed 2026-10-14 → 2026-10-30, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **8942 tests collected**
-  (cycle 223, 2026-10-30). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9041 tests collected**
+  (cycle 224, 2026-10-30). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -50,16 +50,30 @@ doctor's resource fallbacks degrade there.
   the history-frame probe (`run --history-frame`),
   the interior word-loss prune-sweep probe (`run --prune-sweep`),
   the record-notation probe (`run --record-notation`),
+  the confusable-skeleton substitution probe (`run --confusable-skeleton`),
   the real batched generation path behind the batch-invariance
   audit (`LocalHFBackend.generate_batch`, cycle 192),
   and differential-verification suites with
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  94.9469% (cycle 223, 2026-10-30)**. The gate compares the
+  94.9315% (cycle 224, 2026-10-30)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+0.447) is auditable rather than inferred from the display.
+  (+0.432) is auditable rather than inferred from the display.
+  Cycle 224 moves both figures: the confusable-skeleton
+  feature added 1,102 statements (37,887 → 38,989) and 1,063
+  covered statements (36,412 → 37,475); its first full run
+  measured 94.7005% before the gap battery, and the new
+  module itself measures 98.68% after it — its only missing
+  lines are three guards unreachable by construction (the
+  two validate_case skeleton returns subsumed by the
+  table-and-dose checks above them, and the aggregate's
+  paired-cell continue over a list pre-filtered to records
+  whose headline cells are present), left in place as defence
+  in depth and documented here, and a residual set of deep
+  reject branches in the diffreports mirror's recompute,
+  the standing class left uncovered since cycle 218.
   Cycle 223 moves both figures: the invisible-characters
   feature added 939 statements (36,948 → 37,887) and 854
   covered statements (35,558 → 36,412); its first full run
@@ -111,10 +125,10 @@ doctor's resource fallbacks degrade there.
   negation feature added 393 statements, 32,655 → 33,048.)
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (310 files in that CI scope; the repo-root scope counts more.
+  (312 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
-- `mypy model_protocol_lab` — clean (69 source files).
+- `mypy model_protocol_lab` — clean (71 source files).
 - `bandit -r model_protocol_lab` — **no issues identified** at any
   severity/confidence (the targeted `# nosec B105` suppressions on
   report-schema fields carry justifications).

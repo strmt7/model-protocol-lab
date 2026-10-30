@@ -300,6 +300,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "prune_sweep": {"available": "neither", "changed": False},
         "record_notation": {"available": "neither", "changed": False},
         "invisible_chars": {"available": "neither", "changed": False},
+        "confusable_skeleton": {"available": "neither", "changed": False},
         "choice_audit": {"available": "neither", "changed": False},
         "precision": {"available": "neither", "changed": False},
         "confidence": {"available": "neither", "changed": False},
@@ -405,6 +406,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "record_notation_asymmetric": False,
             "invisible_chars_changed": False,
             "invisible_chars_asymmetric": False,
+            "confusable_skeleton_changed": False,
+            "confusable_skeleton_asymmetric": False,
             "choice_audit_changed": False,
             "choice_audit_asymmetric": False,
             "precision_changed": False,
@@ -10829,6 +10832,1168 @@ def _o_invisiblechars(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+# diffreports._valid_confusable_skeleton / diff_confusable_skeleton,
+# re-implemented from docs/CONFUSABLESKELETON_DESIGN.md as
+# amended (A1-A9). The population is frozen from the pinned
+# Unicode 15.0.0 confusables data (the smallest-code-point
+# rule); the rarity assignment follows the name-prefix
+# script rule (amendment A2); every cell carries
+# digest-bound answer_text; the headline is the guarded
+# classification over the id-divergent paired population;
+# the decomposition is the ordered decision list with the
+# position-aware rarity form_only predicate (amendment A3).
+
+
+_O_CS_TOPICS = (
+    "harbor",
+    "summit",
+    "quarry",
+    "tundra",
+    "granite",
+    "willow",
+    "copper",
+    "saddle",
+    "walnut",
+    "velvet",
+    "cobalt",
+    "marble",
+    "cinder",
+    "falcon",
+    "garnet",
+    "saffron",
+    "indigo",
+    "juniper",
+    "lagoon",
+    "magnet",
+    "nickel",
+    "pepper",
+    "quartz",
+    "birch",
+)
+_O_CS_WORDS = (
+    "alder",
+    "basalt",
+    "cedar",
+    "drift",
+    "elm",
+    "fern",
+    "glade",
+    "heath",
+    "iris",
+    "jade",
+    "kelp",
+    "loom",
+    "moss",
+    "nova",
+    "ochre",
+    "pine",
+    "quill",
+    "reed",
+    "sage",
+    "tide",
+    "urn",
+    "vale",
+    "wren",
+    "yew",
+)
+_O_CS_NEUTRAL_STATEMENTS = (
+    "The weather changed slowly during the afternoon hours.",
+    "A wooden fence runs along the edge of the property.",
+    "She placed the documents inside a plain folder yesterday.",
+    "The train arrived later than the schedule suggested.",
+    "Fresh bread was cooling on the counter near the sink.",
+    "He repaired the bicycle with tools from the garage.",
+    "The bookshop extends its opening hours during summer.",
+    "Several chairs were arranged around the long table.",
+    "The recipe calls for a pinch of salt and herbs.",
+    "They walked along the path beside the lake at dawn.",
+    "The committee postponed its decision until next week.",
+    "A thick layer of dust covered the old furniture.",
+    "The children played quietly in the courtyard after lunch.",
+    "His handwriting was difficult to read in places.",
+    "The farmer harvested the fields before the rain came.",
+    "An old map hung framed on the wall of the hallway.",
+    "The accountant reviewed the figures a second time.",
+    "Birds gathered on the rooftops as the sun went down.",
+    "The mechanic inspected the engine and changed the oil.",
+    "A narrow staircase led up to the attic.",
+    "The orchestra rehearsed the piece several times over.",
+    "Someone left a bicycle leaning against the railing.",
+    "The soup simmered gently on the stove all morning.",
+    "Visitors signed the guest book near the entrance.",
+)
+_O_CS_FROZEN_REPLACEMENTS = {
+    "a": "\u03b1",
+    "c": "\u0441",
+    "d": "\u0501",
+    "e": "\u0435",
+    "h": "\u04bb",
+    "i": "\u03b9",
+    "j": "\u0458",
+    "o": "\u03bf",
+    "p": "\u03c1",
+    "q": "\u051b",
+    "r": "\u0433",
+    "s": "\u0455",
+    "u": "\u03c5",
+    "v": "\u03bd",
+    "w": "\u0461",
+    "y": "\u03b3",
+}
+_O_CS_RARITY_CONTROLS = {
+    "a": "\u03b6",
+    "c": "\u0434",
+    "d": "\u0434",
+    "e": "\u0434",
+    "h": "\u0434",
+    "i": "\u03b6",
+    "j": "\u0434",
+    "o": "\u03b6",
+    "p": "\u03b6",
+    "q": "\u0434",
+    "r": "\u0434",
+    "s": "\u0434",
+    "u": "\u03b6",
+    "v": "\u03b6",
+    "w": "\u0434",
+    "y": "\u03b6",
+}
+_O_CS_CONTROL_CHARACTERS = ("\u0434", "\u03b6")
+_O_CS_LETTER_SKELETONS = {
+    "a": "a",
+    "b": "b",
+    "c": "c",
+    "d": "d",
+    "e": "e",
+    "f": "f",
+    "g": "g",
+    "h": "h",
+    "i": "i",
+    "j": "j",
+    "k": "k",
+    "l": "l",
+    "m": "rn",
+    "n": "n",
+    "o": "o",
+    "p": "p",
+    "q": "q",
+    "r": "r",
+    "s": "s",
+    "t": "t",
+    "u": "u",
+    "v": "v",
+    "w": "w",
+    "y": "y",
+    "z": "z",
+}
+_O_CS_POPULATION_COUNTS = {
+    "a": (23, 2),
+    "b": (18, 0),
+    "c": (21, 1),
+    "d": (19, 1),
+    "e": (19, 2),
+    "f": (18, 0),
+    "g": (18, 0),
+    "h": (17, 1),
+    "i": (37, 4),
+    "j": (17, 1),
+    "k": (13, 0),
+    "l": (73, 0),
+    "m": (17, 0),
+    "n": (15, 0),
+    "o": (75, 3),
+    "p": (29, 2),
+    "q": (16, 1),
+    "r": (19, 1),
+    "s": (20, 1),
+    "t": (13, 0),
+    "u": (27, 1),
+    "v": (29, 2),
+    "w": (22, 2),
+    "y": (30, 3),
+    "z": (16, 0),
+}
+_O_CS_PANEL_LETTERS = tuple(sorted(_O_CS_POPULATION_COUNTS))
+_O_CS_CONFUSABLES_VERSION = "15.0.0"
+_O_CS_CONFUSABLES_SHA256 = "2b10130885c3370b101c52d7baedc452ab7f0e257b86c1e52ee657ecfc29ce64"
+_O_CS_CONFUSABLES_DERIVED_SHA256 = (
+    "d367290bc0867e6b484c68370530bdd1a08b6b32404601b8c7accaf83e05628d"
+)
+_O_CS_ARM_KEYS = ("control", "single_site", "whole_word", "rarity_control")
+_O_CS_TREATED_ARMS = _O_CS_ARM_KEYS[1:]
+_O_CS_CONFUSABLE_ARMS = ("single_site", "whole_word")
+_O_CS_CASE_COUNT = 24
+_O_CS_MIN_D = 10
+_O_CS_MIN_J = 6
+_O_CS_MAX_INCOMPLETE = 6
+_O_CS_REDRAW_LIMIT = 1000
+_O_CS_GENERATOR_SPEC = (
+    "draw(seed, index, slot, counter) = int.from_bytes("
+    "sha256(f'{seed}|confusableskeleton|{index}|{slot}|{counter}')"
+    ".digest()[:8], 'big'); slot 0: word = WORDS[draw % len(WORDS)]; "
+    "slot 1: number = 1000 + draw % 9000; a value colliding with an "
+    "earlier case redraws both slots at counter+1, giving up after "
+    "1000 consecutive redraws (the stage fails closed); slots 2/3: "
+    "neutral indices = draw % len(NEUTRAL_STATEMENTS), the second "
+    "advancing +1 on collision"
+)
+_O_CS_MAX_CANDIDATES = 24
+_O_CS_MAX_GROUND_RECORDS = _O_CS_MAX_CANDIDATES * _O_CS_CASE_COUNT
+_O_CS_GENERATION_BUDGET = len(_O_CS_ARM_KEYS) * _O_CS_MAX_GROUND_RECORDS
+_O_CS_MAX_RECORDS_BYTES = 12 * 1024 * 1024
+_O_CS_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+    "answer_text",
+}
+_O_CS_DETAILS = ("arm_context_exceeded", "arm_evaluation_failed")
+_O_CS_CELL_CLASSES = (
+    "pass",
+    "boundary_only",
+    "wrong_value",
+    "echo_confusable",
+    "echo_control",
+    "form_only",
+    "non_answer",
+)
+_O_CS_PAIR_CLASSES = ("exact_only", "boundary_only", "mixed")
+_O_CS_OC = {
+    "fire_competent_independent": 0.0173,
+    "fire_competent_paired": 0.0044,
+    "fire_weak_independent": 0.1743,
+    "fire_random_independent": 0.5503,
+    "power_drop10_base90": 0.2542,
+    "power_drop25_base90": 0.8159,
+    "power_drop25_base85": 0.8761,
+    "power_drop25_paired": 0.6981,
+    "power_drop50_base90": 0.999,
+    "sensitivity18_drop25": 0.5214,
+    "sensitivity18_competent": 0.0038,
+    "panel_sweep_16_drop25": 0.3904,
+    "panel_sweep_20_drop25": 0.6395,
+    "transplant_fire_competent_independent": 0.8897,
+    "familywise_competent_expected_72": 1.2437,
+    "familywise_competent_any_72": 0.7148,
+    "familywise_paired_expected_72": 0.3199,
+    "familywise_paired_any_72": 0.2743,
+    "familywise_random_expected_72": 39.6221,
+    "world_a_guarded_fire": 0.0055,
+    "world_a_unguarded_fire": 0.0186,
+    "world_b_unguarded_below_threshold": 0.7277,
+    "world_b_guarded_below_threshold": 0.0117,
+    "world_c_guarded_fire": 0.8893,
+    "world_c_unguarded_fire": 0.9399,
+}
+_O_CS_AGGREGATE_KEYS = {
+    "arms",
+    "ids",
+    "dose",
+    "headline",
+    "operating_characteristics",
+    "n_cases",
+    "n_incomplete",
+}
+
+
+def _o_cs_sha(text: str) -> str:
+    """O ic sha."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _o_cs_digest_ok(value: Any) -> bool:
+    """O ic digest ok."""
+    if type(value) is not str or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in value)
+
+
+def _o_cs_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    """O ic derive."""
+    material = f"{seed}|confusableskeleton|{index}|{slot}|{counter}"
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+
+
+def _o_cs_generate(seed: int):
+    """O ic generate."""
+    cases: list = []
+    seen: set = set()
+    for index in range(_O_CS_CASE_COUNT):
+        counter = 0
+        while True:
+            word = _O_CS_WORDS[_o_cs_derive(seed, index, 0, counter) % len(_O_CS_WORDS)]
+            number = 1000 + _o_cs_derive(seed, index, 1, counter) % 9000
+            value = f"{word}-{number}"
+            if value not in seen:
+                break
+            counter += 1
+            if counter > _O_CS_REDRAW_LIMIT:
+                return None
+        seen.add(value)
+        first = _o_cs_derive(seed, index, 2, 0) % len(_O_CS_NEUTRAL_STATEMENTS)
+        second = _o_cs_derive(seed, index, 3, 0) % len(_O_CS_NEUTRAL_STATEMENTS)
+        if second == first:
+            second = (first + 1) % len(_O_CS_NEUTRAL_STATEMENTS)
+        cases.append(
+            {
+                "fixture_id": f"confusableskeleton-{index:02d}",
+                "topic": _O_CS_TOPICS[index],
+                "value": value,
+                "expected": value,
+                "neutral_indices": [first, second],
+            }
+        )
+    return cases
+
+
+def _o_cs_fact(case: dict) -> str:
+    """O ic fact."""
+    return f"The {case['topic']} inspection code is {case['value']}."
+
+
+def _o_cs_question(case: dict) -> str:
+    """O ic question."""
+    return f"What is the {case['topic']} inspection code?"
+
+
+def _o_cs_eligible_count(word: str) -> int:
+    """O cs eligible count."""
+    return sum(1 for char in word if char in _O_CS_FROZEN_REPLACEMENTS)
+
+
+def _o_cs_treated_word(word: str, arm: str) -> str:
+    """O cs treated word."""
+    if arm == "control":
+        return word
+    if arm == "whole_word":
+        return "".join(_O_CS_FROZEN_REPLACEMENTS.get(char, char) for char in word)
+    table = _O_CS_FROZEN_REPLACEMENTS if arm == "single_site" else _O_CS_RARITY_CONTROLS
+    for index, char in enumerate(word):
+        if char in table:
+            return word[:index] + table[char] + word[index + 1 :]
+    return word
+
+
+def _o_cs_treated_fact(case: dict, arm: str) -> str:
+    """O cs treated fact."""
+    word, _, number = str(case["value"]).partition("-")
+    treated_topic = _o_cs_treated_word(str(case["topic"]), arm)
+    treated_value = _o_cs_treated_word(word, arm) + "-" + number
+    return f"The {treated_topic} inspection code is {treated_value}."
+
+
+def _o_cs_arm_content(case: dict, arm: str) -> str:
+    """O cs arm content."""
+    first, second = (int(i) for i in case["neutral_indices"])
+    fact = _o_cs_fact(case) if arm == "control" else _o_cs_treated_fact(case, arm)
+    return (
+        f"{_O_CS_NEUTRAL_STATEMENTS[first]} {fact} "
+        f"{_O_CS_NEUTRAL_STATEMENTS[second]} {_o_cs_question(case)}"
+    )
+
+
+def _o_cs_skeleton_form(word: str) -> str:
+    """O cs skeleton form."""
+    out: list = []
+    inverse = {replacement: letter for letter, replacement in _O_CS_FROZEN_REPLACEMENTS.items()}
+    for char in word:
+        if char in _O_CS_LETTER_SKELETONS:
+            out.append(_O_CS_LETTER_SKELETONS[char])
+        elif char in inverse:
+            out.append(_O_CS_LETTER_SKELETONS[inverse[char]])
+        else:
+            out.append(char)
+    return "".join(out)
+
+
+def _o_cs_script_of(char: str) -> str:
+    """O cs script of."""
+    name = unicodedata.name(char, "")
+    if name.startswith("CYRILLIC"):
+        return "CYRILLIC"
+    if name.startswith("GREEK"):
+        return "GREEK"
+    return ""
+
+
+def _o_cs_population_audit() -> dict:
+    """O cs population audit."""
+    letters: dict = {}
+    ok = True
+    for letter in _O_CS_PANEL_LETTERS:
+        replacement = _O_CS_FROZEN_REPLACEMENTS.get(letter)
+        control = _O_CS_RARITY_CONTROLS.get(letter)
+        skeleton_equal, eligible = _O_CS_POPULATION_COUNTS[letter]
+        entry: dict = {
+            "skeleton_equal_sources": skeleton_equal,
+            "eligible_sources": eligible,
+            "replacement": None,
+            "replacement_name": "",
+            "script": "",
+            "control": None,
+            "control_name": "",
+            "satisfies": replacement is None,
+        }
+        if replacement is not None and control is not None:
+            name = unicodedata.name(replacement, "")
+            script = _o_cs_script_of(replacement)
+            control_name = unicodedata.name(control, "")
+            satisfies = (
+                name.startswith(("CYRILLIC SMALL LETTER", "GREEK SMALL LETTER"))
+                and unicodedata.category(replacement) == "Ll"
+                and unicodedata.normalize("NFC", replacement)
+                == unicodedata.normalize("NFD", replacement)
+                == replacement
+                and unicodedata.normalize("NFKC", replacement) == replacement
+                and unicodedata.decomposition(replacement) == ""
+                and len(replacement.encode("utf-8")) == 2
+                and _o_cs_script_of(control) == script
+                and control in _O_CS_CONTROL_CHARACTERS
+            )
+            entry.update(
+                {
+                    "replacement": f"U+{ord(replacement):04X}",
+                    "replacement_name": name,
+                    "script": script,
+                    "control": f"U+{ord(control):04X}",
+                    "control_name": control_name,
+                    "satisfies": satisfies,
+                }
+            )
+            if not satisfies:
+                ok = False
+        letters[letter] = entry
+    controls: dict = {}
+    for control in _O_CS_CONTROL_CHARACTERS:
+        name = unicodedata.name(control, "")
+        distinct = (
+            control not in _O_CS_FROZEN_REPLACEMENTS.values()
+            and control not in _O_CS_LETTER_SKELETONS
+            and _o_cs_skeleton_form(control) == control
+        )
+        satisfies = (
+            bool(name)
+            and unicodedata.category(control) == "Ll"
+            and unicodedata.normalize("NFC", control)
+            == unicodedata.normalize("NFD", control)
+            == control
+            and unicodedata.normalize("NFKC", control) == control
+            and unicodedata.decomposition(control) == ""
+            and len(control.encode("utf-8")) == 2
+            and distinct
+        )
+        controls[f"U+{ord(control):04X}"] = {
+            "name": name,
+            "script": _o_cs_script_of(control),
+            "skeleton_distinct": distinct,
+            "satisfies": satisfies,
+        }
+        if not satisfies:
+            ok = False
+    words = (*_O_CS_TOPICS, *_O_CS_WORDS)
+    words_ok = all(_o_cs_eligible_count(word) >= 1 for word in words)
+    invariance = all(
+        _o_cs_skeleton_form(_o_cs_treated_word(word, arm)) == _o_cs_skeleton_form(word)
+        for word in words
+        for arm in _O_CS_CONFUSABLE_ARMS
+    )
+    rarity_differs = all(
+        _o_cs_skeleton_form(_o_cs_treated_word(word, "rarity_control")) != _o_cs_skeleton_form(word)
+        for word in words
+    )
+    length_ok = all(
+        len(_o_cs_treated_word(word, arm)) == len(word)
+        for word in words
+        for arm in _O_CS_ARM_KEYS[1:]
+    )
+    ok = ok and words_ok and invariance and rarity_differs and length_ok
+    return {
+        "letters": letters,
+        "controls": controls,
+        "every_word_eligible": words_ok,
+        "skeleton_invariance": invariance,
+        "rarity_skeleton_differs": rarity_differs,
+        "length_preserved": length_ok,
+        "ok": ok,
+        "unicode_version": unicodedata.unidata_version,
+        "confusables_version": _O_CS_CONFUSABLES_VERSION,
+    }
+
+
+def _o_cs_table_sha256() -> str:
+    """O cs table sha256."""
+    material = {
+        "frozen_replacements": _O_CS_FROZEN_REPLACEMENTS,
+        "rarity_controls": _O_CS_RARITY_CONTROLS,
+        "control_characters": list(_O_CS_CONTROL_CHARACTERS),
+        "letter_skeletons": _O_CS_LETTER_SKELETONS,
+        "population_counts": {
+            letter: list(counts) for letter, counts in _O_CS_POPULATION_COUNTS.items()
+        },
+        "confusables_version": _O_CS_CONFUSABLES_VERSION,
+        "confusables_sha256": _O_CS_CONFUSABLES_SHA256,
+        "confusables_derived_sha256": _O_CS_CONFUSABLES_DERIVED_SHA256,
+    }
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return _o_cs_sha(canonical)
+
+
+def _o_cs_case_material_sha256() -> str:
+    """O cs case material sha256."""
+    material = {
+        "topics": list(_O_CS_TOPICS),
+        "words": list(_O_CS_WORDS),
+        "neutral_statements": list(_O_CS_NEUTRAL_STATEMENTS),
+        "arm_keys": list(_O_CS_ARM_KEYS),
+        "generator_spec": _O_CS_GENERATOR_SPEC,
+        "case_count": _O_CS_CASE_COUNT,
+        "table_sha256": _o_cs_table_sha256(),
+        "min_d": _O_CS_MIN_D,
+        "min_j": _O_CS_MIN_J,
+        "max_incomplete": _O_CS_MAX_INCOMPLETE,
+        "redraw_limit": _O_CS_REDRAW_LIMIT,
+        "population_audit": _o_cs_population_audit(),
+    }
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return _o_cs_sha(canonical)
+
+
+def _o_cs_ground_sha256(seed: int):
+    """O ic ground sha256."""
+    generated = _o_cs_generate(seed)
+    if generated is None:
+        return None
+    rows = [
+        [case["fixture_id"], case["topic"], case["value"], list(case["neutral_indices"])]
+        for case in generated
+    ]
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _o_cs_sha(canonical)
+
+
+def _o_cs_protocol(seed: int, backend_fingerprint: str):
+    """O ic protocol."""
+    ground = _o_cs_ground_sha256(seed)
+    if ground is None:
+        return None
+    protocol: dict = {
+        "version": 1,
+        "arm_keys": list(_O_CS_ARM_KEYS),
+        "treated_arms": list(_O_CS_TREATED_ARMS),
+        "table_sha256": _o_cs_table_sha256(),
+        "confusables_version": _O_CS_CONFUSABLES_VERSION,
+        "case_count": _O_CS_CASE_COUNT,
+        "min_d": _O_CS_MIN_D,
+        "min_j": _O_CS_MIN_J,
+        "max_incomplete": _O_CS_MAX_INCOMPLETE,
+        "case_material_sha256": _o_cs_case_material_sha256(),
+        "ground_sha256": ground,
+        "population_audit": _o_cs_population_audit(),
+        "generation_budget": _O_CS_GENERATION_BUDGET,
+        "max_ground_records": _O_CS_MAX_GROUND_RECORDS,
+        "max_records_bytes": _O_CS_MAX_RECORDS_BYTES,
+        "max_candidates": _O_CS_MAX_CANDIDATES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _o_cs_sha(canonical)
+    return protocol
+
+
+def _o_cs_cell(record: dict, key: str):
+    """O ic cell."""
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(key)
+    return cell if isinstance(cell, dict) else None
+
+
+def _o_cs_detail(record: dict, key: str) -> str:
+    """O ic detail."""
+    details = record.get("cell_details")
+    if not isinstance(details, dict):
+        return ""
+    detail = details.get(key, "")
+    return detail if type(detail) is str else ""
+
+
+def _o_cs_verdict(record: dict, key: str) -> bool:
+    """O ic verdict."""
+    cell = _o_cs_cell(record, key)
+    return bool(cell is not None and cell["verdict"])
+
+
+def _o_cs_ids_identical(record: dict, arm: str) -> bool:
+    """O ic ids identical."""
+    digests = record.get("id_digests")
+    if not isinstance(digests, dict):
+        return False
+    control = digests.get("control")
+    return type(control) is str and control != "" and control == digests.get(arm)
+
+
+def _o_cs_decompose_cell(cell: dict, expected: str, expected_digest: str, arm: str) -> str:
+    """O cs decompose cell."""
+    if cell.get("verdict") is True:
+        return "pass"
+    digest = cell.get("answer_digest")
+    if digest is not None and digest == expected_digest:
+        return "boundary_only"
+    text = cell.get("answer_text")
+    if type(text) is not str:
+        return "non_answer"
+    if text != expected and re.match(r"^[a-z]+-[0-9]{4}$", text):
+        word, _, number = text.partition("-")
+        if word in _O_CS_WORDS and 1000 <= int(number) <= 9999:
+            return "wrong_value"
+    if arm in _O_CS_CONFUSABLE_ARMS:
+        word, _, number = expected.partition("-")
+        if text == _o_cs_treated_word(word, arm) + "-" + number:
+            return "echo_confusable"
+        if text != expected:
+            inverse = {
+                replacement: letter for letter, replacement in _O_CS_FROZEN_REPLACEMENTS.items()
+            }
+            if "".join(inverse.get(char, char) for char in text) == expected:
+                return "form_only"
+    elif arm == "rarity_control":
+        word, _, number = expected.partition("-")
+        if text == _o_cs_treated_word(word, arm) + "-" + number:
+            return "echo_control"
+        if (
+            text != expected
+            and len(text) == len(expected)
+            and any(char in _O_CS_CONTROL_CHARACTERS for char in text)
+            and all(
+                char == expected_char or char in _O_CS_CONTROL_CHARACTERS
+                for char, expected_char in zip(text, expected, strict=True)
+            )
+        ):
+            return "form_only"
+    return "non_answer"
+
+
+def _o_cs_decompose_pair(control_cell: dict, arm_cell: dict) -> str:
+    """O ic decompose pair."""
+    if control_cell.get("answer_digest") == arm_cell.get("answer_digest"):
+        return "boundary_only"
+    if control_cell.get("boundary_found") and arm_cell.get("boundary_found"):
+        return "exact_only"
+    return "mixed"
+
+
+def _o_cs_classify(control_passes: int, wrong_values: int, n_incomplete: int) -> str:
+    """O ic classify."""
+    if n_incomplete > _O_CS_MAX_INCOMPLETE:
+        return "insufficient"
+    if control_passes < _O_CS_MIN_D:
+        return "insufficient"
+    if wrong_values >= _O_CS_MIN_J:
+        return "discordant_asymmetric"
+    if wrong_values == 0:
+        return "no_discordance_observed" if n_incomplete == 0 else "insufficient"
+    return "below_threshold" if wrong_values + n_incomplete < _O_CS_MIN_J else "insufficient"
+
+
+def _o_cs_rate(numerator: int, denominator: int):
+    """O ic rate."""
+    return (numerator / denominator) if denominator else None
+
+
+def _o_cs_aggregate(records: list, cases: list) -> dict:
+    """O ic aggregate."""
+    expected_by_fixture = {str(case["fixture_id"]): str(case["expected"]) for case in cases}
+    arms: dict = {}
+    for key in _O_CS_ARM_KEYS:
+        n_completed = 0
+        n_pass = 0
+        n_context = 0
+        n_failed = 0
+        decomposition = dict.fromkeys(_O_CS_CELL_CLASSES, 0)
+        for record in records:
+            detail = _o_cs_detail(record, key)
+            if detail == "arm_context_exceeded":
+                n_context += 1
+            elif detail == "arm_evaluation_failed":
+                n_failed += 1
+            cell = _o_cs_cell(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell["verdict"]:
+                n_pass += 1
+            decomposition[
+                _o_cs_decompose_cell(
+                    cell,
+                    expected_by_fixture.get(str(record.get("fixture", "")), ""),
+                    str(record.get("expected_digest", "")),
+                    key,
+                )
+            ] += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": _o_cs_rate(n_pass, n_completed),
+            "n_context_exceeded": n_context,
+            "n_evaluation_failed": n_failed,
+            "decomposition": decomposition,
+        }
+    ids: dict = {}
+    for arm in _O_CS_TREATED_ARMS:
+        deltas: list = []
+        n_ids_identical = 0
+        n_same_ids_flips = 0
+        for record in records:
+            tokens = record.get("arm_tokens")
+            tokens = tokens if isinstance(tokens, dict) else {}
+            treated = tokens.get(arm)
+            baseline = tokens.get("control")
+            if type(treated) is int and type(baseline) is int:
+                deltas.append(treated - baseline)
+            else:
+                deltas.append(0)
+            if _o_cs_ids_identical(record, arm):
+                n_ids_identical += 1
+                control_cell = _o_cs_cell(record, "control")
+                arm_cell = _o_cs_cell(record, arm)
+                if (
+                    control_cell is not None
+                    and arm_cell is not None
+                    and control_cell["verdict"] != arm_cell["verdict"]
+                ):
+                    n_same_ids_flips += 1
+        ids[arm] = {
+            "n_ids_identical": n_ids_identical,
+            "n_ids_divergent": len(records) - n_ids_identical,
+            "id_length_delta": deltas,
+            "max_abs_id_delta": max((abs(delta) for delta in deltas), default=0),
+            "n_same_ids_verdict_flips": n_same_ids_flips,
+        }
+    dose_eligible = 0
+    dose_letters = 0
+    for case in cases:
+        word, _, _number = str(case["value"]).partition("-")
+        for treated in (str(case["topic"]), word):
+            dose_eligible += _o_cs_eligible_count(treated)
+            dose_letters += len(treated)
+    dose = {
+        "whole_word": {
+            "eligible_letters": dose_eligible,
+            "total_letters": dose_letters,
+            "fraction": _o_cs_rate(dose_eligible, dose_letters),
+        }
+    }
+    headline: dict = {}
+    for arm in _O_CS_TREATED_ARMS:
+        domain = [record for record in records if not _o_cs_ids_identical(record, arm)]
+        paired = [
+            record
+            for record in domain
+            if _o_cs_cell(record, "control") is not None and _o_cs_cell(record, arm) is not None
+        ]
+        n_incomplete = len(domain) - len(paired)
+        control_passes = 0
+        wrong_values = 0
+        reverse = 0
+        non_answer = 0
+        pair_decomposition = dict.fromkeys(_O_CS_PAIR_CLASSES, 0)
+        failing_classes = dict.fromkeys(_O_CS_CELL_CLASSES, 0)
+        for record in paired:
+            control_cell = _o_cs_cell(record, "control")
+            arm_cell = _o_cs_cell(record, arm)
+            if control_cell is None or arm_cell is None:
+                continue
+            expected = expected_by_fixture.get(str(record.get("fixture", "")), "")
+            expected_digest = str(record.get("expected_digest", ""))
+            arm_class = _o_cs_decompose_cell(arm_cell, expected, expected_digest, arm)
+            if arm_class == "non_answer":
+                non_answer += 1
+            if control_cell["verdict"]:
+                control_passes += 1
+                if arm_class == "wrong_value":
+                    wrong_values += 1
+            elif arm_cell["verdict"]:
+                reverse += 1
+            if control_cell["verdict"] != arm_cell["verdict"]:
+                pair_decomposition[_o_cs_decompose_pair(control_cell, arm_cell)] += 1
+                failing = arm_cell if control_cell["verdict"] else control_cell
+                failing_arm = arm if control_cell["verdict"] else "control"
+                failing_classes[
+                    _o_cs_decompose_cell(failing, expected, expected_digest, failing_arm)
+                ] += 1
+        headline[arm] = {
+            "label": _o_cs_classify(control_passes, wrong_values, n_incomplete),
+            "n_population": len(paired),
+            "n_incomplete": n_incomplete,
+            "control_passes": control_passes,
+            "wrong_values": wrong_values,
+            "n_reverse": reverse,
+            "control_rate": _o_cs_rate(control_passes, len(paired)),
+            "arm_rate": _o_cs_rate(
+                sum(1 for record in paired if _o_cs_verdict(record, arm)), len(paired)
+            ),
+            "n_non_answer": non_answer,
+            "pair_decomposition": pair_decomposition,
+            "failing_classes": failing_classes,
+        }
+    return {
+        "arms": arms,
+        "ids": ids,
+        "dose": dose,
+        "headline": headline,
+        "operating_characteristics": dict(_O_CS_OC),
+        "n_cases": len(records),
+        "n_incomplete": sum(
+            1
+            for record in records
+            if any(_o_cs_cell(record, arm) is None for arm in _O_CS_ARM_KEYS)
+        ),
+    }
+
+
+def _o_cs_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """O ic cell ok."""
+    if type(cell) is not dict or set(cell) != _O_CS_CELL_FIELDS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    digest = cell["answer_digest"]
+    if digest is not None and not _o_cs_digest_ok(digest):
+        return False
+    text = cell["answer_text"]
+    if text is None:
+        if digest is not None:
+            return False
+    elif type(text) is not str or _o_cs_sha(text) != digest:
+        return False
+    verdict = (digest == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _o_cs_recompute(payload: Any):
+    """O ic recompute."""
+    if type(payload) is not dict:
+        return None
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
+        return None
+    expected_protocol = _o_cs_protocol(seed, backend_fingerprint)
+    if expected_protocol is None or protocol != expected_protocol:
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    if len(candidates) > _O_CS_MAX_CANDIDATES:
+        return None
+    generated = _o_cs_generate(seed)
+    if generated is None:
+        return None
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _O_CS_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _O_CS_MAX_RECORDS_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "content_digests",
+                "arm_tokens",
+                "id_digests",
+                "ids_identical",
+                "id_length_delta",
+                "table_pin",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"]:
+                return None
+            if record["topic"] != case["topic"]:
+                return None
+            expected_digest = _o_cs_sha(str(case["expected"]))
+            if record["expected_digest"] != expected_digest:
+                return None
+            table_pin = record["table_pin"]
+            if type(table_pin) is not dict or set(table_pin) != {"version", "table_sha256"}:
+                return None
+            if table_pin["version"] != _O_CS_CONFUSABLES_VERSION:
+                return None
+            if table_pin["table_sha256"] != _o_cs_table_sha256():
+                return None
+            arm_tokens = record["arm_tokens"]
+            id_digests = record["id_digests"]
+            content_digests = record["content_digests"]
+            ids_identical = record["ids_identical"]
+            id_length_delta = record["id_length_delta"]
+            cells = record["cells"]
+            details = record["cell_details"]
+            for mapping in (arm_tokens, id_digests, content_digests, cells, details):
+                if type(mapping) is not dict or set(mapping) != set(_O_CS_ARM_KEYS):
+                    return None
+            for mapping in (ids_identical, id_length_delta):
+                if type(mapping) is not dict or set(mapping) != set(_O_CS_TREATED_ARMS):
+                    return None
+            for arm in _O_CS_TREATED_ARMS:
+                if ids_identical[arm] is not (id_digests[arm] == id_digests["control"]):
+                    return None
+                if id_length_delta[arm] != arm_tokens[arm] - arm_tokens["control"]:
+                    return None
+            for arm in _O_CS_ARM_KEYS:
+                tokens = arm_tokens[arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                    return None
+                if not _o_cs_digest_ok(id_digests[arm]):
+                    return None
+                if content_digests[arm] != _o_cs_sha(_o_cs_arm_content(case, arm)):
+                    return None
+                cell = cells[arm]
+                detail = details[arm]
+                if detail not in ("", *_O_CS_DETAILS):
+                    return None
+                if cell is None:
+                    if detail == "":
+                        return None
+                    continue
+                if detail != "":
+                    return None
+                if not _o_cs_cell_ok(cell, expected_digest):
+                    return None
+                if cell["input_tokens"] != tokens:
+                    return None
+        aggregates[name] = _o_cs_aggregate(records, generated)
+    if total_records > _O_CS_MAX_GROUND_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    return {
+        "aggregates": aggregates,
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _o_confusableskeleton_valid(value: Any) -> bool:
+    """Oracle invisible-chars validator: mirrors
+    diffreports._valid_confusable_skeleton.
+    """
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if value.get("detail") != "":
+        return False
+    audit = value.get("audit")
+    if type(audit) is not dict or set(audit) != {
+        "n_audit_excluded",
+        "by_reason",
+        "special_token_findings",
+    }:
+        return False
+    if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+        return False
+    if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+        return False
+    by_reason = audit["by_reason"]
+    if type(by_reason) is not dict:
+        return False
+    for key, count in by_reason.items():
+        if type(key) is not str or type(count) is not int or count < 0:
+            return False
+    recomputed = _o_cs_recompute(value)
+    if recomputed is None:
+        return False
+    candidates = value["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, val in expected.items():
+            if entry.get(key) != val:
+                return False
+    if value.get("n_candidates") != recomputed["n_candidates"]:
+        return False
+    return bool(value.get("n_cases") == recomputed["n_cases"])
+
+
+def _o_confusableskeleton(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle invisible-chars section: mirrors
+    diffreports.diff_confusable_skeleton.
+    """
+    old_ok = _o_confusableskeleton_valid(old)
+    new_ok = _o_confusableskeleton_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    ) or old["protocol"].get("case_material_sha256") != new["protocol"].get("case_material_sha256")
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not generator_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        metrics: list = []
+        for arm in _O_CS_ARM_KEYS:
+            metrics.append(
+                (f"{arm}_rate", old_entry["arms"][arm]["rate"], new_entry["arms"][arm]["rate"])
+            )
+        metrics.extend(
+            [
+                (
+                    "whole_word_eligible_letters",
+                    old_entry["dose"]["whole_word"]["eligible_letters"],
+                    new_entry["dose"]["whole_word"]["eligible_letters"],
+                ),
+                (
+                    "whole_word_total_letters",
+                    old_entry["dose"]["whole_word"]["total_letters"],
+                    new_entry["dose"]["whole_word"]["total_letters"],
+                ),
+                (
+                    "whole_word_fraction",
+                    old_entry["dose"]["whole_word"]["fraction"],
+                    new_entry["dose"]["whole_word"]["fraction"],
+                ),
+            ]
+        )
+        for arm in _O_CS_TREATED_ARMS:
+            old_head = old_entry["headline"][arm]
+            new_head = new_entry["headline"][arm]
+            old_ids = old_entry["ids"][arm]
+            new_ids = new_entry["ids"][arm]
+            metrics.extend(
+                [
+                    (f"{arm}_label", old_head["label"], new_head["label"]),
+                    (
+                        f"{arm}_control_passes",
+                        old_head["control_passes"],
+                        new_head["control_passes"],
+                    ),
+                    (f"{arm}_wrong_values", old_head["wrong_values"], new_head["wrong_values"]),
+                    (f"{arm}_n_reverse", old_head["n_reverse"], new_head["n_reverse"]),
+                    (f"{arm}_n_population", old_head["n_population"], new_head["n_population"]),
+                    (f"{arm}_n_incomplete", old_head["n_incomplete"], new_head["n_incomplete"]),
+                    (f"{arm}_n_non_answer", old_head["n_non_answer"], new_head["n_non_answer"]),
+                    (f"{arm}_control_rate", old_head["control_rate"], new_head["control_rate"]),
+                    (f"{arm}_arm_rate", old_head["arm_rate"], new_head["arm_rate"]),
+                    (
+                        f"{arm}_pair_exact_only",
+                        old_head["pair_decomposition"]["exact_only"],
+                        new_head["pair_decomposition"]["exact_only"],
+                    ),
+                    (
+                        f"{arm}_pair_boundary_only",
+                        old_head["pair_decomposition"]["boundary_only"],
+                        new_head["pair_decomposition"]["boundary_only"],
+                    ),
+                    (
+                        f"{arm}_pair_mixed",
+                        old_head["pair_decomposition"]["mixed"],
+                        new_head["pair_decomposition"]["mixed"],
+                    ),
+                    (
+                        f"{arm}_n_ids_identical",
+                        old_ids["n_ids_identical"],
+                        new_ids["n_ids_identical"],
+                    ),
+                    (
+                        f"{arm}_max_abs_id_delta",
+                        old_ids["max_abs_id_delta"],
+                        new_ids["max_abs_id_delta"],
+                    ),
+                    (
+                        f"{arm}_n_same_ids_verdict_flips",
+                        old_ids["n_same_ids_verdict_flips"],
+                        new_ids["n_same_ids_verdict_flips"],
+                    ),
+                ]
+            )
+        for metric, old_value, new_value in metrics:
+            if old_value != new_value:
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    diff["candidate_drift"] = candidate_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["generator_drift"] = generator_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        candidate_drift or added or removed or protocol_drift or generator_drift or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
 def _o_instructiondistance_valid(value: Any) -> bool:
     """Oracle instruction-distance validator: mirrors
     diffreports._valid_instruction_distance.
@@ -15324,6 +16489,9 @@ def _oracle_diff(
     o_ic, o_ic_changed, o_ic_asymmetric = _o_invisiblechars(
         old.get("invisible_chars"), new.get("invisible_chars")
     )
+    o_cs, o_cs_changed, o_cs_asymmetric = _o_confusableskeleton(
+        old.get("confusable_skeleton"), new.get("confusable_skeleton")
+    )
     o_ca, o_ca_changed, o_ca_asymmetric = _o_choiceaudit(
         old.get("choice_audit"), new.get("choice_audit")
     )
@@ -15494,6 +16662,7 @@ def _oracle_diff(
         "prune_sweep": o_ps,
         "record_notation": o_rn,
         "invisible_chars": o_ic,
+        "confusable_skeleton": o_cs,
         "choice_audit": o_ca,
         "precision": o_pr,
         "confidence": o_cfd,
@@ -15595,6 +16764,8 @@ def _oracle_diff(
             "record_notation_asymmetric": o_rn_asymmetric,
             "invisible_chars_changed": o_ic_changed,
             "invisible_chars_asymmetric": o_ic_asymmetric,
+            "confusable_skeleton_changed": o_cs_changed,
+            "confusable_skeleton_asymmetric": o_cs_asymmetric,
             "choice_audit_changed": o_ca_changed,
             "choice_audit_asymmetric": o_ca_asymmetric,
             "precision_changed": o_pr_changed,
@@ -16575,6 +17746,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "record_notation_asymmetric": False,
                 "invisible_chars_changed": False,
                 "invisible_chars_asymmetric": False,
+                "confusable_skeleton_changed": False,
+                "confusable_skeleton_asymmetric": False,
                 "choice_audit_changed": False,
                 "choice_audit_asymmetric": False,
                 "precision_changed": False,
@@ -20683,6 +21856,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not record_notation_asymmetric\n"
             '        and not invisible_chars_diff["changed"]\n'
             "        and not invisible_chars_asymmetric\n"
+            '        and not confusable_skeleton_diff["changed"]\n'
+            "        and not confusable_skeleton_asymmetric\n"
             '        and not choiceaudit_diff["changed"]\n'
             "        and not choiceaudit_asymmetric\n"
             '        and not precision_diff["changed"]\n'
@@ -20791,6 +21966,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or record_notation_asymmetric\n"
             '        or invisible_chars_diff["changed"]\n'
             "        or invisible_chars_asymmetric\n"
+            '        or confusable_skeleton_diff["changed"]\n'
+            "        or confusable_skeleton_asymmetric\n"
             '        or choiceaudit_diff["changed"]\n'
             "        or choiceaudit_asymmetric\n"
             '        or precision_diff["changed"]\n'
