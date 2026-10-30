@@ -50,7 +50,6 @@ _DANGEROUS_GLOBALS = frozenset({"lipsum", "cycler", "joiner", "self"})
 _RANGE_LITERAL_BOUND = 1_000_000
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _findings_for(source: str) -> tuple[TemplateFinding, ...]:
     """Walk the parsed AST; implementation of :func:`scan_template_ast`."""
     from jinja2 import Environment, nodes

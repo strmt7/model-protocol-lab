@@ -59,7 +59,6 @@ from model_protocol_lab.core import (
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 try:
-    # skipcq: PYL-W0404 - test-local import isolates the module under audit
     import importlib.util as _ilu
 
     HAS_HF = all(
@@ -841,7 +840,6 @@ class TestVerifyWiring(unittest.TestCase):
         audit = payload["determinism"]
         self.assertFalse(audit["available"])
         self.assertEqual(audit["detail"], "observations_stripped")
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         check = next(c for c in payload["checks"] if c["id"] == "determinism_replay")
         self.assertEqual(check["status"], "unavailable")
 
@@ -860,7 +858,6 @@ class TestVerifyWiring(unittest.TestCase):
         self.assertEqual(audit["verdict"], "deterministic")
         self.assertIsNotNone(audit["certificate"])
         self.assertEqual(audit["certificate"]["replay"], {"device": "cpu", "max_context": 2048})
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         check = next(c for c in payload["checks"] if c["id"] == "determinism_replay")
         self.assertEqual(check["status"], "passed")
 
@@ -878,7 +875,6 @@ class TestVerifyWiring(unittest.TestCase):
                 code, payload, _err = _run_verify(args)
         self.assertEqual(code, 2)
         self.assertEqual(payload["verdict"], "failed")
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         check = next(c for c in payload["checks"] if c["id"] == "determinism_replay")
         self.assertEqual(check["status"], "failed")
         self.assertIn("backend-determinism finding", check["detail"])
@@ -899,7 +895,6 @@ class TestVerifyWiring(unittest.TestCase):
                 code, payload, _err = _run_verify(args)
         self.assertEqual(code, 0)
         self.assertEqual(payload["determinism"]["verdict"], "inconclusive")
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         check = next(c for c in payload["checks"] if c["id"] == "determinism_replay")
         self.assertEqual(check["status"], "unavailable")
         self.assertIn("determinism not established", check["detail"])
@@ -917,7 +912,6 @@ class TestVerifyWiring(unittest.TestCase):
             ):
                 code, payload, _err = _run_verify(args)
         self.assertEqual(code, 0)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         check = next(c for c in payload["checks"] if c["id"] == "determinism_replay")
         self.assertEqual(check["status"], "unavailable")
         self.assertIn("search incomplete", check["detail"])
@@ -956,7 +950,6 @@ def _exec_variant(original: str, mutant: str, tag: str):  # type: ignore[no-unty
     module.__package__ = "model_protocol_lab"
     sys.modules[name] = module
     try:
-        # skipcq: PYL-W0122 - gate execs own module source mutated in memory only
         exec(  # noqa: S102 -- the gate's whole point: run a mutated copy of our own module
             compile(source.replace(original, mutant), f"<mutant {tag}>", "exec"),
             module.__dict__,

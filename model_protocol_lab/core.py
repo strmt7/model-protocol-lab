@@ -75,7 +75,6 @@ class Format:
             if optional is not None and type(optional) is not str:
                 raise ValueError("Optional Format fields must be strings or None")
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def render(self, messages: tuple[Message, ...]) -> str:
         """repeat_bos means BOS before every message, including the open reply.
 
@@ -321,7 +320,6 @@ class EvaluationReport:
     planned_count: int
     status: RunStatus
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def __post_init__(self) -> None:
         """Validate the report counts and observations at construction."""
         if type(self.planned_count) is not int or self.planned_count < 1:
@@ -427,7 +425,6 @@ def first_boundary(tokens: tuple[int, ...], stop: tuple[int, ...]) -> int | None
     return None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def template_diff(
     hand_ids: tuple[int, ...], template_ids: tuple[int, ...], *, _deadline_s: float = 10.0
 ) -> tuple[dict[str, Any], ...]:
@@ -554,7 +551,6 @@ def check_boundary_portability(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def template_tokenizer_compatibility(
     name: str,
     inventory: tuple[str, ...],
@@ -760,7 +756,6 @@ _BACKEND_ERROR_CODES = frozenset(
 )
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def evaluate(
     backend: Backend,
     candidate: Format,

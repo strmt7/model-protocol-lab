@@ -166,7 +166,8 @@ _DIGEST0 = ic.digest_text(_EXPECTED0)
 
 class TestGeneratorFreeze(unittest.TestCase):
     """A1 + build debt 3: the generator's conversion and
-    panel are frozen in executed values."""
+    panel are frozen in executed values.
+    """
 
     def test_generator_spec_text_pinned(self):
         """Generator spec text pinned."""
@@ -326,7 +327,8 @@ class TestGeneratorFreeze(unittest.TestCase):
 
 class TestDecomposition(unittest.TestCase):
     """A5/A6/A7: the ordered decision list and its
-    witnesses."""
+    witnesses.
+    """
 
     def test_pass_first(self):
         """Pass first."""
@@ -447,7 +449,8 @@ def _oracle_label(d: int, j: int, k: int) -> str:
     k missing pairs (each lands as control-pass+wrong,
     control-pass+other, or control-fail) and require the
     acquittal to be completion-stable; fires issue on the
-    observed counts; the cap and the D floor refuse."""
+    observed counts; the cap and the D floor refuse.
+    """
     if k > ic.MAX_INCOMPLETE:
         return "insufficient"
     if d < ic.MIN_D:
@@ -467,7 +470,8 @@ def _oracle_label(d: int, j: int, k: int) -> str:
 
 class TestClassifyGuard(unittest.TestCase):
     """A3/A4: the guarded headline against an independent
-    completion oracle."""
+    completion oracle.
+    """
 
     def test_classify_matches_oracle_on_grid(self):
         """Classify matches oracle on grid."""
@@ -519,9 +523,11 @@ def _record(case, cells, details, identical_arms=()):
 class TestGuardBatteryIdsDimension(unittest.TestCase):
     """Build debt 1 / A3: the completion domain is the
     id-divergent domain; ids-identical incomplete cases
-    never enter the completion."""
+    never enter the completion.
+    """
 
-    def _cells(self, case, verdict=True, missing=()):
+    @staticmethod
+    def _cells(case, verdict=True, missing=()):
         """Cells."""
         cells = {}
         details = {}
@@ -582,7 +588,8 @@ class TestGuardBatteryIdsDimension(unittest.TestCase):
 
 def _worlds(cap_trials: int = 4000, seed: int = 20261030) -> dict[str, dict[str, float]]:
     """Worlds A-C re-executed against the module's
-    classifier (build debt 2, at the amended cap)."""
+    classifier (build debt 2, at the amended cap).
+    """
     import random
 
     rng = random.Random(seed)  # noqa: S311 -- deterministic test seed
@@ -636,7 +643,8 @@ class TestWorldsAtAmendedCap(unittest.TestCase):
 def _fire_independent(a: float, q: float, n: int = 24, min_d: int = 10) -> float:
     """Exact fire probability under the marginal
     (independent-pair) convention: D ~ Bin(n, a),
-    J | D ~ Bin(D, q)."""
+    J | D ~ Bin(D, q).
+    """
     total = 0.0
     for d in range(min_d, n + 1):
         p_d = comb(n, d) * a**d * (1 - a) ** (n - d)
@@ -653,7 +661,8 @@ def _transplant_fire(n: int, pc: float, pa: float) -> float:
     equal-count clause of the executed computation is
     subsumed by that threshold) -- evaluated here by the
     exact dynamic program over (control-only, arm-only)
-    counts."""
+    counts.
+    """
     probs = (pc * pa, pc * (1 - pa), (1 - pc) * pa, (1 - pc) * (1 - pa))
     dp = {(0, 0): 1.0}
     for _ in range(n):
@@ -693,7 +702,8 @@ def _phi2(h: float, k: float, rho: float) -> float:
 def _fire_paired(pc: float, pa: float, rho: float = 0.5, n: int = 24) -> float:
     """Exact fire probability under the per-case copula:
     pJ = pc - Phi2(tc, ta; rho); the trinomial sum over
-    (wrong pairs, both-pass pairs, control-fail cases)."""
+    (wrong pairs, both-pass pairs, control-fail cases).
+    """
     p_both = _phi2(_NORM.inv_cdf(pc), _NORM.inv_cdf(pa), rho)
     p_j = pc - p_both
     p_c = 1 - pc
@@ -707,7 +717,8 @@ def _fire_paired(pc: float, pa: float, rho: float = 0.5, n: int = 24) -> float:
 
 class TestOperatingCharacteristics(unittest.TestCase):
     """Build debt 4 / A2/A8/A10: the adjudicated figures,
-    re-derived exactly."""
+    re-derived exactly.
+    """
 
     def test_independent_rows(self):
         """Independent rows."""
@@ -956,7 +967,8 @@ class TestStagePayloads(unittest.TestCase):
 
 class TestMirrorValidation(unittest.TestCase):
     """The diffreports mirror: acceptance and tamper
-    rejection."""
+    rejection.
+    """
 
     def setUp(self):
         """Set up."""
@@ -1088,7 +1100,8 @@ def _gap_record(case, cells, identical_arms=()):
 class _FlakyCells(dict):
     """A cells mapping that drops one arm after two reads."""
 
-    def get(self, key, default=None):  # noqa: D102 -- test double
+    def get(self, key, default=None):
+        """Get double: the 'zwsp' entry reads as missing after two reads."""
         if key == "zwsp":
             self._reads = getattr(self, "_reads", 0) + 1
             if self._reads > 2:
@@ -1141,7 +1154,9 @@ class TestCoverageGaps(unittest.TestCase):
         """Validate."""
         self.assertFalse(ic.validate_case({"fixture_id": "bogus"}, 0))
 
-    def _validate_patched(self, case):
+    @staticmethod
+    def _validate_patched(case):
+        """Validate the case with generate_case patched to return it."""
         with mock.patch.object(ic, "generate_case", lambda seed, index: case):
             return ic.validate_case(case, 0)
 
@@ -1363,7 +1378,10 @@ class TestCoverageGaps(unittest.TestCase):
         """Stage."""
 
         class _RaisingDecode(_WordBackend):
+            """Backend double whose decode always raises."""
+
             def decode(self, token_ids):
+                """Raise: this backend cannot decode."""
                 raise RuntimeError("no decode")
 
         payload = _payload(backend=_RaisingDecode())
@@ -1392,24 +1410,29 @@ class TestCoverageGaps(unittest.TestCase):
 
 class TestMirrorDeepTampers(unittest.TestCase):
     """Deep mirror tampers: forgeries that pass the shallow
-    bindings and fail in the recomputed aggregates."""
+    bindings and fail in the recomputed aggregates.
+    """
 
     def test_deep_tampers_rejected(self):
         """Mirror."""
         base = _payload(_WordBackend("echo"))
 
         def tamper_j(payload):
+            """Forgery: bump the headline population count."""
             payload["candidates"]["chatml"]["headline"]["zwsp"]["n_population"] += 1
 
         def tamper_pair(payload):
+            """Forgery: bump the pair-decomposition exact-only count."""
             payload["candidates"]["chatml"]["headline"]["zwsp"]["pair_decomposition"][
                 "exact_only"
             ] += 1
 
         def tamper_same_ids(payload):
+            """Forgery: bump the identical-ids count."""
             payload["candidates"]["chatml"]["ids"]["zwsp"]["n_ids_identical"] += 1
 
         def tamper_control_rate(payload):
+            """Forgery: overwrite the control rate with 0.5."""
             payload["candidates"]["chatml"]["headline"]["zwsp"]["control_rate"] = 0.5
 
         for tamper in (tamper_j, tamper_pair, tamper_same_ids, tamper_control_rate):

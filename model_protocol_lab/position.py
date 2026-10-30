@@ -112,7 +112,6 @@ POSITION_SPECS: tuple[dict[str, tuple[str, ...] | str], ...] = (
 _SPEC_KEYS = ("id", "question", "options", "correct")
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def validate_position_specs(specs: object) -> tuple[dict[str, object], ...]:
     """Validate synthetic multiple-choice fixture specifications.
 

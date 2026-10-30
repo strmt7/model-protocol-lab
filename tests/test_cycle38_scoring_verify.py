@@ -1301,7 +1301,6 @@ class TestRequireTorch(unittest.TestCase):
     def test_torch_restored_afterwards(self) -> None:
         """Test torch restored afterwards."""
         # Sanity: the hide/restore dance above leaves torch usable.
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import torch as t2
 
         self.assertTrue(hasattr(t2, "zeros"))

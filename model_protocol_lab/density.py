@@ -428,7 +428,6 @@ def _draw_word(seed: int, index: int, slot: int, forbidden: set[str]) -> str:
         counter += 1
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def generate_cases(seed: int) -> list[dict[str, Any]]:
     """The frozen generated case set for a run seed, in
     canonical index order. Pure and deterministic -- the same
@@ -512,17 +511,14 @@ def generate_cases(seed: int) -> list[dict[str, Any]]:
             kind = kind_at(index, position)
             if kind == "count":
                 constraints.append(
-                    # skipcq: PTC-W0063 - kind cycle and pool sizes are both four by construction
                     {"position": position, "kind": kind, "limit": next(pools["count"])}
                 )
             elif kind == "include":
                 constraints.append(
-                    # skipcq: PTC-W0063 - kind cycle and pool sizes are both four by construction
                     {"position": position, "kind": kind, "target": next(pools["include"])}
                 )
             else:
                 constraints.append(
-                    # skipcq: PTC-W0063 - kind cycle and pool sizes are both four by construction
                     {"position": position, "kind": kind, "target": next(pools[kind])}
                 )
         cases.append(
@@ -835,7 +831,6 @@ def _eligible(constraint: dict[str, Any], hashes: list[str]) -> bool:
     return not (constraint["kind"] == "count" and not hashes)
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def aggregate_candidate(
     records: list[dict[str, Any]], cases: list[dict[str, Any]]
 ) -> dict[str, Any]:

@@ -765,7 +765,6 @@ def records_bytes(records_by_candidate: dict[str, list[dict[str, Any]]]) -> int:
     )
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def validate_case(case: dict[str, Any], seed: int) -> bool:
     """The pre-generation invariant battery over one case
     (design sections 2-4, amendment A9(iv)), executed by the
@@ -963,7 +962,6 @@ def _ids_identical(record: dict[str, Any], arm: str) -> bool:
     return type(control) is str and control != "" and control == digests.get(arm)
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def aggregate_candidate(
     records: list[dict[str, Any]], cases: tuple[dict[str, Any], ...]
 ) -> dict[str, Any]:

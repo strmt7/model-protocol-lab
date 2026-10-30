@@ -129,7 +129,6 @@ def _ref_min_budget(obs, boundary, max_new_tokens):
     return None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _ref_frontier(search, *, boundary, max_new_tokens, native_decision, native_winner):
     """Ref frontier."""
     names = [e["format"]["name"] for e in search]
@@ -228,7 +227,6 @@ def _check_matches_reference(
     return impl, ref
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _check_invariants(impl, ref, max_new_tokens):
     """Check invariants."""
     # pass_steps: sorted, strictly increasing, minimal (no redundant points),

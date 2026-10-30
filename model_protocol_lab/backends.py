@@ -196,7 +196,6 @@ def _verify_manifest_fingerprints(
     for name in names:
         path = _member(root, name)
         try:
-            # skipcq: PYL-W0621 - the name is load-bearing (import binding / payload vocabulary)
             stat = path.stat()
         except OSError:
             raise ValueError("assets_changed") from None
@@ -402,7 +401,6 @@ class _OOVTokenBytes(bytes):
     """
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _hf_byte_token_mapper(tokenizer: Any) -> Callable[[int], bytes | None] | None:
     """Byte-space token mapping mirroring HF ``StopStringCriteria``'s table build.
 
@@ -484,7 +482,6 @@ def _hf_byte_token_mapper(tokenizer: Any) -> Callable[[int], bytes | None] | Non
     return _map
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def emulate_hf_stop_string(
     backend: Backend,
     prompt_ids: tuple[int, ...],
@@ -589,7 +586,6 @@ def emulate_hf_stop_string(
     return StopOutcome(True, True, tuple(output_ids[:step]), f"fired_at_step_{step}")
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def emulate_vllm_holdback(
     backend: Backend,
     output_ids: tuple[int, ...],
@@ -1021,7 +1017,6 @@ class LocalHFBackend:
     cooperative between forwards, not an interruption of kernels.
     """
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def __init__(
         self,
         model_path: str | Path,
@@ -1257,7 +1252,6 @@ class LocalHFBackend:
         size: int = self._vocab_size
         return size
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def heal_input_ids(self, input_ids: tuple[int, ...]) -> tuple[int, ...]:
         """Apply HF-style token healing to a prompt (preprocessing step).
 
@@ -1409,7 +1403,6 @@ class LocalHFBackend:
             except Exception:  # noqa: BLE001 -- inference errors become fixed codes
                 raise RuntimeError("local_forward_failed") from None
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def generate(
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
@@ -1481,7 +1474,6 @@ class LocalHFBackend:
             if acquired:
                 self._lock.release()
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def generate_batch(
         self,
         prompts: tuple[tuple[int, ...], ...],

@@ -1709,7 +1709,6 @@ def _run_ws_probe(
         )
         from .wscanonical import MUTATIONS
 
-        # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
         candidates = tuple(fmt.name for fmt in formats)
         stage = ws_stage(
             backend,
@@ -1807,7 +1806,6 @@ def _run_deliforge_probe(
     try:
         from .experiments import deliforge_authority, deliforge_stage, native_search_outcomes
 
-        # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
         candidates = tuple(fmt.name for fmt in formats)
         stage = deliforge_stage(
             backend,
@@ -1854,7 +1852,6 @@ def _run_faketurn_probe(
     try:
         from .experiments import faketurn_robustness, faketurn_stage, native_search_outcomes
 
-        # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
         candidates = tuple(fmt.name for fmt in formats)
         stage = faketurn_stage(
             backend,
@@ -1906,7 +1903,6 @@ def _run_toolcall_probe(
         )
 
         queries = validate_toolcall_queries(TOOLCALL_QUERIES)
-        # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
         candidates = tuple(fmt.name for fmt in formats)
         # Floor the token budget: the longest canonical call is 79
         # characters, and real tokenizers may split JSON punctuation,
@@ -1964,7 +1960,6 @@ def _run_verbosity_probe(
                 continue
             observations.extend(o for o in entry_obs if type(o) is dict)
         expected_by_fixture = {f.id: f.expected for f in search_fixtures}
-        # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
         candidates = tuple(fmt.name for fmt in formats)
         stage = verbosity_stage(
             observations=observations,
@@ -3145,7 +3140,6 @@ def _run_cache_profile_probe(
             if type(entry_obs) is not list:
                 continue
             observations.extend(o for o in entry_obs if type(o) is dict)
-        # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
         candidates = tuple(fmt.name for fmt in formats)
         stage = cache_profile_stage(
             observations=observations,
@@ -3197,7 +3191,6 @@ def _run_confidentiality_probe(
             max_new_tokens=max_new_tokens,
             seed=seed,
         )
-        # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
         candidates = tuple(fmt.name for fmt in formats)
         result["confidentiality"] = confidentiality_profile(candidates, stage)
     except Exception:  # noqa: BLE001 -- confidentiality probe must not fail the run
@@ -3237,7 +3230,6 @@ def _run_answer_collision_probe(
             boundary_map=boundary_map,
             seed=seed,
         )
-        # skipcq: PYL-W0621 - the name is load-bearing: import binding or frozen payload vocabulary
         candidates = tuple(fmt.name for fmt in formats)
         result["answer_collision"] = answer_collision_profile(candidates, stage)
     except Exception:  # noqa: BLE001 -- answer-collision audit must not fail the run
@@ -3539,7 +3531,6 @@ def _run_batch_probe(
         }
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point: parse argv and dispatch to the requested subcommand.
 
@@ -3769,7 +3760,6 @@ def main(argv: list[str] | None = None) -> int:
                     f"{', '.join(_display_id(i) for i in empty_expected)}; these pass vacuously",
                     file=sys.stderr,
                 )
-            # skipcq: PY-W2000 - used on the next line; analyzer missed the use
             from .backends import LocalHFBackend
 
             backend = LocalHFBackend(args.model, device=args.device, max_context=args.max_context)
@@ -3815,7 +3805,6 @@ def main(argv: list[str] | None = None) -> int:
             # Fixture hygiene (pure, advisory): search/held-out
             # near-duplicate overlap, so the report records whether the
             # held-out split was contaminated. Never fails the run.
-            # skipcq: PY-W2000 - used two lines below; analyzer missed the use
             from .contamination import contamination_report
 
             result["contamination"] = contamination_report(split.search, split.held_out)

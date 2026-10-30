@@ -180,7 +180,8 @@ _DIGEST0 = sha256(_EXPECTED0.encode("utf-8")).hexdigest()
 
 class TestGeneratorFreeze(unittest.TestCase):
     """The frozen derivation, panel, population, and arms
-    (design sections 2-4; A1, A2, A7, A9)."""
+    (design sections 2-4; A1, A2, A7, A9).
+    """
 
     def test_generator_spec_text_pinned(self):
         """Generator spec text pinned."""
@@ -237,7 +238,8 @@ class TestGeneratorFreeze(unittest.TestCase):
         """A9 / build debt 5: force case 1's counter-0 draws
         onto case 0's value; the redraw must land at
         counter+1 for slots 0+1 while the neutrals stay at
-        counter 0."""
+        counter 0.
+        """
         original = cs._derive
 
         def colliding(seed, index, slot, counter):
@@ -301,7 +303,8 @@ class TestGeneratorFreeze(unittest.TestCase):
         same-script control BY NAME PREFIX -- the Cyrillic
         Supplement seats d and q take the Cyrillic control,
         which the design round's code-point-range proxy got
-        wrong."""
+        wrong.
+        """
         self.assertEqual(cs.RARITY_CONTROLS["d"], "\u0434")
         self.assertEqual(cs.RARITY_CONTROLS["q"], "\u0434")
         self.assertEqual(cs.RARITY_CONTROLS["a"], "\u03b6")
@@ -320,7 +323,8 @@ class TestGeneratorFreeze(unittest.TestCase):
         populations of all five evidence seeds, every rarity
         site character's script (by name prefix) equals the
         frozen replacement's script at that site, in the
-        topic and in the value word."""
+        topic and in the value word.
+        """
         for seed in (0, 1, 7, 42, 20261030):
             for case in cs.generate_cases(seed):
                 word = case["value"].partition("-")[0]
@@ -341,7 +345,8 @@ class TestGeneratorFreeze(unittest.TestCase):
     def test_cyrillic_seat_words_take_cyrillic_control(self):
         """A2 witness: quarry's first eligible letter is q
         (Cyrillic seat) -- its rarity site carries U+0434,
-        not the Greek control."""
+        not the Greek control.
+        """
         self.assertEqual(cs.treated_word("quarry", "rarity_control"), "\u0434uarry")
         self.assertEqual(cs.treated_word("quartz", "rarity_control"), "\u0434uartz")
         self.assertEqual(cs.treated_word("alder", "rarity_control"), "\u03b6lder")
@@ -351,7 +356,8 @@ class TestGeneratorFreeze(unittest.TestCase):
         each control is skeleton-distinct from every panel
         letter and frozen replacement under the frozen
         tables, its skeleton form is itself, and the audit
-        conjunction holds."""
+        conjunction holds.
+        """
         audit = cs.POPULATION_AUDIT
         self.assertTrue(audit["ok"])
         # The audit records the RUNTIME's Unicode version (the
@@ -375,7 +381,8 @@ class TestGeneratorFreeze(unittest.TestCase):
 
     def test_arm_content_structure(self):
         """Arm content structure (design section 4): doses,
-        skeleton invariance, byte-identical carriers."""
+        skeleton invariance, byte-identical carriers.
+        """
         for seed in (0, 42):
             for case in cs.generate_cases(seed):
                 control = cs.arm_content(case, "control")
@@ -402,7 +409,8 @@ class TestGeneratorFreeze(unittest.TestCase):
 
     def test_whole_word_dose_seed_zero(self):
         """The printed whole-word dose (design section 4):
-        171 of 249 letters on seed 0's panel."""
+        171 of 249 letters on seed 0's panel.
+        """
         aggregate = cs.aggregate_candidate([], cs.generate_cases(0))
         self.assertEqual(aggregate["dose"]["whole_word"]["eligible_letters"], 171)
         self.assertEqual(aggregate["dose"]["whole_word"]["total_letters"], 249)
@@ -456,7 +464,8 @@ class TestGeneratorFreeze(unittest.TestCase):
 class TestDesignDocCompleteness(unittest.TestCase):
     """A1 / build debt 1: the consolidated design doc is the
     build contract -- the rarity definition in full, and no
-    truncation markers in any shipped doc."""
+    truncation markers in any shipped doc.
+    """
 
     def test_design_doc_rarity_definition_in_full(self):
         """Design doc rarity definition in full."""
@@ -486,7 +495,8 @@ class TestDesignDocCompleteness(unittest.TestCase):
         not silently absorbed): HISTORYFRAME_DESIGN.md and
         INSTRUCTIONDISTANCE_DESIGN.md -- pre-existing
         conditions outside this cycle's scope, disclosed in
-        the cycle-224 final report."""
+        the cycle-224 final report.
+        """
         known = {"HISTORYFRAME_DESIGN.md", "INSTRUCTIONDISTANCE_DESIGN.md"}
         carrying = set()
         for path in sorted(Path("docs").rglob("*.md")):
@@ -499,9 +509,11 @@ class TestDesignDocCompleteness(unittest.TestCase):
 
 class TestDecomposition(unittest.TestCase):
     """The ordered decision list (design section 5; A3,
-    A8(iv))."""
+    A8(iv)).
+    """
 
-    def _decomp(self, text, arm, *, verdict=False, boundary=True, digest=None):
+    @staticmethod
+    def _decomp(text, arm, *, verdict=False, boundary=True, digest=None):
         """Decomp."""
         cell = _cell(text=text, verdict=verdict, boundary=boundary)
         if digest is not None:
@@ -530,7 +542,8 @@ class TestDecomposition(unittest.TestCase):
     def test_echo_classes_per_arm(self):
         """Echo classes per arm (expected urn-2133: the
         value word is urn; its single-site echo replaces u,
-        its whole-word echo replaces u and r)."""
+        its whole-word echo replaces u and r).
+        """
         self.assertEqual(self._decomp("\u03c5rn-2133", "single_site"), "echo_confusable")
         self.assertEqual(self._decomp("\u03c5\u0433n-2133", "whole_word"), "echo_confusable")
         self.assertEqual(self._decomp("\u03b6rn-2133", "rarity_control"), "echo_control")
@@ -546,7 +559,8 @@ class TestDecomposition(unittest.TestCase):
     def test_whole_word_echo_vs_single_site_echo(self):
         """Whole-word echo is not the single-site echo:
         expected alder-1234 (whole-word echo replaces every
-        eligible letter)."""
+        eligible letter).
+        """
         digest = sha256(b"alder-1234").hexdigest()
         whole_echo = cs.treated_word("alder", "whole_word") + "-1234"
         single_echo = cs.treated_word("alder", "single_site") + "-1234"
@@ -568,7 +582,8 @@ class TestDecomposition(unittest.TestCase):
         rarity arm by the position-aware predicate (the
         control at the position stands for the expected
         value's character there), non_answer on single_site
-        (its form step knows only the frozen table)."""
+        (its form step knows only the frozen table).
+        """
         digest = sha256(b"alder-1234").hexdigest()
         cell = _cell(text="\u0434lder-1234", verdict=False)
         self.assertEqual(
@@ -598,7 +613,8 @@ class TestDecomposition(unittest.TestCase):
         """Form-only on the confusable arms maps the frozen
         table back; A8(iv): an echo in a NON-frozen
         skeleton-equal letter (Cyrillic a, U+0430, against
-        expected alder-1234) is non_answer, never form_only."""
+        expected alder-1234) is non_answer, never form_only.
+        """
         self.assertEqual(self._decomp("\u03c5\u0433n-2133", "single_site"), "form_only")
         digest = sha256(b"alder-1234").hexdigest()
         cell = _cell(text="\u0430lder-1234", verdict=False)
@@ -643,7 +659,8 @@ def _oracle_label(d: int, j: int, k: int) -> str:
     classify_headline: enumerate every completion of the
     k missing pairs and require the acquittal to be
     completion-stable; fires issue on the observed counts;
-    the cap and the D floor refuse."""
+    the cap and the D floor refuse.
+    """
     if k > cs.MAX_INCOMPLETE:
         return "insufficient"
     if d < cs.MIN_D:
@@ -663,7 +680,8 @@ def _oracle_label(d: int, j: int, k: int) -> str:
 
 class TestClassifyGuard(unittest.TestCase):
     """The guarded headline against an independent
-    completion oracle; the cap count of amendment A4."""
+    completion oracle; the cap count of amendment A4.
+    """
 
     def test_classify_matches_oracle_on_grid(self):
         """Classify matches oracle on grid."""
@@ -695,7 +713,8 @@ class TestClassifyGuard(unittest.TestCase):
         """A4: over the reachable state space (D + k <= 24),
         exactly 264 states are completion-stable fires the
         cap suppresses (D >= MIN_D, MIN_J <= J <= D -- J
-        counts among the control passes -- k > cap)."""
+        counts among the control passes -- k > cap).
+        """
         count = 0
         for d in range(0, 25):
             for j in range(0, 25):
@@ -732,9 +751,11 @@ def _record(case, cells, details, identical_arms=()):
 class TestGuardBatteryIdsDimension(unittest.TestCase):
     """Build debt 4 / A8(i): the completion domain is the
     id-divergent domain; ids-identical incomplete cases
-    never enter the completion."""
+    never enter the completion.
+    """
 
-    def _cells(self, case, verdict=True, missing=()):
+    @staticmethod
+    def _cells(case, verdict=True, missing=()):
         """Cells."""
         cells = {}
         details = {}
@@ -795,7 +816,8 @@ def _worlds_ids(cap_trials: int = 4000, seed: int = 20261030) -> dict[str, dict[
     toward the guard only on divergent cases, and the
     guarded D/J are taken over the divergent domain. The
     unguarded comparator ranges over all cases, as the
-    design-phase worlds did."""
+    design-phase worlds did.
+    """
     import random
 
     rng = random.Random(seed)  # noqa: S311 -- deterministic test seed
@@ -830,7 +852,8 @@ def _worlds_ids(cap_trials: int = 4000, seed: int = 20261030) -> dict[str, dict[
 
 class TestWorldsAtPinnedDomain(unittest.TestCase):
     """Build debt 4: worlds A-C under the pinned
-    id-divergent domain."""
+    id-divergent domain.
+    """
 
     def test_worlds(self):
         """Worlds."""
@@ -860,7 +883,8 @@ class TestWorldsAtPinnedDomain(unittest.TestCase):
 def _fire_independent(a: float, q: float, n: int = 24, min_d: int = 10) -> float:
     """Exact fire probability under the marginal
     (independent-pair) convention: D ~ Bin(n, a),
-    J | D ~ Bin(D, q)."""
+    J | D ~ Bin(D, q).
+    """
     total = 0.0
     for d in range(min_d, n + 1):
         p_d = comb(n, d) * a**d * (1 - a) ** (n - d)
@@ -874,7 +898,8 @@ def _transplant_fire(n: int, pc: float, pa: float) -> float:
     as executed in the design evidence): independent
     control/arm outcomes per case; fire iff either
     discordant count reaches 2 -- evaluated by the exact
-    dynamic program over (control-only, arm-only) counts."""
+    dynamic program over (control-only, arm-only) counts.
+    """
     probs = (pc * pa, pc * (1 - pa), (1 - pc) * pa, (1 - pc) * (1 - pa))
     dp = {(0, 0): 1.0}
     for _ in range(n):
@@ -914,7 +939,8 @@ def _phi2(h: float, k: float, rho: float) -> float:
 def _fire_paired(pc: float, pa: float, rho: float = 0.5, n: int = 24) -> float:
     """Exact fire probability under the per-case copula:
     pJ = pc - Phi2(tc, ta; rho); the trinomial sum over
-    (wrong pairs, both-pass pairs, control-fail cases)."""
+    (wrong pairs, both-pass pairs, control-fail cases).
+    """
     p_both = _phi2(_NORM.inv_cdf(pc), _NORM.inv_cdf(pa), rho)
     p_j = pc - p_both
     p_c = 1 - pc
@@ -928,7 +954,8 @@ def _fire_paired(pc: float, pa: float, rho: float = 0.5, n: int = 24) -> float:
 
 class TestOperatingCharacteristics(unittest.TestCase):
     """Build debt 6 / A6 / A8(v): the adjudicated figures,
-    re-derived exactly."""
+    re-derived exactly.
+    """
 
     def test_independent_rows(self):
         """Independent rows."""
@@ -953,7 +980,8 @@ class TestOperatingCharacteristics(unittest.TestCase):
 
     def test_paired_rows_exact(self):
         """A6: the exact paired figures replace the design
-        round's Monte Carlo values."""
+        round's Monte Carlo values.
+        """
         null = _fire_paired(0.90, 0.90)
         drop = _fire_paired(0.90, 0.65)
         self.assertEqual(round(null, 4), 0.0044)
@@ -963,7 +991,8 @@ class TestOperatingCharacteristics(unittest.TestCase):
 
     def test_familywise_rows_72(self):
         """A6: the family-wise price over the 72 labelled
-        comparisons (3 treated arms x 24 candidates)."""
+        comparisons (3 treated arms x 24 candidates).
+        """
         price = _fire_independent(0.90, 0.10)
         self.assertEqual(round(72 * price, 4), 1.2437)
         self.assertEqual(round(1 - (1 - price) ** 72, 4), 0.7148)
@@ -979,7 +1008,8 @@ class TestOperatingCharacteristics(unittest.TestCase):
         selected pair trails the exact maximum by the
         executed gap (3.3e-14 by exact rational arithmetic;
         the adjudication's 2.8e-11 did not reproduce and the
-        design doc records the correction)."""
+        design doc records the correction).
+        """
         values = {m: _fire_independent(0.90, 0.10, min_d=m) for m in range(1, 17)}
         self.assertEqual(len({round(values[m], 4) for m in range(1, 15)}), 1)
         self.assertEqual(len({values[m] for m in range(1, 7)}), 1)
@@ -1002,7 +1032,8 @@ class TestStagePayloads(unittest.TestCase):
 
     def test_perfect_payload(self):
         """Perfect payload: every arm passes; the mirror
-        validates the payload whole."""
+        validates the payload whole.
+        """
         payload, _backend, _stage = _payload("perfect")
         self.assertTrue(payload["available"])
         self.assertEqual(payload["n_candidates"], 2)
@@ -1021,7 +1052,8 @@ class TestStagePayloads(unittest.TestCase):
 
     def test_echo_payload(self):
         """Echo payload: treated answers reproduce the
-        treated surface -- echo classes, never wrong values."""
+        treated surface -- echo classes, never wrong values.
+        """
         payload, _backend, _stage = _payload("echo")
         entry = payload["candidates"]["chatml"]
         self.assertEqual(entry["arms"]["single_site"]["decomposition"]["echo_confusable"], 24)
@@ -1037,7 +1069,8 @@ class TestStagePayloads(unittest.TestCase):
         both confusable arms ids-identical (headline
         withheld as instrument-inapplicable) while the
         rarity arm -- whose skeleton genuinely differs --
-        stays divergent and headlines normally."""
+        stays divergent and headlines normally.
+        """
         payload, _backend, _stage = _payload("perfect", fold=True)
         entry = payload["candidates"]["chatml"]
         for arm in cs.CONFUSABLE_ARMS:
@@ -1082,7 +1115,8 @@ class TestStagePayloads(unittest.TestCase):
     def test_boundary_only_at_aggregate_level(self):
         """Boundary only at aggregate level: cells carrying
         the expected text with no boundary decompose as
-        boundary_only and contribute no control passes."""
+        boundary_only and contribute no control passes.
+        """
         cases = cs.generate_cases(0)
         records = []
         for case in cases:
@@ -1102,7 +1136,8 @@ class TestStagePayloads(unittest.TestCase):
 
     def test_explode_payload(self):
         """Explode payload: every cell an evaluation
-        failure; the stage still completes."""
+        failure; the stage still completes.
+        """
         payload, _backend, _stage = _payload("explode")
         entry = payload["candidates"]["chatml"]
         for arm in cs.ARM_KEYS:
@@ -1131,7 +1166,8 @@ class TestStagePayloads(unittest.TestCase):
 
     def test_screen_tamper_stage(self):
         """Screen tamper stage: a broken case invariant
-        fails the whole stage closed before generation."""
+        fails the whole stage closed before generation.
+        """
         with mock.patch.object(cs, "validate_case", lambda case, seed: False):
             payload, _backend, stage = _payload("perfect")
         self.assertFalse(stage["available"])
@@ -1141,9 +1177,10 @@ class TestStagePayloads(unittest.TestCase):
 
     def test_stage_format_budget(self):
         """Stage format budget: 25 candidates exceed the
-        ground-record cap before any generation."""
+        ground-record cap before any generation.
+        """
         formats = tuple(Format(f"fmt{i}", "", "u", "a", "e") for i in range(cs.MAX_CANDIDATES + 1))
-        payload, _backend, stage = _payload("perfect", formats=formats)
+        _payload_unused, _backend, stage = _payload("perfect", formats=formats)
         self.assertFalse(stage["available"])
         self.assertEqual(stage["detail"], "confusable_skeleton_record_budget_exceeded")
 
@@ -1152,7 +1189,8 @@ class TestStagePayloads(unittest.TestCase):
         answers cross the 12 MiB serialised cap (the
         four-arm panel carries fewer cells per candidate
         than the sibling's seven-arm panel, so the count is
-        higher)."""
+        higher).
+        """
         formats = tuple(Format(f"fmt{i}", "", "u", "a", "e") for i in range(11))
         payload, _backend, stage = _payload("long_nonascii", formats=formats)
         self.assertFalse(stage["available"])
@@ -1161,7 +1199,8 @@ class TestStagePayloads(unittest.TestCase):
 
     def test_stage_rejects_bad_format_tuples(self):
         """Stage rejects bad format tuples at its own
-        boundary."""
+        boundary.
+        """
         backend = _WordBackend("perfect")
         with self.assertRaises(ValueError):
             experiments.confusable_skeleton_stage(
@@ -1175,7 +1214,8 @@ class TestStagePayloads(unittest.TestCase):
 
 class TestMirrorValidation(unittest.TestCase):
     """The diffreports mirror: recompute validation and
-    drift."""
+    drift.
+    """
 
     def test_valid_payload_accepted(self):
         """Valid payload accepted."""
@@ -1242,7 +1282,8 @@ class TestMirrorValidation(unittest.TestCase):
 
     def test_diff_echo_vs_perfect_changed(self):
         """Diff echo vs perfect changed, carrying the
-        per-arm rate metrics."""
+        per-arm rate metrics.
+        """
         perfect, _b1, _s1 = _payload("perfect")
         echo, _b2, _s2 = _payload("echo")
         result = diffreports.diff_confusable_skeleton(perfect, echo)
@@ -1264,7 +1305,8 @@ class TestMirrorValidation(unittest.TestCase):
 
 class TestReportingSection(unittest.TestCase):
     """The HTML section (design sections 6-8 printed
-    matter; A5, A6)."""
+    matter; A5, A6).
+    """
 
     def test_section_renders(self):
         """Section renders."""
@@ -1297,7 +1339,8 @@ class TestReportingSection(unittest.TestCase):
 
     def test_section_legend_fallback(self):
         """Section legend fallback: a protocol without the
-        population audit still renders (empty legend)."""
+        population audit still renders (empty legend).
+        """
         payload, _backend, _stage = _payload("perfect")
         broken = copy.deepcopy(payload)
         broken["protocol"] = {}
@@ -1308,7 +1351,8 @@ class TestReportingSection(unittest.TestCase):
 class TestCoverageGaps(unittest.TestCase):
     """Targeted branch coverage for the stage screens, the
     aggregate's hostile shapes, and the mirror's deep
-    rejections."""
+    rejections.
+    """
 
     def test_population_screen_stage(self):
         """Population screen stage."""
@@ -1322,12 +1366,13 @@ class TestCoverageGaps(unittest.TestCase):
     def test_special_token_screen_stage(self):
         """Special-token screen stage: a special-token
         literal finding against the run's formats fails the
-        stage closed before any generation."""
+        stage closed before any generation.
+        """
         with mock.patch(
             "model_protocol_lab.fixtures.audit_special_token_literals",
             return_value=["finding"],
         ):
-            payload, _backend, stage = _payload("perfect")
+            _payload_unused, _backend, stage = _payload("perfect")
         self.assertFalse(stage["available"])
         self.assertEqual(stage["detail"], "confusable_skeleton_screen_failed")
         self.assertEqual(stage["audit"]["by_reason"], {"special_token_literal": 1})
@@ -1335,7 +1380,8 @@ class TestCoverageGaps(unittest.TestCase):
 
     def test_boundary_containment_screen(self):
         """Boundary containment screen: a boundary text that
-        appears inside arm content fails the stage closed."""
+        appears inside arm content fails the stage closed.
+        """
         backend = _WordBackend("perfect")
         boundary = backend.encode("inspection code is")
         stage = experiments.confusable_skeleton_stage(
@@ -1351,11 +1397,13 @@ class TestCoverageGaps(unittest.TestCase):
     def test_undecodable_boundary_screens_nothing(self):
         """Undecodable boundary screens nothing: decode
         raising is treated as an empty boundary text and the
-        stage proceeds."""
+        stage proceeds.
+        """
 
         class _BadDecode(_WordBackend):
             """Bad decode backend: undecodable only for the
-            boundary id tuple the stage decodes."""
+            boundary id tuple the stage decodes.
+            """
 
             def decode(self, ids):
                 """Decode."""
@@ -1376,9 +1424,10 @@ class TestCoverageGaps(unittest.TestCase):
     def test_redraw_exhaustion_stage(self):
         """Redraw exhaustion stage: the protocol build
         itself surfaces the exhaustion as the screen
-        failure with no protocol."""
+        failure with no protocol.
+        """
         with mock.patch.object(cs, "_derive", lambda *args: 7):
-            payload, _backend, stage = _payload("perfect")
+            _payload_unused, _backend, stage = _payload("perfect")
         self.assertFalse(stage["available"])
         self.assertEqual(stage["detail"], "confusable_skeleton_screen_failed")
         self.assertEqual(stage["protocol"], {})
@@ -1417,7 +1466,8 @@ class TestCoverageGaps(unittest.TestCase):
 
     def test_aggregate_hostile_shapes(self):
         """Aggregate hostile shapes: non-dict cells and
-        details degrade to incompletion, never a crash."""
+        details degrade to incompletion, never a crash.
+        """
         cases = cs.generate_cases(0)
         records = []
         for case in cases:
@@ -1437,7 +1487,8 @@ class TestCoverageGaps(unittest.TestCase):
         """Validate rejects every case while the population
         audit is broken, and a frozen-table drift moves the
         table and case-material digests (the binding the
-        protocol and the mirror check)."""
+        protocol and the mirror check).
+        """
         case = cs.generate_cases(0)[0]
         with mock.patch.dict(cs.POPULATION_AUDIT, {"ok": False}):
             self.assertFalse(cs.validate_case(case, 0))
@@ -1473,7 +1524,8 @@ class TestGapPassModule(unittest.TestCase):
     once the regeneration oracle is patched to return the
     case under test, which is exactly what those invariants
     guard), and the aggregate's flip / wrong-value / reverse
-    counters on crafted records."""
+    counters on crafted records.
+    """
 
     def test_treated_word_identity_paths(self):
         """Treated word identity paths."""
@@ -1498,9 +1550,11 @@ class TestGapPassModule(unittest.TestCase):
             self.assertFalse(cs.audit_population()["ok"])
         self.assertTrue(cs.audit_population()["ok"])
 
-    def _validate_with_regeneration(self, case):
+    @staticmethod
+    def _validate_with_regeneration(case):
         """Validate a case whose regeneration returns itself,
-        so the deep invariants are what decide."""
+        so the deep invariants are what decide.
+        """
         with mock.patch.object(cs, "generate_case", lambda seed, index: case):
             return cs.validate_case(case, 0)
 
@@ -1521,6 +1575,7 @@ class TestGapPassModule(unittest.TestCase):
         real_content = cs.arm_content
 
         def nonascii(case_, arm):
+            """Content double: the control arm starts with a non-ASCII letter."""
             text = real_content(case_, arm)
             return "é" + text[1:] if arm == "control" else text
 
@@ -1528,6 +1583,7 @@ class TestGapPassModule(unittest.TestCase):
             self.assertFalse(cs.validate_case(case, 0))
 
         def echo_control(case_, arm):
+            """Content double: every arm echoes the control content."""
             return real_content(case_, "control")
 
         with mock.patch.object(cs, "arm_content", echo_control):
@@ -1539,6 +1595,7 @@ class TestGapPassModule(unittest.TestCase):
         real_treated = cs.treated_word
 
         def longer(word, arm):
+            """Treated-word double: the single-site arm gains a trailing letter."""
             text = real_treated(word, arm)
             return text + "x" if arm == "single_site" else text
 
@@ -1546,6 +1603,7 @@ class TestGapPassModule(unittest.TestCase):
             self.assertFalse(cs.validate_case(case, 0))
 
         def wrong_char(word, arm):
+            """Treated-word double: one site takes a non-frozen character."""
             if arm != "single_site":
                 return real_treated(word, arm)
             for index, char in enumerate(word):
@@ -1557,6 +1615,7 @@ class TestGapPassModule(unittest.TestCase):
             self.assertFalse(cs.validate_case(case, 0))
 
         def double_dose(word, arm):
+            """Treated-word double: two sites replaced on the single-site arm."""
             if arm != "single_site":
                 return real_treated(word, arm)
             out = list(word)
@@ -1571,7 +1630,8 @@ class TestGapPassModule(unittest.TestCase):
             self.assertFalse(cs.validate_case(case, 0))
         self.assertTrue(cs.validate_case(case, 0))
 
-    def _crafted_records(self):
+    @staticmethod
+    def _crafted_records():
         """Records exercising the aggregate's counters."""
         cases = cs.generate_cases(0)
         case0, case1, case2 = cases[0], cases[1], cases[2]
@@ -1646,7 +1706,8 @@ class TestGapPassModule(unittest.TestCase):
 class TestGapPassStage(unittest.TestCase):
     """Gap pass: the stage's cancel-after-evaluate raise, the
     evaluation-failed cell path, and the stage-level redraw
-    exhaustion return (protocol already built)."""
+    exhaustion return (protocol already built).
+    """
 
     def test_cancel_set_during_generation(self):
         """Cancel set during generation."""
@@ -1659,6 +1720,7 @@ class TestGapPassStage(unittest.TestCase):
                 self._event = event
 
             def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
+                """Generate double: signal the event, then run the real generate."""
                 self._event.set()
                 return super().generate(
                     input_ids, max_new_tokens=max_new_tokens, seed=seed, cancel=cancel
@@ -1703,6 +1765,7 @@ class TestGapPassStage(unittest.TestCase):
         calls = {"n": 0}
 
         def flaky(seed):
+            """Panel double: two panels served, then redraw exhaustion."""
             calls["n"] += 1
             if calls["n"] <= 2:
                 return real_cases
@@ -1725,7 +1788,8 @@ class TestGapPassStage(unittest.TestCase):
 class TestGapPassReporting(unittest.TestCase):
     """Gap pass: the section's loose-shape branches (non-dict
     candidates, unavailable rows, non-dict arms, n/a rates,
-    non-dict ids entries)."""
+    non-dict ids entries).
+    """
 
     def test_candidates_not_a_dict(self):
         """Candidates not a dict renders empty."""
@@ -1777,7 +1841,8 @@ class TestGapPassMirror(unittest.TestCase):
     corrupted mirror tables, aggregate counters and classes
     on crafted records, the classify fire label, deep
     validate invariants under a patched mirror regeneration,
-    and the diff's new-only and status-drift paths."""
+    and the diff's new-only and status-drift paths.
+    """
 
     def test_mirror_helper_identities(self):
         """Mirror helper identities."""
@@ -1804,6 +1869,7 @@ class TestGapPassMirror(unittest.TestCase):
         details = dict.fromkeys(cs.ARM_KEYS)
 
         def rec(case, control, single, identical=False):
+            """Build one mirror record from per-arm cell values."""
             return _record(
                 case,
                 {
@@ -1902,6 +1968,7 @@ class TestGapPassMirror(unittest.TestCase):
         tampered[0]["neutral_indices"] = [3, 3]
 
         def fake_generate(seed):
+            """Generate double: the tampered panel at seed 0, genuine otherwise."""
             return tampered if seed == 0 else genuine
 
         payload, _backend, _stage = _payload("perfect")
@@ -1913,6 +1980,7 @@ class TestGapPassMirror(unittest.TestCase):
         payload, _backend, _stage = _payload("perfect")
 
         def spoil(mutator):
+            """Mutate a deep copy of the payload and assert the mirror rejects it."""
             broken = copy.deepcopy(payload)
             mutator(broken["candidates"]["chatml"])
             self.assertFalse(diffreports._valid_confusable_skeleton(broken))
@@ -1963,7 +2031,8 @@ class TestGapPass2(unittest.TestCase):
     raise, and the mirror's remaining aggregate branches
     (mixed pair class, non-answer decomposition, the
     classify tail return, tokenless-record id deltas, and
-    the ids-identical helper's hostile shape)."""
+    the ids-identical helper's hostile shape).
+    """
 
     def test_validate_early_reject_order(self):
         """Validate early reject order."""
@@ -2000,7 +2069,8 @@ class TestGapPass2(unittest.TestCase):
 
     def test_cell_pre_evaluate_cancel(self):
         """The cell's pre-evaluate cancel raise (the
-        multiturn rule, at the cell level)."""
+        multiturn rule, at the cell level).
+        """
         event = threading.Event()
         event.set()
         backend = _WordBackend("perfect")
@@ -2032,6 +2102,7 @@ class TestGapPass2(unittest.TestCase):
         report.observations = [observation]
 
         def fake_evaluate(*args, **kwargs):
+            """Evaluate double: signal the event and return the canned report."""
             event.set()
             return report
 
@@ -2061,7 +2132,8 @@ class TestGapPass2(unittest.TestCase):
 
     def test_mirror_aggregate_remaining_branches(self):
         """Mirror aggregate mixed pair, non-answer, classify
-        tail, and tokenless deltas."""
+        tail, and tokenless deltas.
+        """
         cases = cs.generate_cases(0)
         details = dict.fromkeys(cs.ARM_KEYS)
         records = []

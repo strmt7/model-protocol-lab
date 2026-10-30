@@ -86,7 +86,6 @@ class _WordBackend:
         """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
         """Generate."""
         self.calls += 1

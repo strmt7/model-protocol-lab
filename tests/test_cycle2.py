@@ -832,7 +832,6 @@ class WriteFixtureFileTests(unittest.TestCase):
 
     def test_partial_write_leaves_no_file(self):
         """Test partial write leaves no file."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import os as _os
         from unittest.mock import patch
 

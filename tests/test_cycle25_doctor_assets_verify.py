@@ -219,7 +219,6 @@ def _o_model_result(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_examine_model(
     model_path: str | Path,
     *,
@@ -396,7 +395,6 @@ def oracle_template_conformance_status(model_path: str | Path) -> tuple[str, str
     return ("loadable", "")
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_parse_safetensors_header(path: str | Path) -> tuple[bool, str]:
     """Independent struct-based safetensors header parse: (ok, reason).
 
@@ -496,7 +494,6 @@ def oracle_longest_prompt_tokens(tokenizer: object, dataset_path: str | Path) ->
         return None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_suggestion(
     *,
     verdict_ok: bool,

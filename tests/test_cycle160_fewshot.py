@@ -970,7 +970,6 @@ class FewshotOracleTests(unittest.TestCase):
             return "ambiguous", None
         return "no_candidate", None
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_200_case_differential(self):
         """Test 200 case differential."""
         rng = random.Random(20261019)  # noqa: S311 -- deterministic test seed
@@ -1318,7 +1317,6 @@ class DiffFewshotTests(unittest.TestCase):
         self.assertTrue(diff["changed"])
         self.assertEqual(diff["candidates_added"], ["c2"])
         self.assertFalse(diff["gain_drift"])
-        # skipcq: PYL-W1114 - the reversed diff is the assertion: symmetry is what is audited
         diff = diffreports.diff_fewshot(new, old)
         self.assertEqual(diff["candidates_removed"], ["c2"])
         # Excluded added/removed.

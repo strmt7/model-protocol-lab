@@ -510,7 +510,6 @@ def effect_falsified(
     return n_control >= MIN_PAIRED_EVALUABLE and control_level is not None and d <= control_level
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-candidate aggregates over its ground records.
 

@@ -132,7 +132,6 @@ def oracle_classify(obs, eos_id):
     return "no-boundary-in-N"
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_taxonomy(result, eos_id):
     """Reimplementation of failure_taxonomy from its docstring."""
     if type(result) is not dict:
@@ -170,7 +169,6 @@ def oracle_taxonomy(result, eos_id):
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_budget_frontier(search, *, boundary, max_new_tokens, native_decision, native_winner):
     """Reimplementation of budget_frontier from its docstring's derivation."""
     if type(search) not in (list, tuple) or not search:
@@ -385,7 +383,6 @@ def oracle_stop_cell(backend, fixture, boundary, outcome, stop_text=None):
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_stop_matrix(
     backend,
     candidate_name,
@@ -521,7 +518,6 @@ def oracle_aggregate(scores):
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_interpret_kind(fixture_scores):
     """The interpretation *kind* from _interpret_logprob_candidate's docstring.
 
@@ -603,7 +599,6 @@ def oracle_diagnostic_observation(backend, obs, expected_by_id):
     return scored, score
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_logprob_diagnostic(backend, result, fixtures):
     """Reimplementation of logprob_diagnostic from its docstring.
 

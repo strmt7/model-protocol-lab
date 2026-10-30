@@ -78,7 +78,6 @@ def _margin_oracle(a: int, b: int) -> str:
     da, db = _digits_of(a), _digits_of(b)
     if len(da) != len(db):
         return "different_length"
-    # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
     index = next(i for i, (x, y) in enumerate(zip(da, db, strict=True)) if x != y)
     if index == len(da) - 1:
         return "same_length_last_digit"
@@ -285,7 +284,6 @@ class TestGeneration(unittest.TestCase):
                 # larger side).
                 magnitude = max(record["operands"])
                 digits = len(str(magnitude))
-                # skipcq: PTC-W0063 - in a test, StopIteration is the intended failure
                 expected_band = next(i for i, (lo, hi) in enumerate(nf.BANDS) if lo <= digits <= hi)
                 self.assertEqual(record["band"], expected_band, record["value_id"])
             if task == "copy":
@@ -713,7 +711,6 @@ class _NumformBackend:
         """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
         """Generate."""
         self.generate_calls += 1
@@ -1392,7 +1389,6 @@ class TestValidatorBattery(unittest.TestCase):
 
         def first(payload, task, form="plain"):
             """First."""
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             return next(
                 r
                 for r in payload["candidates"]["nf-a"]["records"]
@@ -1953,13 +1949,11 @@ class TestGapCoverage(unittest.TestCase):
         mutate(payload)
         return payload
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_record_guards_round_two(self):
         """Test record guards round two."""
 
         def first(payload, task, form="plain"):
             """First."""
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             return next(
                 r
                 for r in payload["candidates"]["nf-a"]["records"]
@@ -1968,7 +1962,6 @@ class TestGapCoverage(unittest.TestCase):
 
         def middle_compare(payload):
             """Middle compare."""
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             record = next(
                 r
                 for r in payload["candidates"]["nf-a"]["records"]
@@ -1984,7 +1977,6 @@ class TestGapCoverage(unittest.TestCase):
             """Wrong compare stratum."""
             record = first(payload, "compare")
             true_class = nf.margin_class(*record["operands"])
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             record["stratum"] = next(
                 c
                 for c in (
@@ -1999,7 +1991,6 @@ class TestGapCoverage(unittest.TestCase):
             """Wrong add stratum."""
             record = first(payload, "add")
             true_class = nf.carry_class(*record["operands"])
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             record["stratum"] = next(c for c in ("none", "some", "full_chain") if c != true_class)
 
         tampers = [
@@ -2020,7 +2011,6 @@ class TestGapCoverage(unittest.TestCase):
             wrong_add_stratum,
             middle_compare,
             lambda p: first(p, "copy").__setitem__("form_identical", 1),
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             lambda p: next(
                 r
                 for r in p["candidates"]["nf-a"]["records"]
@@ -2161,7 +2151,6 @@ class TestGapCoverageRoundThree(unittest.TestCase):
 
         def first(payload, task, form="plain", name="nf-a"):
             """First."""
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             return next(
                 r
                 for r in payload["candidates"][name]["records"]
@@ -2206,7 +2195,6 @@ class TestGapCoverageRoundThree(unittest.TestCase):
             # The same (task, value, form) key carrying a
             # different -- individually consistent -- value in
             # the second candidate: construction tuples differ.
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             record = next(
                 r
                 for r in payload["candidates"]["nf-b"]["records"]

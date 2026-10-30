@@ -106,7 +106,6 @@ def _build_backend(spec: dict[str, Any]) -> object:
     raise MCPError(-32602, 'backend.kind must be "selftest" or "local_hf"')
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _parse_fixtures(raw: object) -> tuple[Fixture, ...]:
     """Parse fixtures."""
     if type(raw) is not list or not raw:
@@ -434,7 +433,6 @@ TOOLS: dict[str, dict[str, Any]] = {
 # ---------------------------------------------------------------------------
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
     """Dispatch one JSON-RPC request; notifications are never executed."""
     # JSON-RPC notification discipline (oversight security S-13): a
@@ -525,7 +523,6 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
 
 def self_test() -> int:
     """Run one embedded probe end-to-end (offline) and exit 0 on success."""
-    # skipcq: PYL-W0404 - deferred import keeps the package import graph acyclic
     from model_protocol_lab.core import Fixture, Message
 
     backend = sn.SelfTestBackend()
@@ -605,7 +602,6 @@ def _reject_frame_float(text: str) -> float:
     (the same pair of hooks toolcall.py carries).
     """
     value = float(text)
-    # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
     if value != value or value in (float("inf"), float("-inf")):
         raise ValueError(f"non-finite float literal {text!r}")
     return value

@@ -114,7 +114,6 @@ class DivergencePropertyTests(unittest.TestCase):
             "backend": self.backend,
         }
         base.update(kwargs)
-        # skipcq: PYL-E1125 - mandatory keywords arrive via the **base unpacking
         return diff_backends(**base)
 
     # -- verdict consistency -------------------------------------------

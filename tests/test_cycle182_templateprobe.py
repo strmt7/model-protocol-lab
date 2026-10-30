@@ -809,7 +809,6 @@ class MutationGateTests(unittest.TestCase):
         self.assertEqual(source.count(anchor), 1, "gate anchor not unique")
         mutated = source.replace(anchor, mutant)
         namespace: dict[str, object] = {"__name__": "model_protocol_lab.templateprobe_mut"}
-        # skipcq: PYL-W0122 - gate execs own module source mutated in memory only
         exec(  # noqa: S102 -- the gate's whole point: run a mutated copy of our own module
             compile(mutated, "templateprobe_mut", "exec"), namespace
         )

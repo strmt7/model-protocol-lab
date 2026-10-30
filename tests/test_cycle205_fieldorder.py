@@ -62,7 +62,6 @@ def _wrong_value(spec, field):
     expected = spec["answer"][field]
     enum = schema_field.get("enum")
     if enum is not None:
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         return next(value for value in enum if value != expected)
     if schema_field["type"] == "integer":
         for candidate in (expected + 1, expected - 1):

@@ -240,7 +240,6 @@ def oracle_valid_ids(value):
     return type(value) is tuple and all(type(t) is int and t >= 0 for t in value)
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_hf_overhang_match(token_texts, stop):
     """Suffix-of-concatenation view of the HF overhang match rule.
 
@@ -298,7 +297,6 @@ def oracle_first_firing_step(token_texts, stop, base, total):
     return None
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_emulate_hf(backend, prompt_ids, output_ids, stop_text, token_bytes=None):
     """Oracle emulate hf."""
     if (
@@ -341,7 +339,6 @@ def oracle_emulate_hf(backend, prompt_ids, output_ids, stop_text, token_bytes=No
     return StopOutcome(True, True, tuple(output_ids[:step]), f"fired_at_step_{step}")
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_emulate_vllm(
     backend, output_ids, stop_text, include_stop_str_in_output=False, min_tokens=0
 ):
@@ -572,7 +569,6 @@ def _write_json(path, value):
     path.write_text(json.dumps(value), encoding="utf-8")
 
 
-# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class AssetHelpers(unittest.TestCase):
     """Temp-dir scaffolding shared by the loading tests."""
 

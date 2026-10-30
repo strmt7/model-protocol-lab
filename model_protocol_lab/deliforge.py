@@ -332,7 +332,6 @@ def find_insertion_span(rendered_text: object, inserted: object) -> tuple[int, i
     return (start, start + len(inserted))
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def forged_marker_offsets(
     text: object,
     marker: object,
@@ -373,7 +372,6 @@ def forged_marker_offsets(
     return offsets
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def build_subword_ids(
     encode: Callable[[str], Sequence[int]],
     decode: Callable[[tuple[int, ...]], str],
@@ -444,7 +442,6 @@ def build_subword_ids(
     return spliced
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def flip_rates(
     native: dict[str, bool],
     forged: dict[str, bool | None],

@@ -656,7 +656,6 @@ def _rate(n_pass: int, n: int) -> float | None:
     return (n_pass / n) if n else None
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-candidate readouts over its ground records.
 

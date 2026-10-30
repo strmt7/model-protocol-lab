@@ -463,7 +463,6 @@ class _ExplodingProbeBackend(_SoloBackend):
 class _FlakySoloBackend(_SoloBackend):
     """Flaky solo backend."""
 
-    # skipcq: PYL-R0201 - zero-arg super() requires an instance method
     def generate(self, input_ids, *, max_new_tokens, seed, cancel):
         """Generate."""
         if input_ids[0] == ord("b"):
@@ -945,7 +944,6 @@ class SampleDeterminismTests(unittest.TestCase):
 
     def test_sample_batchinv_deterministic(self):
         """Test sample batchinv deterministic."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import importlib.util
 
         script = Path(__file__).resolve().parent.parent / "examples" / "make_sample_report.py"

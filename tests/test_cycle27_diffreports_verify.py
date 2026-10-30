@@ -240,7 +240,6 @@ def _or_fixture_set_drift(
     return entries
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def oracle_diff_reports(
     old: dict[str, Any],
     new: dict[str, Any],
@@ -1876,7 +1875,6 @@ def oracle_diff_reports(
                 m_tuples: set[tuple[Any, ...]] = set()
                 r_tuples: set[Any] = set()
                 for entry in primary:
-                    # skipcq: PTC-W0063 - in a test, StopIteration is the intended failure
                     cell = next(
                         r for r in entry["records"] if r["evaluable"] and r["fixture"] == fixture
                     )
@@ -1893,7 +1891,6 @@ def oracle_diff_reports(
                     outputs: set[Any] = set()
                     outcomes: set[tuple[Any, ...]] = set()
                     for name in names:
-                        # skipcq: PTC-W0063 - in a test, StopIteration is the intended failure
                         cell = next(
                             r
                             for r in by_name[name]["records"]
@@ -2083,10 +2080,7 @@ def oracle_diff_reports(
         # pre-checks, record structure, aggregates, conditions,
         # and the protocol fingerprint all recomputed.
         """Or distraction valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         _details = {
@@ -2497,10 +2491,7 @@ def oracle_diff_reports(
         # common population, and the protocol fingerprint all
         # recomputed.
         """Or leading valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import math as _math
 
@@ -3055,10 +3046,7 @@ def oracle_diff_reports(
         # availability-level oracle must agree with the implementation
         # on hostile payloads too, including every recompute identity.
         """Or repetition valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         _details = {
@@ -3428,10 +3416,7 @@ def oracle_diff_reports(
         # stored evidence, the grouping delta relation checked,
         # and every aggregate and paired contrast recomputed.
         """Or numform valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import math as _math
         import re as _re
@@ -3542,7 +3527,6 @@ def oracle_diff_reports(
             da, db = str(a), str(b)
             if len(da) != len(db):
                 return "different_length"
-            # skipcq: PTC-W0060 - the oracle indexes parallel sequences by one shared index
             for index in range(len(da)):
                 if da[index] != db[index]:
                     if index == len(da) - 1:
@@ -4125,7 +4109,6 @@ def oracle_diff_reports(
         # recomputes through its own literal tables -- a drift in
         # either side's constants breaks the agreement.
         """Or dateline valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import dateline as _dl
@@ -4596,10 +4579,7 @@ def oracle_diff_reports(
         # selection readouts recomputed. A drift in either
         # side's constants breaks the agreement.
         """Or multiturn valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import multiturn as _mt
@@ -4871,10 +4851,7 @@ def oracle_diff_reports(
         # per-cell selections recomputed. A drift in either
         # side's constants breaks the agreement.
         """Or needle valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import needle as _nd
@@ -5083,10 +5060,7 @@ def oracle_diff_reports(
         # recomputed. A drift in either side's constants breaks
         # the agreement.
         """Or placement valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import placement as _pl
@@ -5242,10 +5216,7 @@ def oracle_diff_reports(
         # selections recomputed. A drift in either side's
         # constants breaks the agreement.
         """Or canonicalform valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import canonicalform as _cf
@@ -5426,10 +5397,7 @@ def oracle_diff_reports(
         # the recorded digests alone, amendment C). A drift in
         # either side's constants breaks the agreement.
         """Or instructiondistance valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import instructiondistance as _idm
@@ -5638,7 +5606,6 @@ def oracle_diff_reports(
         # derive from the recorded id digests alone). A drift
         # in either side's constants breaks the agreement.
         """Or historyframe valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import re as _re
 
@@ -5909,7 +5876,6 @@ def oracle_diff_reports(
         # producer's own aggregate function. A drift in
         # either side's constants breaks the agreement.
         """Or prunesweep valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import re as _re
 
@@ -6119,7 +6085,6 @@ def oracle_diff_reports(
         # function. A drift in either side's constants breaks
         # the agreement.
         """Or recordnotation valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import re as _re
 
@@ -6340,7 +6305,6 @@ def oracle_diff_reports(
         # producer's own aggregate function. A drift in
         # either side's constants breaks the agreement.
         """Or invisiblechars valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import re as _re
 
@@ -6569,7 +6533,6 @@ def oracle_diff_reports(
         # producer's own aggregate function. A drift in
         # either side's constants breaks the agreement.
         """Or confusableskeleton valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import re as _re
 
@@ -6800,10 +6763,7 @@ def oracle_diff_reports(
         # recomputed. A drift in either side's constants breaks
         # the agreement.
         """Or rotation valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import hashlib as _hashlib
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import rotation as _rt
@@ -6982,7 +6942,6 @@ def oracle_diff_reports(
         # pure aggregation. A drift in either side's constants
         # breaks the agreement.
         """Or density valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import density as _dn
@@ -7137,7 +7096,6 @@ def oracle_diff_reports(
         # pure aggregation. A drift in either side's constants
         # breaks the agreement.
         """Or field order valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import math as _math
 
@@ -7322,7 +7280,6 @@ def oracle_diff_reports(
         # recomputed through the producer's pure aggregation.
         # A drift in either side's constants breaks the agreement.
         """Or choiceaudit valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import math as _math
         import struct as _struct
@@ -7565,7 +7522,6 @@ def oracle_diff_reports(
         # (precision.compute_derived). A drift in either side's
         # constants breaks the agreement.
         """Or precision valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
 
         from model_protocol_lab import precision as _pr
@@ -7719,7 +7675,6 @@ def oracle_diff_reports(
                     return False
                 lp = cell["logprob"]
                 if lp is not None and (
-                    # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON
                     type(lp) not in (int, float) or lp != lp or lp in (float("inf"), float("-inf"))
                 ):
                     return False
@@ -7797,7 +7752,6 @@ def oracle_diff_reports(
         # (confidence.compute_derived). A drift in either side's
         # constants breaks the agreement.
         """Or confidence valid."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import json as _json
         import re
 
@@ -9058,7 +9012,6 @@ def _rand_entry(rng: random.Random, name: str, n_fixtures: int) -> dict[str, Any
     return entry
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def make_report(
     rng: random.Random,
     *,
@@ -9749,7 +9702,6 @@ class SummaryAndDriftShape(unittest.TestCase):
                 "fixtures:search",
             ],
         )
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         planned = next(e for e in diff["config_drift"] if e["field"] == "planned:llama3/a")
         self.assertEqual((planned["old"], planned["new"]), (2, 3))
         # no fixtures:held_out entry: held fixture ids identical ({h1})

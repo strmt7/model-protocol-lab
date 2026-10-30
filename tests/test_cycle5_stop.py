@@ -272,7 +272,6 @@ class StopMatrixStopTextTests(unittest.TestCase):
 
     def test_stop_text_field_distinguishes_hf_and_vllm(self) -> None:
         """Test stop text field distinguishes hf and vllm."""
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = self._rows()
         hf = row["cells"]["hf_stop_string"]
         vllm = row["cells"]["vllm_holdback"]
@@ -286,14 +285,12 @@ class StopMatrixStopTextTests(unittest.TestCase):
 
     def test_include_stop_str_flips_vllm_disposition(self) -> None:
         """Test include stop str flips vllm disposition."""
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = self._rows(vllm_include_stop_str_in_output=True)
         self.assertEqual(row["cells"]["vllm_holdback"]["stop_text"], "kept")
         self.assertEqual(row["cells"]["hf_stop_string"]["stop_text"], "kept")
 
     def test_min_tokens_gates_vllm_cell(self) -> None:
         """Test min tokens gates vllm cell."""
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = self._rows(vllm_min_tokens=9)
         vllm = row["cells"]["vllm_holdback"]
         self.assertTrue(vllm["available"])
@@ -315,7 +312,6 @@ class StopMatrixStopTextTests(unittest.TestCase):
 
     def test_row_schema_is_additive(self) -> None:
         """Test row schema is additive."""
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = self._rows()
         self.assertEqual(set(row.keys()), {"fixture", "native_pass", "cells", "flips"})
         for semantic, cell in row["cells"].items():

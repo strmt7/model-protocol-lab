@@ -74,7 +74,6 @@ class _MTBackend:
         """Decode."""
         return " ".join(self.rev.get(int(i), "?") for i in ids)
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
         """Generate."""
         self.calls += 1
@@ -258,7 +257,6 @@ class TestGenerator(unittest.TestCase):
                 self.assertEqual(len(set(values)), len(values))
                 for value in values:
                     self.assertTrue(1 <= value <= 99)
-                # skipcq: PYL-W0640 - consumed by max() in-iteration; the parameter binds per call
                 best = max(range(len(values)), key=lambda i: values[i])
                 self.assertEqual(fixture["expected"], "ABC"[best])
                 text = multiturn.JOINER.join(fixture["shards"])

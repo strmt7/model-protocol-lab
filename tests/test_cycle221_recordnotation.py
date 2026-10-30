@@ -1548,7 +1548,6 @@ class CellCancelGapTests(unittest.TestCase):
         class CancellingBackend(_WordBackend):
             """Cancelling backend."""
 
-            # skipcq: PYL-R0201 - zero-arg super() requires an instance method
             def generate(self, *args, **kwargs):
                 """Generate."""
                 event.set()

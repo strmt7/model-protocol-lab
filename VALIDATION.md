@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–224 (executed 2026-10-14 → 2026-10-30, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–225 (executed 2026-10-14 → 2026-10-30, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9041 tests collected**
-  (cycle 224, 2026-10-30). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9049 tests collected**
+  (cycle 225, 2026-10-30). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -57,11 +57,16 @@ doctor's resource fallbacks degrade there.
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  94.9315% (cycle 224, 2026-10-30)**. The gate compares the
+  94.9441% (cycle 225, 2026-10-30)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+0.432) is auditable rather than inferred from the display.
-  Cycle 224 moves both figures: the confusable-skeleton
+  (+0.444) is auditable rather than inferred from the display.
+  Cycle 225 moves both figures slightly: the findings-integrity
+  work added 22 statements net (38,989 → 39,011) and 26 covered
+  statements (37,475 → 37,501) — the diff-reports restructure
+  and the diff-backends loader split carry their own tests in
+  `tests/test_cycle225_findings_integrity.py`; no feature
+  surface was added. Cycle 224 moves both figures: the confusable-skeleton
   feature added 1,102 statements (37,887 → 38,989) and 1,063
   covered statements (36,412 → 37,475); its first full run
   measured 94.7005% before the gap battery, and the new
@@ -125,7 +130,7 @@ doctor's resource fallbacks degrade there.
   negation feature added 393 statements, 32,655 → 33,048.)
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (312 files in that CI scope; the repo-root scope counts more.
+  (313 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (71 source files).

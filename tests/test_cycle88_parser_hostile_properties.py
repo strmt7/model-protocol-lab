@@ -202,10 +202,7 @@ class ParserHostilePropertiesTests(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up the test fixture."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import tempfile
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from pathlib import Path
 
         # PID-scoped temp dir; tempfile picks the location (no hard-coded /tmp).

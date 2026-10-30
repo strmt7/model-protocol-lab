@@ -563,7 +563,6 @@ def oracle_classify(obs, eos_id):
     return "no-boundary-in-N"
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def oracle_taxonomy(result, eos_id):
     """Oracle taxonomy."""
     per_candidate = {}
@@ -714,7 +713,6 @@ def diff_results(actual, expected, path="result", _out=None):
     return _out
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def check_properties(actual, backend, world, cap, seed, eos_id):
     """Direct audits of the real result that do not go through the oracle:
 

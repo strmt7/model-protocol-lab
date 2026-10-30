@@ -151,7 +151,6 @@ def is_evaluable_ids(value: Any) -> bool:
     return _valid_ids(value, nonempty=True)
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def analyze_candidate(
     observations: Any,
     *,
@@ -331,7 +330,6 @@ def redundant_counts(
         measurement_tuples: set[tuple[Any, ...]] = set()
         render_tuples: set[Any] = set()
         for record in members:
-            # skipcq: PTC-W0063 - cohort members share one evaluable fixture set by construction
             cell = next(r for r in record["records"] if r["evaluable"] and r["fixture"] == fixture)
             render_tuples.add(cell["input_sha256"])
             measurement_tuples.add((cell["input_sha256"], tuple(record["boundary_token_ids"])))
@@ -363,7 +361,6 @@ def suspect_cells(
             outputs: set[Any] = set()
             outcomes: set[tuple[Any, ...]] = set()
             for name in names:
-                # skipcq: PTC-W0063 - cohort members share one evaluable fixture set by construction
                 cell = next(
                     r
                     for r in by_name[name]["records"]

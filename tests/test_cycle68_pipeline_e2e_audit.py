@@ -216,7 +216,6 @@ class PipelineEndToEndTests(unittest.TestCase):
         self.assertEqual(diff["candidate_verdicts"], [])
         self.assertIn("No differences", proc.stderr)
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_04_diff_reports_perturbed_observation_flips_one_cell(self) -> None:
         """Test 04 diff reports perturbed observation flips one cell."""
         report = self._run_report()

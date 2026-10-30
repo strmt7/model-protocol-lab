@@ -850,6 +850,53 @@ def _script_of(char: str) -> str:
     return ""
 
 
+def _replacement_satisfies(replacement: str, control: str) -> bool:
+    """Whether one frozen replacement meets every stdlib-decidable
+    eligibility predicate of design section 2, including the
+    amendment-A2 rule that its rarity control seats in the same
+    script (the caller supplies the letter's paired control).
+    """
+    return (
+        unicodedata.name(replacement, "").startswith(
+            ("CYRILLIC SMALL LETTER", "GREEK SMALL LETTER")
+        )
+        and unicodedata.category(replacement) == "Ll"
+        and unicodedata.normalize("NFC", replacement)
+        == unicodedata.normalize("NFD", replacement)
+        == replacement
+        and unicodedata.normalize("NFKC", replacement) == replacement
+        and unicodedata.decomposition(replacement) == ""
+        and len(replacement.encode("utf-8")) == 2
+        and _script_of(control) == _script_of(replacement)
+        and control in CONTROL_CHARACTERS
+    )
+
+
+def _control_satisfies(control: str) -> bool:
+    """Whether one control character meets the amendment-A7
+    properties in their stdlib-decidable form: named, category
+    Ll, normalization identity, empty canonical decomposition,
+    exactly 2 UTF-8 bytes, skeleton-distinct from every panel
+    letter and frozen replacement, and its own skeleton.
+    """
+    distinct = (
+        control not in FROZEN_REPLACEMENTS.values()
+        and control not in LETTER_SKELETONS
+        and skeleton_form(control) == control
+    )
+    return (
+        bool(unicodedata.name(control, ""))
+        and unicodedata.category(control) == "Ll"
+        and unicodedata.normalize("NFC", control)
+        == unicodedata.normalize("NFD", control)
+        == control
+        and unicodedata.normalize("NFKC", control) == control
+        and unicodedata.decomposition(control) == ""
+        and len(control.encode("utf-8")) == 2
+        and distinct
+    )
+
+
 def audit_population() -> dict[str, Any]:
     """The population audit over the frozen tables (design
     section 2), executed against the local interpreter's
@@ -898,18 +945,7 @@ def audit_population() -> dict[str, Any]:
             name = unicodedata.name(replacement, "")
             script = _script_of(replacement)
             control_name = unicodedata.name(control, "")
-            satisfies = (
-                name.startswith(("CYRILLIC SMALL LETTER", "GREEK SMALL LETTER"))
-                and unicodedata.category(replacement) == "Ll"
-                and unicodedata.normalize("NFC", replacement)
-                == unicodedata.normalize("NFD", replacement)
-                == replacement
-                and unicodedata.normalize("NFKC", replacement) == replacement
-                and unicodedata.decomposition(replacement) == ""
-                and len(replacement.encode("utf-8")) == 2
-                and _script_of(control) == script
-                and control in CONTROL_CHARACTERS
-            )
+            satisfies = _replacement_satisfies(replacement, control)
             entry.update(
                 {
                     "replacement": f"U+{ord(replacement):04X}",
@@ -931,17 +967,7 @@ def audit_population() -> dict[str, Any]:
             and control not in LETTER_SKELETONS
             and skeleton_form(control) == control
         )
-        satisfies = (
-            bool(name)
-            and unicodedata.category(control) == "Ll"
-            and unicodedata.normalize("NFC", control)
-            == unicodedata.normalize("NFD", control)
-            == control
-            and unicodedata.normalize("NFKC", control) == control
-            and unicodedata.decomposition(control) == ""
-            and len(control.encode("utf-8")) == 2
-            and distinct
-        )
+        satisfies = _control_satisfies(control)
         controls[f"U+{ord(control):04X}"] = {
             "name": name,
             "script": _script_of(control),
@@ -1099,7 +1125,6 @@ def records_bytes(records_by_candidate: dict[str, list[dict[str, Any]]]) -> int:
     )
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def validate_case(case: dict[str, Any], seed: int) -> bool:
     """The pre-generation invariant battery over one case
     (design sections 2-4), executed by the stage before any
@@ -1219,28 +1244,58 @@ def decompose_cell(cell: dict[str, Any], expected: str, expected_digest: str, ar
         if word in WORDS and 1000 <= int(number) <= 9999:
             return "wrong_value"
     if arm in CONFUSABLE_ARMS:
-        word, _, number = expected.partition("-")
-        if text == treated_word(word, arm) + "-" + number:
-            return "echo_confusable"
-        if text != expected:
-            inverse = {replacement: letter for letter, replacement in FROZEN_REPLACEMENTS.items()}
-            if "".join(inverse.get(char, char) for char in text) == expected:
-                return "form_only"
+        label = _confusable_echo_or_form(text, expected, arm)
+        if label is not None:
+            return label
     elif arm == "rarity_control":
-        word, _, number = expected.partition("-")
-        if text == treated_word(word, arm) + "-" + number:
-            return "echo_control"
-        if (
-            text != expected
-            and len(text) == len(expected)
-            and any(char in CONTROL_CHARACTERS for char in text)
-            and all(
-                char == expected_char or char in CONTROL_CHARACTERS
-                for char, expected_char in zip(text, expected, strict=True)
-            )
-        ):
-            return "form_only"
+        label = _rarity_echo_or_form(text, expected, arm)
+        if label is not None:
+            return label
     return "non_answer"
+
+
+def _confusable_echo_or_form(text: str, expected: str, arm: str) -> str | None:
+    """The echo and form classes of a confusable arm, in the
+    decision list's order: ``echo_confusable`` when the answer
+    is the expected value with this arm's own treatment applied
+    to the value word; else ``form_only`` when mapping every
+    frozen-table character in the answer back to its Latin
+    letter yields exactly the expected value (the frozen-table
+    scope of amendment A8(iv)); else ``None``.
+    """
+    word, _, number = expected.partition("-")
+    if text == treated_word(word, arm) + "-" + number:
+        return "echo_confusable"
+    if text != expected:
+        inverse = {replacement: letter for letter, replacement in FROZEN_REPLACEMENTS.items()}
+        if "".join(inverse.get(char, char) for char in text) == expected:
+            return "form_only"
+    return None
+
+
+def _rarity_echo_or_form(text: str, expected: str, arm: str) -> str | None:
+    """The echo and form classes of the rarity arm, in the
+    decision list's order: ``echo_control`` when the answer is
+    the expected value with the rarity treatment applied to the
+    value word; else ``form_only`` under the position-aware
+    predicate of amendment A3 (same length, at least one control
+    character, and every position either the expected character
+    or a control character); else ``None``.
+    """
+    word, _, number = expected.partition("-")
+    if text == treated_word(word, arm) + "-" + number:
+        return "echo_control"
+    if (
+        text != expected
+        and len(text) == len(expected)
+        and any(char in CONTROL_CHARACTERS for char in text)
+        and all(
+            char == expected_char or char in CONTROL_CHARACTERS
+            for char, expected_char in zip(text, expected, strict=True)
+        )
+    ):
+        return "form_only"
+    return None
 
 
 def decompose_pair(control_cell: dict[str, Any], arm_cell: dict[str, Any]) -> str:
@@ -1331,7 +1386,6 @@ def _ids_identical(record: dict[str, Any], arm: str) -> bool:
     return type(control) is str and control != "" and control == digests.get(arm)
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def aggregate_candidate(
     records: list[dict[str, Any]], cases: tuple[dict[str, Any], ...]
 ) -> dict[str, Any]:

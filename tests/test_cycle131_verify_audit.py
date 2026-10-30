@@ -138,7 +138,6 @@ def _artifact(
         "raw_evidence_included": True,
     }
     if selected is not None:
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         entry = next(e for e in entries if e["format"]["name"] == selected)
         data["selected_boundary_token_ids"] = list(entry["boundary_token_ids"])
     if decision in (
@@ -412,7 +411,6 @@ class TestTamperDetection(unittest.TestCase):
         report = verify.verify_results(data)
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(_check_status(report, "candidates_unique"), "failed")
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         detail = next(c["detail"] for c in report["checks"] if c["id"] == "candidates_unique")
         self.assertNotIn("\x1b", detail)
         self.assertIn("alpha", detail)

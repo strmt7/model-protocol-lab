@@ -822,8 +822,6 @@ class TokenCliTests(unittest.TestCase):
                     )
                 )
                 from model_protocol_lab import doctor as doctor_mod
-
-                # skipcq: PYL-W0404 - test-local import isolates the module under audit
                 from model_protocol_lab import reporting as reporting_mod
 
                 stack.enter_context(

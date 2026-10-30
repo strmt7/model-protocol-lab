@@ -326,7 +326,6 @@ def _pair_counts(records: list[dict[str, Any]], arm_a: str, arm_b: str) -> dict[
     """Discordant counts for one arm pair over the records
     where both arms completed (a = reference arm).
     """
-    # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
     counts = {"n_paired": 0, "a_only": 0, "b_only": 0, "both_pass": 0, "both_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
     for record in records:
         cell_a = _cell(record, arm_a)
@@ -347,7 +346,6 @@ def _pair_counts(records: list[dict[str, Any]], arm_a: str, arm_b: str) -> dict[
     return counts
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-candidate readouts recomputed from the records
     alone: per-depth paired blocks (delivery and scripted
@@ -390,11 +388,9 @@ def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
         # sharded and scripted disagree about a fixture the
         # single-turn arm passed.
         self_history = {
-            # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
             "n_full_pass": 0,  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
             "sh_only": 0,
             "sc_only": 0,
-            # skipcq: FLK-E501 - ruff's E501 exemptions cover this frozen, test-pinned literal
             "both_pass": 0,  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
             "both_fail": 0,
         }

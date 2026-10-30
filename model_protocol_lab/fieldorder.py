@@ -734,7 +734,6 @@ def _decision(n_first_only: int, n_last_only: int) -> dict[str, Any]:
     }
 
 
-# skipcq: PY-R1000 - branches are frozen payload-contract cases pinned by tests
 def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Aggregate one candidate's 60 records into the readout block.
 

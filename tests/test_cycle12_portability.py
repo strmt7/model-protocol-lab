@@ -156,7 +156,7 @@ class CompatibilityProbeTests(unittest.TestCase):
         """Test unknown when encode returns garbage."""
         for bad in (["not-a-tuple"], (1, -2), ()):
             with self.subTest(bad=bad):
-                # skipcq: PYL-W0102 - bad=bad binds the loop value at def time by design.
+
                 def encode(text, bad=bad):
                     """Encode."""
                     return bad

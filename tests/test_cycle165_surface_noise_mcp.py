@@ -52,7 +52,6 @@ class MCPContractTests(unittest.TestCase):
 
     def test_tools_list(self):
         """Test tools list."""
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session([_req(1, "tools/list")])
         self.assertEqual(resp["id"], 1)
         tools = resp["result"]["tools"]
@@ -72,7 +71,6 @@ class MCPContractTests(unittest.TestCase):
 
     def test_server_discover(self):
         """Test server discover."""
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session([_req(1, "server/discover")])
         self.assertIn("tools", resp["result"]["capabilities"])
         self.assertIn("serverInfo", resp["result"])
@@ -83,7 +81,6 @@ class MCPContractTests(unittest.TestCase):
         # The server accepts initialize without a prior handshake (liberal
         # acceptance); it must not require the 2026-07-28 stateless
         # framing nor the older stateful one.
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session(
             [_req(1, "initialize", {"protocolVersion": "2026-07-28", "clientInfo": {}})]
         )
@@ -92,7 +89,6 @@ class MCPContractTests(unittest.TestCase):
 
     def test_probe_tool_end_to_end(self):
         """Test probe tool end to end."""
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session(
             [
                 _req(
@@ -127,7 +123,6 @@ class MCPContractTests(unittest.TestCase):
 
     def test_controls_tool(self):
         """Test controls tool."""
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session(
             [
                 _req(
@@ -146,7 +141,6 @@ class MCPContractTests(unittest.TestCase):
 
     def test_protocol_info_tool(self):
         """Test protocol info tool."""
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session(
             [_req(1, "tools/call", {"name": "surface_noise_protocol_info", "arguments": {}})]
         )
@@ -188,7 +182,6 @@ class MCPContractTests(unittest.TestCase):
         )
         probe_report = responses[0]["result"]["structuredContent"]
         # Re-send with the report attached (the tool takes a report object).
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session(
             [
                 _req(
@@ -205,7 +198,6 @@ class MCPContractTests(unittest.TestCase):
         self.assertIn("counterfactuals", structured)
         self.assertIn("loop_guidance", structured)
         # A missing report is a param error, not a crash.
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (err,) = _run_session(
             [
                 _req(
@@ -220,19 +212,16 @@ class MCPContractTests(unittest.TestCase):
     def test_unknown_tool_error(self):
         """Test unknown tool error."""
         # tools/call exists, so an unknown tool NAME is an invalid param.
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session([_req(1, "tools/call", {"name": "nope", "arguments": {}})])
         self.assertEqual(resp["error"]["code"], -32602)
 
     def test_unknown_method_error(self):
         """Test unknown method error."""
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session([_req(1, "frobnicate")])
         self.assertEqual(resp["error"]["code"], -32601)
 
     def test_invalid_params_error(self):
         """Test invalid params error."""
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session(
             [
                 _req(
@@ -249,7 +238,6 @@ class MCPContractTests(unittest.TestCase):
 
     def test_parse_error(self):
         """Test parse error."""
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}])
         # Sanity: a well-formed request still works through _run_session.
         self.assertIn("result", resp)
@@ -267,7 +255,6 @@ class MCPContractTests(unittest.TestCase):
 
     def test_prompt_size_cap(self):
         """Test prompt size cap."""
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session(
             [
                 _req(
@@ -296,7 +283,6 @@ class MCPContractTests(unittest.TestCase):
     def test_fixture_group_defaults(self):
         """Test fixture group defaults."""
         # Fixtures without an explicit group are accepted (defaulted).
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (resp,) = _run_session(
             [
                 _req(

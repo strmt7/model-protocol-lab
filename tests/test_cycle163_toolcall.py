@@ -837,7 +837,6 @@ class ToolcallStageTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_classify(text: object, expected: dict[str, Any] | None) -> dict[str, Any]:
     """Independent oracle for classify_tool_call, written from the docstring."""
     if type(text) is not str:
@@ -1550,7 +1549,6 @@ class ParseEmittedFailClosedTests(unittest.TestCase):
         """Test classify never raises on degenerate answer."""
         # One degenerate observation must not kill the stage: classify
         # degrades to parse_failed.
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.toolcall import classify_tool_call
 
         evil = "CALL get_weather " + "[" * 10000 + "]" * 10000

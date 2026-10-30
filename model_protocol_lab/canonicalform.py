@@ -485,7 +485,6 @@ def invariance_falsified(classification: str) -> bool:
     return classification in ("discordant_balanced", "discordant_asymmetric")
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Per-candidate aggregates over its ground records.
 

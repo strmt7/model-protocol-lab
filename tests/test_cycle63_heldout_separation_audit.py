@@ -729,7 +729,6 @@ class HeldoutSeparationAuditTests(unittest.TestCase):
         assert r1["held_out"] is not r2["held_out"]
         assert json.dumps(r1, sort_keys=True) == json.dumps(r2, sort_keys=True)
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_fuzz_separation_matches_independent_oracle(self):
         """Test fuzz separation matches independent oracle."""
         for trial in range(24):

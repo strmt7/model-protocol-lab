@@ -230,8 +230,6 @@ class FixtureSerializationAuditTests(unittest.TestCase):
     def setUp(self) -> None:
         """Set up the test fixture."""
         import tempfile
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from pathlib import Path
 
         self._td = tempfile.TemporaryDirectory()

@@ -110,7 +110,6 @@ def _no_ws(text: str) -> str:
     return "".join(text.split())
 
 
-# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class LeakAsserts(unittest.TestCase):
     """Shared canary scanners; not a test case itself (no test_ methods)."""
 

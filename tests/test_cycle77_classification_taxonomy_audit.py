@@ -847,7 +847,6 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             boundary=(33,),
             eos_id=99,
         )
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertEqual(
             row,
@@ -894,7 +893,6 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             boundary=(33,),
             eos_id=99,
         )
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertTrue(row["native_pass"])
         cells = row["cells"]
@@ -921,7 +919,6 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             eos_id=99,
             vllm_include_stop_str_in_output=True,
         )
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertEqual(row["cells"]["vllm_holdback"]["stop_text"], "kept")
         self.assertTrue(row["cells"]["vllm_holdback"]["fired"])
@@ -944,7 +941,6 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             boundary=(8364,),
             eos_id=99,
         )
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         hf = row["cells"]["hf_stop_string"]
         vllm = row["cells"]["vllm_holdback"]
@@ -967,7 +963,6 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             boundary=(33,),
             eos_id=99,
         )
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertFalse(row["native_pass"])
         for semantic in STOP_SEMANTICS[1:]:
@@ -986,7 +981,6 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             (_matrix_observation(output_ids=("a",), exact_match=False, boundary_found=False),),
             boundary=(33,),
         )
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         for semantic in STOP_SEMANTICS[1:]:
             with self.subTest(semantic=semantic):
@@ -1083,7 +1077,6 @@ class StopMatrixWiringTests(unittest.TestCase):
             for eos_id, keep in itertools.product((None, 99), (False, True)):
                 with self.subTest(index=index, eos_id=eos_id, keep=keep):
                     expected = self._predict(backend, fixture, (33,), obs, eos_id, keep_vllm=keep)
-                    # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
                     (actual,) = stop_matrix(
                         backend,
                         "tiny",
@@ -1119,7 +1112,6 @@ class StopMatrixValidationTests(unittest.TestCase):
         fixtures = args.pop("fixtures")
         observations = args.pop("observations")
         boundary = args.pop("boundary")
-        # skipcq: PYL-E1132 - 'boundary' was popped from args; **args cannot repeat it
         return stop_matrix(
             backend, candidate_name, fixtures, observations, boundary=boundary, **args
         )
@@ -1160,7 +1152,6 @@ class StopMatrixValidationTests(unittest.TestCase):
         class NoBoundaryText(TinyBackend):
             """No boundary text."""
 
-            # skipcq: PYL-R0201 - zero-arg super() requires an instance method
             def decode(self, token_ids: Any) -> Any:
                 """Decode."""
                 if tuple(token_ids) == (33,):
@@ -1168,7 +1159,6 @@ class StopMatrixValidationTests(unittest.TestCase):
                 return super().decode(token_ids)
 
         rows = self._run(backend=NoBoundaryText(), eos_id=99)
-        # skipcq: PYL-W0632 - the one-element unpack is the assertion of exactly one row
         (row,) = rows
         self.assertFalse(row["cells"]["hf_stop_string"]["available"])
         self.assertFalse(row["cells"]["vllm_holdback"]["available"])

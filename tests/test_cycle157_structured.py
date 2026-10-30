@@ -337,7 +337,6 @@ class SchemaDefTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_field_def_ok(field):
     """Independent reimplementation of validate_field_def's acceptance set."""
     if not isinstance(field, dict):
@@ -359,7 +358,6 @@ def _oracle_field_def_ok(field):
         if value is not None:
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 return False
-            # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
             if value != value or abs(value) == float("inf"):
                 return False
             if field_type == "integer" and int(value) != value:
@@ -371,7 +369,6 @@ def _oracle_field_def_ok(field):
     return True
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_schema_def_ok(schema):
     """Independent reimplementation of validate_schema_def's acceptance set."""
     if not isinstance(schema, dict):
@@ -397,7 +394,6 @@ def _oracle_schema_def_ok(schema):
     return all(_oracle_field_def_ok(field) for field in properties.values())
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_field_ok(value, field):
     """Independent reimplementation of the per-field value check."""
     field_type = field["type"]
@@ -414,7 +410,6 @@ def _oracle_field_ok(value, field):
             # Non-finite floats are not JSON numbers (RFC 8259 §6); the
             # oracle must share the implementation's rejection, not the
             # shared blind spot that let F1 through.
-            # skipcq: PYL-R0124 - self-comparison is the total NaN test on untrusted JSON values
             if value != value or abs(value) == float("inf"):
                 return False
         case "boolean":
@@ -1511,10 +1506,8 @@ class StructuredSampleTests(unittest.TestCase):
     @staticmethod
     def _base_prompt(fixture_id):
         """Base prompt."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.structured import render_prompt
 
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         spec = next(s for s in _SPECS if s["id"] == fixture_id.split("/")[1])
         return (
             "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n"
@@ -1550,7 +1543,6 @@ class StructuredSampleTests(unittest.TestCase):
 
     def test_structured_exercise_is_deterministic(self):
         """Test structured exercise is deterministic."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.experiments import structured_adherence, structured_stage
 
         def _run_once():
@@ -1654,7 +1646,6 @@ class StructuredCoverageGapTests(unittest.TestCase):
 
     def test_validate_schema_def_rejects_bad_properties(self):
         """Test validate schema def rejects bad properties."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.structured import validate_schema_def
 
         base = {
@@ -1670,7 +1661,6 @@ class StructuredCoverageGapTests(unittest.TestCase):
 
     def test_describe_schema_allows_additional_properties(self):
         """Test describe schema allows additional properties."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from model_protocol_lab.structured import describe_schema
 
         schema = {

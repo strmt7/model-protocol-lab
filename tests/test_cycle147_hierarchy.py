@@ -950,7 +950,6 @@ class HierarchyMutationGateTests(unittest.TestCase):
         )
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_adherence(primary_winner, primary_decision, candidates, stages):
     """Independent reimplementation of hierarchy_adherence (test oracle)."""
     per_condition = {}

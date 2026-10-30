@@ -521,7 +521,6 @@ class AblationDiffTests(unittest.TestCase):
         diff = diffreports.diff_ablation(old, new)
         self.assertEqual(diff["candidates_added"], ["t2"])
         self.assertTrue(diff["changed"])
-        # skipcq: PYL-W1114 - the reversed diff is the assertion: symmetry is what is audited
         diff2 = diffreports.diff_ablation(new, old)
         self.assertEqual(diff2["candidates_removed"], ["t2"])
 

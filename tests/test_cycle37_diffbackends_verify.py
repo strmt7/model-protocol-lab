@@ -407,7 +407,6 @@ def _rule_harness_relied(stop: str, snaps: dict[str, _Snap], ctx: SimpleNamespac
     return hits
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _rule_multi_stop_selection(
     per_stop: list[tuple[str, dict[str, _Snap]]], ctx: SimpleNamespace
 ) -> list[str]:
@@ -561,7 +560,6 @@ class _DocstringOracle:
             "verdict": "diverge" if findings else "agree",
         }
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def summarize(
         self,
         *,
@@ -757,7 +755,6 @@ _CLASS_CASES = {
 }
 
 
-# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class _Cycle37Base(unittest.TestCase):
     """Cycle37 base."""
 
@@ -852,7 +849,6 @@ class OracleDifferentialTests(_Cycle37Base):
         # _CLASS_SEMANTICS entry for every class.
         self.assertEqual(_ORACLE_ATTRIBUTION, _CLASS_SEMANTICS)
 
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def test_fuzz_classification_matches_oracle(self) -> None:
         """Test fuzz classification matches oracle."""
         rng = random.Random("cycle37-diffbackends-fuzz")  # noqa: S311 -- seeded, not crypto

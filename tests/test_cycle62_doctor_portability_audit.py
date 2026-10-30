@@ -172,7 +172,6 @@ class _FakePreTrainedTokenizerFast:
         if spec.drop_encode:
             self.encode = None  # present but unusable -> TypeError on call
 
-    # skipcq: PYL-E0202 - the attribute deliberately shadows the method to fake a missing primitive
     def encode(self, text: str, add_special_tokens: bool = False) -> Any:
         """Encode."""
         return self._spec.encode(text)
@@ -235,7 +234,6 @@ def _no_transformers():
 _CHECK_SKIPPED = "skipped"
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_portability_check(
     *,
     primary: dict | None,
@@ -606,11 +604,8 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up the test fixture."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import sys
         import tempfile
-
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         from pathlib import Path
 
         # tmp_path fixture
@@ -634,7 +629,6 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         """Tear down the test fixture."""
-        # skipcq: PYL-W0404 - test-local import isolates the module under audit
         import sys
 
         # Undo fake module installation (monkeypatch.setitem equivalent)
@@ -1072,7 +1066,6 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
             assert row["verdict"] == "incompatible"
             assert row["reason"] == "unregistered"
             assert row["detail"] == f"unregistered on {lit!r}"
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             token_row = next(t for t in row["tokens"] if t["token"] == lit)
             assert token_row["registered"] is False
             assert token_row["registered_id"] is None
@@ -1095,7 +1088,6 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         for row in hits:
             assert row["verdict"] == "incompatible"
             assert row["reason"] == "fragments"
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             token_row = next(t for t in row["tokens"] if t["token"] == lit)
             assert token_row["single_token"] is False
             assert token_row["id_match"] is None
@@ -1116,7 +1108,6 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         for row in hits:
             assert row["verdict"] == "incompatible"
             assert row["reason"] == "id_mismatch"
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             token_row = next(t for t in row["tokens"] if t["token"] == lit)
             assert token_row["id_match"] is False
             assert token_row["encoded_id"] == ids[lit] + 1
@@ -1160,7 +1151,6 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         hits = [r for r in report["rows"] if any(t["token"] == lit for t in r["tokens"])]
         assert hits
         for row in hits:
-            # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
             token_row = next(t for t in row["tokens"] if t["token"] == lit)
             assert token_row["registered"] is False  # suppressed exception -> skipped
             assert row["reason"] == "unregistered"
@@ -1365,7 +1355,6 @@ _CHECK_FUZZ_CASES = 220
 _DECODE_TEXTS = ("<m>", "hello world", "<m0><m1>", "x", "  spaced\t\n")
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _fuzz_check_case(rng: random.Random) -> dict[str, Any]:
     """Fuzz check case."""
     bkind = rng.choice(
@@ -1579,7 +1568,6 @@ _MATRIX_FUZZ_CASES = 130
 _MATRIX_POOL: list[str] = list(dict.fromkeys(_LITS[:14])) + [f"<syn{i}>" for i in range(8)]
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _fuzz_matrix_stimulus(
     rng: random.Random,
 ) -> tuple[dict, dict[str, Any], Callable[[str], Any], Callable[[str], Any]]:

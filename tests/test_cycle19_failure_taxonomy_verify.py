@@ -99,7 +99,6 @@ def _oracle_classify_observation(obs, eos_id):
     return "no-boundary-in-N"
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _oracle_failure_taxonomy(result, eos_id):
     """Independent re-derivation of ``failure_taxonomy``.
 
@@ -720,7 +719,6 @@ def _build_mutant(package_name, replacements):
     """Copy the package under a fresh top-level name, apply textual mutations
     to its experiments.py, and import the mutated module.
     """
-    # skipcq: PYL-W0603 - module-level mutable test state is the fixture mechanism
     global _MUTANT_PATH_READY
     src = Path(real.__file__).resolve().parent
     dest = _MUTANT_ROOT / package_name

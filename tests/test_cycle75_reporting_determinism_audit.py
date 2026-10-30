@@ -1159,7 +1159,6 @@ def _fresh(tag):
     root. save_report refuses existing leaves (O_EXCL), so the path must not
     exist until save_report creates it.
     """
-    # skipcq: PYL-W0603 - module-level mutable test state is the fixture mechanism
     global _FRESH_COUNTER
     _SCRATCH.mkdir(parents=True, exist_ok=True)
     _FRESH_COUNTER += 1

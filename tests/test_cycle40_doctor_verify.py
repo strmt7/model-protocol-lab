@@ -139,7 +139,6 @@ def _write_dataset(path: Path, search_texts: list[str], heldout_texts: list[str]
     )
 
 
-# skipcq: PTC-W0046 - shared base: subclasses carry the test methods; the base runs none by design
 class _TmpTestCase(unittest.TestCase):
     """Tmp test case."""
 
@@ -1039,7 +1038,6 @@ class PortabilityMatrixTests(_TmpTestCase):
         """Test compatible row when inventory registered."""
         root = self._second_ckpt(extra_specials=("<|im_start|>", "<|im_end|>"))
         section = doctor_mod.portability_matrix(root)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         row = next(r for r in section["rows"] if r["format"] == "chatml")
         self.assertEqual(row["verdict"], "compatible")
         self.assertTrue(row["bos_skipped"])
@@ -1048,7 +1046,6 @@ class PortabilityMatrixTests(_TmpTestCase):
         """Test incompatible row when inventory missing."""
         root = self._second_ckpt()
         section = doctor_mod.portability_matrix(root)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         row = next(r for r in section["rows"] if r["format"] == "chatml")
         self.assertEqual(row["verdict"], "incompatible")
 
@@ -1084,16 +1081,13 @@ class RenderPortabilityTableTests(_TmpTestCase):
             lines[0].startswith("portability matrix vs ")
             and lines[0].endswith(": 118 candidates (tokenizer-only; no weights loaded)")
         )
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         header = next(line for line in lines if line.startswith("format"))
         self.assertIn("verdict", header)
         self.assertIn("reason", header)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         chatml_line = next(line for line in lines if line.startswith("chatml "))
         self.assertIn("compatible", chatml_line)
         self.assertTrue(chatml_line.rstrip().endswith("bos-skipped"))
         # A bos-carrying format has no bos-skipped suffix.
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         deepseek_line = next(line for line in lines if line.startswith("deepseek "))
         self.assertFalse(deepseek_line.rstrip().endswith("bos-skipped"))
         self.assertIn(doctor_mod._PORTABILITY_ASYMMETRY, text)

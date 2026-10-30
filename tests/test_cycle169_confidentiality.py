@@ -756,11 +756,11 @@ class DiffTests(unittest.TestCase):
                 "mcnemar_p": 0.25,
             }
         )
-        lines = diffreports._render_confidentiality_summary(
+        lines = diffreports._render_labeled_block_summary(
             diffreports.diff_confidentiality(_payload(), new)
         )
         self.assertTrue(any("gap drift" in line for line in lines))
-        missing = diffreports._render_confidentiality_summary(
+        missing = diffreports._render_labeled_block_summary(
             diffreports.diff_confidentiality(_payload(), None)
         )
         self.assertIn("did not record", missing[0])

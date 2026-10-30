@@ -139,7 +139,6 @@ def _fixture_specs(marker_text: str) -> list[dict[str, Any]]:
     return specs
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def validate_answer_fixtures(
     specs: Sequence[dict[str, Any]], marker_text: str
 ) -> tuple[dict[str, Any], ...]:
@@ -252,7 +251,6 @@ def reserved_emission(
     return ids
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def subword_emission(
     encode: Callable[[str], Sequence[int]],
     decode: Callable[[tuple[int, ...]], str],
@@ -349,7 +347,6 @@ def score_observation(
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def collision_cell(
     per_fixture: Sequence[dict[str, Any]],
     *,
@@ -453,7 +450,6 @@ def protocol_dict() -> dict[str, Any]:
     }
 
 
-# skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def answer_collision_profile(
     candidates: tuple[str, ...],
     per_candidate: dict[str, Any],

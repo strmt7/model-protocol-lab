@@ -194,12 +194,10 @@ class RenderHtmlSourceGuardTests(unittest.TestCase):
     """Every _toc entry's variable must reach the returned document."""
 
     @staticmethod
-    # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
     def _render_html_parts():
         """Render html parts."""
         source = Path(reporting_mod.__file__).read_text(encoding="utf-8")
         tree = ast.parse(source)
-        # skipcq: PTC-W0063 - in a test, next() raising StopIteration is the intended failure
         render = next(
             node
             for node in ast.walk(tree)
