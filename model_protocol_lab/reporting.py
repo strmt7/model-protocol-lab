@@ -8902,6 +8902,357 @@ def _record_notation_section(result: dict[str, Any]) -> str:
     )
 
 
+def _invisible_chars_section(result: dict[str, Any]) -> str:
+    """Invisible-character insertion probe: does one frozen
+    invisible code point in a fact sentence move answers to
+    wrong values?
+
+    Renders the ``invisible_chars`` payload (see
+    experiments.invisible_chars_analysis). The first sentence
+    states the treatment exactly: one code point at two frozen
+    sites in the fact sentence, the question and carriers
+    byte-identical across arms. Per candidate, in the design's
+    printed order: per-arm pass rates with attrition and the
+    six-class completed-cell decomposition; the per-arm
+    token-ID report (the regime gate); and per treated arm the
+    guarded headline over the id-divergent paired population
+    -- label, D, J, reverse discordants, incomplete count, the
+    paired control rate beside the label, the pair
+    decomposition with the failing cells' classes, and the
+    non-answer count. After the table: the estimand sentence,
+    the operating-characteristics paragraph (exact figures,
+    one convention, the family-wise price printed beside the
+    licence), the guard paragraph (what incompletion can and
+    cannot do, with the executed worlds), and the printed
+    limitations. Counts and rates only; no prompt or answer
+    text is rendered. Every payload-derived value below goes
+    through _escape_text, never bare escape().
+    """
+    probe: Any = result.get("invisible_chars")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        """Return the rate."""
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return _escape_text(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        """Return the count."""
+        return _escape_text(str(value)) if type(value) is int else "n/a"
+
+    arm_names = (
+        "control",
+        "zwsp",
+        "vs16",
+        "tag",
+        "softhyphen",
+        "wj",
+        "visible_hyphen",
+    )
+    class_names = (
+        "pass",
+        "boundary_only",
+        "wrong_value",
+        "echo_invisible",
+        "form_only",
+        "non_answer",
+    )
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + _escape_text(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        arms = entry.get("arms")
+        if type(arms) is dict:
+            for arm_name in arm_names:
+                arm = arms.get(arm_name)
+                if type(arm) is not dict:
+                    continue
+                decomp = arm.get("decomposition")
+                decomp_bit = ""
+                if type(decomp) is dict:
+                    decomp_bit = (
+                        " Decomposition of completed cells -- "
+                        + ", ".join(
+                            class_name + " " + _count(decomp.get(class_name))
+                            for class_name in class_names
+                        )
+                        + " (in the frozen order: a boundary-only "
+                        "cell is a boundary effect, never an "
+                        "insertion effect; wrong-value counts "
+                        "only values inside the frozen grammar; "
+                        "echo and form classes are the model "
+                        "reproducing the treated surface with the "
+                        "value intact)."
+                    )
+                bits.append(
+                    "<div>"
+                    + _escape_text(arm_name)
+                    + " pass rate "
+                    + _rate(arm.get("rate"))
+                    + " ("
+                    + _count(arm.get("n_pass"))
+                    + " of "
+                    + _count(arm.get("n_completed"))
+                    + " completed), "
+                    + _count(arm.get("n_context_exceeded"))
+                    + " context-exceeded, "
+                    + _count(arm.get("n_evaluation_failed"))
+                    + " evaluation-failed."
+                    + decomp_bit
+                    + "</div>"
+                )
+        ids = entry.get("ids")
+        headline = entry.get("headline")
+        if type(ids) is dict and type(headline) is dict:
+            for arm_name in arm_names[1:]:
+                arm_ids = ids.get(arm_name)
+                arm_head = headline.get(arm_name)
+                if type(arm_ids) is not dict or type(arm_head) is not dict:
+                    continue
+                deltas = arm_ids.get("id_length_delta")
+                delta_bit = ""
+                if type(deltas) is list:
+                    delta_bit = (
+                        " Per-case id-length deltas (arm minus "
+                        "control, in case order): "
+                        + _escape_text(", ".join(str(d) for d in deltas))
+                        + "."
+                    )
+                pair = arm_head.get("pair_decomposition")
+                pair_bit = ""
+                if type(pair) is dict:
+                    pair_bit = (
+                        " Pair decomposition of the discordant "
+                        "pairs -- exact-only "
+                        + _count(pair.get("exact_only"))
+                        + ", boundary-only "
+                        + _count(pair.get("boundary_only"))
+                        + ", mixed "
+                        + _count(pair.get("mixed"))
+                        + " (reported, never attributed)."
+                    )
+                failing = arm_head.get("failing_classes")
+                failing_bit = ""
+                if type(failing) is dict:
+                    failing_bit = (
+                        " The discordant pairs' failing cells "
+                        "decompose as "
+                        + ", ".join(
+                            class_name + " " + _count(failing.get(class_name))
+                            for class_name in class_names
+                        )
+                        + "."
+                    )
+                bits.append(
+                    "<div>"
+                    + _escape_text(arm_name)
+                    + " headline over "
+                    + _count(arm_head.get("n_population"))
+                    + " paired cases (completed in both control "
+                    "and this arm and id-divergent for this arm; "
+                    + _count(arm_ids.get("n_ids_identical"))
+                    + " cases were ids-identical for this arm "
+                    "-- instrument-inapplicable for those, never "
+                    "passes -- and "
+                    + _count(arm_head.get("n_incomplete"))
+                    + " id-divergent cases were incomplete): "
+                    "label "
+                    + _escape_text(str(arm_head.get("label")))
+                    + ", D (control passes) "
+                    + _count(arm_head.get("control_passes"))
+                    + " at control rate "
+                    + _rate(arm_head.get("control_rate"))
+                    + ", J (wrong-value discordants) "
+                    + _count(arm_head.get("wrong_values"))
+                    + ", reverse discordants "
+                    + _count(arm_head.get("n_reverse"))
+                    + " (counted, never pooled into J), "
+                    "arm pass rate "
+                    + _rate(arm_head.get("arm_rate"))
+                    + ", non-answer arm cells in the population "
+                    + _count(arm_head.get("n_non_answer"))
+                    + ". Same-ids verdict flips for this arm: "
+                    + _count(arm_ids.get("n_same_ids_verdict_flips"))
+                    + " (a determinism finding, never insertion "
+                    "fragility); maximum absolute id-length delta "
+                    + _count(arm_ids.get("max_abs_id_delta"))
+                    + "."
+                    + delta_bit
+                    + pair_bit
+                    + failing_bit
+                    + "</div>"
+                )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + _escape_text(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    oc: dict[str, Any] = {}
+    for entry in candidates.values():
+        if type(entry) is dict and type(entry.get("operating_characteristics")) is dict:
+            oc = entry["operating_characteristics"]
+            break
+
+    def _oc(key: str) -> str:
+        """Return the oc."""
+        return _rate(oc.get(key))
+
+    tail_paragraphs = [
+        "<p>The estimand, stated once: value-changing "
+        "discordance between the verbatim control and one "
+        "treated rendering, over the id-divergent paired cases "
+        "both arms completed, for this candidate's template "
+        "family on this checkpoint. The claim is per candidate "
+        "and per arm; nothing is pooled, and a fire proves only "
+        "that this arm moved this checkpoint's answers to wrong "
+        "values inside the frozen grammar on this generated "
+        "population -- never a claim about weights, attacks, or "
+        "code points outside the frozen list. An invisible arm "
+        "is read as invisibility-specific only when the visible "
+        "hyphen arm does not also fire for the same candidate; "
+        "if both fire, the reading is that insertion at these "
+        "sites disrupts this candidate, and the invisible arm "
+        "adds no invisibility-specific evidence.</p>",
+        "<p>Operating characteristics (exact enumeration under "
+        "per-case independence, q the arm's marginal in-grammar "
+        "wrong-value rate; the paired column couples the two "
+        "outcomes within each case at correlation 0.5 and is "
+        "computed exactly): the competent panel fires "
+        + _oc("fire_competent_independent")
+        + " independent and "
+        + _oc("fire_competent_paired")
+        + " paired; the weak panel (control rate 0.80) fires "
+        + _oc("fire_weak_independent")
+        + " and the random labeller "
+        + _oc("fire_random_independent")
+        + " -- the label is comparative evidence at a stated "
+        "base rate, which is why each candidate's control rate "
+        "prints beside its label above. Power at the 25-point "
+        "target effect is "
+        + _oc("power_drop25_base90")
+        + " at base .90 and "
+        + _oc("power_drop25_base85")
+        + " at base .85 (paired "
+        + _oc("power_drop25_paired")
+        + "); a 10-point drop fires only "
+        + _oc("power_drop10_base90")
+        + " of the time, so an acquittal is an observed null at "
+        "this panel's resolution, never proof of invariance. "
+        "Family-wise, over the 120 labelled invisible "
+        "comparisons the competent expectation is "
+        + _rate(oc.get("familywise_competent_expected_120"))
+        + " false labels (probability of at least one "
+        + _oc("familywise_competent_any_120")
+        + "); over all 144 printed labels it is "
+        + _rate(oc.get("familywise_competent_expected_144"))
+        + "; paired, the 120-comparison expectation is "
+        + _rate(oc.get("familywise_paired_expected_120"))
+        + " (probability of at least one "
+        + _escape_text(str(oc.get("familywise_paired_any_120")))
+        + "). The rejected two-directional transplant rule "
+        "fires "
+        + _oc("transplant_fire_competent_independent")
+        + " on the same competent null, which is why the "
+        "floors are this instrument's own.</p>",
+        "<p>The completion guard, and what incompletion can "
+        "and cannot do: fires issue on observed counts over "
+        "completed cases, so removing a generation can never "
+        "create a wrong-value discordant; acquittal labels "
+        "issue only when stable under the worst-case completion "
+        "of the pair's incomplete id-divergent cases, so "
+        "removal can never manufacture an acquittal either -- "
+        "in the executed attack worlds (10,000 trials each), "
+        "sign-concentrated incompletion drives the unguarded "
+        "rule's below-threshold rate to "
+        + _oc("world_b_unguarded_below_threshold")
+        + " on a true drop while the guarded rate stays "
+        + _oc("world_b_guarded_below_threshold")
+        + ", the displaced mass withheld as insufficient. The "
+        "price of the guard is withholding: at the amended cap "
+        "(incomplete id-divergent cases above 6 of 24 withhold "
+        "every label) the manufacture world fires "
+        + _oc("world_a_guarded_fire")
+        + " and the flat-incompletion drop world "
+        + _oc("world_c_guarded_fire")
+        + " against its unguarded "
+        + _oc("world_c_unguarded_fire")
+        + ". Dose escalation in response to a null is outside "
+        "this instrument: one code point per site is the frozen "
+        "dose, and a null here is a legitimate pre-registered "
+        "outcome. Printed limitations: the soft-hyphen arm is "
+        "the weakest member of the frozen list (a renderer may "
+        "show it at a line-break opportunity; the frozen sites "
+        "are never at one); value changes outside the frozen "
+        "grammar print as non-answer and are outside the "
+        "headline claim; sanitizer cost on clean text is not "
+        "measured by this arm set. Records carry digests, "
+        "except cells' answer text, which is digest-bound and "
+        "never rendered here.</p>",
+    ]
+    audit_arms: Any = {}
+    protocol = probe.get("protocol")
+    if type(protocol) is dict:
+        population = protocol.get("population_audit")
+        if type(population) is dict and type(population.get("arms")) is dict:
+            audit_arms = population["arms"]
+    legend_parts = []
+    for arm in arm_names[1:]:
+        entry = audit_arms.get(arm)
+        if type(entry) is dict:
+            legend_parts.append(f"{arm} ({entry.get('code_point')} {entry.get('name')})")
+        else:
+            legend_parts.append(arm)
+    legend = "<p>The frozen arms: " + _escape_text(", ".join(legend_parts)) + ".</p>"
+    return (
+        '<section class="card" id="invisible-chars">'
+        "<h2>Invisible characters (frozen invisible-code-point insertion)</h2>"
+        "<p>This probe inserts one frozen code point at two "
+        "frozen sites in a generated fact sentence: each of the "
+        "24 generated cases is a fact-recall item (a frozen "
+        "topic, a word-number inspection code, two neutral "
+        "carrier sentences, a question), rendered verbatim in "
+        "the control arm and with a single invisible code point "
+        "inserted after the second letter of the topic and of "
+        "the code's word in five invisible arms (zero-width "
+        "space, variation selector-16, language tag, soft "
+        "hyphen, word joiner -- a frozen list of "
+        "Default-Ignorable code points in Unicode 15.0.0), plus "
+        "a matched visible control inserting a hyphen at the "
+        "same sites. The question and carriers are "
+        "byte-identical across arms; the scorer is byte-exact "
+        "conjoined with boundary presence; every arm is a "
+        "fixture with the same id, so request seeds are "
+        "identical across arms. Each cell is one greedy "
+        "generation. The readout is a guarded classification "
+        "per candidate and per arm over the id-divergent "
+        "paired population, with the operating characteristics "
+        "and the family-wise price printed beside it.</p>"
+        + legend
+        + "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        + "".join(tail_paragraphs)
+        + "</section>"
+    )
+
+
 # skipcq: PY-R1000 - Gate-pinned frozen function; splitting breaks its verified contract.
 def _rotation_section(result: dict[str, Any]) -> str:
     """Context rotation probe: does cyclically rotating the block span move the verdict?
@@ -11579,6 +11930,7 @@ def render_html(result: dict[str, Any]) -> str:
     history_frame_html = _history_frame_section(result)
     prune_sweep_html = _prune_sweep_section(result)
     record_notation_html = _record_notation_section(result)
+    invisible_chars_html = _invisible_chars_section(result)
     choiceaudit_html = _choiceaudit_section(result)
     precision_html = _precision_section(result)
     confidence_html = _confidence_section(result)
@@ -11780,6 +12132,11 @@ def render_html(result: dict[str, Any]) -> str:
                 record_notation_html,
             ),
             (
+                "invisible-chars",
+                "Invisible characters (frozen invisible-code-point insertion)",
+                invisible_chars_html,
+            ),
+            (
                 "choice-audit",
                 "Choice-scoring audit (second opinion)",
                 choiceaudit_html,
@@ -11910,6 +12267,7 @@ def render_html(result: dict[str, Any]) -> str:
         + history_frame_html
         + prune_sweep_html
         + record_notation_html
+        + invisible_chars_html
         + choiceaudit_html
         + precision_html
         + confidence_html

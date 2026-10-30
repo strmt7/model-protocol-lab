@@ -564,3 +564,699 @@ order. The amended instrument in §3 is that new candidate. It
 is not a build order, and no build cycle may act on it without
 a fresh blind design review that finds its three open
 decisions already settled in its text.
+
+---
+
+## Appendix: second fresh-review adjudication (coordinator #70)
+
+Appended in cycle 223, as ordered when the line was parked: the
+second restated candidate was reviewed fresh and adjudicated
+NO-BUILD as written; the settlement obligation below (absorb
+bundled incompletion into the guarded perimeter, or condition
+the claim on it) is the standing gate for any future
+restatement.
+
+## Fresh-review adjudication — SECOND restated `--multi-question` candidate (coordinator #70, 2026-10-29)
+
+**Verdict: NO-BUILD as written.** The restatement's two design
+repairs are real and verified to a standard no previous round in
+this line reached: the completion guard is *sound* — its lemma
+survived five independent executions including exhaustive
+completion enumeration — and the Q-marker grammar closes the
+marker-valued-wrong-answer channel by construction. The
+candidate fails at the boundary its own §5 draws around the
+guard. The guard ranges over **hidden** slots (cells that
+completed but did not parse). A generation that produces no
+boundary-delimited span at all is an **incomplete** outcome
+whose slots are **absent** — outside every completion, by §5's
+definition ("not attrition"). Through that gap, both directions
+the guard was built to close reopen, executed below: bundled
+incompletion concentrated on would-be-pw cases manufactures the
+drop label at 0.54/0.72 (K=3) and 0.92/0.90 (K=5) in a
+zero-value-effect world, and bundled incompletion concentrated
+on would-be-fw cases acquits a true licensed-size drop
+(`below_threshold` 0.026 → 0.144 at K=5). The §7 claim sentence
+conditions only on *split-cell* incompletion; §5's two
+direction sentences about bundled incompletion ("converts the
+blindness into withholding"; "its direction is withholding")
+are false as written. Every cure — naming the bundled-side
+assumption on the claim, conditioning the acquittal licence,
+or bringing absent slots inside the perimeter — changes the
+headline claim or the rule, so BUILD-as-amended is not
+available under the amendment test (rule, population,
+headline scorer, and the headline claim untouched). The
+generator freeze is also still incomplete in two executed
+places (§1's arithmetic redraw; the 67/72 evidence computed on
+a string the text does not freeze), which standing alone would
+have been amendment-class by the record-notation precedent —
+recorded as obligations. **Parked, not closed**: the mechanism
+core is verified and the remaining defect has a defined
+settlement shape; the caution at the end of this document
+governs a third restatement.
+
+Candidate of record:
+`~/workspace/agents_out/multiquestion_restated2/candidate.md`.
+Round: researcher (BUILD-as-amended), red team A (guard sound
+as a lemma, broken as a decision rule), red team B (one
+population-class freeze defect, rest amendment-class),
+verifier (reproduction strong). Briefs in this directory.
+All load-bearing claims adjudicated by the coordinator's own
+execution (`coord/` in this directory: `coord_engine.py`,
+`coord_lemma.py`, `coord_lemma2.py`, plus re-runs and grid
+checks logged at the end).
+
+### The decisive defect — the incompletion perimeter
+
+§5's frozen principle sorts every generation into *outcome*
+(span produced, however malformed) or *incomplete* (no
+boundary-delimited span). Parse failure is an outcome: its
+slots are hidden and §6's guard ranges over them. Bundled
+incompletion is not: the case stays in the §5 population, is
+counted in `n_bundled_incomplete`, and "contributes no slot
+outcomes and no visibility counts — its slots are **absent**,
+not hidden". §5 then walls the channel off from the attrition
+analysis by definition: "not attrition (the case is not
+removed)". The wall is definitional, not arithmetical. A
+bundled-incomplete case contributes a (0,0) row to every
+quantity the decision reads (D, F, P, npos, nneg); deleting
+the row instead changes none of them. Coordinator-verified
+identity: on 3,000 random panels, zeroing one half's rows and
+removing that half's rows give identical decisions, 3,000/3,000.
+Absent ≡ removed, for the decision. The split side of this
+exact arithmetic is the channel obligation 4 forced onto the
+record — named as §5's load-bearing assumption and priced in
+§6. The bundled side is the same arithmetic with no name and
+no price.
+
+**Manufacture (coordinator's execution, `coord_engine.py`
+row `atk_latent10`; parser-in-the-loop, own implementation of
+§§2/3/5/6 from the text).** The candidate's own mirror
+population — half the cases pw-prone (split pass 0.55,
+bundled 0.95), half fw-prone (the mirror); delivered marginal
+rates identical across arms (0.75/0.75), zero value effect by
+construction — with one change: the pw-prone half's bundled
+cells never complete (their slots are absent, all 24 cases
+"live", mean bundled-incomplete 12.00). Guarded fire:
+**0.5405 (F) / 0.7198 (A) at K=3; 0.9230 / 0.9047 at K=5**
+(10,000 trials each). Controls, same engine: the identical
+mirror-trait population with incompletion rate **0.0** fires
+at the null (**0.0018 / 0.0124** at K=3; **0.0018 / 0.0016**
+at K=5; 10,000 trials each), and
+flat bundled incompletion at rate 0.15 on the homogeneous
+competent population fires at the competent null
+(0.0077/0.0061 at K=3; 0.0130/0.0152 at K=5) — volume does
+nothing, concentration does everything. For scale: the
+candidate's printed sensitivity for the *split* side of this
+arithmetic, at half the removal (q = 0.5), is 0.3541/0.8779.
+The bundled side at full concentration is worse, and it is
+nowhere in §6.
+
+**Acquittal (red team A, `absent_acquittal.py`; coordinator
+concurs in the mechanism and verified the arithmetic).** In a
+spread extraction drop of 0.25 — the licence's own row — with
+bundled incompletion at 0.5 concentrated on cases realising
+≥1 fw slot: K=5 fire falls 0.9665 → 0.4133 and
+**`below_threshold` rises 0.0259 → 0.1442** (8,000 trials);
+the displaced mass is not withholding, it is acquittal of a
+true drop at 5.6× the baseline rate. The deterministic form:
+18 absent cases whose would-be bundled values are all wrong
+(the §5 blindness scenario verbatim) plus 6 visible pw cases
+give D_MAX = 6, F_MAX = 0, P_MAX = 6 → `below_threshold`,
+while the completed panel fires under the candidate's own
+base rule (rotation-legal form verified by the coordinator:
+F = 36, P = 6, D = 24, one-sided p(18, 6) = 0.0113 ≤ 0.05;
+red team A's printed panel uses the author's decide-demo
+FFF patterns, disclosed in its brief — the mechanism is
+pattern-independent). A's own hard-case control records
+honestly that in the candidate's printed hard-case world the
+dominant direction *is* withholding; the falsified text is
+the categorical claim, and it fails exactly in the scenario
+§5 itself names ("fail to complete precisely on the cases
+where bundling would have hurt it").
+
+**Why this is not amendment-class.** The claim sentence (§7)
+licenses the drop "under §5's named assumption that
+*split-cell* incompletion is independent of a case's would-be
+discordance sign". The executed channel needs the same
+independence for *bundled-cell* incompletion, which no
+sentence in the candidate states, prices, or attaches to any
+licence; the header's "no formatting event can fire or
+acquit" and §5/§6's direction sentences assert the contrary.
+The cures are: (a) a unified incompletion assumption named
+on the claim sentence with worst-case prices for both arms —
+a change to the headline claim's conditions, the class the
+previous round already ruled restatement material (its
+defect 1 and obligation 4); (b) conditioning
+`below_threshold` on bundled-incompletion exposure — the
+same class for the acquittal licence; (c) bringing absent
+slots inside a completion perimeter or out of the population
+— a rule/population change, and §5's own text argues (c)'s
+premise away ("no span exists whose completion the guard
+could range over"). A reviewer who believes (a) is a mere
+wording fix should note what the wording would have to say:
+that the label is certified only if a second, untestable
+independence assumption holds — which is precisely the
+settlement the previous round demanded be made *in a
+restated candidate's own text*, not appended by a verdict.
+
+### Obligation by obligation
+
+**1. Error-visibility channel — SETTLED for parse failure;
+NOT SETTLED for generation incompletion (decisive, above).**
+For the channel the obligation named — value-correlated
+*parse* failure — the completion guard is the genuine
+settlement the first restatement lacked, and it is verified
+beyond this tree's usual standard:
+
+- *Lemma.* The author's monotone-path walk (60,000 panels,
+  13,131,607 steps) re-ran byte-identically (verifier;
+  coordinator's re-run of the sibling scripts identical).
+  Red team A: exhaustive completion enumeration over two
+  lanes — 3,277 panels (145,326,876 completions) and 1,002
+  engineered panels (103 MIN-firing; 69,366,975 completions)
+  — plus 899,531 upward-walk steps with 0 fire→nonfire
+  transitions: 0 violations of claims A/B. (Counts as
+  corrected by red team A after its first delivery: the
+  figures in its original brief came from background-delivery
+  texts that proved to be phantom, and were replaced by
+  re-runs read from on-disk logs — the same failure family
+  as the corrections to this document's own log, below.)
+  Red team B: 268 panels exhaustively — 0 violations, and the
+  `insufficient` basis dichotomy exact. Red team A also
+  verified the α..ε attainability under cell-granular hiding,
+  including joint cross-family corners the text does not
+  require. Coordinator: exhaustive (npos, nneg) grid —
+  the one-sided tail is non-increasing under all three step
+  kinds on the full 0..60 × 0..60 grid (0 violations), and
+  no (npos ≤ 5, D ≥ 6) panel fires on a grid to D = 200 (the
+  firing ⇒ npos ≥ 6 lemma the D-gate argument needs); plus
+  endpoint enumeration (1,405 panels, 24 MIN-firing,
+  8,804,693 completions): claims A and B held on every
+  completion, per-case df extrema equal to the MIN/MAX
+  corner rows in every panel.
+- *Behaviour.* The author's OC rows were diffed line-by-line
+  against the shipped outputs (red team B: every figure
+  matched) and re-executed on shipped seeds (verifier, venv
+  interpreter: part-1 rows within |Δ| ≤ 0.0020, the
+  manufacture rows exact). Red team A's independent
+  guard-vs-truth engine: guarded FIRE with true base ≠ fire
+  = 0 and guarded BELOW with true base = fire = 0 in every
+  cell (manufacture, symmetric, masking at dress 0.5/1.0).
+  Coordinator's independent engine reproduces the competent
+  nulls (0.0093/0.0101 at K=3, 0.0193/0.0196 at K=5 vs
+  printed 0.0112/0.0092, 0.0184/0.0207) and the masking
+  endpoint (fire 0.0000 at r = 1.0, K=3, 5,000 trials; a
+  below-verdict discrepancy in the coordinator's own
+  masking construction is recorded in the execution log
+  and is not counted against the candidate).
+  Manufacture by *parse* dressing is dead (guarded fire flat
+  in r at the null); masking by parse dressing never acquits
+  (withholding 1.0000 at r = 1.0). §6's replacement
+  properties (i)–(iii) are true — of hidden slots.
+
+**2. Marker-valued wrong answers — SETTLED.** Q-markers are
+disjoint from both value spaces as strings, hence (the
+tree's standing digest assumption) as hashes; executed
+disjointness over pools, topics, and decimals 0..9999 at
+K ∈ {1, 3, 5}; the wrong-value battery the previous battery
+omitted is frozen and passes under both conventions
+(coordinator's re-run of `grammar_check2.py` byte-identical);
+the §6 marker sweep prints the digit grammar's collapse
+(1.0000 → 0.1059 → 0.0000 at K=5) beside Q-marker invariance,
+diffed clean by red team B and spot-reproduced by the
+verifier. The label-word-as-content residue is correctly
+classified in the text as a formatting event inside the
+guard's perimeter. The S3 floor's restated status (population
+definition, not grammar safety) is honest and its retention
+reasoning is the right shape.
+
+**3. Claim inside the printed power — SETTLED at the
+licence's headline rows; two scoping defects sustained
+(amendment-class, obligations below).** The 25-point licence
+figures are correct roundings of *both* families' executed
+spread rows (F 0.7493/0.9681; A 0.7474/0.9677); the header
+utility names the spread rows and disclaims clustered
+25-point drops; slip×drop and collapse×drop dilution rows
+are in the OC and behave as printed (dilution converts to
+withholding, `below_threshold` 0.0048/0.0001). But: §6's
+50-point rows and all clustered rows are **extraction-only
+executions** printed without a family qualifier, and §7's
+licence quotes "(0.9988/1.0000 for 50 points)" and the
+clustered "detected at 0.45/0.48" unscoped (red team B,
+source audit of the grid — coordinator concurs from the
+same read: the grid contains spread-A 0.25 and no A 0.50 or
+clustered-A world at any size). And the §7 licence, which
+"licenses exactly:", quotes the full-panel powers with **no
+live-N condition**, while §6's own at-N rows put the
+25-point spread power at 0.3155/0.7592 at live N = 16 —
+the acquittal's evidential weight is overstated ≈2.2× at
+K=3 for a reduced-N panel (red team A, executed at N = 16:
+0.3389/0.7669, matching §6's rows).
+
+**4. §5 conditioning and disclosure — split side SETTLED as
+specified; its printed price understates the stated
+assumption's worst case; bundled side NOT SETTLED
+(decisive).** The manufacture sentence is conditioned on the
+named assumption, the assumption is labelled load-bearing
+and record-untestable in §5, §6, and the claim sentence,
+and the claim is scoped to "the live cases of this generated
+panel" — obligation 4's letter, met. But §6 presents one
+construction (latent halves, per-cell q) as "its executed
+sensitivity" / "the sensitivity price", and that
+construction is not the assumption's literal violation.
+Conditioning removal on the **realised** discordance sign —
+exactly what the stated assumption forbids dependence on —
+dominates the printed rows at every matched budget (red team
+A; deterministic floor verified by the coordinator: 12 fw +
+12 pw cases, removing the pw cases with 12 single-cell
+misses, turns base `below` (F = P = 12) into a guaranteed
+fire at D = 12, p = 0.000244). Calibration note: red team
+A's replication figures for the candidate's own construction
+(0.2061/0.6174 at q = 0.3) equal the F/A *means* of the
+printed rows (0.1356/0.2636; 0.6470/0.5950) to Monte Carlo
+noise — their comparison is internally consistent but their
+baseline is the family mean, not a family row; the
+qualitative break stands on the deterministic floor and the
+matched-budget argument, not on their headline margin. The
+placement breakdown that was to distinguish *where* the
+blindness sits is half vacuous (below, defect 5). The
+invisibility disclosure's inc = 0.0 baseline rows themselves
+(0.0406/0.1232; 0.0016/0.0070 at inc 0.5) are executed and
+check out.
+
+**5. §4/F4 completions — NOT complete (two executed gaps;
+amendment-class by precedent, obligations below).**
+- *Arithmetic redraw (red team B, `gen_freeze.py`).* §1: a
+  case-level screen "rejects the later slot's conflicting
+  item", redrawn "at its kind counter + 1". For an arithmetic
+  slot the conflicting item is the sum, drawn from two kinds
+  (`opa`, `opb`); the text never says which operand redraws.
+  Executed: 12 raw S1 collisions in 192 cases (seeds 0–3,
+  both panels); redraw-`opa` vs redraw-`opb` populations
+  differ in 4 of 192 cases. §4's "regenerates the identical
+  population from the seed alone" is false as written, in
+  obligation 5's original defect class.
+- *The 67/72 evidence (red team B; coordinator-verified).*
+  §1 prints that two conforming mappings "disagree on the
+  drawn topic for 67 of 72 case-slots", reproduced in
+  `grammar_check2.py`. The script builds its material
+  *without* the `kind` field (`…|{index}|{slot}|0`). On §1's
+  own frozen material (kind = `topic`) the coordinator
+  computes **72/72**, not 67/72. The qualitative point
+  survives strengthened; the printed figure does not
+  describe the frozen generator, and the shipped script
+  tests a different string than the text freezes.
+- Minor companions (red team B): S2 is vacuous by
+  construction (alphabetic values vs decimal sums — a
+  conflict is impossible by type) and the text presents it
+  as a live screen without disclosing this; no give-up
+  condition is frozen for when redraws end and
+  `multiquestion_screen_failed` fires, while §1's screens
+  header and draws paragraph pull in opposite directions.
+  The researcher adds: the material's `{index}` field is
+  nowhere defined in §1 (the author's own scripts read it as
+  case index within panel, as does the `_derive` citation; a
+  one-line pin removes the ambiguity). The remaining F4
+  completions are done and verified: commitment-verification
+  rejection row frozen and executed both directions
+  (`decide2.py`, coordinator's re-run identical);
+  `render_id_digest` dropped; swap scope frozen to the
+  bundled cell; `_live` cited with all three conjuncts
+  (coordinator-verified at `density.py:788` in the current
+  source, the third vacuous here as argued); §7 aggregation
+  sentence corrected; isolation rows regenerated under the
+  independent-arms null (non-target fire 0.009–0.021, its
+  own null rate); pattern recurrence corrected to four;
+  magnitude-blindness disclosure printed with its executed
+  pair.
+
+### The one-sided deviation — adjudicated, accepted
+
+**Counterexample: verified.** Coordinator's own panel
+through the tree's `density.sign_test_p`: discordant cases
+at (npos, nneg) = (6, 17) with F = 18 > P = 17 carried by
+slot magnitudes fires two-sided at **p = 0.0347**; one
+completion step moving a negative case to zero (F = 18,
+P = 16, D = 22 — every other firing component intact) raises
+it to **p = 0.0525** and extinguishes the fire. The doubled
+smaller tail is not completion-monotone; the two-sided form
+is unsound under the guard, exactly as §6 argues. (The
+verifier and red team A reproduce both p-values; red team
+B confirms them against the tree function. Provenance
+note, verifier: §6 attributes the panel to
+`guard_lemma.py`'s "first run", which is not in the shipped
+directory — the script carries the p-values in a docstring
+only, so the author's original panel is unconfirmable; a
+panel with these totals is arithmetically forced, and the
+lanes' constructed witnesses agree.)
+
+**Upward closure of the one-sided rule: verified
+independently** (coordinator's grid exhaustion and endpoint
+enumeration, §1 above; the author's walk, red team A's
+exhaustive and walk lanes, and red team B's enumeration
+concur — five executions, three methods).
+
+**The printed price: accepted for this tree.** One-sided
+family-wise accounting (coordinator's re-run of
+`familywise2.py` byte-identical; arithmetic independently
+recomputed): random E = 2.95, P(≥1) = 0.95, per-candidate
+0.1174; competent E = 1.43, P = 0.76, per-candidate
+**0.0582**; paired ≈ 0. The previous round recorded
+per-candidate 0.031/0.045/0.053 (two-sided) as inside shipped
+tolerances, citing field-order's ≈1.2 expected false labels
+per run. The one-sided competent figure (0.0582) sits
+marginally above that range's top; the random-null figure
+(0.1174) is ~2.2× it. Against the excess: the price is
+printed in §6 beside the deviation argument and again in
+the family-wise paragraph, which calls the rates "visibly
+worse" and frames the label as comparative evidence at a
+stated base rate, never a verdict on a model; the
+decision-relevant nulls for candidate comparison are the
+competent and paired ones (E = 1.43 is inside the
+field-order envelope; paired is ≈ 0 at the executed
+resolution); and the alternative is not a cheaper test but
+no guard — the two-sided price is unavailable at any
+printing. A falsifier whose false-label base rate is
+printed where its licence lives meets this tree's standard.
+**Not a defect; do not re-litigate in a third restatement.**
+
+### What verified — the settlements that hold
+
+- **Guard lemma and extremal completions** (five executions,
+  above), including per-case corner attainability and the
+  joint cross-family corners.
+- **Guard behaviour vs truth** (red team A): 0 false fires,
+  0 false acquittals against completed truth across
+  manufacture/symmetric/masking cells, parse channels only.
+- **Base-rule counting purity** (carried from the previous
+  round, re-verified in this round's engines): the rule
+  counts `wrong_value` discordance only.
+- **Grammar**: total, disjoint, value-blind by construction;
+  battery (old shapes + the wrong-value shapes) cell-for-cell;
+  120,000-list totality; renderer/parser agreement through
+  the real `density.word_hashes` (coordinator's re-run
+  byte-identical).
+- **Rotation**: every slot 12F/12A at both K; totals 36/60;
+  four recurring K=5 patterns (AAAFF, AAFAF, FFAFA, FFFAA).
+- **Power honesty at the executed rows**: the full §6 table
+  diffs clean against the shipped outputs (red team B);
+  sampled re-executions concur (verifier; red team A;
+  coordinator's nulls). The drop-parameter convention
+  (conditional flip, rev 0.10) is the line's established
+  convention and its direction is conservative for the
+  licence (a true marginal 25-point drop is detected at
+  *higher* power than printed).
+- **Decidability core**: `decide2.py` — every §4 row
+  recomputed from the carried fields; commitment tampering
+  rejected in both directions; deterministic manufacture /
+  masking / no-over-withholding / magnitude panels behave
+  exactly as §6/§7 describe (coordinator's re-run identical).
+- **Counts and budget**: 240 generations per candidate,
+  5,760 legal maximum, 1,152 ground records; candidate cap
+  24 at `experiments.py:4013–4014` (verifier; line moved +1
+  since the previous citation, value unchanged); attrition
+  closed form 24(1−q)^K reproduces 20.6/18.6/17.5/14.2;
+  worst-case correct K=5 reply 54 bytes / 10 words under the
+  64-token cap (longest pool word `umbrella`, 8 chars).
+- **Density citations**: exact at current source (one
+  range start one line early — `_derive` cited 407–414,
+  def at :408; verifier/researcher note, immaterial) —
+  `_derive` `density.py:407–414`, `_draw_word` :417,
+  `normalize_words` :701, `word_hashes` :720,
+  `commitment_digest` :726, `sign_test_p` :770, `_live` :788
+  (coordinator-verified).
+- **Naming**: `--multi-question` is free in the *current*
+  parser — the tree has since shipped `--record-notation`;
+  the only "multi" string is `--multiturn`;
+  `allow_abbrev=False` on the root and all subparsers
+  (coordinator-instantiated). §10's printed census (80)
+  equals the distinct long-option count on the current tree
+  (coordinator: 80 distinct; red team B: 114 occurrences,
+  81 `cli.py` source literals — three methods, three
+  numbers; the candidate's method is unstated and its
+  narrative omits the record-notation ship: a reporting
+  note, defect 9 below, not a naming failure).
+- **Uniqueness** (researcher, primary sources opened): the
+  residue stands — no shipped probe varies the number of
+  independent questions in one turn against asking them
+  separately; Cheng (arXiv:2301.08721) and HELM
+  (arXiv:2211.09110) fencing is accurate at the operative
+  scope (HELM does define multi-question instances inside
+  scenarios; it nowhere runs the packaging-vs-separation
+  contrast the candidate fences). The claim is the
+  combination; no "first" claimed.
+
+### Sustained non-fatal defects (obligations for a restatement)
+
+1. **§7 licence unconditioned on live N** (red team A):
+   quote the at-N powers or condition the licence on the
+   printed live count.
+2. **50-point and clustered rows unscoped** (red team B):
+   scope them to extraction in §6/§7, or execute the
+   arithmetic rows and print both families.
+3. **Attrition price is not the worst case** (red team A):
+   print the realised-sign sensitivity (or a bound) beside
+   the latent construction, for the split side — and, per
+   the decisive defect, for the bundled side.
+4. **False provenance in §5/§6** (red team B;
+   coordinator-verified): the first restatement's header
+   printed **0.0018–0.0063** — the invisibility world at 50%
+   bundled incompletion (`grep -c "0.035"` over its text:
+   0). The 0.035/0.111 figures were the previous
+   adjudication's executed inc = 0.0 baseline, and the
+   recorded direction under incompletion was a fall. §5's
+   retelling ("printed a hard-case world firing at
+   0.035/0.111 with a further rise under bundled
+   incompletion") inverts the record it cites. The new
+   candidate's own rows are unaffected; its settlement
+   narrative is false and must be corrected.
+5. **Placement breakdown half vacuous** (red team B;
+   coordinator-verified from the rotation definition): at
+   both K, 0 of 24 patterns are "balanced" (K is odd) and
+   24 of 24 contain at least one slot of each family, so
+   the per-family counts are identically
+   `n_bundled_incomplete` on every panel — they distinguish
+   nothing. Only the majority leg carries information.
+   Specify a breakdown that does the job (per-pattern, or
+   majority-only honestly labelled).
+6. **`id_length_delta` aggregation unfrozen** (red team B):
+   §4's row admits per-j deltas; `decide2.py` implements
+   per-case bundled − Σ_j split; §7 readout 4 prints a
+   per-candidate quantity whose aggregation (sum? list?
+   cf. `historyframe.py`'s by-case list under the same
+   name) is nowhere stated. Pin the function.
+7. **Readout 3's denominator unfrozen** (red team B): a
+   cell with `boundary_found` false has no delimited span,
+   so its parser class is undefined by §4's table, and the
+   text never says whether readout 3 counts incomplete
+   cells or non-live cases' cells. Freeze the population
+   of the readout.
+8. **D_MIN/D_MAX gloss** (red team B; coordinator-verified
+   arithmetically): the names invite an extremal reading
+   the quantities do not bear — 6 cases of (fw=0, pw=0,
+   α=1) give D at the MIN completion = 6 and at the MAX
+   completion = 0. They are D evaluated at the two
+   completions; rename or gloss precisely. (The verdict
+   logic depending on D_MAX is sound.)
+9. **§10 census method unstated; §8 header overclaims**
+   (red team B; researcher; coordinator): state the census
+   method and refresh the narrative for shipped flags;
+   `sequence_broken`/`segment_malformed` occur nowhere in
+   the tree — they are new stage-local coinages, so §8's
+   "(frozen; tree words only; unchanged)" is false as a
+   provenance claim (no harmful collision; the decision and
+   detail words are tree words).
+
+### Fabrication sweep
+
+**Candidate text: two hits, both in the candidate's own
+evidence narrative — the previous round's pattern.** (i)
+The 67/72 mapping-divergence figure was computed on a
+material string the frozen text does not use (frozen
+string: 72/72; coordinator-executed both). (ii) The §5/§6
+provenance retelling of the first restatement's hard-case
+numbers is false and direction-inverted
+(coordinator-verified by direct read). Every other printed
+number the coordinator or a lane re-derived matched:
+the full §6 OC table (line-by-line diff, red team B;
+sampled re-execution, verifier + red team A + coordinator),
+the family-wise conversions (exact), the grammar battery
+and counts (byte-identical re-runs), the counterexample
+p-values (three lanes), the attrition closed form, the
+54-byte bound. No invented symbol or citation in the
+candidate: density citations spot-verified at source by
+three lanes; Cheng/HELM resolved by the researcher against
+primary sources.
+
+**Specialists: two briefs carry errors, recorded.** The
+researcher's brief asserts `docs/USAGE.md` does not exist
+(it does — coordinator-verified by direct listing; the
+probe list lives there and in `docs/reference/cli.md`) and
+raises a multiturn-budget staleness claim (5,184 vs a
+"computed 10,272") that the coordinator could not
+substantiate against the source (`multiturn.py:117` =
+5184, agreeing with the docs) — immaterial to the candidate,
+which cites neither, but the brief's two FAILS verdicts
+resting on the USAGE premise collapse. Red team A's
+attrition-replication figures are family means mislabelled
+as a replication of the printed rows (calibration note in
+obligation 4 above); its two breaks stand on their own
+executions. Red team A also corrected its own lemma-lane
+counts after delivery — its first figures came from
+phantom background-delivery texts; the re-run totals read
+from on-disk logs (≈214M completions, 0 violations) are
+the ones cited in obligation 1, and its corrected
+one-sided control (0.9947) agrees with the coordinator's
+own computation. The verifier's first `oc_guard.py` attempt ran
+under the system Python 3.14 (a dataclass-evaluation crash)
+and was re-executed under the tree venv, self-reported in
+its brief; its venv numbers are the ones relied on. No
+fabricated citation, symbol, or tree fact with load-bearing
+weight in any brief.
+
+### Restated candidate — must settle in its own text
+
+1. **The incompletion channel, both arms, both directions.**
+   Either (a) one named assumption covering *any* generation
+   incompletion — split-cell or bundled-cell — whose
+   occurrence correlates with a case's would-be discordance
+   sign, attached to the claim sentence and to the
+   `below_threshold` licence, with executed worst-case
+   (realised-sign) sensitivity prices for both arms and both
+   directions (manufacture and acquittal); or (b) a
+   construction that brings bundled-incomplete cases inside
+   a decision perimeter (guard-ranged, population-excluded,
+   or verdict-capped by their count) with its operating
+   characteristics re-derived. The §5/§6 direction sentences
+   must be replaced by the executed truth in either path.
+2. **The licence conditions**: `below_threshold` conditioned
+   on live N and on bundled-incompletion exposure; the
+   50-point and clustered rows scoped to the families
+   actually executed (or executed for both).
+3. **The freeze, completed and demonstrated**: the
+   arithmetic redraw operand pinned; a redraw give-up
+   condition frozen; `{index}` defined; S2's vacuity
+   disclosed; the mapping-divergence evidence recomputed on
+   the frozen material string (72/72) with the script fixed.
+   A restatement should demonstrate the freeze the way the
+   previous round's B-3 test did — two independent
+   implementations of §1 generating identical populations —
+   not assert it.
+4. **The reporting repairs**: placement breakdown that
+   distinguishes (defect 5); `id_length_delta` aggregation
+   pinned (6); readout-3 denominator frozen (7); D_MIN/
+   D_MAX renamed or glossed (8); §5/§6 provenance corrected
+   (4); §10 census method stated (9); §8 header's provenance
+   claim corrected (9).
+
+**Parked, not closed** — behind the DeepSource remediation
+in queue order; not a build order. Caution for the next
+round, stated once: this is the line's third NO-BUILD, and
+each round's decisive defect was a channel adjacent to the
+previous settlement (counting purity → eligibility → the
+guard's perimeter). The verified core (guard, one-sided
+test, Q-markers) is not in question. But a third restatement
+that settles obligation 1 by assumption alone — a second
+untestable independence clause carrying the headline claim —
+should expect the review to weigh whether the instrument's
+claim is now conditioned on more of the world than it
+measures; the by-construction path (1b), or a candid
+re-scoping of the utility to what survives both channels,
+is the stronger submission.
+
+### Standing questions
+
+- **Monday-morning utility (one sentence, as scoped):** a
+  form-filling front-end operator deciding, per template
+  candidate and per question family, whether to bundle three
+  or five short questions into one user message — as a
+  per-family large-drop falsifier whose *parse*-channel
+  soundness is now proven, and whose licence still
+  overclaims wherever generation incompletion, rather than
+  parse failure, is the channel that correlates with value.
+  The user and the decision are real.
+- **Uniqueness:** verified (above). The residue is real:
+  the completion guard itself — a verdict that must hold
+  under the extremal completions of its hidden evidence —
+  is a genuinely new mechanism in this tree, and it works.
+- **Duplication:** none; the stage reuses density's frozen
+  topics/words/primitives by citation, the tree's own reuse
+  discipline.
+
+### Build cost (if a future review returns BUILD)
+
+Generations 5,760 legal maximum (frozen, correct).
+Implementation estimated ~2,500–3,500 lines including tests
+by sibling-probe analogy — an estimate for sequencing only,
+labelled UNEXECUTED.
+
+### Coordinator's execution log (own work, this directory)
+
+- Parser census (venv, `cli.build_parser()` instantiated):
+  80 distinct long option strings incl. `--help`;
+  `--multi-question` absent; `--record-notation`,
+  `--history-frame`, `--prune-sweep` present; only
+  "multi" string `--multiturn`; `allow_abbrev=False` on
+  root and all 11 subparsers.
+- Counterexample: own panel (6×(3,0) + 17×(0,1)) through
+  tree `density.sign_test_p` → fires at 0.0347; after one
+  neg→zero step → 0.0525, no fire; F > P and D ≥ 6
+  throughout. One-sided p1(6,17) = 0.9947.
+- Lemma grids: p1 non-increasing under all three step kinds,
+  full 0..60 × 0..60 grid, 0 violations; no (npos ≤ 5,
+  D ≥ 6) firing panel for D ≤ 200, 0 violations.
+- Endpoint enumeration (`coord_lemma2.py`): 1,405 panels
+  (24 MIN-firing), 8,804,693 completions — claims A/B held
+  on every completion; per-case df extrema = MIN/MAX
+  corners in every panel. (v1's generator skipped
+  3,999/4,000 panels for >16 hidden slots and tested 1;
+  superseded by v2, recorded here rather than hidden.)
+- Script re-runs (venv): `decide2.py`, `familywise2.py`,
+  `grammar_check2.py` — all exit 0, outputs byte-identical
+  to the author's. Family-wise arithmetic recomputed
+  independently: E and per-candidate figures exact.
+- Independent engine (`coord_engine.py`, written from the
+  candidate text; 20,000 trials unless noted): competent
+  null 0.0093/0.0101 (K=3), 0.0193/0.0196 (K=5) vs printed
+  0.0112/0.0092, 0.0184/0.0207 — agreement; masking
+  (drop 0.50, hide_bund r = 1.0) fire 0.0000 at K=3
+  (5,000 trials).
+- Decisive attack (`coord_engine.py`, 10,000 trials):
+  mirror population, bundled incompletion at rate 1.0 on
+  the pw-prone half → guarded fire 0.5405/0.7198 (K=3),
+  0.9230/0.9047 (K=5), mean live 24.0, mean
+  bundled-incomplete 12.00. Trait control (identical
+  population, incompletion rate 0.0): 0.0018/0.0124 (K=3),
+  0.0018/0.0016 (K=5) — the null at both K. Flat-incompletion control (0.15, homogeneous
+  competent population): 0.0077/0.0061 (K=3), 0.0130/0.0152
+  (K=5) — the null rates.
+- Discrepancy recorded, not counted: the coordinator's own
+  masking row (drop 0.50, hide_bund r = 1.0, 5,000 trials)
+  produced fire 0.0000 at both K but `below_threshold` at
+  0.0002 (F) / 0.0042 (A) at K=3 (0.0000 / 0.0000 at K=5),
+  where the author's rows (20,000 trials) print 0.0000 and
+  red team A's guard-vs-truth found 0 acquittals in masking
+  cells. The two verified engines
+  agree with each other and with the proven lemma; the
+  deviation localizes to the coordinator's corner/masking
+  construction and is recorded here rather than charged to
+  the candidate. The masking property relied on in
+  obligation 1 is the one those engines carry.
+- Identity check: absent (0,0) rows ≡ removed rows for the
+  decision, 3,000/3,000 random panels.
+- Fabrication checks: mapping divergence 67/72 on the
+  author's script string vs **72/72** on §1's frozen string
+  (own computation); `grep -c "0.035"` over the first
+  restatement = 0, its header prints 0.0018–0.0063 (line 29);
+  p1(18, 6) = 0.0113; p1(12, 0) = 0.000244; density
+  citations verified at `density.py` :408/:417/:701/:720/
+  :726/:770/:788; `arm_context_exceeded` /
+  `arm_evaluation_failed` confirmed as tree vocabulary;
+  `sequence_broken` / `segment_malformed` confirmed absent
+  from the tree.
+- Load note: all coordinator batches ran single-threaded
+  at nice 10–15 alongside cycle 221's gate (PID 1844);
+  no repo test suites were run and the tree was not
+  modified. No simulation result used above showed
+  contention sensitivity (all decisive rows are large-margin
+  or exact).

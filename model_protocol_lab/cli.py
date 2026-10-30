@@ -921,6 +921,65 @@ def build_parser() -> argparse.ArgumentParser:
         "touches selection. The stage never fails the run.",
     )
     run.add_argument(
+        "--invisible-chars",
+        action="store_true",
+        help="Invisible-character insertion probe (cycle 223, "
+        "research wave-12 rank 1): this probe inserts one frozen "
+        "invisible code point at two frozen sites in a generated "
+        "fact sentence and classifies, per candidate and per arm, "
+        "whether the insertion moved the model's answers to wrong "
+        "values. Each of the 24 generated cases is one fact-recall "
+        "item (a frozen topic, a word-number inspection code from a "
+        "frozen 24-word pool over a 216,000 code space, values "
+        "distinct across the panel by a frozen SHA-256 derivation "
+        "whose digest-to-integer conversion is pinned) carried by "
+        "two neutral sentences and a question; the expected value "
+        "is pure ASCII under the byte-exact scorer. Arms per "
+        "candidate: the verbatim control; five invisible arms "
+        "(U+200B, U+FE0F, U+E0001, U+00AD, U+2060 -- a frozen list, "
+        "each member Default-Ignorable with no combining behaviour "
+        "in Unicode 15.0.0; the list, not a property sweep, is the "
+        "definition) inserting at both sites in the fact sentence "
+        "only; and a matched visible-insertion control (U+002D at "
+        "the same sites), so an invisible arm counts as evidence "
+        "about invisibility only against the visible arm's "
+        "behaviour. Every completed cell decomposes in a frozen "
+        "order (pass, boundary-only, wrong-value, echo, form-only, "
+        "non-answer); only wrong-value -- a value inside the "
+        "frozen grammar -- counts toward the headline, and "
+        "out-of-grammar value changes print as non-answer. "
+        "Token-ID divergence is the regime gate: the headline "
+        "population is cases completed in both arms and "
+        "id-divergent, so ids-identical arms read as "
+        "instrument-inapplicable for that family (a normalizing "
+        "tokenizer folding the code points), never as passes. "
+        "Headline per candidate and arm: D = control passes in "
+        "the population, J = wrong-value discordants among them; "
+        "D below 10 is insufficient; J of at least 6 is "
+        "discordant_asymmetric, the only falsification label; "
+        "J of 0 is no_discordance_observed and anything between "
+        "is below_threshold, both issued only when stable under "
+        "the worst-case completion of the pair's incomplete "
+        "id-divergent cases (incompletion can manufacture "
+        "neither a fire nor an acquittal), and every label is "
+        "withheld when incomplete cases exceed 6. Exact "
+        "operating characteristics print beside the decision: "
+        "the competent panel fires 0.0173 under independence and "
+        "0.0044 under the paired copula, the family-wise "
+        "expectation is 2.07 false labels over the 120 invisible "
+        "comparisons, and power at the 25-point target effect is "
+        "0.8159 -- so below_threshold is weak evidence, never "
+        "invariance (a 10-point drop fires only 0.2542 of the "
+        "time). No winner readout and no pooling across arms or "
+        "candidates. Monday morning: 'do invisible code points "
+        "in the web and retrieval text we pipe into this "
+        "checkpoint change its answers at all -- and is a "
+        "pre-ingest sanitizer worth adding?' Costs 7 generations "
+        "per candidate per case (4,032 at the legal maximum: 24 "
+        "candidates x 24 cases x 7). Informational only; never "
+        "touches selection. The stage never fails the run.",
+    )
+    run.add_argument(
         "--rotate",
         action="store_true",
         help="Context rotation probe (cycle 203, research wave-9 "
@@ -2489,6 +2548,49 @@ def _run_record_notation_probe(
         result["record_notation"] = {
             "available": False,
             "detail": "record_notation_unavailable",
+        }
+
+
+def _run_invisible_chars_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the invisible-chars probe; never raises.
+
+    The probe is self-contained: its cases are generated from
+    the run seed, so it consults neither the recorded search
+    nor the primary decision, and a failed user run cannot
+    silently suppress it. The run's cancel event is threaded
+    dispatch -> wrapper -> stage -> evaluate, so SIGINT/
+    SIGTERM stop the stage cooperatively.
+    """
+    try:
+        from .experiments import invisible_chars_analysis, invisible_chars_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = invisible_chars_stage(
+            backend,
+            formats,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["invisible_chars"] = invisible_chars_analysis(stage, names)
+    except Exception:  # noqa: BLE001 -- invisible-chars must not fail the run
+        result["invisible_chars"] = {
+            "available": False,
+            "detail": "invisible_chars_unavailable",
         }
 
 
@@ -4568,6 +4670,29 @@ def main(argv: list[str] | None = None) -> int:
                 # Never fails the run.
                 if args.record_notation:
                     _run_record_notation_probe(
+                        backend,
+                        formats,
+                        result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Invisible-character insertion probe (cycle
+                # 223, research wave-12 rank 1): generated
+                # 24-case fact-recall panel with one frozen
+                # invisible code point (or the matched visible
+                # hyphen) inserted at two frozen sites in the
+                # fact sentence per arm, classified per
+                # candidate and arm over the id-divergent
+                # paired population under the completion
+                # guard, the run's cancel event threaded into
+                # the stage loop. Informational only -- never
+                # changes selection. Never fails the run.
+                if args.invisible_chars:
+                    _run_invisible_chars_probe(
                         backend,
                         formats,
                         result,
