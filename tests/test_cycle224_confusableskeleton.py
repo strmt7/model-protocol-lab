@@ -354,7 +354,11 @@ class TestGeneratorFreeze(unittest.TestCase):
         conjunction holds."""
         audit = cs.POPULATION_AUDIT
         self.assertTrue(audit["ok"])
-        self.assertEqual(audit["unicode_version"], "15.0.0")
+        # The audit records the RUNTIME's Unicode version (the
+        # derivation-time data pin is CONFUSABLES_VERSION, asserted
+        # in test_data_pin_not_host_pin); it must agree with the
+        # interpreter actually running, on every CI leg.
+        self.assertEqual(audit["unicode_version"], unicodedata.unidata_version)
         for code_point, entry in audit["controls"].items():
             self.assertTrue(entry["satisfies"], code_point)
             self.assertTrue(entry["skeleton_distinct"], code_point)
