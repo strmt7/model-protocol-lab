@@ -257,5 +257,204 @@ class AgentContextTests(unittest.TestCase):
                     self.assertIsInstance(json.loads(output.getvalue()), dict)
 
 
+class AgentContextJsonTests(unittest.TestCase):
+    """Bounded JSON report contracts, adapted from FlitzZip's json-op tests (MIT)."""
+
+    def setUp(self):
+        """Purpose: Isolate state
+        Inputs: temporary filesystem
+        Outputs: owned checkout for JSON evidence files.
+        """
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+
+    def invoke(self, argv):
+        """Purpose: Exercise the real CLI interface
+        Inputs: CLI arguments
+        Outputs: exit code and decoded JSON response.
+        """
+        with (
+            patch.object(context, "ROOT", self.root),
+            contextlib.redirect_stdout(io.StringIO()) as output,
+        ):
+            code = context.main(argv)
+        return code, json.loads(output.getvalue())
+
+    def test_json_report_pages_recover_every_finding_without_printing_embedded_logs(self):
+        """Purpose: Preserve complete navigation with bounded context.
+        Inputs: Report with many findings and large logs.
+        Outputs: Every exact pointer, explicit omitted payloads.
+        """
+        report = {
+            "status": "failed",
+            "findings": [{"id": index, "message": "must not disappear"} for index in range(53)],
+            "log": "retained diagnostic\n" * 10000,
+        }
+        path = self.root / "report.json"
+        original = json.dumps(report).encode()
+        path.write_bytes(original)
+        code, root = self.invoke(["json", "report.json"])
+        self.assertEqual(code, 0)
+        self.assertEqual(root["items"][0]["value"], "failed")
+        self.assertFalse(root["items"][1]["expanded"])
+        self.assertFalse(root["items"][2]["expanded"])
+        self.assertNotIn("retained diagnostic", json.dumps(root))
+        self.assertEqual(root["acceptance"], "not_established_by_context_tool")
+        seen, offset = [], 0
+        while offset is not None:
+            code, page = self.invoke(
+                [
+                    "json",
+                    "report.json",
+                    "--pointer",
+                    "/findings",
+                    "--offset",
+                    str(offset),
+                    "--max-chars",
+                    "800",
+                ]
+            )
+            self.assertEqual(code, 0)
+            self.assertLessEqual(len(context.compact_json(page)), 800)
+            seen.extend(entry["pointer"] for entry in page["items"])
+            offset = page["next_offset"]
+        self.assertEqual(seen, [f"/findings/{index}" for index in range(53)])
+        code, selected = self.invoke(["json", "report.json", "--pointer", "/findings/52/id"])
+        self.assertEqual((code, selected["value"]), (0, 52))
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_json_pointer_preserves_escaped_keys_empty_keys_and_scalar_types(self):
+        """Purpose: Prevent selecting the wrong evidence.
+        Inputs: RFC 6901 edge cases.
+        Outputs: Exact values.
+        """
+        value = {"a/b": {"~key": [False, None, 123]}, "": {"01": "object key"}}
+        (self.root / "report.json").write_text(json.dumps(value), encoding="utf-8")
+        for pointer, expected in (
+            ("/a~1b/~0key/0", False),
+            ("/a~1b/~0key/1", None),
+            ("/a~1b/~0key/2", 123),
+            ("//01", "object key"),
+        ):
+            with self.subTest(pointer=pointer):
+                code, result = self.invoke(["json", "report.json", "--pointer", pointer])
+                self.assertEqual(code, 0)
+                self.assertEqual(result["value"], expected)
+                self.assertEqual(type(result["value"]), type(expected))
+        (self.root / "report.json").write_text('{"value":1.5}', encoding="utf-8")
+        self.assertEqual(
+            self.invoke(["json", "report.json", "--pointer", "/value"])[1]["value"], 1.5
+        )
+        for pointer in (
+            "a/b",
+            "/a~2b",
+            "/missing",
+            "/value/nested",
+            "/a~1b/~0key/01",
+            "/a~1b/~0key/-",
+            "/a~1b/~0key/8",
+        ):
+            with self.subTest(pointer=pointer):
+                self.assertEqual(self.invoke(["json", "report.json", "--pointer", pointer])[0], 2)
+
+    def test_json_budget_counts_serialized_unicode_and_does_not_mislabel_omissions(self):
+        """Purpose: Bound actual emitted text.
+        Inputs: Escaped Unicode and oversized scalars.
+        Outputs: Honest extent.
+        """
+        for value in ("λ" * 5000, {"λ" * 500: "value"}):
+            (self.root / "report.json").write_text(json.dumps(value), encoding="utf-8")
+            code, result = self.invoke(["json", "report.json", "--max-chars", "512"])
+            if isinstance(value, str):
+                self.assertEqual(code, 0)
+                self.assertFalse(result["expanded"])
+                self.assertNotIn("value", result)
+                self.assertEqual(result["characters"], len(value))
+            else:
+                self.assertEqual(code, 2)
+                self.assertIn("cannot fit", result["error"])
+            self.assertLessEqual(len(context.compact_json(result)), 512)
+        key = "k" * 500
+        (self.root / "report.json").write_text(json.dumps({key: 1}), encoding="utf-8")
+        self.assertEqual(
+            self.invoke(["json", "report.json", "--pointer", "/" + key, "--max-chars", "512"])[0], 2
+        )
+
+    def test_json_projection_preserves_failures_and_refuses_missing_fields(self):
+        """Purpose: Inspect many results without repeated reads.
+        Inputs: Real mixed outcomes.
+        Outputs: Exact fields.
+        """
+        rows = [
+            {"id": "one", "passed": False, "log": "large" * 10000},
+            {"id": "two", "passed": True},
+        ]
+        (self.root / "report.json").write_text(json.dumps(rows), encoding="utf-8")
+        code, result = self.invoke(["json", "report.json", "--field", "id", "--field", "passed"])
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            [[field["value"] for field in item["fields"]] for item in result["items"]],
+            [["one", False], ["two", True]],
+        )
+        self.assertTrue(all(not item["expanded"] for item in result["items"]))
+        self.assertNotIn("large", json.dumps(result))
+        for args in (
+            ["--field", "missing"],
+            ["--field", "id", "--field", "id"],
+            ["--pointer", "/0", "--field", "id"],
+        ):
+            self.assertEqual(self.invoke(["json", "report.json", *args])[0], 2)
+        (self.root / "report.json").write_text("[1,2]", encoding="utf-8")
+        self.assertEqual(self.invoke(["json", "report.json", "--field", "id"])[0], 2)
+
+    def test_json_rejects_ambiguous_nonfinite_deep_or_oversized_evidence(self):
+        """Purpose: Refuse unbounded evidence.
+        Inputs: Invalid JSON families.
+        Outputs: Explicit failures.
+        """
+        path = self.root / "report.json"
+        for text in (
+            '{"status":"failed","status":"passed"}',
+            '{"other":NaN}',
+            '{"other":Infinity}',
+            '{"other":1e999}',
+            "[" * 2000,
+        ):
+            path.write_text(text, encoding="utf-8")
+            with self.subTest(text=text[:80]):
+                self.assertEqual(self.invoke(["json", "report.json"])[0], 2)
+        path.write_bytes(b'"' + b"x" * 1024 + b'"')
+        with patch.object(context, "MAX_REPORT_BYTES", 1024):
+            self.assertEqual(self.invoke(["json", "report.json"])[0], 2)
+        for argv in (
+            ["json", "../outside.json"],
+            ["json", "report.json", "--offset", "-1"],
+            ["json", "report.json", "--limit", "0"],
+            ["json", "report.json", "--max-chars", "32001"],
+            ["json", "report.json", "--offset", "1"],
+        ):
+            with self.subTest(argv=argv):
+                self.assertEqual(self.invoke(argv)[0], 2)
+
+    def test_empty_json_containers_and_final_pages_are_distinct_from_missing_evidence(self):
+        """Purpose: Preserve empty results.
+        Inputs: Containers and invalid offsets.
+        Outputs: Exact status.
+        """
+        path = self.root / "report.json"
+        for value in ({}, []):
+            path.write_text(json.dumps(value), encoding="utf-8")
+            code, result = self.invoke(["json", "report.json"])
+            self.assertEqual(code, 0)
+            self.assertEqual(result["items"], [])
+            self.assertIsNone(result["next_offset"])
+            self.assertEqual(self.invoke(["json", "report.json", "--offset", "1"])[0], 2)
+        path.write_text("[1,2]", encoding="utf-8")
+        self.assertEqual(self.invoke(["json", "report.json", "--offset", "2"])[0], 0)
+        path.unlink()
+        self.assertEqual(self.invoke(["json", "report.json"])[0], 2)
+
+
 if __name__ == "__main__":
     unittest.main()

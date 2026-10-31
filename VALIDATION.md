@@ -13,7 +13,7 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9049 tests collected**
+- `python -m pytest -q -p no:cacheprovider` — **9055 tests collected**
   (cycle 225, 2026-10-30). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,

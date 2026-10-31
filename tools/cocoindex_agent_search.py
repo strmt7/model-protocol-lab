@@ -32,7 +32,7 @@ _GIT = shutil.which("git")
 if _GIT is None:
     raise RuntimeError("git executable not found on PATH")
 _GIT_BIN: str = _GIT
-VERSION = "0.2.41"
+VERSION = "0.2.42"
 MODEL = "Snowflake/snowflake-arctic-embed-xs"
 INDEX_SUFFIXES = (
     ".py",
@@ -90,10 +90,10 @@ def paths(base: Path, repo: Path = ROOT) -> tuple[Path, Path, Path, Path]:
     """
     digest = hashlib.sha256(str(repo.resolve()).encode("utf-8")).hexdigest()[:16]
     return (
-        base / "venv",
+        base / f"venv-{VERSION}",
         base / "mirrors" / digest,
         base / "config" / digest,
-        base / "runtime" / digest,
+        base / "runtime" / VERSION / digest,
     )
 
 
@@ -355,7 +355,7 @@ def search(base: Path, query: str, limit: int, repo: Path = ROOT, path: str | No
     """
     if path and any(mark in path for mark in "*?["):
         raise ValueError(
-            "wildcard path filters are unreliable in CocoIndex Code 0.2.41; "
+            "wildcard path filters are unreliable in CocoIndex Code 0.2.42; "
             "search broadly, then validate files with rg"
         )
     venv, mirror, config, runtime = paths(base, repo)

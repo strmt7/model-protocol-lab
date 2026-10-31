@@ -208,11 +208,15 @@ class TestCommunityFiles(unittest.TestCase):
 class TestReadmeSurface(unittest.TestCase):
     """README surface: badges, contents and links match the shipped state."""
 
-    def test_dev_tool_badges_dropped_and_scorecard_added(self):
-        """Dev-tool badges are dropped from the README and the Scorecard badge is present."""
+    def test_dev_tool_badges_present_and_scorecard_kept(self):
+        """Dev-tool badges match FlitzZip; 2026-10-30 order reverses the cycle-210 drop."""
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-        for badge in ("[![cocoindex-code]", "[![caveman]", "[![crawl4ai]"):
-            self.assertNotIn(badge, readme)
+        for badge in (
+            "[![cocoindex-code](https://img.shields.io/static/v1?label=&message=cocoindex-code&color=555&logo=github&logoColor=white)](https://github.com/cocoindex-io/cocoindex-code)",
+            "[![caveman](https://img.shields.io/static/v1?label=&message=caveman&color=555&logo=github&logoColor=white)](https://github.com/JuliusBrussee/caveman)",
+            "[![crawl4ai](https://img.shields.io/static/v1?label=&message=crawl4ai&color=555&logo=github&logoColor=white)](https://github.com/unclecode/crawl4ai)",
+        ):
+            self.assertIn(badge, readme)
         self.assertIn("api.securityscorecards.dev", readme)
         # The Codecov badge pin survives: still directly after CI.
         self.assertLess(readme.index("[![CI]"), readme.index("[![Codecov]"))

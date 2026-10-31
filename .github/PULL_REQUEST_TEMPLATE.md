@@ -4,10 +4,17 @@
 
 ## Verification
 
-- [ ] `python -m unittest discover -s tests -t .` passes
+- [ ] `coverage run -m unittest discover -s tests -t .` passes (the exact CI command)
 - [ ] `ruff check` and `ruff format --check` pass on `model_protocol_lab tests examples`
 - [ ] `mypy model_protocol_lab` passes
+- [ ] `bandit -r model_protocol_lab -q` is clean
 - [ ] New behavior has a regression test (or explains why not)
+
+## Documentation
+
+- [ ] `docs/USAGE.md` updated for any CLI or output-contract change
+- [ ] README Capabilities names any new `run` probe flag
+- [ ] `CHANGELOG.md` entry added under Unreleased (per-cycle heading form)
 - [ ] `VALIDATION.md` updated if the change moves anything across the evidence boundary
 
 ## Checklist

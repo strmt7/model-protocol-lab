@@ -36,6 +36,30 @@ the mandates above.
   commits). A missing credential is NOT-CONFIGURED, never zero
   findings.
 
+## Commands (run from the repository root)
+
+Setup and the verification gate — the same commands CI enforces
+(`CONTRIBUTING.md` carries the contributor-facing version):
+
+```sh
+python -m pip install -e ".[dev,hf]"     # dev toolchain + HF adapter stack
+tools/agent_context.py startup           # mandatory skills gate (fail-closed)
+ruff check model_protocol_lab tests examples
+ruff format --check model_protocol_lab tests examples
+mypy model_protocol_lab                  # strict; CI also runs mypy --strict
+bandit -r model_protocol_lab -q          # latest bandit, exit 0 required
+coverage run -m unittest discover -s tests -t .   # the exact CI test command
+coverage report                          # gate: 95% line coverage
+python -m pytest -q                      # same suite, for iteration only
+```
+
+Before any push: linters first, the full suite last, and no source
+edits while a full-suite run is in flight (mutation gates rewrite
+sources in place; two suites never run concurrently). Verdicts are
+read from the gate's own log files, never from a completion notice.
+After any interrupted run, audit for orphaned mutants before trusting
+the tree (see the workspace lessons file).
+
 ## Product direction (standing owner directive, 2026-10-19)
 
 - Sharp direction, real utility, verified uniqueness. Every piece of

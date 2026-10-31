@@ -12,7 +12,7 @@ Apply this skill in every task. Lower token usage is mandatory, not opt-in; use 
 
 - Keep `AGENTS.md` as the primary contract; use its reading map to load only relevant guidance. Do not load the entire skill catalog.
 - Reduce unnecessary input/context first and apply this skill second. This repo-local overlay does not require an upstream plugin or third-party runtime.
-- Use `tools/agent_context.py startup` once per new context to deliver the current mandatory skill instructions. Use its `outline` and bounded `read` operations for long documents; keep partial/unread ranges explicit. A read-cache session belongs to one retained model context: start a new session after compaction or use `--force`.
+- Use `tools/agent_context.py startup` once per new context to deliver the current mandatory skill instructions. Use its bounded `outline`, `read` and `json` operations for long documents; keep partial/unread ranges explicit. A read-cache session belongs to one retained model context: start a new session after compaction or use `--force`.
 - `caveman` is for internal AI reply/prompting only. Never use caveman prose in persisted text for other people: docs, comments, docstrings, commits, issues, pull requests, defect reports, messages, and user-facing copy always use normal prose. It changes response style only and must not change context selection, tool choice, verification scope, or clarification decisions.
 - This repo does not import upstream hooks, plugin auto-loading, `.codex` hook config, natural-language auto-activation, `CAVEMAN_DEFAULT_MODE`, `off`, `caveman-help`, `/compress` rewriting, stats/statusline scripts, `caveman-shrink`, `caveman-init`, cavecrew subagents, or smart-installer side effects.
 

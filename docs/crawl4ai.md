@@ -3,9 +3,9 @@
 Model Protocol Lab uses [Crawl4AI](https://github.com/unclecode/crawl4ai) as a local
 development tool for reading and crawling web pages. It is separate from the
 lab's measurement runtime and requires no cloud account, API key, paid service or
-public server. The [latest stable release reviewed on 19 October 2026](https://github.com/unclecode/crawl4ai/releases/tag/v0.9.4)
-is 0.9.4. Its base package is pinned in [the installation lock](https://github.com/strmt7/model-protocol-lab/blob/main/tools/requirements/crawl4ai.txt).
-The installed crawler is the explicitly identified upstream `0.9.4` release.
+public server. The [latest stable release reviewed on 30 October 2026](https://github.com/unclecode/crawl4ai/releases/tag/v0.9.5)
+is 0.9.5. Its base package is pinned in [the installation lock](https://github.com/strmt7/model-protocol-lab/blob/main/tools/requirements/crawl4ai.txt).
+The installed crawler is the explicitly identified upstream `0.9.5` release.
 
 Normal research invokes Crawl4AI's own `crawl` command through the portable
 launcher, forwarding its documented options without an alternative URL parser or
@@ -100,8 +100,8 @@ repeatedly crawl the entire manifest.
 
 ## License And Attribution
 
-The [exact upstream license](https://github.com/unclecode/crawl4ai/blob/v0.9.4/LICENSE)
-is Apache 2.0. Installed dependencies and Chromium retain their own upstream
+The [exact upstream license](https://github.com/unclecode/crawl4ai/blob/v0.9.5/LICENSE)
+is Apache 2.0; a copy is kept in `docs/licenses/Crawl4AI-0.9.5.txt`. Installed dependencies and Chromium retain their own upstream
 notices. The repository only installs these tools; it does not redistribute
 their binaries in lab releases.
 

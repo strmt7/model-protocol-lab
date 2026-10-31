@@ -79,6 +79,14 @@ RUN_PROBE_FLAGS = [
     "--sensitivity-sweep",
     "--max-drop-bytes",
     "--logprob-diagnostic",
+    "--canonical-form",
+    "--negation",
+    "--instruction-distance",
+    "--history-frame",
+    "--prune-sweep",
+    "--record-notation",
+    "--invisible-chars",
+    "--confusable-skeleton",
 ]
 
 
