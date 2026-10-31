@@ -4,7 +4,7 @@
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
-the project's `.venv` (torch 2.14.1+cpu, transformers 5.19.0, hypothesis
+the project's `.venv` (torch 2.15.0+cpu, transformers 5.22.1, hypothesis
 installed; the `[dev]` extra now includes `pytest>=8.0`).
 
 Platform: CI tests Linux x86-64 for the full suite; a cross-OS smoke
@@ -138,7 +138,7 @@ doctor's resource fallbacks degrade there.
   severity/confidence (the targeted `# nosec B105` suppressions on
   report-schema fields carry justifications).
 - `pip-audit` — no known vulnerabilities in auditable dependencies;
-  `torch 2.14.1+cpu` keeps its local version tag (invisible to the OSV DB —
+  `torch 2.15.0+cpu` keeps its local version tag (invisible to the OSV DB —
   the accepted residual, unchanged).
 - Red-team: 3 findings fixed with regression tests (quadratic hang in
   vLLM holdback emulation → split input caps; unbounded stop texts →

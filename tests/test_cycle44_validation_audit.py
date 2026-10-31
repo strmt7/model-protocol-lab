@@ -146,13 +146,13 @@ class ValidationEnvironmentTests(unittest.TestCase):
         self.assertIn(version, spec, f"Python {version} not in {match.group(1)}")
 
     def test_torch_version(self):
-        # Doc: "torch 2.14.1+cpu" (the validated build). CI installs the
+        # Doc: "torch 2.15.0" (the validated build). CI installs the
         # CUDA wheel, so compare only the base version, not the local
         # build tag.
         """Torch version."""
         import torch
 
-        self.assertEqual(torch.__version__.split("+")[0], "2.14.1")
+        self.assertEqual(torch.__version__.split("+")[0], "2.15.0")
 
     def test_transformers_version(self):
         # Doc: "transformers 5.19.0" (the validated version). CI may resolve
@@ -417,11 +417,11 @@ class ValidationConfigFileTests(unittest.TestCase):
         self.assertLess(readme.index(ci_badge), readme.index(badge))
 
     def test_pre_commit_ruff_rev(self):
-        # Doc: "pre-commit YAML (ruff-pre-commit v0.17.1)".
+        # Doc: "pre-commit YAML (ruff-pre-commit v0.17.3)".
         """Pre commit ruff rev."""
         text = (REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
         self.assertIn("ruff-pre-commit", text)
-        self.assertIn("rev: v0.17.1", text)
+        self.assertIn("rev: v0.17.3", text)
 
     def test_dependabot_ecosystems(self):
         # Doc: "Dependabot YAML (pip, github-actions, pre-commit)".

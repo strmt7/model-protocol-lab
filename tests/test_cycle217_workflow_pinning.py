@@ -168,7 +168,7 @@ def _hashed_workflow_files():
 # single hash. Any OTHER pin with fewer than two hashes means its
 # set was generated from a partial resolution — the defect class
 # that broke the CI 3.11 and Windows legs.
-_SINGLE_HASH_RELEASES = {("cuda-pathfinder", "1.8.4"), ("cuda-toolkit", "13.0.3.0")}
+_SINGLE_HASH_RELEASES = {("cuda-pathfinder", "1.8.5"), ("cuda-toolkit", "13.2.2")}
 
 
 class HashedRequirementsMultiTargetTests(unittest.TestCase):
