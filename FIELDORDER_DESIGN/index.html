@@ -1,0 +1,2672 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Local conversation-protocol experiments with held-out evidence: exact token-sequence comparisons across chat-format families.">
+      
+      
+      
+        <link rel="canonical" href="https://strmt7.github.io/model-protocol-lab/FIELDORDER_DESIGN/">
+      
+      
+        <link rel="prev" href="../DISTRACTION_DESIGN/">
+      
+      
+        <link rel="next" href="../FIXTURE_FUZZ_DESIGN/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Field order - Model Protocol Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#schema-field-order-probe-design-cycle-205-wave-9-rank-4" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Model Protocol Lab" class="md-header__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Model Protocol Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Field order
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Model Protocol Lab" class="md-nav__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Model Protocol Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/adr-index/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_LOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Research log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_READINESS_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release readiness 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_NOTES_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_PORTABILITY_2026-10-15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portability research (2026-10-15)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crawl4ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent tooling notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evidence notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_10" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_10" id="__nav_5_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design documents
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design documents
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ALIASING_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BATCH_PATH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CANONICALFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canonical form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHOICE_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choice audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFIDENCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DATELINE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DENSITY_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DETERMINISM_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Determinism audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DISTRACTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#utility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Utility
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#question-and-claim" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Question and claim
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#spec-set" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spec set
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arms
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#records-and-recompute-residue-stated-records" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Records and recompute (residue stated, §Records)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aggregation-and-decision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Aggregation and decision
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#surfaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Surfaces
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#known-limits-printed-in-the-report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known limits (printed in the report)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIXTURE_FUZZ_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HISTORYFRAME_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History frame
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRUNESWEEP_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prune sweep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONDISTANCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INVISIBLECHARS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Invisible characters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFUSABLESKELETON_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confusable skeleton
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LEADING_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Leading claim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTITURN_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEEDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEGATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NUMFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PAYLOADSERIALIZATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLACEMENT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Placement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRECISION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Precision
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REPETITION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repetition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROTATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rotation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SCORER_LENS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scorer lens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEALED_BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sealed bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SURFACE_NOISE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surface noise
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template probe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_ROBUSTNESS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template robustness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TOKENDEPTH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Token depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#utility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Utility
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#question-and-claim" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Question and claim
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#spec-set" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spec set
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arms
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#records-and-recompute-residue-stated-records" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Records and recompute (residue stated, §Records)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aggregation-and-decision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Aggregation and decision
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#surfaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Surfaces
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#known-limits-printed-in-the-report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known limits (printed in the report)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="schema-field-order-probe-design-cycle-205-wave-9-rank-4">Schema field-order probe — design (cycle 205, wave-9 rank 4)<a class="headerlink" href="#schema-field-order-probe-design-cycle-205-wave-9-rank-4" title="Permanent link">&para;</a></h1>
+<p>Status: v2, adjudicated after the adversarial round
+and shipped in cycle 205
+(<code>agents_out/cycle205/{redteam_a,redteam_b,verifier,
+coordinator_adjudication}.md</code>: A filed 2 FATAL / 9 MAJOR /
+4 MINOR, the verifier reproduced every load-bearing number,
+B confirmed both FATALs with corrections and added NB1–NB6).
+v1's defects that shaped this rewrite: answer labels the
+contexts do not entail (F1), a self-contradictory non-finite
+sentinel with an undefined canonical form (F2), overstated arm
+distinctness (F3), unfrozen new specs (F4), and a decision rule
+whose printed operating characteristics understated its
+weakness (F5/F6).</p>
+<h2 id="utility">Utility<a class="headerlink" href="#utility" title="Permanent link">&para;</a></h2>
+<p>A practitioner defining a JSON schema for extraction learns, per
+template family, whether putting the main answer field first vs
+last in the schema changes the values the model produces for it —
+before a cosmetic schema reorder in a code review silently changes
+extraction accuracy in production.</p>
+<h2 id="question-and-claim">Question and claim<a class="headerlink" href="#question-and-claim" title="Permanent link">&para;</a></h2>
+<p>For a fixed candidate (chat template) and a fixed set of flat JSON
+extraction/classification/routing specs, is the value produced for
+a spec's designated answer field invariant under the field's
+position in the presented schema?</p>
+<p>Pre-registered claim: <strong>per-field value accuracy is invariant
+under schema field order.</strong> Proved wrong, per candidate, if the
+designated field's paired accuracy differs between the
+answer-first and answer-last arms on specs adherent in both arms,
+under the decision rule below. Intermediate arms (canonical,
+reversed) are descriptive context, never decision inputs.</p>
+<p>Motivation, stated precisely: Tam et al. (arXiv:2408.02442)
+establish that format restrictions degrade reasoning; their
+abstract makes no key-order claim. Their §4.1 does report direct
+key-order evidence of a different kind: 100% of GPT-3.5 JSON-mode
+Last-Letter responses placed the "answer" key before the "reason"
+key, "resulting in zero-shot direct answering", and the authors
+conclude that "the order of keys in structured outputs … emerge
+as important factors". That is <strong>emitted</strong> key order under
+constrained JSON mode, on a reasoning task — not the order in
+which a prompt presents a schema's fields. The
+presentation-order hypothesis — a field the schema presents
+earlier is also emitted earlier, with less of the object's
+content in context — is the lab's own reasoning, built on Tam et
+al.'s two verified results. JSONSchemaBench (arXiv:2501.10868,
+cited by <code>structured.py</code>) varies constrained-decoding frameworks
+and models, not prompt-only field order crossed with chat
+templates. The combination — prompt-only field order × template
+family × per-field exact scoring — is the contribution; no
+"first" is claimed.</p>
+<h2 id="spec-set">Spec set<a class="headerlink" href="#spec-set" title="Permanent link">&para;</a></h2>
+<p>The shipped <code>structured</code> spec set (9 specs) is reused unchanged,
+and six further specs in the same flat dialect are added in
+<code>fieldorder.py</code> (the <code>structured</code> set itself is not modified).
+Reason for the addition, stated plainly: the shipped schemas have
+at most 2 fields, and three have exactly 1, so on the shipped set
+alone the arms collapse to at most two distinct orders per spec
+and the reversed arm is rarely a distinct treatment. The new
+specs carry 3–4 fields.</p>
+<p>Canonical order is the order the shipped instrument presents:
+<strong>alphabetical by field name</strong> (<code>structured.describe_schema</code>
+sorts properties and the required list). Each spec designates one
+<strong>answer field</strong> and a frozen <strong>paired</strong> flag. Pairing rule
+(derived, from frozen data): a spec enters a candidate's paired
+population iff <code>paired</code> is yes, its first/last orders differ, both
+endpoint records are adherent, and neither endpoint record has
+duplicate keys.</p>
+<p><strong>Reader-entailment rule (F1):</strong> a spec may be <code>paired: yes</code> only
+if a reader given the question, context, and schema — but not the
+answer table — can derive the answer field's value uniquely.
+Two shipped specs fail it and are <code>paired: no</code> (kept as
+adherence/descriptive specs; the shipped set cannot be edited):
+route-alert (<code>channel = pager</code> — nothing maps 97% disk usage to
+pager over sms/email) and route-order (<code>warehouse = south</code> —
+nothing entails it; Porto is in northern Portugal). Non-answer
+fields of shipped specs may carry frozen judgement values
+(route-ticket's <code>priority = 3</code>); they feed descriptive per-field
+readouts only and are named here so the noise is not discovered
+later.</p>
+<p>The six new specs, frozen in full (schema dialect exactly as in
+<code>structured.py</code>; every answer passes <code>check_schema</code> against its
+own schema, verified at module load in tests):</p>
+<ul>
+<li><strong>extract-product</strong> (extraction, paired yes). Q: "Extract the
+  product's brand, model, price and stock status." Context: "The
+  catalogue lists it as: brand Acme, model Rotor X2. It costs 349
+  dollars and is currently in stock." Schema: brand (string),
+  model (string), price (integer ≥ 0), in_stock (boolean).
+  Answer: {brand "Acme", model "Rotor X2", price 349,
+  in_stock true}. Answer field: model. (The catalogue split is
+  stated verbatim in the context, so the answer field is
+  determined, not convention-dependent.)</li>
+<li><strong>extract-event</strong> (extraction, paired yes). Q: "Extract the
+  event venue, day and attendance." Context: "The workshop meets
+  at Harbor Hall on Friday with 40 attendees." Schema: venue
+  (string), day (string, enum monday…sunday, all lowercase),
+  attendance (integer ≥ 0). Answer: {venue "Harbor Hall",
+  day "friday", attendance 40}. Answer field: venue.</li>
+<li><strong>route-complaint</strong> (routing, paired yes). Q: "Route the
+  complaint and record whether a defect was confirmed and
+  whether data was lost." Context: "Complaint: 'The update
+  deleted my saved files.' Front-line support confirmed the
+  update itself is defective." Schema: team (string, enum
+  [sales, support, technical]), defect_confirmed (boolean),
+  data_lost (boolean). Answer: {team "technical",
+  defect_confirmed true, data_lost true}. Answer field: team.
+  (Every field is entailed: files deleted, defect confirmed by
+  support, and a confirmed product defect routes past front-line
+  support to technical.)</li>
+<li><strong>classify-document</strong> (classification, paired yes). Q:
+  "Classify the document's type, language and confidentiality."
+  Context: "Document: a German-language internal memo marked
+  confidential." Schema: doc_type (string, enum [memo, report,
+  invoice]), language (string, enum [english, german, french]),
+  confidential (boolean). Answer: {doc_type "memo",
+  language "german", confidential true}. Answer field: doc_type.</li>
+<li><strong>extract-vehicle</strong> (extraction, paired yes). Q: "Extract the
+  vehicle make, year, fuel and seat count." Context: "The 2019
+  Volvo wagon runs on diesel and seats five." Schema: make
+  (string), year (integer 1900–2100), fuel (string, enum
+  [petrol, diesel, electric]), seats (integer ≥ 1). Answer:
+  {make "Volvo", year 2019, fuel "diesel", seats 5}. Answer
+  field: make.</li>
+<li><strong>route-delivery</strong> (routing, paired yes). Q: "Route the
+  delivery and flag its requirements." Context: "Delivery:
+  vaccines to a clinic in the south, sent by express courier for
+  tomorrow morning; a signature is required and the box must stay
+  refrigerated." Schema: region (string, enum [north, south,
+  east, west]), speed (string, enum [standard, express]),
+  signature_required (boolean), refrigerated (boolean). Answer:
+  {region "south", speed "express", signature_required true,
+  refrigerated true}. Answer field: region.</li>
+</ul>
+<p>Designation table (canonical = alphabetical order; position of
+the answer field within it):</p>
+<table>
+<thead>
+<tr>
+<th>spec</th>
+<th>canonical order</th>
+<th>answer field (position)</th>
+<th>paired</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>extract-person</td>
+<td>age, name</td>
+<td>name (2/2)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>extract-city</td>
+<td>city, population</td>
+<td>city (1/2)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>extract-book</td>
+<td>title, year</td>
+<td>title (1/2)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>classify-sentiment</td>
+<td>label</td>
+<td>label (1/1)</td>
+<td>no (one field)</td>
+</tr>
+<tr>
+<td>classify-urgency</td>
+<td>level</td>
+<td>level (1/1)</td>
+<td>no (one field)</td>
+</tr>
+<tr>
+<td>classify-language</td>
+<td>language</td>
+<td>language (1/1)</td>
+<td>no (one field)</td>
+</tr>
+<tr>
+<td>route-ticket</td>
+<td>department, priority</td>
+<td>department (1/2)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>route-alert</td>
+<td>ack_required, channel</td>
+<td>channel (2/2)</td>
+<td><strong>no (unentailed)</strong></td>
+</tr>
+<tr>
+<td>route-order</td>
+<td>express, warehouse</td>
+<td>warehouse (2/2)</td>
+<td><strong>no (unentailed)</strong></td>
+</tr>
+<tr>
+<td>extract-product</td>
+<td>brand, in_stock, model, price</td>
+<td>model (3/4)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>extract-event</td>
+<td>attendance, day, venue</td>
+<td>venue (3/3)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>route-complaint</td>
+<td>data_lost, defect_confirmed, team</td>
+<td>team (3/3)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>classify-document</td>
+<td>confidential, doc_type, language</td>
+<td>doc_type (2/3)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>extract-vehicle</td>
+<td>fuel, make, seats, year</td>
+<td>make (2/4)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>route-delivery</td>
+<td>refrigerated, region, signature_required, speed</td>
+<td>region (2/4)</td>
+<td>yes</td>
+</tr>
+</tbody>
+</table>
+<p>Paired pool: <strong>10 specs</strong> (extraction 6, routing 3,
+classification 1). Across them the answer field sits first in 3
+canonical orders, last in 3, and in a middle position in 4, so
+the endpoint contrast is not confounded with "the answer field
+is always the alphabetically-first field".</p>
+<h2 id="arms">Arms<a class="headerlink" href="#arms" title="Permanent link">&para;</a></h2>
+<p>Per spec, four renderings of the same prompt, differing <strong>only</strong>
+in the field enumeration order inside the schema description
+(the property list and the required list both follow the arm
+order):</p>
+<ul>
+<li><code>canonical</code>: alphabetical (the shipped presentation).</li>
+<li><code>answer_first</code>: the answer field moved to the front; the
+  remaining fields keep canonical relative order.</li>
+<li><code>answer_last</code>: the answer field moved to the end; the
+  remaining fields keep canonical relative order.</li>
+<li><code>reversed</code>: canonical order reversed (generic-reordering
+  control).</li>
+</ul>
+<p><strong>Distinctness, stated exactly (F3):</strong> the four orders are all
+distinct only when the answer field sits in a middle position
+(4 specs). When it sits at a canonical endpoint with ≥ 3 fields,
+there are 3 distinct orders (canonical coincides with that
+endpoint arm; 2 specs). With 2 fields there are 2 distinct
+orders (6 specs); with 1 field, 1 (3 specs). Canonical therefore
+coincides with an endpoint arm on 6 of the 10 paired specs, and
+its readouts there are replicates of that endpoint arm under
+greedy decoding — labelled as such wherever canonical numbers
+are printed next to endpoint numbers. Per candidate the stage
+runs 60 arm-generations covering <strong>37 distinct prompts</strong>; the
+duplicate generations are kept (uniform code path and record
+shape), and the cost is printed as 60, not 37. The decision is
+unaffected: answer-first ≠ answer-last on all 10 paired specs.</p>
+<p>The prompt template is <code>structured.render_prompt</code>'s, with the
+schema description rendered in the arm's order by an
+order-parametrised describe function whose canonical output is
+byte-identical to <code>structured.describe_schema</code> (pinned by a
+test). Shipped specs keep the <code>(ref: structured/&lt;id&gt;)</code> marker;
+new specs use <code>(ref: fieldorder/&lt;id&gt;)</code>. The schema presentation
+and the implied output key order move together — that is the
+production change being tested; no separate output-order
+instruction exists in the shipped prompt, and none is added.</p>
+<h2 id="records-and-recompute-residue-stated-records">Records and recompute (residue stated, §Records)<a class="headerlink" href="#records-and-recompute-residue-stated-records" title="Permanent link">&para;</a></h2>
+<p>Generation mirrors the density/rotation stages: one record per
+(candidate, spec, arm), exactly 15 × 4 = 60 per candidate in
+canonical (spec, arm) order with unique (spec, arm) keys — the
+validator rejects any other record set for a candidate (NB1).
+Records come from <code>core.evaluate</code> at MAX_NEW_TOKENS = 64, fixed
+by the protocol rather than threaded from the CLI: the record
+caps below are derived from it (NB4). Budget cap: 24 candidates
+→ MAX_FIELD_ORDER_RECORDS = 1,440. Screening mirrors density:
+the stage-level special-token audit runs over the frozen text
+inventory (questions, contexts, templates, description
+components), and a per-spec boundary-containment screen runs
+over the rendered prompts (NB5). Stage details {cancelled,
+field_order_record_budget_exceeded, field_order_screen_failed};
+per-record detail ∈ {"", arm_evaluation_failed,
+arm_context_exceeded}.</p>
+<p>Record shape (frozen):</p>
+<div class="highlight"><pre><span></span><code>{candidate, spec_id, arm, detail, case_screened, boundary_found,
+ duplicate_keys, answer_digest, document_kind, document_digest,
+ field_values, input_tokens, content_digest}
+</code></pre></div>
+<p>Digest preimages (NB2): <code>content_digest</code> = SHA-256 of the arm's
+rendered user content (the prompt string), recomputed by the
+validator from its literal spec table. <code>answer_digest</code> = SHA-256
+of the decoded answer text, or None when there was no generation.</p>
+<ul>
+<li><code>document_kind</code>: "object" | "non_object" | "unparseable" | ""
+  ("" exactly when there was no generation). <code>unparseable</code> means
+  JSON parse failure <strong>only</strong>.</li>
+<li><code>duplicate_keys</code>: a stage-observed bool — the raw answer
+  contained a repeated object key. Scoring consequences
+  (derived, below): a duplicate-key document is never adherent
+  and never enters pairing, because its extraction is
+  parser-dependent (Python's <code>json.loads</code> keeps the last
+  occurrence; a production parser may keep the first). Per-field
+  readouts score the last-wins parse, with duplicate counts
+  printed beside them.</li>
+<li><code>field_values</code>: for "object" documents, a dict mapping every
+  produced key to the <strong>canonical JSON string</strong> of its parsed
+  value (canonical form pinned below), or to None when the
+  produced value has no canonical form — a non-finite number
+  (NaN/±Infinity, which <code>json.loads</code> accepts as a Python
+  extension) or a value beyond the int↔str digit limit. A produced JSON
+  null is the string "null", never None — the sentinel is
+  unambiguous. {} for every other kind, and for degraded
+  records (detail set or screened: kind "", digest None,
+  field_values {}).</li>
+<li><code>document_digest</code>: the digest of the document's canonical
+  form, stored <strong>only</strong> where the validator recomputes it:
+  non-None ⟺ kind is "object" and no <code>field_values</code> entry is
+  None; then it must equal the digest of the reconstructed
+  document. Otherwise None.</li>
+</ul>
+<p><strong>Canonical JSON, pinned (F2c):</strong> <code>structured._canonical_json</code>
+exactly — <code>json.dumps(value, sort_keys=True,
+separators=(", ", ": "), ensure_ascii=True, allow_nan=False)</code>.
+Worked example: the document {"name": "Ada Lovelace", "age": 36}
+canonicalises to the string <code>{"age": 36, "name": "Ada Lovelace"}</code>
+(note the spaced separators — this probe's canonical form is the
+<code>structured</code> convention, not density's compact one).</p>
+<p>Everything scored is <strong>derived</strong> from the record fields, by the
+producer's aggregator and the diff validator's mirror alike:</p>
+<ul>
+<li>A field's produced value is <strong>correct</strong> iff its key is present
+  in <code>field_values</code> with a string whose digest equals the
+  expected value's canonical digest (expected values come from
+  the frozen spec table). A None (non-finite) value is incorrect
+  for every field, since no expected value is a non-finite
+  number. Correctness is exact canonical equality; every numeric
+  field in the spec set is <code>integer</code> (F11), and <code>number</code>-typed
+  fields are out of scope for answer-field designation.</li>
+<li>The schema verdict is recomputed by re-running the flat schema
+  check over the reconstructed document (each <code>field_values</code>
+  string parsed back; the validator requires every stored string
+  to be exactly the canonical form of its parse, and requires
+  <code>document_digest</code> consistency as above — so the stored values
+  are bound, not attested). A None value fails its key's field
+  check <strong>before</strong> reconstruction, so a null-typed field can
+  never be passed by the sentinel (no current spec has a null
+  field; the rule is frozen anyway). "non_object" and
+  "unparseable" documents are schema-failed by kind.</li>
+<li><strong>Validator totality (F10):</strong> any exception while parsing or
+  canonicalising a stored string — ValueError (including the
+  int↔str digit limit), RecursionError, TypeError — makes the
+  section invalid, never a crash. Both mirrors use a safe
+  canonicaliser with that catch (<code>classify_response</code>'s
+  RecursionError handling is the in-tree precedent).</li>
+<li>Adherence per record: parse_ok iff kind ∈ {object,
+  non_object}; adherent iff parse_ok, the recomputed schema
+  verdict is ok, and not <code>duplicate_keys</code> — <code>structured</code>'s
+  parse/schema decomposition, kept, so a value effect cannot
+  hide inside an adherence effect.</li>
+</ul>
+<p><strong>Caps (F8, derived from enforced premises):</strong> per record, the
+summed length of <code>field_values</code> strings is at most 4,096 chars,
+validator-enforced. Derivation: MAX_NEW_TOKENS = 64 and at most
+32 decoded chars per generated token for the tokenizers this
+lab targets bound an answer at 2,048 chars; the cap is 2× that.
+Producer rule: a live record whose values exceed the cap is
+stored with detail <code>arm_evaluation_failed</code> and empty
+<code>field_values</code> (counted under n_detail_screened). Payload cap
+MAX_FIELD_ORDER_PAYLOAD_BYTES = 8 MiB: 1,440 records × (4,096 +
+≈ 1.4 KB of other fields and JSON overhead) ≈ 7.9 MB.</p>
+<p><strong>Stated residue (F9):</strong> the link between <code>answer_digest</code> and
+(document_kind, field_values) is stage-attested — the validator
+recomputes every verdict from the record fields, but it cannot
+prove the fields came from the answer the digest names (the
+same origin-only residue density discloses). <code>duplicate_keys</code>
+and <code>boundary_found</code> are stage-observed facts of the same
+status; every consequence drawn from them is recomputed.</p>
+<h2 id="aggregation-and-decision">Aggregation and decision<a class="headerlink" href="#aggregation-and-decision" title="Permanent link">&para;</a></h2>
+<p>The aggregate candidate block always carries <code>detail</code> ("" or
+"field_order_unavailable") plus every readout key below, so a
+zero-live candidate prints None rates and an <code>insufficient</code>
+decision with n_paired = 0 rather than vanishing (NB6). Live =
+not screened, no detail, boundary found.</p>
+<ul>
+<li><strong>Adherence by arm</strong>: n, parse/schema/adherent rates over live
+  records (structured's decomposition; rates None iff n = 0).</li>
+<li><strong>Per-field accuracy by arm</strong>: for every field of every spec,
+  correct / live-in-arm (missing counts incorrect; denominators
+  printed). Plus whole-document accuracy by arm — all spec
+  fields correct <strong>and</strong> no extra keys in <code>field_values</code> —
+  over live records (F15).</li>
+<li><strong>Answer-field accuracy by arm</strong> over all live records, and
+  over the paired population below.</li>
+<li><strong>Pairing and attrition</strong>: per candidate, the paired
+  population per the rule above; attrition printed per arm
+  (specs lost to non-adherence, to duplicate keys, to the
+  paired flag / order rule). Beside the paired counts, the
+  <strong>ungated discordant counts</strong> — all <code>paired: yes</code> specs whose
+  endpoint orders differ, scoring non-adherent records' answer
+  fields by their <code>field_values</code> — are printed as a sensitivity,
+  because adherence gating is outcome-dependent selection: a
+  generation failure that makes the answer field wrong in one
+  arm often makes that record non-adherent and removes the spec
+  from pairing, deflating measured discordance (F6; the
+  deflation is bounded in this instrument — most incorrect
+  values here are adherent-shaped, e.g. a wrong enum member —
+  but the direction is disclosed, not hidden).</li>
+<li><strong>Decision</strong>: per paired spec, answer-field correct in first
+  / correct in last; discordant counts n_first_only,
+  n_last_only; exact two-sided sign test over discordant specs.
+  <code>falsified</code> iff discordant ≥ MIN_DISCORDANT_SPECS = 6 and
+  p ≤ 0.05 (direction recorded); <code>insufficient</code> iff discordant
+  &lt; 6 — the boolean is withheld, never defaulted to acquittal;
+  else <code>not_falsified</code>. Printed sensitivities: the same decision
+  recomputed on the extraction-only paired specs (6), and the
+  paired counts split by field count (2-field vs ≥ 3-field —
+  on 2-field specs the answer field's promotion <em>is</em> the
+  companion's demotion, F13).</li>
+<li><strong>Operating characteristics, printed wherever the verdict is
+  (F5/F12):</strong> critical splits — at 6–8 discordant specs only a
+  unanimous split falsifies; at 9, 8–1 (p = 0.0391); at 10,
+  9–1 (p = 0.0215). Power: a true 0.90-vs-0.60 endpoint accuracy
+  gap yields <code>falsified</code> only ≈ 15% of the time (simulated,
+  independent specs); most such runs print <code>insufficient</code> or
+  <code>not_falsified</code>. The sign test's α is exact under independent
+  discordance directions across specs; specs are a fixed panel,
+  not a sample, and within-shape direction correlation degrades
+  the calibration (at the extreme of one direction coin per
+  shape, conditioned on full discordance, the false-falsification
+  rate reaches ≈ 50%; unconditional rates stayed ≤ ≈ 4.4% across
+  the round's parameter sweep). Per-candidate α = 0.05 gives
+  ≈ 1.2 expected false falsifications across 24 candidates at
+  the nominal rate (probability of at least one ≈ 0.71); the
+  realised per-candidate rate is below nominal by discreteness.</li>
+</ul>
+<p>Protocol object: {seed, backend fingerprint, spec/arm inventory,
+and digests of three frozen rule texts — GENERATION (spec set,
+designations, paired flags, arm derivation), RENDERING (prompt
+construction), CHECKING (canonicalisation, sentinel, duplicate
+rule, correctness, schema recompute, pairing, decision)} —
+mirror-recomputed by the validator from its own literal copies,
+as in cycles 203/204.</p>
+<h2 id="surfaces">Surfaces<a class="headerlink" href="#surfaces" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Pure module <code>fieldorder.py</code> (spec table, arm derivation,
+  rendering, checking, aggregation, protocol).</li>
+<li><code>experiments.fieldorder_stage</code> / <code>fieldorder_analysis</code>
+  mirroring <code>density_stage</code>; CLI <code>--field-order</code> with the
+  utility sentence and the 1,440-generation cost in help.</li>
+<li>Reporting section "Schema field order"; diff section
+  <code>field_order</code> whose validator recomputes everything above
+  from the records (full literal-table mirror in diffreports).</li>
+<li>USAGE §8.52; RESEARCH_LOG cycle-205 entry; CHANGELOG;
+  VALIDATION counts by measurement.</li>
+<li>Pin blast radius (NB3), all in the same push: test_cycle44
+  mypy source-file pin 61 → 62 (fieldorder.py is the 62nd) and
+  its VALIDATION.md line; test_cycle178 header pin "cycles
+  10–204" → "cycles 10–205"; test_cycle27 + test_cycle67 oracle
+  elements for the new diff section (oracle trio, identical key
+  set, summary literal, flip-gate anchor original + mutant);
+  README capability bullet + sample-report and diff-section
+  enumerations; VALIDATION probe list.</li>
+</ul>
+<h2 id="known-limits-printed-in-the-report">Known limits (printed in the report)<a class="headerlink" href="#known-limits-printed-in-the-report" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Flat schemas of 1–4 fields; endpoint placement only — nothing
+  is measured about middle positions as a treatment.</li>
+<li>Canonical coincides with an endpoint arm on 6 of 10 paired
+  specs; single-field specs cannot enter the pairing; the
+  reversed arm coincides with an endpoint on 2-field specs.</li>
+<li>Two shipped specs are excluded from pairing because their
+  frozen answer labels are not entailed by their contexts
+  (route-alert, route-order); one shipped non-answer field is a
+  frozen judgement value (route-ticket priority).</li>
+<li>Adherence gating selects specs the candidate already handles,
+  and selects against discordance; the paired claim is
+  conditional on adherence in both endpoint arms, with the
+  ungated counts printed as sensitivity.</li>
+<li>Duplicate-key documents are scored by their last occurrence
+  in per-field readouts and excluded from adherence/pairing.</li>
+<li>10 paired specs and a sign test: only very large endpoint
+  effects can falsify, and they usually will not (≈ 15% power
+  at a 30-point gap). The verdict's printed characteristics
+  say so.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

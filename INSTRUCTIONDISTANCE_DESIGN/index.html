@@ -1,0 +1,3508 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Local conversation-protocol experiments with held-out evidence: exact token-sequence comparisons across chat-format families.">
+      
+      
+      
+        <link rel="canonical" href="https://strmt7.github.io/model-protocol-lab/INSTRUCTIONDISTANCE_DESIGN/">
+      
+      
+        <link rel="prev" href="../PRUNESWEEP_DESIGN/">
+      
+      
+        <link rel="next" href="../INVISIBLECHARS_DESIGN/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Instruction distance - Model Protocol Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#instruction-distance-probe-design-of-record" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Model Protocol Lab" class="md-header__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Model Protocol Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Instruction distance
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Model Protocol Lab" class="md-nav__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Model Protocol Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/adr-index/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_LOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Research log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_READINESS_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release readiness 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_NOTES_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_PORTABILITY_2026-10-15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portability research (2026-10-15)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crawl4ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent tooling notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evidence notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_10" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_10" id="__nav_5_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design documents
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design documents
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ALIASING_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BATCH_PATH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CANONICALFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canonical form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHOICE_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choice audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFIDENCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DATELINE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DENSITY_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DETERMINISM_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Determinism audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DISTRACTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIELDORDER_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIXTURE_FUZZ_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HISTORYFRAME_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History frame
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRUNESWEEP_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prune sweep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INVISIBLECHARS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Invisible characters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFUSABLESKELETON_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confusable skeleton
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LEADING_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Leading claim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTITURN_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEEDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEGATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NUMFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PAYLOADSERIALIZATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLACEMENT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Placement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRECISION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Precision
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REPETITION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repetition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROTATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rotation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SCORER_LENS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scorer lens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEALED_BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sealed bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SURFACE_NOISE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surface noise
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template probe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_ROBUSTNESS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template robustness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TOKENDEPTH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Token depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Status
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="instruction-distance-probe-design-of-record">Instruction-distance probe — design of record<a class="headerlink" href="#instruction-distance-probe-design-of-record" title="Permanent link">&para;</a></h1>
+<h2 id="status">Status<a class="headerlink" href="#status" title="Permanent link">&para;</a></h2>
+<p><strong>BUILT — cycle 218</strong> (BUILD-as-amended, fresh review by
+coordinator #59; the queue's first build verdict). This document
+is the complete design of record, consolidated in the build
+push:</p>
+<ul>
+<li><strong>Part I</strong> is the instrument as built: the resubmission
+  candidate (round-1 researcher's amended instrument, transcribed
+  as §3 of the round-1 round) <strong>with the fresh review's binding
+  amendments A–J incorporated into its text</strong>, not merely listed.
+  Where an amendment corrected a number or a sentence, Part I
+  carries the corrected form only.</li>
+<li><strong>Part II</strong> is the round-1 adjudication (coordinator #43,
+  NO-BUILD), reproduced from the surviving working-tree copy.
+  That copy truncates mid-F6(c); the truncation is marked where
+  it occurs and nothing past it has been reconstructed except
+  the one code expression F6(c) was quoting, which is verifiable
+  from the tree it cites. The round-1 design document's own
+  §§2–7 (the circulated sketch and its transcription) do not
+  survive anywhere; the round-1 briefs
+  (<code>~/workspace/agents_out/instructiondistance/</code> —
+  <code>research.md</code>, <code>redteam_a.md</code>, <code>redteam_b.md</code>, <code>verifier.md</code>)
+  are the surviving record, and this consolidation says so
+  rather than fabricating replacements.</li>
+<li><strong>Part III</strong> is the fresh-review adjudication (coordinator
+  #59) verbatim, including the verdict, settlements (a)–(c),
+  and amendments A–J in their binding form.</li>
+</ul>
+<p>The frozen errors the amendments corrected appear in this
+document <strong>only</strong> inside the Part III adjudication narrative
+that corrects them (and in Part II's round summary, which
+records the round-1 verifier catching one of them).</p>
+<hr />
+<h1 id="part-i-the-instrument-as-built-candidate-text-as-amended">Part I — The instrument as built (candidate text as amended)<a class="headerlink" href="#part-i-the-instrument-as-built-candidate-text-as-amended" title="Permanent link">&para;</a></h1>
+<h2 id="1-what-exactly-varies-the-distance-definition">1. What exactly varies — the distance definition<a class="headerlink" href="#1-what-exactly-varies-the-distance-definition" title="Permanent link">&para;</a></h2>
+<h3 id="11-a-dose-is-a-verified-rendered-token-delta-per-candidate">1.1 A dose is a verified rendered-token delta, per candidate<a class="headerlink" href="#11-a-dose-is-a-verified-rendered-token-delta-per-candidate" title="Permanent link">&para;</a></h3>
+<p>Transplant of needle's dose settlement, in substance
+(<code>model_protocol_lab/needle.py</code> docstring and <code>SIZING_RULE_TEXT</code>):</p>
+<ul>
+<li>For one case and one candidate, let <code>adj_ids</code> be the rendered
+  token ids of the adjacent arm (§3) under that candidate's own
+  template/backend. A separated or displaced arm at dose <code>d</code> is
+  a construction whose rendered ids satisfy
+  <code>len(ids) − len(adj_ids) == d</code> <strong>exactly</strong>, verified on the
+  accepted construction's final ids before generation.</li>
+<li>The filler span is built by the sizing discipline of §1.4
+  (whole sentences from the cycled neutral corpus stream plus
+  one truncated suffix, probed in closeness order, encode
+  budget 512 per cell) until the delta is exact. If no span in
+  budget hits the delta exactly, the cell is <code>arm_unmatchable</code>
+  — never approximated, never silently sized in characters.</li>
+<li>Therefore "distance" is <strong>not</strong> a property of the filler
+  text, not characters, and not a cross-candidate constant:
+  the same filler string tokenizes differently per candidate,
+  so each candidate gets a <em>different filler text</em> sized to
+  the same verified delta. What is frozen across candidates
+  is the dose (the delta), the corpus, the stream order, and
+  the sizing rule (bound by digest in the protocol object,
+  needle pattern).</li>
+</ul>
+<h3 id="12-the-measured-separation-stated-honestly">1.2 The measured separation, stated honestly<a class="headerlink" href="#12-the-measured-separation-stated-honestly" title="Permanent link">&para;</a></h3>
+<p>The dose is the number of <em>added tokens</em>: in the separated
+arms the added tokens sit <strong>between</strong> the directive and the
+block; in the displaced arms the same number of added tokens
+sits <strong>after</strong> the block (the displaced arm's between-distance
+is the adjacent baseline; its dose is length). The adjacent
+render itself has a small nonzero separation (the fact
+sentence sits between directive and question); that baseline
+is a per-case, per-candidate quantity, reported per candidate
+as the per-arm rendered-token counts in the records, never as
+a single printed token figure in prose.</p>
+<h3 id="13-doses">1.3 Doses<a class="headerlink" href="#13-doses" title="Permanent link">&para;</a></h3>
+<p><code>DOSES = (256, 1024)</code> rendered tokens.</p>
+<ul>
+<li>Derivation, not borrowing: 256 and 1024 are the two largest
+  neutral levels of the distraction factorial
+  (<code>distraction.py</code> <code>NEUTRAL_LEVELS = (64, 256, 1024)</code>), and
+  1024 is needle's smaller dose. The <em>reasons</em> they are right
+  here are local: (i) the largest dose must fit the default
+  context cap with the whole prompt — <code>--max-context</code> default
+  is 2048 (<code>cli.py</code>) and under it a 1024-token filler plus the
+  adjacent prompt plus template head plus generation budget
+  is the largest power-of-four dose that is a real measurement
+  rather than a guaranteed <code>arm_context_exceeded</code> column
+  (executed in the fresh review: worst 1024-arm total 1,395
+  tokens against the 2,048 cap across every catalog family);
+  (ii) two doses give three same-turn layouts at two doses
+  (adjacent, 256, 1024) — three points, printed with
+  denominators, from which no shape is claimed (§2.2).</li>
+<li>The sketch's 128/512 pair is rejected: 128 is below every
+  shipped neutral dose except 64 and maximises the short-dose
+  null risk the sketch itself names; nothing in the tree
+  supports it.</li>
+<li>Cells that exceed the run's <code>--max-context</code> are
+  <code>arm_context_exceeded</code>, counted per arm, never truncated
+  into existence.</li>
+</ul>
+<h3 id="14-the-sizing-rule-frozen-text-amendment-j">1.4 The sizing rule (frozen text; amendment J)<a class="headerlink" href="#14-the-sizing-rule-frozen-text-amendment-j" title="Permanent link">&para;</a></h3>
+<p>The protocol carries the SHA-256 of the sizing rule text
+(<code>instructiondistance.SIZING_RULE_TEXT</code>,
+"instructiondistance-single-phase-exact-v1"): spans are whole
+sentences plus one truncated suffix (<code>span_text</code>) over the
+cycled neutral corpus stream, every sized cell searching from
+the stream head; candidates are probed in <code>span_candidates</code>
+closeness order against the dose, each probe rendering the
+full arm content under the candidate's own template,
+accepting the first whose rendered token count minus the
+case's adjacent-arm rendered token count equals the dose
+exactly, verified on the accepted construction's final ids
+(the probe render <em>is</em> the arm render, so acceptance and
+verification are one encode). One encode per probe; the
+per-cell encode budget is 512.</p>
+<p>This is needle's sizing discipline with one named omission
+(amendment J / A-K5c): needle's rule carries an in-span
+<strong>offset-verification phase</strong> (needle.py's <code>SIZING_RULE_TEXT</code>),
+because needle measures where inside the filler a fact sits.
+This instrument has no offset variable — the filler sits
+wholly between the directive and the block, or wholly after
+it — and the "\n" joiner insulates the span from the block it
+precedes or follows, so delta-exactness on the final render
+is the only acceptance condition. The transplant is therefore
+<strong>not</strong> "verbatim in substance"; it is the needle discipline
+minus the phase that has no analogue here (executed in the
+fresh review: 12/12 cells exact under the single-phase rule).</p>
+<h2 id="2-the-claim-and-the-ordering">2. The claim and the ordering<a class="headerlink" href="#2-the-claim-and-the-ordering" title="Permanent link">&para;</a></h2>
+<h3 id="21-claim-frozen-one-directional-per-candidate-as">2.1 Claim (frozen, one-directional, per candidate, as<a class="headerlink" href="#21-claim-frozen-one-directional-per-candidate-as" title="Permanent link">&para;</a></h3>
+<p>re-scoped by amendment F)</p>
+<blockquote>
+<p>For one candidate, over the cases it completes in all three
+arms of a dose contrast (adjacent, separated, displaced)
+whose adjacent cell is <code>compliant_correct</code> (§5.2), let D be
+that population, S the cases in D whose separated cell is
+noncompliant, and T the cases in D whose dose-matched
+displaced cell is noncompliant. The label
+<code>instruction_distance_drop_observed</code> fires exactly under
+the rule in §6. No other sentence is a headline.</p>
+</blockquote>
+<p>The falsifiable statement behind it, with its conditioning
+and completion scope carried in the sentence (amendment F):
+<em>per-candidate compliance with the frozen directive (§3.2),
+conditioned on the cases the candidate completes in the
+adjacent, separated, and displaced arms of the dose and
+answers compliant-correct when adjacent, is identical at
+added distance 0 and at added distance d.</em> Proved wrong, per
+dose, only by the §6 pattern — discordant pairs (compliant
+adjacent, noncompliant separated) in excess of both the
+derived floor and the dose-matched displaced control.
+Reverse discordants (noncompliant adjacent, compliant
+separated) are counted and printed beside every decision
+(<code>n_reverse</code>), never pooled away.</p>
+<p>The label is an <strong>excess-of-between-losses label</strong>, never a
+distance effect simpliciter (amendment F, estimand
+restatements): a pure constraint-to-generation effect yields
+S = T → <code>below_threshold</code> even at a 24/24 → 0/24 collapse,
+and a genuine between-effect exactly masked by the control's
+own trailing-filler effect (S = 10, T = 10) also yields
+<code>below_threshold</code>. Both are the frozen estimand operating as
+defined, with S and T printed.</p>
+<h3 id="22-what-the-claim-is-not-no-ladder-no-shape-no">2.2 What the claim is NOT — no ladder, no shape, no<a class="headerlink" href="#22-what-the-claim-is-not-no-ladder-no-shape-no" title="Permanent link">&para;</a></h3>
+<p>cross-turn rung</p>
+<ul>
+<li><strong>Not monotone decay, not a threshold.</strong> The readout prints
+  the three same-turn compliance rates with denominators;
+  per-dose labels can invert the raw dose order through
+  control noise alone, so no sentence describes a curve, a
+  threshold distance, or decay. The literature's "rapidly
+  degrades" (LongIns, §10) is a claim about exam-task
+  performance at 4K–16K tokens on API models; it is not a
+  design input and no shape is pre-registered.</li>
+<li><strong>The cross-turn arm is excluded, by name.</strong> A scripted turn
+  pair bundles turn boundary + assistant-turn presence + role
+  alternation + token distance; it cannot sit on the
+  token-dose dimension. Multiturn owns cross-turn delivery.</li>
+<li><strong>The adjacent-after arm is a control, not a rung</strong> (§4):
+  distance 0, order reversed. It is reported descriptively
+  and never enters a dose contrast.</li>
+</ul>
+<h2 id="3-population-and-frozen-texts">3. Population and frozen texts<a class="headerlink" href="#3-population-and-frozen-texts" title="Permanent link">&para;</a></h2>
+<h3 id="31-generated-cases-stage-local-never-the-split">3.1 Generated cases, stage-local, never the Split<a class="headerlink" href="#31-generated-cases-stage-local-never-the-split" title="Permanent link">&para;</a></h3>
+<p>Cases are generated from the run seed by a frozen SHA-256
+derivation (needle pattern), live only in the stage, and
+never enter the user's search/held-out Split.</p>
+<p>Case shape: a fact block B that is byte-identical and
+internally adjacent in every arm —</p>
+<div class="highlight"><pre><span></span><code>The {topic} number is {value}.
+What is the {topic} number?
+</code></pre></div>
+<ul>
+<li><code>{value}</code>: a 3-digit integer (100–999) from the seed
+  derivation; pairwise distinct across cases (needle redraw
+  discipline). 3 digits keeps the answer a single short digit
+  string whose compliant form is unambiguous, and makes a
+  closed-book guess a 1-in-900 event before any model prior.</li>
+<li><code>{topic}</code>: drawn from a frozen topic list of 24 single
+  words (harbor, summit, quarry, tundra, granite, willow,
+  copper, saddle, walnut, velvet, cobalt, marble, cinder,
+  falcon, garnet, saffron, indigo, juniper, lagoon, magnet,
+  nickel, onyx, pepper, quartz), verified absent from the
+  neutral corpus as case-folded substrings and pinned by
+  test. (The first candidate list had four collisions —
+  meadow, orchard, timber, hazel occur in the corpus — and
+  was corrected before freezing, needle's own freeze
+  discipline.)</li>
+<li>The fact is <em>inside</em> B, after the directive in every
+  directive-first arm, so the fact↔question distance is
+  <strong>constant across arms by construction</strong>. What moves is
+  only directive↔B separation and, in the displaced control,
+  B's distance to the generation point (§4).</li>
+</ul>
+<p>Case count: <strong>24</strong> (<code>CASE_COUNT = 24</code>, placement's count;
+amendment A — the candidate's §12 verdict sentence printed a
+stale case count, corrected in Part III). The derivation is the
+decision rule's, §6: the frozen rule at N=24 reaches power
+0.9088 at a 50% conditional drop while at N=20 it reaches
+only 0.813, and N=16 (negation's count) cannot support the
+rule's D≥10 floor at realistic adjacent pass rates.</p>
+<p>Candidates: at most 24 (run_experiment's operative cap,
+<code>experiments.py</code>: "Supply between 1 and 24 candidates";
+amendment A — the candidate cited an audit budget in
+determinism.py, which is not the operative cap).</p>
+<h3 id="32-the-frozen-directive-single-draw-scoped">3.2 The frozen directive (single draw, scoped)<a class="headerlink" href="#32-the-frozen-directive-single-draw-scoped" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>Reply with only the number: no units, no sentence, nothing else.
+</code></pre></div>
+<p>(64 chars — amendment A; the candidate printed a wrong
+character count, an error the round-1 verifier had already
+flagged.) Byte-
+identical in every arm that carries it; only its position
+and its distance to B vary. The claim is scoped to this
+string. A second phrasing is excluded from v1: two phrasings
+× the arm set doubles the panel and re-opens the
+single-rendering collinearity question for zero decision
+value — the instrument's subject is distance, and phrasing
+is held constant precisely so distance can vary alone.</p>
+<h3 id="33-what-the-cases-do-not-inherit">3.3 What the cases do NOT inherit<a class="headerlink" href="#33-what-the-cases-do-not-inherit" title="Permanent link">&para;</a></h3>
+<p>The tree's shipped/generated populations already carry
+answer-only directives (the example fixtures, numform's
+templates, negation's contract). On user fixtures the frozen
+directive would duplicate or contradict an incumbent
+directive (hierarchy's construct), unscreened. On generated
+cases the frozen directive is the <em>only</em> directive in the
+prompt, by construction and by the §7 screen. That is why
+this instrument generates its own cases instead of treating
+user fixtures.</p>
+<h2 id="4-arms-and-the-attribution-contract">4. Arms and the attribution contract<a class="headerlink" href="#4-arms-and-the-attribution-contract" title="Permanent link">&para;</a></h2>
+<p>Six arms per case. Layouts are within one user turn; joiner
+"\n" (distraction <code>JOINER</code>); B and the directive are
+byte-identical wherever they appear.</p>
+<table>
+<thead>
+<tr>
+<th>Arm</th>
+<th>Layout</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>adj</code></td>
+<td>C + B</td>
+<td>headline reference (added distance 0)</td>
+</tr>
+<tr>
+<td><code>sep_256</code></td>
+<td>C + filler(256) + B</td>
+<td>headline dose 256</td>
+</tr>
+<tr>
+<td><code>sep_1024</code></td>
+<td>C + filler(1024) + B</td>
+<td>headline dose 1024</td>
+</tr>
+<tr>
+<td><code>disp_256</code></td>
+<td>C + B + filler(256)</td>
+<td>displaced control, dose-matched</td>
+</tr>
+<tr>
+<td><code>disp_1024</code></td>
+<td>C + B + filler(1024)</td>
+<td>displaced control, dose-matched</td>
+</tr>
+<tr>
+<td><code>adj_after</code></td>
+<td>B + C</td>
+<td>order/recency control, descriptive</td>
+</tr>
+</tbody>
+</table>
+<h3 id="41-why-the-sketchs-control-set-was-insufficient">4.1 Why the sketch's control set was insufficient<a class="headerlink" href="#41-why-the-sketchs-control-set-was-insufficient" title="Permanent link">&para;</a></h3>
+<p>The sketch claimed the cross-turn arm and <code>adj_after</code> "bound"
+the filler confound. They do not: neither contains filler, so
+in the sketch every separated cell differed from every
+control cell in two ways at once — filler presence (hence
+total prompt length) and between-ness. (Part II, F1, executes
+this; §4.2 is the cure.)</p>
+<h3 id="42-the-displaced-control-is-the-missing-arm">4.2 The displaced control is the missing arm<a class="headerlink" href="#42-the-displaced-control-is-the-missing-arm" title="Permanent link">&para;</a></h3>
+<p><code>disp_d</code> carries filler sized to the same verified delta d
+over the same case's adjacent render, in the same turn, but
+<strong>after</strong> B, so:</p>
+<ul>
+<li>total rendered prompt length: equal to <code>sep_d</code> (both are
+  adj + d tokens, verified per candidate — the sizing rule
+  sizes each arm's span to its own exact delta, so seam
+  tokenization differences are absorbed by the search);</li>
+<li>filler presence/content class: same corpus, same dose.
+  The two arms' spans are drawn from the same stream prefix
+  before sizing; they are <strong>not</strong> the same span — per-arm
+  sizing accepts different (whole, suffix) constructions
+  (executed in the fresh review: one asymmetric seam merge
+  gave a 284-char separated span vs a 285-char displaced
+  span at dose 256, both delta-exact). A description of the
+  two arms as sharing one span would be false; per-arm
+  sizing is what makes the doses equal, not span identity.</li>
+<li>directive↔B distance: the adjacent distance (the filler is
+  not between them);</li>
+<li>what <em>does</em> differ from <code>adj</code>: B's distance to the
+  generation point grows by d, and total length grows by d.</li>
+</ul>
+<p>The headline contrast is therefore an <em>excess of losses</em>:
+on the headline population, S counts <code>sep_d</code> compliance
+losses and T counts <code>disp_d</code> compliance losses on the same
+cases, and the rule (§6) fires only when S exceeds T by a
+derived margin. A pure question-recency effect fires on
+<code>disp_d</code>, not <code>sep_d</code>, and works against the headline. A
+pure filler-presence/length effect fires on both — how
+completely the margin differences it out depends on how
+case-correlated the effect is, and §6 prints both bounds
+honestly (a perfectly case-correlated length effect gives
+S = T and can never fire; the independent-cells bound is
+printed as a number, 0.0788, with its premise, §6).</p>
+<p>Residual confounds, printed beside every decision, never
+argued away: (i) <strong>value-mediation</strong> — in <code>sep_d</code> the filler
+is also between the directive and the <em>fact</em>, but
+fact↔question adjacency is held (§3.1), and a compliance
+loss with the value kept (<code>noncompliant_correct_value</code>,
+§5.2) cannot be a fact-loss story; the S split by
+value-kept/value-lost is printed so a fact-mediated pattern
+is visible as such; (ii) <strong>filler-proximity</strong> (amendment G)
+— on the directive-first arms, filler immediately preceding
+B is coextensive with between-ness, so a mechanism that
+fails iff filler immediately precedes the governed block
+(the directive never consulted; executed in the fresh
+review as a deterministic mock firing S = 12, T = 0) fires
+this label, and the separating arm is not among the six;
+the value-kept/value-lost split mitigates but does not
+gate; (iii) filler <em>content</em> is one frozen corpus (§4.3) —
+the claim is scoped to neutral prose filler, and a
+topically-related or instruction-like filler is a different
+treatment, excluded.</p>
+<h3 id="43-filler">4.3 Filler<a class="headerlink" href="#43-filler" title="Permanent link">&para;</a></h3>
+<p><code>distraction.NEUTRAL_CORPUS</code> (71 sentences, digest
+<code>NEUTRAL_CORPUS_SHA256</code>), reused by needle. Executed hygiene:
+71 sentences, <strong>no digit character of any kind</strong> — filler
+cannot contain the answer value, a competing number, or a
+digit that primes a numeric format. Spans are stream
+prefixes in stream order. Screening per §7.</p>
+<h2 id="5-scorer">5. Scorer<a class="headerlink" href="#5-scorer" title="Permanent link">&para;</a></h2>
+<h3 id="51-the-span-and-the-two-verdicts">5.1 The span and the two verdicts<a class="headerlink" href="#51-the-span-and-the-two-verdicts" title="Permanent link">&para;</a></h3>
+<p>The judged span is exactly <code>core.evaluate</code>'s answer: the
+decoded pre-boundary span. Two verdicts are derived from the
+record per cell, never conflated:</p>
+<ul>
+<li><strong>Byte-exact verdict</strong> (descriptive, beside the headline):
+  <code>exact_match</code> conjoined with <code>boundary_found</code> in the cell
+  (sibling pattern). This is the lab's verdict; the probe
+  does not redefine it.</li>
+<li><strong>Compliance</strong> (headline): a total function of the span
+  under the frozen grammar §5.2, derived in the stage from
+  the recorded span and recomputed by the diff validator
+  from the carried primitives (§5.4).</li>
+</ul>
+<p>The reply contract is answer-only and byte-identical in
+every arm, so a fully compliant response <em>is</em> <code>expected</code>,
+byte for byte — there is no prose arm whose compliant output
+is a superstring of the expected answer; prose output is,
+under this instrument's frozen contract, noncompliance
+itself, in every arm equally (the negation settlement:
+byte-identical reply contract in every arm).</p>
+<p>Cap censoring: the default generation cap is 64 tokens. A
+compliant answer is ≤3 digits plus boundary — three orders
+under the cap — and no arm demands pre-answer prose, so the
+answer's position in the output does not move with the
+treatment. The remaining channel is input-side: longer arms
+invite <code>arm_context_exceeded</code> attrition (§7), printed beside
+every rate, and headline populations require completion in
+all three arms of the contrast (§5.3).</p>
+<h3 id="52-frozen-compliance-grammar-and-decomposition">5.2 Frozen compliance grammar and decomposition<a class="headerlink" href="#52-frozen-compliance-grammar-and-decomposition" title="Permanent link">&para;</a></h3>
+<p>(amendments B1–B3, C)</p>
+<p>Grammar (total, no stripping, no casefolding, no parsing
+beyond the stated extraction): a completed cell is
+<strong>compliant</strong> iff its span matches <code>\A[0-9]+\Z</code> — fullmatch
+semantics (amendment B2: Python's <code>$</code> anchor matches before
+a trailing newline, so <code>re.match(r"^[0-9]+$", "417\n")</code> is
+True while fullmatch is False; the frozen semantics is
+fullmatch). The digit alphabet is ASCII [0-9] everywhere
+(amendment B3): <code>digit_count</code> and first-run extraction use
+[0-9] only — <code>str.isdigit()</code> and <code>\d</code> disagree with each
+other on spans like "4²7", and Unicode digits (٤١٧, ４１７)
+are non-digits under this grammar.</p>
+<p>Decomposition of every completed cell into exactly one
+class (expected <code>417</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Class</th>
+<th>Definition</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>compliant_correct</code></td>
+<td>compliant ∧ span == expected</td>
+<td><code>"417"</code></td>
+</tr>
+<tr>
+<td><code>compliant_wrong</code></td>
+<td>compliant ∧ span != expected</td>
+<td><code>"418"</code>, <code>"0417"</code></td>
+</tr>
+<tr>
+<td><code>noncompliant_correct_value</code></td>
+<td>¬compliant ∧ first maximal <code>[0-9]+</code> run == expected</td>
+<td><code>"The answer is 417."</code>, <code>"417 crates"</code></td>
+</tr>
+<tr>
+<td><code>noncompliant_wrong</code></td>
+<td>¬compliant ∧ (no digit run ∨ first run != expected)</td>
+<td><code>"1,417"</code> (first run <code>1</code>), <code>"I cannot find that number."</code>, <code>""</code></td>
+</tr>
+<tr>
+<td><code>boundary_only</code></td>
+<td>¬boundary_found ∧ the span is compliant-correct</td>
+<td><code>"417"</code> with the boundary missed</td>
+</tr>
+</tbody>
+</table>
+<p>Frozen rulings: the value extraction is the <strong>first</strong>
+maximal ASCII digit run — <code>"1,417"</code> is
+<code>noncompliant_wrong</code>, not correct-value (grouping is a
+format violation and its first run is not the value);
+leading zeros are compliant but wrong (<code>"0417"</code>); a value
+embedded in a longer digit string is compliant-wrong
+(<code>"14170"</code>). Empty span is <code>noncompliant_wrong</code>.</p>
+<p><strong>Boundary disposition (amendment B1, per negation §4.2 as
+shipped).</strong> Boundary-missing cells are grammar-classified
+over the whole-output span (the span <code>core.evaluate</code>
+defines when no boundary is found). A boundary-missing cell
+whose span is compliant-correct decomposes as
+<code>boundary_only</code> — boundary attrition only: it cannot count
+toward D (D requires the adjacent cell boundary-found,
+which <code>compliant_correct</code> already implies) and never toward
+S or T. Boundary-missing cells with any other span classify
+normally (a boundary-missing <code>"418"</code> is <code>compliant_wrong</code>;
+a boundary-missing <code>"The answer is 417."</code> is
+<code>noncompliant_correct_value</code> and <em>does</em> count as a loss in
+S/T). Completion = a span was produced. This disposition is
+exactly negation's shipped <code>boundary_only</code> rule; the
+candidate's blanket "boundary-missing cells are decomposed
+out first" was broader than the precedent it cited and is
+superseded (Part III, item 6, executes the three readings
+the blanket text admitted, yielding three different labels
+on identical generations).</p>
+<h3 id="53-conditioning">5.3 Conditioning<a class="headerlink" href="#53-conditioning" title="Permanent link">&para;</a></h3>
+<p>D = cases whose adjacent cell is <code>compliant_correct</code>,
+inside the population of cases completed in the adjacent,
+separated, and displaced arms of the dose. Correctness
+alone is the wrong baseline property: a case answered
+correctly-but-noncompliantly when adjacent was never
+compliant, and its separated noncompliance is not a
+distance loss; a case compliant-but-wrong when adjacent
+<em>can</em> show a compliance loss but is not evidence the
+candidate both knew and formatted the answer at distance 0.
+The conditioning is on the <strong>reference arm only</strong> (exactly
+negation's D), so the treated arm's outcome never excludes
+a case from D; it only classifies it. The full per-arm 2×2
+(compliant × correct) is printed for every arm (§8), so a
+correctness drop at distance is visible as its own readout
+— it is simply not the headline, because correctness at
+distance is needle/distraction's axis.</p>
+<h3 id="54-records-validator-recomputable-primitives">5.4 Records: validator-recomputable primitives<a class="headerlink" href="#54-records-validator-recomputable-primitives" title="Permanent link">&para;</a></h3>
+<p>(amendment C)</p>
+<p>Per cell the record carries: <code>verdict</code>, <code>boundary_found</code>,
+<code>boundary_text_match</code>, <code>input_tokens</code>, <code>answer_digest</code>
+(SHA-256 of the span), <code>first_digit_run_digest</code> (SHA-256 of
+the first maximal ASCII digit run; <strong>"" when the span has
+no run</strong> — amendment B3), <code>nondigit_projection_digest</code>
+(SHA-256 of the span with every ASCII digit removed — the
+field amendment C adds), and the descriptive integers
+<code>answer_len</code> (characters) and <code>digit_count</code> (total ASCII
+digit characters).</p>
+<p>Every §5.2 class is a function of the digests plus the
+case's expected digest, and <strong>only</strong> of the digests:
+compliant ⇔ <code>answer_digest != sha256("")</code> ∧
+<code>nondigit_projection_digest == sha256("")</code>; correct ⇔
+answer digest equals expected digest; correct-value ⇔
+first-run digest equals expected digest. <code>answer_len</code> /
+<code>digit_count</code> are descriptive only and never a verdict
+input: under the candidate's original bare-integer
+derivation (compliant ⇔ <code>answer_len == digit_count</code>), an
+executed forgery — identical digests, <code>digit_count</code> 3 vs
+10 — flipped <code>noncompliant_correct_value</code> ↔
+<code>compliant_wrong</code> undetectably (Part III, item 9). The diff
+validator recomputes the classes from the record alone; the
+stage classifies spans by digesting them into exactly these
+inputs, so stage and validator can never disagree (the
+cycle-190 digest-binding discipline; decidability executed
+on 15 spans by three parties, Part III). No raw answer
+text, no shape string, no prose is carried.</p>
+<p>Per record the stage also carries <code>arm_tokens</code> and
+<code>id_digests</code> per arm. An arm that was never constructed
+(the sized arms when unmatchable, or context-exceeded
+before sizing) carries neither — there is no render to
+measure — and every constructed sized arm's token count
+must sit exactly its dose above the adjacent arm's, which
+the validator checks on the stored counts.</p>
+<h2 id="6-decision-rule-derived-for-this-panel-executed">6. Decision rule — derived for this panel, executed<a class="headerlink" href="#6-decision-rule-derived-for-this-panel-executed" title="Permanent link">&para;</a></h2>
+<p>Rule, per candidate, per dose d ∈ {256, 1024}, over cases
+completed in <code>adj</code>, <code>sep_d</code>, and <code>disp_d</code>:</p>
+<ul>
+<li>D = # cases with <code>adj</code> cell <code>compliant_correct</code>.</li>
+<li>S = # cases in D with <code>sep_d</code> noncompliant.</li>
+<li>T = # cases in D with <code>disp_d</code> noncompliant.</li>
+<li><code>n_reverse</code> = # cases with <code>adj</code> noncompliant ∧ <code>sep_d</code>
+  compliant — printed beside, never in the rule.</li>
+<li>Fire <code>instruction_distance_drop_observed</code> iff <strong>D ≥ 10 ∧
+  S ≥ 6 ∧ S − T ≥ 5</strong>. Otherwise: D &lt; 10 → <code>insufficient</code>;
+  D ≥ 10 without the pattern → <code>below_threshold</code> (an
+  observed null at this panel, weak evidence, never
+  invariance).</li>
+</ul>
+<p>Operating characteristics (exact enumeration, four
+independent derivations agreeing; corrected per amendment
+E):</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Fire rate, frozen rule, N=24</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>random labeller</td>
+<td>0.0013</td>
+</tr>
+<tr>
+<td>no-effect competent</td>
+<td>0.0058</td>
+</tr>
+<tr>
+<td>drop q = 0.25</td>
+<td>0.2460</td>
+</tr>
+<tr>
+<td>drop q = 0.50</td>
+<td>0.9088</td>
+</tr>
+<tr>
+<td>drop q = 0.75</td>
+<td>0.9993</td>
+</tr>
+<tr>
+<td>pure length/presence (independent cells)</td>
+<td>0.0788</td>
+</tr>
+<tr>
+<td>pure length/presence (fully case-correlated)</td>
+<td>0.000 (by construction: S = T)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The pure-length bound carries its premise (amendment E).</strong>
+The independent-cells figure is the worst case <strong>only under
+corr(sep, disp) ≥ 0</strong>. Under negatively paired nulls the
+bound is breached, executed by two independent methods that
+agree: antithetic Monte Carlo — 0.1085 at ρ = −0.3, 0.1333
+at ρ = −0.6; Gaussian copula — 0.1102 at ρ = −0.5, 0.1327
+at ρ = −0.8. The corrected statement: the pure-length rate
+is at most <strong>0.133 at ρ = −0.8</strong> in every executed model,
+while the no-effect rate stays <strong>≤ 0.0077 in every paired
+model</strong> executed by any party (positive-ρ paired nulls only
+improve the rule: no-effect 0.0023 / 0.0004 / ~0 at ρ =
++0.3 / +0.6 / +0.9, power 0.918–0.938). No single "the
+control rate is X" sentence may be printed.</p>
+<p><strong>Family-wise (amendment E).</strong> 2 dose decisions × 24
+candidates = 48 decisions per run. At the no-effect rate,
+the exact expectation is <strong>0.28 false labels</strong> per panel
+with <strong>P(≥1) = 0.24</strong>. Under candidate-level frailty
+(Beta-distributed baseline rates, κ = 50/20/10) the
+no-effect expectation rises to <strong>E = 0.40–0.59,
+P(≥1) = 0.33–0.44</strong>. At the printed pure-length bound
+(0.0788 per decision): <strong>E ≈ 3.78 labels, P(≥1) ≈ 0.98</strong>.
+All three conversions print beside the verdicts (§8).</p>
+<p><strong>Verdict availability (amendment E).</strong> The D ≥ 10 floor is
+reached with probability <strong>0.511</strong> at an adjacent
+compliant-correct rate of 0.40 and <strong>0.153</strong> at 0.30
+(exact), so <code>insufficient</code> is the common verdict for weak
+candidates by construction; §8 states this in degree, not
+only in kind.</p>
+<p><strong>Utility scope (amendment F).</strong> The panel is powered for
+large drops (≥0.5 conditional) and weak for a 0.25 drop
+(0.2460 exact; 0.78–0.93 power range at q = 0.50 across
+every executed perturbation — pairing, frailty conditioning,
+even N=20: 0.813). The instrument is a per-dose large-drop
+falsifier; the 0.25 row is labelled <strong>below resolution</strong>
+wherever the operating characteristics print.</p>
+<p>Withholding semantics (frozen): <code>insufficient</code> = the panel
+cannot speak (withheld, never acquittal); <code>below_threshold</code>
+= the pattern was looked for at this panel's stated power
+and not found (weak evidence).</p>
+<h2 id="7-fail-closed-vocabulary-amendment-d">7. Fail-closed vocabulary (amendment D)<a class="headerlink" href="#7-fail-closed-vocabulary-amendment-d" title="Permanent link">&para;</a></h2>
+<p>No invented words beyond the section-label pattern:</p>
+<ul>
+<li>Stage details: <code>{cancelled,
+  instruction_distance_record_budget_exceeded,
+  instruction_distance_screen_failed}</code>.
+  <code>…_screen_failed</code> is bound to the stage-level screens:
+  the special-token-literal audit over the frozen directive,
+  fact/question templates, topics, and corpus against every
+  candidate format, and the boundary-text containment check
+  over the generated texts — either hit fails the whole
+  stage closed before any generation.</li>
+<li>Per-cell details: <code>{"", arm_context_exceeded,
+  arm_evaluation_failed, arm_unmatchable, arm_screened}</code> —
+  the needle cell set including <code>arm_screened</code> (amendment
+  D: the candidate's §7 claimed "the needle cell set" while
+  omitting it). Per-cell screening is the needle rule: a
+  constructed filler span containing the case value
+  (case-folded) or the candidate's decoded boundary text is
+  screened — the cell is <code>arm_screened</code>, counted per arm in
+  §8's attrition, and the stage continues. (Read literally
+  with a stage-level binding, one screened span would have
+  failed the whole stage; the shipped behaviour is
+  needle's per-cell disposition, and the screening rule
+  text in the protocol says so.)</li>
+<li>Whole-stage failure (generator, renderer, serializer,
+  non-UTF-8): <code>{"available": False, "detail":
+  "instruction_distance_unavailable"}</code>.</li>
+<li>Section labels only: <code>instruction_distance_drop_observed</code>
+  / <code>below_threshold</code> / <code>insufficient</code>.</li>
+<li>Model noncompliance is scored, never a detail. No
+  <code>arm_parse_failed</code>, no per-arm "not applicable".</li>
+<li>A construction that cannot be verified exact is never
+  shipped approximate: sizing failure inside the budget is
+  the per-cell <code>arm_unmatchable</code> (§1.1), which is the
+  verification discipline operating, not an exception to it.</li>
+</ul>
+<h2 id="8-report-shape">8. Report shape<a class="headerlink" href="#8-report-shape" title="Permanent link">&para;</a></h2>
+<p>Per candidate, per dose, in order: (1) per-arm 2×2 counts
+(compliant × correct) for all six arms with per-arm
+attrition (<code>n_context_exceeded</code>, <code>n_evaluation_failed</code>,
+<code>n_unmatchable</code>, <code>n_screened</code> — amendment D) beside each;
+(2) D, S, T, <code>n_reverse</code>, the decision, and S split by
+value-kept (<code>noncompliant_correct_value</code>) vs value-lost,
+with S − T beside it; (3) the <code>adj_after</code> compliance rate
+(order control) and the closed-book floor (§8.1); (4)
+per-case <code>id_length_delta</code> per arm against the adjacent
+render and <code>max_abs_id_delta</code> — token-ID divergence is
+reported, not gated (arms differ in text by construction;
+same-ids between <code>adj</code> and another arm is a rendering
+anomaly, and a same-ids compliance flip is a determinism
+finding); (5) the operating-characteristics paragraph (§6,
+in substance, at this panel's N=24 — printed, not
+footnoted), carrying amendment E's corrected conversions
+and amendment F's scope sentences.</p>
+<h3 id="81-closed-book-floor-descriptive-not-an-arm">8.1 Closed-book floor (descriptive, not an arm)<a class="headerlink" href="#81-closed-book-floor-descriptive-not-an-arm" title="Permanent link">&para;</a></h3>
+<p>No extra generation: the value is a seed-derived 3-digit
+number stated only in the fact sentence, so a candidate
+that never saw the fact can be compliant-correct only by
+guessing the number. The section prints this derivation
+(900 equiprobable values under the generator; model priors
+over round numbers are a stated caveat, not a hidden one)
+instead of spending an arm on it.</p>
+<h2 id="9-overlap-boundary-per-shipped-probe-with-the">9. Overlap boundary — per shipped probe, with the<a class="headerlink" href="#9-overlap-boundary-per-shipped-probe-with-the" title="Permanent link">&para;</a></h2>
+<p>duplication disclosure (amendment H)</p>
+<table>
+<thead>
+<tr>
+<th>Probe</th>
+<th>Its owned axis</th>
+<th>The line</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>needle (191)</td>
+<td>where an answer-bearing <strong>fact</strong> sits in fixed filler; recall vs depth</td>
+<td>needle moves the <em>fact</em>; here the fact↔question geometry never moves (§3.1); the <em>directive</em> moves relative to a fixed block, and the score is form compliance, not recall.</td>
+</tr>
+<tr>
+<td>placement (193)</td>
+<td>question vs <strong>payload</strong> order inside one turn</td>
+<td>placement moves the question around content; here question and content are one fixed block B and what moves is a directive around B, at verified token doses placement never uses.</td>
+</tr>
+<tr>
+<td>distraction (184)</td>
+<td>irrelevant filler <strong>presence/dose</strong> spliced into a fixture's own message, verdicts re-measured</td>
+<td>distraction's filler is the treatment and its readout is the fixture verdict. Here filler is the <em>spacing medium</em>, held present-and-equal in the displaced control so presence is differenced out; the readout is compliance with a directive the filler separates from its question.</td>
+</tr>
+<tr>
+<td>position</td>
+<td>which <strong>option position</strong> holds the correct MC answer</td>
+<td>no options, no permutation.</td>
+</tr>
+<tr>
+<td>multiturn drift (189)</td>
+<td>information sharded across <strong>turns</strong></td>
+<td>all arms are single-turn; cross-turn delivery is excluded by name (§2.2).</td>
+</tr>
+<tr>
+<td>density (204)</td>
+<td><strong>count</strong> of simultaneous constraints at distance ~0</td>
+<td>exactly one directive in every arm; density varies how many, this varies how far.</td>
+</tr>
+<tr>
+<td>hierarchy</td>
+<td><strong>conflicting</strong> instruction's privilege position</td>
+<td>no conflict, no privilege marking, one directive.</td>
+</tr>
+<tr>
+<td>structured</td>
+<td>JSON parse/schema adherence of the <strong>answer document</strong></td>
+<td>the derivation pattern is borrowed (adherence from the recorded span, independent of <code>exact_match</code>); the treatment and population are structured's, not used here.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Duplication disclosure (amendment H, executed in the
+fresh review).</strong> The displaced arm's content is
+byte-identical to a shipped distraction after-cell on the
+candidate fixture (<code>distraction.build_cell_fixture(...,
+"after")</code>: adjacent content + joiner + span), and the
+separated arm is a constant prefix over a shipped
+before-cell. The residue this probe adds is therefore a
+contrast and a scorer, not an arm set: the mid-message
+insertion point between a directive and the block it
+governs, the differencing of the displaced control inside
+the decision rule, and the compliance grammar scored
+separately from correctness. No shipped probe differences a
+between-placement against its length-matched displaced twin
+inside a decision rule over a compliance grammar, and no
+shipped surgery inserts mid-message between a directive and
+the block it governs.</p>
+<h2 id="10-uniqueness-pass-primary-sources-fenced">10. Uniqueness pass — primary sources, fenced<a class="headerlink" href="#10-uniqueness-pass-primary-sources-fenced" title="Permanent link">&para;</a></h2>
+<p>(amendment I)</p>
+<p>Combination framing only; "first" is claimed nowhere.</p>
+<ul>
+<li><strong>LongIns</strong>, arXiv:2406.17588, §4.3 (LIST-vs-GIST
+  ablation): repeating the instruction before each question
+  (LIST) beats giving it once globally (GIST); "most models
+  are sensitive to the distance of instruction dependency…
+  when instructions and inputs are separated by a greater
+  distance, the performance of most models rapidly
+  degrades." Fencing: exam-style task <em>performance</em> (not
+  format compliance), concatenated question sets at
+  long-context lengths, API/hosted models — no exact-token
+  dose verification, no compliance/correctness
+  decomposition, and LIST-vs-GIST also changes instruction
+  <em>repetition count</em>, which this instrument holds at
+  exactly one.</li>
+<li><strong>Instructional distractions</strong>, arXiv:2502.04362, §5.2:
+  as QA input length grows, distraction rises; the authors'
+  own explanation is that it "<strong>may be due to</strong> the fact
+  that as the passage lengthens, the distance between the
+  instruction and the question grows" (the "may be due to"
+  hedge is part of the quotation — amendment I restores
+  it). Fencing: the distance claim is a post-hoc explanation
+  of a <em>length</em> manipulation in the presence of
+  instruction-like distractors — the confound (§4) this
+  instrument's displaced control exists to remove; no dose
+  is isolated, no compliance grammar, no local checkpoint.</li>
+<li><strong>LIFBench</strong>, arXiv:2411.07037 (Wu et al., ACL 2025,
+  Anthology 2025.acl-long.803, pp. 16445–16468; name
+  collision: LIFEbench, arXiv:2505.16234). Fenced per the
+  fresh review's settlement (c): §3.1 places the instruction
+  at the <strong>end</strong> of the prompt, six intervals to 128k; §5.3
+  reports performance declining "particularly beyond 16k or
+  32k tokens", <strong>but</strong> "'Format' performance remains
+  relatively stable across all input lengths in most models,
+  suggesting that tasks related to formatting are less
+  sensitive to longer contexts". <strong>Licensed:</strong> decline is
+  published prior art at 4k–128k with instruction-at-end.
+  <strong>Forbidden:</strong> citing LIFBench as support for a
+  format-compliance drop at doses 256/1024, or for
+  directive-at-head geometry — its §5.3 cuts against the
+  former and its layout is the latter's opposite. It is
+  never cited as load-bearing for any claim of this
+  instrument beyond "long-context instruction following
+  declines with length is published prior art".</li>
+<li><strong>Neighbour tools</strong> (surveyed in the design round, scoped
+  to the sources fetched): LM Evaluation Harness (task/metric
+  framework; no instruction-distance instrument in its
+  surveyed surface); HELM Capabilities / IFEval
+  (verifiable-instruction following at fixed prompt layouts,
+  no distance dose); OpenAI Evals (grader-scored task
+  framework); PromptPerfect (prompt <em>optimizer</em>);
+  DSPy (prompt-program <em>compiler/optimizer</em>). None of the
+  five doses a directive's separation from its question on
+  a local checkpoint crossed with chat-template families
+  under a derived decision rule. This survey is a
+  search-level pass over the named neighbours, stated as
+  such; it does not prove a universal negative.</li>
+</ul>
+<p>The combination that is this instrument's: <strong>verified
+rendered-token doses of separation between one frozen
+format directive and a fixed fact+question block, on a
+local checkpoint crossed with the lab's template families,
+filler presence differenced out by a dose-matched displaced
+control, compliance derived from the recorded span under a
+frozen grammar and reported in a 2×2 against correctness,
+with a panel-derived decision rule.</strong> Scoped to the sources
+above.</p>
+<h2 id="11-naming-audit">11. Naming audit<a class="headerlink" href="#11-naming-audit" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>--instruction-distance</code> / <code>instruction_distance</code>: zero
+  hits in the package, <code>docs/USAGE.md</code>, <code>docs/FAQ.md</code>,
+  <code>README.md</code> at design time. The flag string is free.</li>
+<li>The word "distance" is <strong>not</strong> free of a reserved sense in
+  the tree: surface-noise owns edit distance (Myers distance
+  between texts/verdicts). Mitigation (frozen): the USAGE
+  section and CLI help define the term on first use as
+  "rendered tokens between the frozen directive and the
+  question block, verified per candidate" and never use bare
+  "distance" for the edit-distance concept in this probe's
+  text.</li>
+<li>Collision with needle's vocabulary: needle owns "depth"
+  (position of a fact <em>inside</em> filler) and "dose" (filler
+  amount). This probe uses "dose" in needle's exact sense
+  (verified rendered-token delta — a deliberate shared
+  convention, stated in the help) and <strong>never</strong> uses "depth"
+  — nothing here is buried at a depth; the directive stays
+  at the prompt's head in every headline arm.</li>
+<li>Alternatives considered and rejected:
+  <code>--directive-distance</code> (inherits DIRECTIVE's over-broad
+  "directive"); <code>--instruction-separation</code> (invents a
+  synonym where the literature — LongIns §4.3 — already says
+  "distance of instruction dependency").</li>
+</ul>
+<h2 id="12-counts-caps-and-the-utility-amendments-a-f-j">12. Counts, caps, and the utility (amendments A, F, J)<a class="headerlink" href="#12-counts-caps-and-the-utility-amendments-a-f-j" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Arms per case: 6 (§4). Cases: 24 (§3.1). Candidates: ≤24
+  (§3.1).</li>
+<li><strong>Generations: 6 × 24 × 24 = 3,456 maximum.</strong></li>
+<li>Ground records: 24 × 24 = 576 multi-cell records.
+  Records-bytes bound 12 MiB (house bound).</li>
+<li><strong>Sizing economy (amendment J):</strong> sized cells are 4 per
+  candidate-case (sep/disp × 2 doses) = 2,304 panel-wide.
+  Expected ≈56K tokenizer encodes at the shipped
+  <code>span_candidates</code> estimator's executed mean (24.5
+  probes/cell, executed range 2–98 by backend); worst case
+  2,304 × 512 = <strong>1,179,648 encodes</strong> at the frozen
+  per-cell budget; plus per-generation encodes (≥3,456).
+  §1.4's rule text and the CLI help both carry this line.</li>
+<li>Generation cap: <code>--max-new-tokens</code> as recorded (default
+  64); a compliant answer needs ≤3 digits + boundary, so
+  the cap is never the binding constraint on a compliant
+  cell (§5.1). Context cap: <code>--max-context</code> as recorded
+  (default 2048); the 1024-dose arms are sized to be
+  measurable under it (§1.3), and any cell over it is
+  <code>arm_context_exceeded</code>, counted.</li>
+<li>No winner/selection readout: generated stage-local cases
+  are not the user's contest. Per-candidate decisions only;
+  nothing pooled across candidates; the primary run's
+  decision is never touched. Informational stage; never
+  fails the run.</li>
+</ul>
+<h3 id="monday-morning-utility-one-sentence-as-re-scoped-by">Monday-morning utility (one sentence, as re-scoped by<a class="headerlink" href="#monday-morning-utility-one-sentence-as-re-scoped-by" title="Permanent link">&para;</a></h3>
+<p>amendment F)</p>
+<p>For a maintainer laying out a prompt, the panel states —
+per dose, at printed operating characteristics — whether
+placing 256 or 1024 tokens of filler between a format
+directive and the question it governs produces a large
+(≥50-point conditional) format-compliance collapse beyond
+what the same filler after the question produces, for this
+checkpoint family; a non-fire excludes large
+separation-driven collapse and claims nothing smaller.
+Where the verdict is <code>insufficient</code> or <code>below_threshold</code>,
+the honest deliverable is "this panel cannot distinguish
+them; choose on other grounds", and the section says so in
+substance. (The candidate's threshold-presupposing layout
+instruction — "sets their prompt layout inside the distance
+that holds" — is deleted: per-dose labels can invert the
+raw dose order through control noise alone, so no layout
+instruction may presuppose a threshold.)</p>
+<hr />
+<h1 id="part-ii-round-1-adjudication-coordinator-43-no-build">Part II — Round-1 adjudication (coordinator #43, NO-BUILD)<a class="headerlink" href="#part-ii-round-1-adjudication-coordinator-43-no-build" title="Permanent link">&para;</a></h1>
+<p>Reproduced verbatim from the surviving working-tree copy,
+minus its original title line (superseded by this
+consolidation's status header). The copy truncates
+mid-F6(c), at the point marked below; the round-1 design
+document's own §§2–7 do not survive (see the status
+header), and the round-1 briefs are the surviving record.</p>
+<h2 id="round-summary-coordinator-43-design-round-only-nothing-built">Round summary (coordinator #43, design round only — nothing built)<a class="headerlink" href="#round-summary-coordinator-43-design-round-only-nothing-built" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Tree at main <code>a6705d1b9607</code> (cycle 213 closed green, 8,442 tests,
+  precise coverage 95.3455%). This round was READ-ONLY except for
+  this doc and the briefs; no suite was run, no push was made, no
+  tag was cut or discussed.</li>
+<li>Specialists (blind to each other): researcher
+  (<code>~/workspace/agents_out/instructiondistance/research.md</code>),
+  red-team A (<code>redteam_a.md</code>), red-team B (<code>redteam_b.md</code>),
+  verifier/claims auditor (<code>verifier.md</code>). All four briefs landed;
+  the verifier resolved every externally checkable claim against
+  primary sources, re-ran every surviving PoC, and recomputed all
+  decision math with its own exact enumeration; the coordinator
+  re-executed the load-bearing claims itself (§4). <strong>Fabrication
+  sweep: clean</strong> — no invented symbol and no fabricated citation
+  in any brief (the third consecutive clean round); the failures
+  found were one wrong number (64, not 61), one wrong file
+  attribution, one mislabelled table column, stale draft residues
+  in the researcher's verdict text, and line drift ≤13 lines, all
+  handled in §5.</li>
+<li>Convergence and divergence, in one paragraph: all three blind
+  briefs and the verifier return NO-BUILD for the candidate as
+  specified in the circulated sketch (generated fact cases, one
+  frozen digits constraint, adjacent-before / adjacent-after /
+  filler-dosed / cross-turn arms, digits-only compliance derived
+  from records, any-discordant-pair falsifier with a borrowed
+  floor, headline conditioned on adjacent-correct), and the
+  verifier upholds that unanimously, fatal by fatal, by
+  execution. The researcher additionally specifies an amended
+  instrument (needle's verified rendered-delta doses at
+  (256, 1024), the cross-turn arm dropped, dose-matched
+  <em>displaced</em> controls whose losses enter the decision rule as a
+  subtraction term, reference-arm conditioning on adjacent
+  compliant-correct, a frozen grammar with validator-recomputable
+  carried primitives, a panel-derived rule) and recommends BUILD;
+  the verifier reproduced its operating characteristics exactly
+  and ruled it a <strong>resubmission, not an amendment</strong>, under this
+  program's own test, and the researcher himself flags that call
+  in his §12. The coordinator concurs: the verdict is
+  <strong>NO-BUILD</strong> — for the sketch, and as a build order for the
+  amended instrument in this round. §3 records the amended
+  instrument as the resubmission candidate in full, including the
+  points the fresh review must settle head-on.</li>
+</ul>
+<h2 id="1-why-no-build-the-fatal-defects-of-the-candidate-as-specified">1. Why NO-BUILD: the fatal defects of the candidate as specified<a class="headerlink" href="#1-why-no-build-the-fatal-defects-of-the-candidate-as-specified" title="Permanent link">&para;</a></h2>
+<p>Each defect below is individually blocking and was established by
+execution (attribution: R = researcher, A = red-team A, B =
+red-team B, V = verifier, C = coordinator).</p>
+<h3 id="f1-attribution-distance-filler-presence-and-total-length-are-one-number-on-every-sketch-arm-and-the-separating-control-does-not-exist">F1 — Attribution: distance, filler presence, and total length are one number on every sketch arm, and the separating control does not exist<a class="headerlink" href="#f1-attribution-distance-filler-presence-and-total-length-are-one-number-on-every-sketch-arm-and-the-separating-control-does-not-exist" title="Permanent link">&para;</a></h3>
+<p>By the sketch's own construction, on every same-turn arm
+<code>distance_tokens == filler_tokens == added_total_length_tokens</code>
+(adjacent 0/0/0; separated d/d/d — A poc1, V re-ran). Three causal
+worlds — compliance fails iff between-distance &gt; 0, iff any
+neutral filler is present anywhere, iff total prompt length
+exceeds a threshold — predict identical observations <code>[1,1,0,0,0]</code>
+on all five sketch arms (A; B poc2 executes the length-only vs
+distance-only version: identical on every arm, diverging only on
+the missing control). The one arm that separates them — filler at
+the same dose placed <em>not between</em> constraint and question —
+does not exist in the sketch. Neither claimed control bounds it:
+adjacent-after carries no filler (it is an order/recency control
+only), and the cross-turn arm carries no filler either (it bundles
+turn boundary + scripted <code>"Noted."</code> history + prior-turn
+placement). The sketch's conceded mitigation (b) is therefore
+false by construction. The tree precedents the control twice —
+<code>repetition.py:66-71</code> (the <code>pad</code> arm and the <code>length_effect</code>
+contrast) and <code>density.py:121</code> (<code>sham</code> in <code>ARM_KEYS</code>) — and
+<code>docs/DISTRACTION_DESIGN.md</code> exists precisely because neutral
+filler at these doses is a verdict-moving treatment in this tree.
+Two further identities ride along (A, B): in the constraint-first
+layout, distance-to-question and distance-to-generation-point
+differ only by the constant question length, so "distance" and
+"recency of the constraint" are affine-identical on these arms;
+and the sketch never states which side the separated filler sits
+on (B: separated-before and separated-after have the same
+distance-between and opposite distance-to-generation — a build
+would have to invent the load-bearing choice). No discordance
+this instrument can produce is attributable to distance.</p>
+<h3 id="f2-the-scorer-relocates-the-byte-exact-trap-and-the-promised-verdict-cannot-be-derived-from-the-trees-records">F2 — The scorer relocates the byte-exact trap, and the promised verdict cannot be derived from the tree's records<a class="headerlink" href="#f2-the-scorer-relocates-the-byte-exact-trap-and-the-promised-verdict-cannot-be-derived-from-the-trees-records" title="Permanent link">&para;</a></h3>
+<p>(a) <strong>The 2×2 is degenerate.</strong> The sketch promises a
+(compliant × correct) readout with correctness through the
+tree's only correctness axis, byte-exact (<code>core.py:797</code>:
+<code>exact_match = status == "completed" and answer == case.expected</code>,
+answer = the pre-boundary span, <code>core.py:939</code>/<code>:966</code>). Executed
+(B poc1, V re-ran): with a digit-string expected, exact ⇒
+byte-equal ⇒ digits-only, so the (correct ∧ non-compliant) cell
+is <strong>structurally empty</strong> (0/12 rows), and prose-correct vs
+prose-wrong are indistinguishable on both axes — no value
+extractor is specified. DIRECTIVE F1 relocated, not escaped.
+(b) <strong>The grammar is unfrozen.</strong> "Digits-only match" states none
+of: strip policy, sign, leading zeros, decimal, grouping, ASCII
+vs Unicode digits — each executed to flip verdicts (A poc4,
+B poc1: byte-exact correct compliant answers <code>"-42"</code>, <code>"42.5"</code>,
+<code>"1,234"</code> score digits-only False — 3 of the 4 number shapes the
+tree itself admits). The tree's standard for a frozen digits
+grammar exists (<code>confidence.py:91-96</code>: ASCII only, no sign, no
+leading zeros, the <code>int()</code>/<code>\d</code> traps named) and the sketch meets
+none of it. (c) <strong>Digest-only records cannot carry the verdict.</strong>
+Every sibling generated probe's records carry digests only
+(<code>negation.py:57</code>: "Records carry digests only"; the
+needle/placement verdict identity is <code>verdict == (answer_digest
+== sha256(expected)) and boundary_found</code>). Executed (A poc4,
+B poc1 §E): compliant-wrong <code>999</code> and non-compliant <code>42 kg</code> are
+the same record class (digest ≠ expected, boundary found). A
+digits verdict therefore needs answer text in the records
+(breaks the digest discipline), a stage-attested boolean (the
+forgery surface the discipline exists to remove), or a frozen
+carried primitive (density's word-hash pattern) — the sketch
+specifies none of the three. <code>structured.classify_response</code>
+(<code>structured.py:568</code>) does not transfer: it derives adherence
+from the full decoded text of <em>user-fixture observations</em>, a
+record shape the generated probes deliberately do not use.
+(d) <strong>The population is silently restricted</strong> to plain
+non-negative integers — perfect word, grouped, and negative
+answers all score compliance False (B poc1 §F) — a restriction
+the sketch never states and which makes its "fact question"
+population a numform-style lookup set, not the RAG population
+its utility paragraph promises.</p>
+<h3 id="f3-the-borrowed-floor-minus-the-test-it-was-borrowed-from-is-a-noise-printer">F3 — The borrowed floor, minus the test it was borrowed from, is a noise printer<a class="headerlink" href="#f3-the-borrowed-floor-minus-the-test-it-was-borrowed-from-is-a-noise-printer" title="Permanent link">&para;</a></h3>
+<p>What density and field-order actually freeze is a conjunction:
+floor <strong>and</strong> directional majority <strong>and</strong> an exact sign test
+(<code>density.py:1056-1066</code>; <code>fieldorder.py:708-720</code>, floor constant
+<code>fieldorder.py:99</code> / <code>density.py:128</code>). The sketch borrows the
+floor (6) and mentions neither direction, nor the sign test, nor
+α. Executed under both jitter models (the sketch never states
+whether discordance is counted per pair or per case-across-arms
+— the ambiguity is itself part of the defect): the floor-only
+any-arm rule fires <strong>1.000</strong> on a random labeller under both
+models (exact anchor: a single pair's P(≥6 discordant of 20) =
+0.9793 — the floor sits <em>below</em> the null's expected discordance
+of 10); on a competent no-effect candidate it fires <strong>0.8912</strong>
+(A's per-case-across-arms model, exact; ≈21.4 of 24 candidates
+per panel) and <strong>0.3532</strong> (B's per-pair model, exact DP; ≈8.48
+false candidates per panel) — V's independent enumeration
+confirms both models' numbers. The rule is also direction-blind
+(A, deterministic): a candidate whose compliance <em>improves</em> with
+distance "falsifies" identically. 96 unadjusted decisions per
+panel (24 candidates × 4 separated contrasts), no family-wise
+expectation anywhere. This is the negation round's borrowed-(6,2)
+failure at larger scale — that rule at least demanded a joint
+pattern.</p>
+<h3 id="f4-conditioning-on-adjacent-correct-deletes-exactly-the-cases-the-treatment-moves-answer-syntax-f2-executed">F4 — Conditioning on adjacent-correct deletes exactly the cases the treatment moves (answer-syntax F2, executed)<a class="headerlink" href="#f4-conditioning-on-adjacent-correct-deletes-exactly-the-cases-the-treatment-moves-answer-syntax-f2-executed" title="Permanent link">&para;</a></h3>
+<p>Deterministic worlds (A poc7, B poc4 — agreeing): 20 cases,
+compliance 1.00 when adjacent; at distance the 10
+adjacent-wrong-but-compliant cases lose the format too, so
+unconditional compliance falls <strong>1.00 → 0.50</strong> — a 50-point
+format-only effect that is the claim's subject — while the
+conditioned headline (pool = the 10 adjacent-correct cases)
+reports discordant 0, "identical at every distance". The mirror
+world hides gains symmetrically. And verdict availability is
+outcome-dependent (A world C, B §B): a candidate with ≤5
+adjacent-correct cases can never reach a floor of 6 inside its
+conditioned pool, so the weakest candidates — the ones the
+utility is about — are unfalsifiable by arithmetic. The 2×2
+printed <em>beside</em> the headline does not cure this: the
+falsification claim and its floor operate only on the
+conditioned slice, so the claim as written ("compliance is
+identical at every distance") is never tested.</p>
+<h3 id="f5-the-falsifier-cannot-express-decay-the-claim-the-slate-title-makes">F5 — The falsifier cannot express "decay", the claim the slate title makes<a class="headerlink" href="#f5-the-falsifier-cannot-express-decay-the-claim-the-slate-title-makes" title="Permanent link">&para;</a></h3>
+<p>The rule is a function of pairwise inequality only — no
+direction, dose-order, or monotonicity term. Executed (A poc3,
+B poc3 §B; C independently, §4): monotone decay, recovery
+(compliance <em>improving</em> with distance), a threshold, a U, and a
+single-dose dip all return the identical verdict
+(<code>('falsified', 8)</code> under C's deterministic rendering). The
+tree's own position prior art is non-monotone (<code>needle.py:25-34</code>
+credits Lost in the Middle's edge-minus-middle functional form);
+a design that presupposes monotone decay contradicts it, and
+this rule could not detect the contradiction if it occurred.
+Per-dose rates printed descriptively could show a shape; the
+sketch's headline — its only decision-bearing output — cannot.
+Blocking for any build carrying the word "decay" or a
+curve-based layout recommendation.</p>
+<h3 id="f6-the-rungs-are-not-one-dimension-the-doses-are-undefined-and-the-top-dose-is-unmeasurable-at-defaults">F6 — The rungs are not one dimension, the doses are undefined, and the top dose is unmeasurable at defaults<a class="headerlink" href="#f6-the-rungs-are-not-one-dimension-the-doses-are-undefined-and-the-top-dose-is-unmeasurable-at-defaults" title="Permanent link">&para;</a></h3>
+<p>(a) <strong>Bundle (DIRECTIVE F3 verbatim).</strong> The cross-turn arm's
+rendered gap between constraint and question is a few dozen
+framing tokens — executed renders: 67 / 115 / 75 chars for
+chatml / llama3 / gemma (B poc2; A's independent renders agree) —
+<em>below</em> the smallest same-turn dose, while adding a turn
+boundary, an assistant turn, and per-family framing. Ordered by
+tokens it sits next to adjacent; ordered by turns it is last.
+The arms swap order by property, so "distance" names a bundle.
+(b) <strong>"F tokens" is undefined.</strong> A fixed filler text encodes to
+wildly different token counts under different tokenizers
+(A poc5: 200 word-tokens vs 1,140 char-tokens; B poc2: 192 /
+959 / 479 under three toy encoders), and a merged token can span
+the filler/question seam (B, executed). The settlement that
+makes a dose meaningful exists — needle's: dose as a
+rendered-token delta over the case's own dose-0 render, per
+candidate, exact-hit or <code>arm_unmatchable</code>, frozen encode budget
+(<code>needle.py</code> docstring; <code>distraction.py</code> sizing discipline) —
+and the sketch adopts none of it: no baseline, no sizing rule,
+no budget, no seam policy. Here the omission bites harder than
+in needle: candidates are template families, so a text-level
+dose is a different dose for every row of the readout.
+(c) <strong>The 2048 rung is a constant censoring class.</strong>
+<code>cli.py:198-199</code>: <code>--max-new-tokens</code> default 64,
+<code>--max-context</code> default 2048; the stages' context check is
+`len(ids) + max_new 
+...[truncated 17489 chars]</p>
+<hr />
+<p>[The surviving round-1 text truncates here, mid-sentence,
+inside F6(c). The check F6(c) was citing is verifiable from
+the tree it references: the stages' context check is
+<code>len(ids) + max_new_tokens &gt; max_context</code> (e.g. the
+negation stage's cell construction). The remainder of
+F6(c) is lost; the round-1 red team B brief
+(<code>~/workspace/agents_out/instructiondistance/redteam_b.md</code>)
+carries the surviving form of the 2048-rung argument.]</p>
+<hr />
+<h1 id="part-iii-fresh-review-adjudication-coordinator-59">Part III — Fresh-review adjudication (coordinator #59)<a class="headerlink" href="#part-iii-fresh-review-adjudication-coordinator-59" title="Permanent link">&para;</a></h1>
+<h1 id="fresh-review-adjudication-instruction-distance-3-resubmission-coordinator-59-2026-10-28">Fresh-review adjudication — instruction-distance §3 resubmission (coordinator #59, 2026-10-28)<a class="headerlink" href="#fresh-review-adjudication-instruction-distance-3-resubmission-coordinator-59-2026-10-28" title="Permanent link">&para;</a></h1>
+<p><strong>Verdict: NO-BUILD as written. BUILD-as-amended</strong>, under the parent's
+amendment test: every required amendment below is text, pins, reporting,
+or record-binding; none touches the endpoints (doses 256/1024, six arms,
+label vocabulary), the population (24 generated cases, D-conditioning as
+designed in §5.3), or the headline scorer (the §5.2 compliance grammar
+and decomposition, the rule D≥10 ∧ S≥6 ∧ S−T≥5). A build that omits any
+of amendments A–J is not this verdict's build. If BUILD: do not build in
+this round — the parent sequences build cycles.</p>
+<p><strong>Document-integrity note (side finding, reported not fixed).</strong> The
+working-tree copy of <code>docs/INSTRUCTIONDISTANCE_DESIGN.md</code> is truncated
+mid-F6(c) at line 214, ending "<code>len(ids) + max_new "; the file is
+untracked and no fuller copy exists anywhere in the tree (searched).
+The MkDocs site render and search index were built from the same
+truncated source. The candidate text of record for this review is
+therefore</code>~/workspace/agents_out/instructiondistance/research.md`
+§§1–12, which the round summary and the parent brief agree is what §3
+transcribed. This adjudication is appended to the truncated doc as the
+new final section.</p>
+<h2 id="what-survived-blind-attack-executed-three-parties-independently">What survived blind attack (executed, three parties independently)<a class="headerlink" href="#what-survived-blind-attack-executed-three-parties-independently" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Inherited OC CONFIRMED.</strong> Exact enumeration (coordinator, independent
+  convention) reproduces §6: random 0.0013; no-effect competent <strong>0.0058</strong>;
+  power q=0.25 → 0.2460; q=0.50 → <strong>0.9088</strong>; q=0.75 → 0.9993; pure-length
+  independent <strong>0.0788</strong>. Red team B's exact enumeration and red team A's
+  recomputation agree to rounding on every row; the round-1 verifier
+  makes four independent derivations. Neighbour grid confirms §6's knee.</li>
+<li><strong>Paired/correlated nulls, positive ρ: the rule survives.</strong> Coordinator
+  MC (200k, seed 20261028): ρ=+0.3/0.6/0.9 → no-effect 0.0023/0.0004/~0,
+  pure-length 0.0448/0.0132/0.0001, power 0.918–0.938. Red team B's
+  Gaussian-copula and shared-beta models agree in direction. The
+  independent-cells convention is the worst case for ρ≥0, as §6 claims.
+  Power under S–T pairing: 0.89–0.93 (B, executed).</li>
+<li><strong>F1 cure is real.</strong> Executed geometry: sep vs disp have identical
+  total length, identical constraint position (head), identical
+  constraint-to-generation distance; only the governed block's position
+  differs. The dose-matched displaced control exists and differences out
+  length and constraint-to-generation distance by construction.</li>
+<li><strong>F2(c) cure is real.</strong> §5.4's digest derivation is decidable:
+  coordinator executed stage-class == validator-class on 15 spans
+  including every frozen ruling ("1,417"→noncompliant_wrong;
+  "0417"/"14170"→compliant_wrong; ""→noncompliant_wrong); red team B
+  11/11 on an independent implementation. Under the ASCII pin
+  (amendment B3) there are no divergences.</li>
+<li><strong>Context budget at dose 1024: attack FAILED-TO-KILL.</strong> Red team A
+  executed renders over every catalog family plus local-repair variants:
+  worst adjacent render 307 tokens (byte tokenizer), worst 1024-arm
+  total 1,395 vs the 2,048 cap (headroom ≥653), sep/disp totals
+  identical — no arm-ordered attrition between the headline arms is
+  possible at a dose.</li>
+<li><strong>Duplication kill FAILS; residue is real but narrower than §9
+  claims.</strong> No shipped probe differences a between-placement against its
+  length-matched displaced twin inside a decision rule over a compliance
+  grammar, and no shipped surgery inserts mid-message between a
+  directive and the block it governs. But red team B executed:
+  <code>disp_d</code> is byte-identical to a shipped distraction after-cell on the
+  candidate fixture (<code>distraction.build_cell_fixture(..., "after")</code>,
+  distraction.py:409–422), and <code>sep_d</code> is a constant prefix over a
+  shipped before-cell. The residue is a contrast and a scorer, not an
+  arm set.</li>
+</ul>
+<h2 id="settlement-a-the-displaced-gate-under-blind-attack">Settlement (a) — the displaced gate under blind attack<a class="headerlink" href="#settlement-a-the-displaced-gate-under-blind-attack" title="Permanent link">&para;</a></h2>
+<p>The estimand survives: S−T identifies the excess of between-placement
+losses over displaced-placement losses on D, with total length and
+constraint-to-generation distance held identical by construction. Three
+attacks landed as fencing/naming items, none as a kill:</p>
+<ul>
+<li><strong>A-K1.1 (landed, amendment G).</strong> A deterministic mock that fails iff
+  filler immediately precedes the governed block (fact-proximity; the
+  constraint never consulted — constraint-deleted and dose-8
+  counterfactuals fail identically) fires S=12, T=0. On
+  constraint-first arms, filler-before-B proximity is coextensive with
+  between-ness, and the separating arm is not among the six. §4.2's
+  residual list names the value-mediation channel only; the
+  pure-proximity channel must be named beside it. §4.2's printed
+  value-kept/value-lost split mitigates but does not gate.</li>
+<li><strong>A-K1.2/K1.3 (estimand restatements, amendment F).</strong> A pure
+  constraint-to-generation mechanism yields S=T → below_threshold even
+  at a 24/24→0/24 collapse; a genuine between-effect masked by the
+  control's own trailing-filler effect (S=10, T=10) also yields
+  below_threshold. Both are the frozen excess estimand operating as
+  defined (§2.1/§4.2), with S and T printed — but §§1.2/2.1/12 must stop
+  describing the label as a distance effect simpliciter.</li>
+<li><strong>B-K6 (landed, amendment F).</strong> Per-dose labels can invert the raw
+  dose order through control noise alone (executed patterns: identical
+  S at both doses, opposite labels, driven by T). §2.2 disavows
+  curve/threshold claims; §1.3's "three-point curve" sentence and
+  §12's "inside the distance that holds" utility presuppose exactly
+  that shape. The utility sentence is incoherent in the
+  fire-at-256-only world. Claim text must change; the labels themselves
+  are exactly as strong as §2.1 says and no stronger.</li>
+</ul>
+<h2 id="settlement-b-sizing-cost-recomputed-at-the-candidates-specification">Settlement (b) — sizing cost, recomputed at the candidate's specification<a class="headerlink" href="#settlement-b-sizing-cost-recomputed-at-the-candidates-specification" title="Permanent link">&para;</a></h2>
+<ul>
+<li>§12's <strong>3,456 maximum generations is correct</strong> (6 arms × 24 cases ×
+  24 candidates) and its 576-record / 12 MiB bounds check out. It omits
+  the sizing economy entirely.</li>
+<li>Sized cells: 4 per candidate-case (sep/disp × 2 doses) = 2,304.
+  Worst case at the frozen 512-encode per-cell budget:
+  2,304 × 512 = <strong>1,179,648 tokenizer encodes</strong> (coordinator and red
+  team A agree exactly; this is encodes, not generations — the parent
+  brief's figure confirmed as encodes). Expected case, executing the
+  shipped <code>span_candidates</code> estimator (red team A): 2–98 probes per
+  cell by backend, mean 24.5 → <strong>≈56,448 encodes panel-wide</strong>, plus
+  core.evaluate's per-generation encodes (≥3,456). The shipped needle
+  precedent (GENERATION_BUDGET 7,200, same per-cell encode budget over
+  more cells) carries this economy in its protocol text; §12 must too
+  (amendment J).</li>
+</ul>
+<h2 id="settlement-c-lifbench-fencing-primary-source-resolved-mechanically">Settlement (c) — LIFBench fencing (primary source resolved mechanically)<a class="headerlink" href="#settlement-c-lifbench-fencing-primary-source-resolved-mechanically" title="Permanent link">&para;</a></h2>
+<p>arXiv:2411.07037 (Wu et al., ACL 2025, Anthology 2025.acl-long.803,
+pp. 16445–16468; v3 23 Jul 2025). §5.3 "Effects of longer inputs":
+performance declines "particularly beyond 16k or 32k tokens", BUT
+"'Format' performance remains relatively stable across all input
+lengths in most models, suggesting that tasks related to formatting are
+less sensitive to longer contexts". §3.1 places the instruction at the
+END of the prompt; six intervals to 128k. <strong>Licensed:</strong> decline is
+published prior art at 4k–128k with instruction-at-end. <strong>Forbidden:</strong>
+citing LIFBench as support for a format-compliance drop at doses
+256/1024, or for directive-at-head geometry — its §5.3 cuts against the
+former and its layout is the latter's opposite. The citation must carry
+the arXiv/Anthology ID (name collision: LIFEbench, arXiv:2505.16234).
+Candidate §10 prints only the abstract-level decline (amendment I).</p>
+<h2 id="defects-in-the-candidate-as-written-each-executed-classification">Defects in the candidate as written (each executed; classification)<a class="headerlink" href="#defects-in-the-candidate-as-written-each-executed-classification" title="Permanent link">&para;</a></h2>
+<p>Frozen-text defects — the text contradicts itself or prints falsehoods:</p>
+<ol>
+<li><strong>Case-count contradiction (I-1 / B-K1).</strong> §3.1/§6/§8 and §12's own
+   counts say 24 (3,456 = 6×24×24); §12's frozen verdict sentence says
+   "<strong>20 seed-generated cases</strong>" (research.md:812) in the same sentence
+   as 3,456. 6×20×24 = 2,880 ≠ 3,456; records would be 480, not 576.
+   Exact OC at N=20 (coordinator + B agree): power 0.813 at q=0.50,
+   0.152 at q=0.25 — every printed OC sentence is false for the N=20
+   panel. §12 declares any deviation from a frozen item voiding, so the
+   frozen text cannot be built without voiding itself. The operative
+   population is unambiguously 24 (§3.1 derives it from the power
+   difference the text itself prints); the "20" is a stale token.
+   Amendment A.</li>
+<li><strong>Constraint length wrong (I-2).</strong> §3.2 prints "(61 chars)"; executed
+   <code>len("Reply with only the number: no units, no sentence, nothing
+   else.")</code> = <strong>64</strong>. Flagged by the round-1 verifier; uncorrected in
+   the surviving candidate text. Amendment A.</li>
+<li><strong>§6's printed bound is false as stated (B-K4).</strong> §6/§12 print the
+   independent convention as "the worst case" and the pure-length truth
+   as lying "between 0.000 and 0.079". That is a theorem only under
+   corr(sep, disp) ≥ 0, a premise nowhere stated. Under negatively
+   paired nulls the bound is breached by two independent executions
+   that agree: coordinator antithetic MC — pure-length 0.1085 (ρ=−0.3),
+   0.1333 (ρ=−0.6); red team B Gaussian copula — 0.1102 (ρ=−0.5),
+   0.1327 (ρ=−0.8). No-effect stays ≤0.0077 in every paired model run
+   by any party, and the corrected confound bound (≈0.13) does not
+   invert the instrument's usefulness — but a frozen section may not
+   print a false bound. Amendment E.</li>
+<li><strong>Family-wise paragraph is selective (A-K4 / B-K5).</strong> §6 converts
+   only the friendly no-effect rate. Exact family-wise at the printed
+   rates over 48 decisions: no-effect E=0.279, P(≥1)=0.244 (candidate
+   prints 0.24/0.21 from the rounded 0.005 — correction stands).
+   Candidate-level frailty (B, executed: Beta-distributed baseline
+   rates, κ=50/20/10) raises the no-effect expectation to E=0.40–0.59,
+   P(≥1)=0.33–0.44. At the candidate's own printed pure-length bound
+   (0.0788/decision): E≈3.78 labels, P(≥1)≈0.98. §8 mandates the OC
+   paragraph beside every verdict; as frozen it understates the panel
+   by ~2× under unremarkable heterogeneity, and is silent on the
+   confound row. Amendment E.</li>
+<li><strong>§7 vocabulary omits <code>arm_screened</code> (I-3).</strong> §7 claims "the needle
+   cell set" but the shipped set includes <code>arm_screened</code>
+   (needle.py:234–240 CELL_DETAILS, verified). Read literally with
+   §4.2's stage-level binding, one screened span fails the whole stage
+   as <code>instruction_distance_screen_failed</code>; §8's attrition list has no
+   screened count. Amendment D.</li>
+</ol>
+<p>Verdict-membership underspecification — S is not a function of the
+frozen text:</p>
+<ol>
+<li><strong>Boundary-missing membership (A-K2.4 / B-K3-C).</strong> §5.2 decomposes
+   boundary-missing cells out "first… never a compliance class", while
+   §6's population text supports three readings with three different
+   labels on identical generations (count-as-loss → fires; exclude
+   case → D′=6 → insufficient; stays in D, not in S →
+   below_threshold). The channel is treatment-correlated: prose that
+   never emits the terminator within the cap is plausibly the
+   canonical failure shape for this contract. Worse, the candidate
+   misstates the precedent it cites: shipped negation
+   (negation.py:347–365) defines <code>boundary_only</code> as the
+   correct-text/boundary-missed class that "cannot count toward J" —
+   boundary-missing cells with other text are still classified and
+   stay in the population. The blanket attrition is broader than
+   negation §4.2. The precedent itself supplies the disposition
+   (amendment B1): grammar-classify boundary-missing cells over the
+   whole-output span (the span core.evaluate defines); a
+   boundary-missing cell whose span is compliant-correct decomposes
+   as boundary attrition only; D requires the adjacent cell
+   boundary-found; completion = a span was produced. Population,
+   scorer, and endpoints unchanged — the amendment states the
+   disposition the candidate's own citation already mandates.</li>
+<li><strong>Grammar anchor unfrozen (A-K2.1).</strong> Python <code>re.match(r"^[0-9]+$",
+   "417\n")</code> is True ($ matches before a trailing newline); fullmatch
+   is False. §5.4's mirror derivation agrees only with fullmatch; the
+   candidate never freezes the semantics. Executed divergence on a
+   one-token span. Amendment B2: freeze <code>\A[0-9]+\Z</code> / fullmatch.</li>
+<li><strong>Digit alphabet unpinned (I-4 / A-K2.2 / B Attack 5).</strong> <code>digit_count</code>
+   is "total digit characters" with no alphabet. Executed: under a
+   Unicode-aware count, ٤١٧, ４１７, ٤١٧417, ١٢٣ flip class between
+   stage and validator (<code>str.isdigit()</code> and <code>\d</code> also disagree with
+   each other on "4²7"). The shipped confidence grammar exists
+   precisely to preclude this (confidence.py:91–96, verified).
+   Amendment B3: pin ASCII [0-9] for digit_count and first-run
+   extraction; state the no-run field of <code>first_digit_run_digest</code>
+   ("" vs digest-of-"" is currently unstated, I-4b).</li>
+<li><strong>Unattested integers in §5.4 (A-K2.3).</strong> The compliance half of the
+   derivation rides on two bare integers (<code>answer_len</code>,
+   <code>digit_count</code>) bound by no digest. Executed forgery: identical
+   digests, digit_count 3 vs 10 flips <code>noncompliant_correct_value</code> ↔
+   <code>compliant_wrong</code>, undetectable by the validator. The shipped
+   density precedent binds its verdict inputs by content (ordered
+   word hashes, density.py:27–29, verified). Amendment C: derive
+   compliant from digests — compliant ⇔ answer_digest ≠ sha256("")
+   ∧ non-digit-projection digest == sha256("") — adding one record
+   field and demoting <code>answer_len</code>/<code>digit_count</code> to descriptive.
+   Scorer unchanged; classes identical on every executed span.</li>
+</ol>
+<p>Claim-scope overreach — the instrument is sounder than its sentences:</p>
+<ol>
+<li><strong>§2.1's falsifiable statement overclaims (I-5 / B-K2).</strong> The
+    statement claims identity of compliance "over this generated
+    population"; the test is D-conditioned and requires completion in
+    three arms. Executed residues of the F4 pattern at claim level:
+    World A (effect confined to the compliant-wrong stratum:
+    unconditional compliance 1.00 → 0.50, rule reads below_threshold)
+    and World B (rule fires while population compliance rises
+    0.583 → 0.667; the 10 reverse discordants sit outside D by
+    design). Both are the disclosed estimand operating as defined —
+    the defect is the sentence, which must carry the conditioning and
+    completion scope (amendment F). Verdict availability is also a
+    monotone function of baseline competence (B-K2 World E, exact:
+    P(D≥10|N=24) = 0.511 at adjacent-CC rate 0.40, 0.153 at 0.30);
+    the <code>insufficient</code> vocabulary discloses this in kind; §8's OC
+    paragraph should state it in degree.</li>
+<li><strong>Utility concedes to a large-drop falsifier (researcher §6,
+    conceded; B-K5 power fragility).</strong> At a true conditional 25%
+    drop, power is 0.246 exact — and 0.06–0.17 under
+    competence-correlated marginal presentation (B, executed) — so in
+    ~3/4 of such worlds the deliverable is "choose on other grounds".
+    LIFBench §5.3's format-stability result makes the low-power region
+    the likely region. The instrument survives honestly only as a
+    per-dose large-drop falsifier: power at q=0.50 is 0.909 exact and
+    0.78–0.93 across every executed perturbation (pairing, frailty
+    conditioning, even N=20: 0.813). Amendment F takes the fork's
+    first branch (re-scope the §12 utility text); the second branch
+    (enlarge the panel with re-derived OC) changes the population and
+    would be a resubmission, not an amendment.</li>
+<li><strong>Minor textual items.</strong> §1.2's dose noun denotes a quantity the
+    displaced arm does not possess (its between-distance is baseline;
+    its dose is length) — §4.2 states it correctly, §1.2 is what
+    USAGE inherits (A-K5a). "Same filler span" is literally false
+    under one asymmetric seam merge (sep span 284 chars vs disp 285
+    at dose 256, both delta-exact; A-K5b) — per-arm sizing already
+    absorbs this; the phrase must go. The sizing transplant dropped
+    needle's in-span offset-verification phase (needle.py:254
+    SIZING_RULE_TEXT, verified) while claiming "verbatim in
+    substance" — no executed in-layout bite (12/12 cells exact; the
+    "\n" joiner insulates), but the claim must be corrected to name
+    the omission and why it has no analogue here (A-K5c). §12's cap
+    citation (determinism.py:32–38) is an audit budget; the operative
+    candidate cap is experiments.py:4014.</li>
+</ol>
+<h2 id="binding-amendments-aj">Binding amendments (A–J)<a class="headerlink" href="#binding-amendments-aj" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>A.</strong> §12 "20 seed-generated cases" → 24; §3.2 "(61 chars)" →
+  "(64 chars)"; §12 cap citation → experiments.py:4014.</li>
+<li><strong>B.</strong> Verdict membership pinned: (B1) boundary disposition per
+  negation §4.2 as shipped (item 6 above); (B2) grammar frozen as
+  fullmatch <code>\A[0-9]+\Z</code>; (B3) digit_count and first-digit-run
+  extraction pinned to ASCII [0-9]; no-run <code>first_digit_run_digest</code>
+  field = "".</li>
+<li><strong>C.</strong> §5.4 compliance derived from digests via one added field
+  (non-digit-projection digest); <code>answer_len</code>/<code>digit_count</code> demoted
+  to descriptive (item 9).</li>
+<li><strong>D.</strong> §7 per-cell vocabulary gains <code>arm_screened</code> (or the
+  needle-parity claim is dropped and stage-level screening stated as
+  a deliberate deviation); §8 prints the per-cell screened count.</li>
+<li><strong>E.</strong> §6 reporting corrected: the pure-length bound carries its
+  premise (corr(sep, disp) ≥ 0) and a negative-ρ row (≤0.133 at
+  ρ=−0.8, executed); the family-wise paragraph converts both bounds
+  (no-effect exact E=0.28 / P=0.24; frailty range E=0.40–0.59 /
+  P=0.33–0.44; pure-length E≈3.78 / P≈0.98 at the printed bound).</li>
+<li><strong>F.</strong> Claim sentences re-scoped: §2.1's falsifiable statement
+  carries the D-conditioning and three-arm completion; §1.2's dose
+  defined as added tokens (between in sep, after in disp); §1.3's
+  "curve" sentence → three same-turn layouts at two doses; §12's
+  utility rewritten as a per-dose large-drop falsifier with
+  conditional power stated as such and the 0.25 row labelled below
+  resolution; the threshold-presupposing layout instruction deleted.</li>
+<li><strong>G.</strong> §4.2 residuals gain the filler-proximity channel by name
+  (settlement (a), A-K1.1), beside the value-mediation channel.</li>
+<li><strong>H.</strong> §9 discloses that the disp arm string is byte-identical to a
+  shipped distraction after-cell on the candidate fixture and sep is
+  a constant prefix over a shipped before-cell; the residue is the
+  mid-message insertion point, the in-rule differencing, and the
+  compliance scorer.</li>
+<li><strong>I.</strong> §10 LIFBench fenced per settlement (c): §5.3
+  format-stability sentence added; the arXiv:2502.04362 quotation's
+  "may be due to" hedge restored; arXiv/Anthology IDs carried.</li>
+<li><strong>J.</strong> §12 budget gains the sizing line: expected ≈56K tokenizer
+  encodes at the shipped estimator's executed mean (24.5 probes/cell),
+  worst case 1,179,648, plus per-generation encodes; generations
+  3,456 and records 576 stand.</li>
+</ul>
+<h2 id="answers-to-the-standing-questions">Answers to the standing questions<a class="headerlink" href="#answers-to-the-standing-questions" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Monday-morning utility (one sentence).</strong> For a maintainer laying
+  out a prompt, the panel states — per dose, at printed operating
+  characteristics — whether placing 256 or 1024 tokens of filler
+  between a format directive and the question it governs produces a
+  large (≥50-point conditional) format-compliance collapse beyond
+  what the same filler after the question produces, for this
+  checkpoint family; a non-fire excludes large separation-driven
+  collapse and claims nothing smaller.</li>
+<li><strong>Uniqueness.</strong> The residue is real: dose-response with a displaced
+  control over a directive, differenced inside the decision rule,
+  scored by a correctness-separated compliance grammar on generated
+  cases. It is a contrast and a scorer, not an arm set (settlement
+  (a)/duplication above).</li>
+<li><strong>Duplication by direct code comparison.</strong> Executed by coordinator
+  and red team B against the shipped modules: the candidate adjacent
+  arm is byte-identical to no placement arm; distraction splices
+  spans into fixture messages and re-reads fixture verdicts; the only
+  shared object is NEUTRAL_CORPUS (<code>needle.NEUTRAL_CORPUS is
+  distraction.NEUTRAL_CORPUS</code> → True; disclosed in candidate §4.3).</li>
+</ul>
+<h2 id="fabrication-sweep">Fabrication sweep<a class="headerlink" href="#fabrication-sweep" title="Permanent link">&para;</a></h2>
+<p>Specialist output was treated as untested input; every load-bearing
+claim was re-derived by the coordinator's own execution or
+cross-executed by two specialists independently. <strong>No fabricated
+material found in any brief.</strong></p>
+<ul>
+<li>Researcher: citations spot-verified against the tree —
+  determinism.py:32–38 (audit budget, as he reported),
+  experiments.py:4014 (operative 1–24 candidate cap),
+  needle.py:234–240 (CELL_DETAILS includes arm_screened),
+  cli.py:604–607 (needle 4096 help; candidate cited 604–606, trivial
+  drift). His I-1/I-2 line quotes (research.md:812, :212) agree with
+  both red teams' independent quotes.</li>
+<li>Red team A: confidence.py:91–96 verified (the ASCII-grammar comment
+  says what he claimed); density.py:27–29 word-hash binding verified;
+  needle.py:254 SIZING_RULE_TEXT verified, including the offset phase
+  the candidate dropped. His worst-case encode figure (1,179,648)
+  matches the coordinator's exactly; his antithetic pure-length
+  values (0.1085/0.1333) match red team B's copula values
+  (0.1102/0.1327) under independent methods.</li>
+<li>Red team B: placement.py:69 (CASE_COUNT = 24), distraction.py:73–74
+  (JOINER "\n"; NEUTRAL_LEVELS (64, 256, 1024)), and
+  distraction.py:409–422 (build_cell_fixture) all verified. His
+  Attack-0 exact table matches the coordinator's enumeration to
+  rounding on all eight rows.</li>
+<li>Coordinator's own scripts: <code>coord_oc.py</code>, <code>coord_sizing.py</code>,
+  <code>coord_decide.py</code> in <code>~/workspace/agents_out/instructiondistance2/</code>
+  (coord_decide used <code>re.fullmatch</code>, so its 15/15 decidability result
+  holds under the fullmatch reading amendment B2 freezes).</li>
+</ul>
+<h2 id="build-cost-if-the-parent-sequences-a-build">Build cost (if the parent sequences a build)<a class="headerlink" href="#build-cost-if-the-parent-sequences-a-build" title="Permanent link">&para;</a></h2>
+<p>Generations: 3,456 maximum (frozen, correct). Sizing: ≈56K tokenizer
+encodes expected, 1,179,648 worst case, plus ≥3,456 evaluation
+encodes. Implementation size: an estimated ~2,500–3,500 lines
+including tests (stage module, diff-validator mirror, reporting
+section, CLI wiring, regression tests) — an estimate from sibling
+probe builds in this tree, labelled UNVERIFIED, for sequencing only.</p>
+<h2 id="side-findings-reported-not-fixed">Side findings (reported, not fixed)<a class="headerlink" href="#side-findings-reported-not-fixed" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Design-doc truncation</strong> (above): <code>docs/INSTRUCTIONDISTANCE_DESIGN.md</code>
+   ends mid-F6(c); its §§2–7 including any transcribed §3 are lost;
+   the docs site was built from the truncated source.</li>
+<li><strong>Round-1 verifier corrections never applied.</strong> The round-1
+   verifier required five corrections before resubmission (61→64
+   chars; §12 "20 cases"; stale "J" terminology; LIFBench §5.3
+   omission; exact family-wise 0.28/0.24). The surviving candidate
+   text carries none of them — the resubmission was assembled from
+   the uncorrected round-1 research text.</li>
+<li>NEUTRAL_CORPUS verified: 71 sentences, zero digits of any kind —
+   the closed-book and sizing constructions' shared premise holds.</li>
+<li>The frozen constraint is 64 characters (item 2) — any future text
+   quoting "61" inherits the error.</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

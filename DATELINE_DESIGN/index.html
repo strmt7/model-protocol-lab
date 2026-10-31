@@ -1,0 +1,2828 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Local conversation-protocol experiments with held-out evidence: exact token-sequence comparisons across chat-format families.">
+      
+      
+      
+        <link rel="canonical" href="https://strmt7.github.io/model-protocol-lab/DATELINE_DESIGN/">
+      
+      
+        <link rel="prev" href="../CONFIDENCE_DESIGN/">
+      
+      
+        <link rel="next" href="../DENSITY_DESIGN/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Dateline - Model Protocol Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#date-line-sensitivity-design-cycle-188" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Model Protocol Lab" class="md-header__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Model Protocol Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Dateline
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Model Protocol Lab" class="md-nav__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Model Protocol Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/adr-index/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_LOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Research log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_READINESS_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release readiness 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_NOTES_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_PORTABILITY_2026-10-15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portability research (2026-10-15)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crawl4ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent tooling notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evidence notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_10" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_10" id="__nav_5_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design documents
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design documents
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ALIASING_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BATCH_PATH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CANONICALFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canonical form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHOICE_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choice audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFIDENCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#utility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Utility
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Construction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-frozen-arm-set-g1-g7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The frozen arm set (G1†, G7)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The frozen arm set (G1†, G7)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#weekday-lie-arm-g1-f8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Weekday-lie arm (G1†, F8)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reproducibility-g10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproducibility (G10)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-no-date-control-g4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The no-date control (G4†)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#eligibility-screen-g5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Eligibility screen (G5†)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#records-g8-m4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Records (G8, M4)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#readouts-g3-g6-g9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Readouts (G3, G6†, G9†)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diff-validator-g8-f11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diff validator (G8, F11)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#budget-g2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Budget (G2†)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pin-blast-radius-g12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pin blast radius (G12†)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DENSITY_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DETERMINISM_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Determinism audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DISTRACTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIELDORDER_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIXTURE_FUZZ_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HISTORYFRAME_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History frame
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRUNESWEEP_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prune sweep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONDISTANCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INVISIBLECHARS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Invisible characters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFUSABLESKELETON_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confusable skeleton
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LEADING_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Leading claim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTITURN_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEEDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEGATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NUMFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PAYLOADSERIALIZATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLACEMENT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Placement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRECISION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Precision
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REPETITION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repetition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROTATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rotation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SCORER_LENS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scorer lens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEALED_BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sealed bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SURFACE_NOISE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surface noise
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template probe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_ROBUSTNESS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template robustness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TOKENDEPTH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Token depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#utility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Utility
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Construction
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-frozen-arm-set-g1-g7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The frozen arm set (G1†, G7)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The frozen arm set (G1†, G7)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#weekday-lie-arm-g1-f8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Weekday-lie arm (G1†, F8)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reproducibility-g10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reproducibility (G10)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-no-date-control-g4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The no-date control (G4†)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#eligibility-screen-g5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Eligibility screen (G5†)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#records-g8-m4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Records (G8, M4)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#readouts-g3-g6-g9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Readouts (G3, G6†, G9†)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diff-validator-g8-f11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diff validator (G8, F11)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#budget-g2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Budget (G2†)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pin-blast-radius-g12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pin blast radius (G12†)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="date-line-sensitivity-design-cycle-188">Date-line sensitivity design (cycle 188)<a class="headerlink" href="#date-line-sensitivity-design-cycle-188" title="Permanent link">&para;</a></h1>
+<p>Status: frozen before code. This document is the contract the
+implementation, the diff validator, and the test oracles are built
+against. It resolves red-team A's F1–F15 and red-team B's corrections
+(M1–M6) from the cycle-188 briefs in
+<code>~/workspace/agents_out/wave8/cycle188/</code>; where A and B disagreed,
+B's cross-checked disposition governs and is cited inline.</p>
+<h2 id="utility">Utility<a class="headerlink" href="#utility" title="Permanent link">&para;</a></h2>
+<p>If your serving stack prepends a "Today is …" line, <code>run
+--dateline</code> tells you — per template family, on your own checkpoint —
+how often changing only that date flips a task verdict, and whether
+the template you picked still wins afterwards, so a calendar
+rollover cannot silently change your eval results after you ship.</p>
+<p>The phenomenon is published: Sanz-Guerrero, Bui, Mager, and von der
+Wense, <em>Dating the Model: Hidden Dates in System Prompts Affect LLM
+Evaluation</em> (arXiv:2609.36931, 2026) — across 9 recent LLMs and 6
+datasets (MCQA, math reasoning, code generation, machine
+translation), changing only the injected current date moves scores
+by up to 6% on MCQA, 14% on math reasoning, 7% on code generation,
+and 2.84 BLEU on machine translation; rankings shift; the effect
+exceeds batch-size and numerical-precision variance; few-shot does
+not reduce it and chain-of-thought amplifies it. That work varies
+the date inside each vendor's own system-prompt rendering on served
+models. No surveyed harness ships the combination frozen here: a
+frozen date-line treatment × hand-rendered template families × one
+local checkpoint × exact-match greedy scoring with an abstention
+rule × a length-matched no-date control (uniqueness survey:
+RESEARCH_LOG cycle 188; the claim is the combination, never
+"first", and generic plumbing in lm-eval/promptfoo/Inspect could
+approximate it by hand — what is claimed is a shipped, frozen,
+recompute-validated probe).</p>
+<p>Boundary, one sentence: <code>doctor --template-probe</code> asks whether the
+checkpoint's own template code changes its <em>rendering</em> in response
+to message content (render-only, no generation, no scoring), whereas
+<code>run --dateline</code> asks whether an operator-supplied date string in
+the message content changes the model's <em>scored verdicts</em> under each
+hand-rendered template family (generation, exact-match). Note the
+sharper limit from TEMPLATE_PROBE_DESIGN T4′/T2′: a day-granularity
+date injection is constant across a template-probe pair and is
+therefore not a template-probe finding at all; the two probes are
+complementary, not mirror images.</p>
+<h2 id="construction">Construction<a class="headerlink" href="#construction" title="Permanent link">&para;</a></h2>
+<p>The lab has no system role (<code>core.Message</code> is user/assistant only),
+so the date line is delivered the way hierarchy delivers privilege
+blocks: folded into a user turn inside a frozen bracketed block.
+Placement is the probe family's uniform choice (repetition,
+distraction, leading all operate on the last user message): the
+block is <strong>prepended to the last user message's content</strong>. The
+construct is therefore named honestly everywhere (this doc, USAGE,
+CLI help, section prose): <strong>a date line immediately before the
+final user message</strong> — for single-turn fixtures that is the head of
+the conversation; for multi-turn fixtures it is not, and the search
+set's multi-turn share is reported beside the headlines (G9†).</p>
+<ul>
+<li>Block template (frozen literal):
+  <code>[Context] Today's date is {DATE}. [/Context]</code></li>
+<li>Joiner (frozen literal): <code>"\n\n"</code> between the block and the
+  original content — <code>block + "\n\n" + content</code>. (Leading appends
+  with <code>"\n"</code>; a prepended block takes the hierarchy-style blank
+  line. The choice is frozen here, not left to the builder.)</li>
+<li>The arm fixture keeps the native fixture's id, so
+  <code>core.request_seed_for</code> pairs request seeds across arms.</li>
+</ul>
+<h2 id="the-frozen-arm-set-g1-g7">The frozen arm set (G1†, G7)<a class="headerlink" href="#the-frozen-arm-set-g1-g7" title="Permanent link">&para;</a></h2>
+<p>Eight date values, each rendered in three frozen formats. Weekday
+names are part of the protocol data: every arm's weekday was
+computed from its own calendar date at freeze time and is pinned by
+test; no weekday is ever derived at runtime (a builder templating
+the anchor's weekday into every arm would silently convert five
+arms into extra lie arms — the validator's weekday rule below
+exists to catch exactly that).</p>
+<table>
+<thead>
+<tr>
+<th>value key</th>
+<th>date</th>
+<th>weekday</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>anchor</code></td>
+<td>2026-10-21</td>
+<td>Wednesday</td>
+</tr>
+<tr>
+<td><code>minus_day</code></td>
+<td>2026-10-20</td>
+<td>Tuesday</td>
+</tr>
+<tr>
+<td><code>plus_day</code></td>
+<td>2026-10-22</td>
+<td>Thursday</td>
+</tr>
+<tr>
+<td><code>minus_year</code></td>
+<td>2025-10-21</td>
+<td>Tuesday</td>
+</tr>
+<tr>
+<td><code>plus_year</code></td>
+<td>2027-10-21</td>
+<td>Thursday</td>
+</tr>
+<tr>
+<td><code>leap</code></td>
+<td>2028-02-29</td>
+<td>Tuesday</td>
+</tr>
+<tr>
+<td><code>boundary_eve</code></td>
+<td>2026-12-31</td>
+<td>Thursday</td>
+</tr>
+<tr>
+<td><code>boundary_day</code></td>
+<td>2027-01-01</td>
+<td>Friday</td>
+</tr>
+</tbody>
+</table>
+<p>Formats (frozen renderers over frozen English month/weekday tables;
+no <code>strftime</code>, no locale anywhere in the module, the stage, the
+reporting section, or the validator):</p>
+<ul>
+<li><code>iso</code>: <code>2026-10-21</code></li>
+<li><code>long</code>: <code>21 October 2026</code></li>
+<li><code>weekday_iso</code>: <code>Wednesday, 2026-10-21</code> — weekday name + ISO, the
+  primary paper's own hidden-prompt shape ("Today is Wednesday,
+  2025-12-03"). B's correction is adopted: the weekday-long hybrid
+  (<code>Wednesday, 21 October 2026</code>) appears in no cited source and
+  would re-confound weekday with the long-form rendering in every
+  pair; weekday-ISO keeps the date tokens identical to the ISO arms,
+  so the ISO↔weekday-ISO pair per value isolates the weekday
+  channel.</li>
+</ul>
+<p>Arm keys: <code>{value}_{format}</code> for the 24 date arms (e.g.
+<code>anchor_iso</code>, <code>leap_long</code>), plus the controls and the lie below —
+28 treated arms in total.</p>
+<p>Arm → effect mapping (the design text asserted the set "spans the
+effects the primary source reports" with no mapping; here it is):
+<code>anchor</code> is the reference date every contrast is anchored to;
+<code>minus_day</code>/<code>plus_day</code> are the smallest calendar step (the paper's
+week-of-dates variation); <code>minus_year</code>/<code>plus_year</code> span the
+year-scale variation — under the weekday-bearing format they
+necessarily shift the weekday too (365 ≡ 1 mod 7, no Feb 29 in
+either span), so that contrast is named <strong>year+weekday shift</strong>,
+never "±1 year" alone; <code>leap</code> is the rare-valid-date arm, frozen to
+2028-02-29 (the nearer leap day, +496 days, and the next one a stack
+frozen at the anchor actually rolls into; its distance from the
+anchor exceeds every other arm's, so leapness is confounded with
+distance and the doc says so wherever the arm is reported);
+<code>boundary_eve</code>/<code>boundary_day</code> are consecutive days straddling the
+anchor's next year rollover — the cleanest year-number contrast in
+the set, at near-constant distance.</p>
+<p>The anchor is named <strong>anchor date (frozen 2026-10-21)</strong> in the
+protocol, the payload, and the docs. It is "current" only on the
+freeze date; under the reproducibility rule below every later run's
+anchor is a stale date <em>by design</em>, and the naming must not invite a
+"the probe used yesterday's date" misreading.</p>
+<h3 id="weekday-lie-arm-g1-f8">Weekday-lie arm (G1†, F8)<a class="headerlink" href="#weekday-lie-arm-g1-f8" title="Permanent link">&para;</a></h3>
+<p>One lie arm: arm key <code>lie</code>. Date value: the anchor. Format:
+weekday-ISO only (the lie is defined inside the weekday-bearing
+format; it is never compared against ISO/long arms as a format
+contrast). Direction: <strong>+1</strong> — literal string <code>Thursday, 2026-10-21</code>
+(the calendar weekday of 2026-10-21 is Wednesday; +1 is the smaller
+length step, 9→8 characters, minimising the length confound that
+honest-vs-lie unavoidably carries). The lie is a single date ×
+single format cell family; the design says so wherever its counts
+appear. Its role is inside the date-loss truth table (below): it
+separates "any date text perturbs" from "the date's content
+matters".</p>
+<h3 id="reproducibility-g10">Reproducibility (G10)<a class="headerlink" href="#reproducibility-g10" title="Permanent link">&para;</a></h3>
+<p>All dates are protocol constants. Nothing in <code>dateline.py</code>, the
+<code>experiments.py</code> stage, the reporting section, or the validator may
+read the wall clock or the locale: no <code>date.today()</code>,
+<code>datetime.now()</code>, <code>strftime</code>, or <code>strptime</code> with <code>%A</code>/<code>%B</code>. A scoped
+pin test greps exactly those surfaces (<code>doctor.py</code>'s legitimate
+<code>run_date_utc</code> is out of scope). A run must be byte-reproducible on
+any day. Dateline cells are recorded search-side treatments, not
+recorded search observations: they are <strong>outside</strong>
+<code>verify --determinism</code>'s scope, and the docs say so rather than
+implying coverage. Held-out fixtures are never date-treated, never
+screened, and never enter any readout; every readout is a
+search-side readout.</p>
+<h2 id="the-no-date-control-g4">The no-date control (G4†)<a class="headerlink" href="#the-no-date-control-g4" title="Permanent link">&para;</a></h2>
+<p>The control is a <strong>sized neutral text, not a sentence</strong> — B's
+adjudication of A F4: a single grammatical sentence has one length
+per candidate render and cannot match arms that provably differ in
+length from each other (the design's own block shape spans 48–64
+characters across arms before any tokenizer effect), and even a
+per-format control is matched to at most one date value in that
+format, because date values differ in length <em>within</em> a format too.
+The honest construction is the precedents' one (repetition's pad,
+distraction's spans): whole neutral units plus at most one
+truncated suffix, sized per (candidate, fixture) against rendered
+token ids, with unmatchable cells flagged and the evaluable share
+reported.</p>
+<p>Frozen choices, priced in the budget below:</p>
+<ul>
+<li>One control per format: arm keys <code>nodate_iso</code>, <code>nodate_long</code>,
+  <code>nodate_weekday_iso</code> — 3 control arms.</li>
+<li>Each control cell is sized to match <strong>that format's anchor arm</strong>
+  for the same (candidate, fixture): the control fixture's rendered
+  token count must equal the anchor fixture's. The date-vs-control
+  contrast is therefore exact at the anchor. For non-anchor date
+  values the control contrast is <strong>length-unmatched by
+  construction</strong> and is labelled as such wherever reported, with the
+  per-cell <code>input_tokens</code> deltas available in the payload — the
+  doc does not let the word "matched" drift onto those contrasts.
+  (The fully-matched alternative — one control per date value —
+  costs 24 control arms and 117,600 worst-case generations for a
+  contrast the headline does not use; rejected and priced here so
+  the rejection is auditable.)</li>
+<li>Neutral unit (frozen literal, new for this probe, temporally
+  inert): <code>The reference panel is mounted on the north wall of the
+  room.</code> Repetition's filler is <em>not</em> reused: it contains the
+  temporal phrase "that morning", which would put temporal priming
+  in the no-date control of a date probe.</li>
+<li>The control block keeps the envelope and replaces the sentence:
+  <code>[Context] {NEUTRAL} [/Context]</code>, same joiner, same position.</li>
+<li>Sizing rule (frozen name):
+  <code>whole-units-plus-one-truncated-suffix-v1</code> over the neutral unit,
+  search budget 512 encodes per cell (repetition precedent),
+  verified on rendered ids. Cells that cannot be matched carry
+  <code>control_evaluable: False</code>; date-vs-control contrasts are computed
+  only over matched pairs, and each control arm's evaluable share is
+  a payload field, never silently absorbed into a denominator.
+  Matching failure is candidate-correlated (tokenizers chunk date
+  digits differently), so denominator loss is not random across the
+  candidates being compared — the shares are reported per candidate
+  for exactly that reason.</li>
+<li>Stage-start screens (fail-closed, leading/distraction
+  precedent): the block template, the neutral unit, and every arm
+  string are audited against the catalog's special-token literals
+  (<code>audit_special_token_literals</code>), and the neutral text is screened
+  against every fixture's expected answer and every candidate's
+  decoded boundary text (<code>screen_filler</code> discipline). A failure
+  fails the stage closed (<code>dateline_screen_failed</code>), before any
+  generation.</li>
+</ul>
+<h2 id="eligibility-screen-g5">Eligibility screen (G5†)<a class="headerlink" href="#eligibility-screen-g5" title="Permanent link">&para;</a></h2>
+<p>A fixture whose expected answer is itself date-derived measures
+copying, not sensitivity: the date line hands the model the exact
+string to copy. Screened fixtures are excluded from every treated
+population and form their own record class; the screened share per
+candidate is a payload field.</p>
+<p>The design's original screen — <code>scorerlens.rung_match</code> of the
+expected against the arm strings — is <strong>unsound as specified</strong>
+(A F5, executed; B §1 reproduced the battery verbatim): rung-4 is an
+equality predicate with no containment component, so expecteds <code>21</code>,
+<code>2026</code>, and <code>October</code> match nothing, and an expected written as a
+date in a third format (<code>October 21, 2026</code>) matches nothing either.
+The opposite pole — substring/containment — is equally unsound
+(executed: <code>equivalent_claim('1', '2026-10-21')</code> is True, and a
+containment screen voids nearly every single-digit numeric fixture,
+precisely the population the source paper's math result concerns).
+The frozen screen is component-wise equivalence, amended per B §1:</p>
+<ul>
+<li><strong>Rule name (frozen):</strong> <code>dateline-components-r4-v1</code>.</li>
+<li>The expected is decomposed too (B's granularity correction: A's
+  cure compared the <em>whole</em> expected against each component and so
+  missed every multi-token date-derived expected — <code>March 3</code>,
+  <code>October 21</code>, <code>21 October</code>). Both sides are tokenised on
+  non-alphanumeric boundaries and compared as component sets.</li>
+<li>A fixture is screened out if any of these holds:</li>
+<li>rung-4 equality of the whole expected against any full arm
+     string;</li>
+<li>rung-4 equality of any expected component against any
+     <strong>date-bearing</strong> component of any arm string — years, month
+     numbers, month names, day numbers, weekday names, and the
+     frozen abbreviation aliases (<code>Jan</code>, <code>Feb</code>, <code>Mar</code>, <code>Apr</code>, <code>Jun</code>,
+     <code>Jul</code>, <code>Aug</code>, <code>Sep</code>, <code>Sept</code>, <code>Oct</code>, <code>Nov</code>, <code>Dec</code>; <code>Mon</code>, <code>Tue</code>,
+     <code>Tues</code>, <code>Wed</code>, <code>Thu</code>, <code>Thur</code>, <code>Thurs</code>, <code>Fri</code>, <code>Sat</code>, <code>Sun</code>).
+     Carrier words (<code>Today's</code>, <code>date</code>, <code>is</code>, <code>Context</code>) are <em>not</em>
+     components: B executed <code>rung_match('is', 'is', 4) = True</code>, and
+     screening on envelope words would void common-word expecteds
+     for a property of the envelope, not the date;</li>
+<li>a <strong>closed-format date-parse leg</strong>: the whole expected is tried
+     against a frozen list of explicit formats (ISO <code>YYYY-MM-DD</code>;
+     <code>D Month YYYY</code>; <code>Month D, YYYY</code>; <code>D/M/YYYY</code>; <code>M/D/YYYY</code>;
+     <code>D.M.YYYY</code>; <code>YYYY/M/D</code>) using the protocol's own frozen English
+     month table — no <code>strptime</code> <code>%B</code>/<code>%A</code>, no locale, no new
+     dependency (the stdlib has no general date parser; B §1.2(c)).
+     Slash dates are ambiguous by construction (<code>3/4/2026</code> is
+     2026-03-04 or 2026-04-03): an expected is excluded if <em>either</em>
+     reading lands on an arm date — over-exclusion, disclosed. A
+     year-less month/day (<code>March 3</code>, <code>21 October</code>) whose month/day
+     equals an arm date's month/day is likewise excluded.</li>
+<li>Rung-4's collapse of leading-zero and decimal variants (<code>021</code>,
+  <code>21.0</code> rung-match the day component <code>21</code>) is a <strong>deliberate
+  over-exclusion</strong>, disclosed here: the screen is a copy/priming
+  screen over values, not a byte screen, and <code>leading</code>'s donor
+  eligibility already treats rung-4-equal answers as the same
+  answer. The screened share is reported so the cost stays visible.</li>
+<li>Scope is <strong>fixture-level</strong> (one flag, clean denominators; the
+  arm-level alternative makes every pair's population different).
+  Blank expecteds are not screened — they are their own record
+  class (<code>expected_blank</code>, leading precedent).</li>
+<li>A fixture whose <em>messages</em> state a date turns the arm into a
+  hierarchy-style conflict rather than a sensitivity measurement:
+  fixtures whose message text contains a date-parse-leg hit are
+  flagged (<code>message_date_bearing</code>) and excluded from the treated
+  populations as their own class, reported beside the screened
+  share.</li>
+<li>Pin battery (from A's execution and B's counterexamples, all
+  become tests): <code>21</code> screened, <code>2026</code> screened, <code>October</code> screened,
+  <code>Wednesday</code> screened, <code>October 21, 2026</code> screened, <code>February 29</code>
+  and <code>October 21</code> screened (year-less month/day leg), <code>Oct</code>
+  screened (alias), <code>March 3</code> <strong>not</strong> screened (no arm date falls
+  on it — the screen is arm-relative, not a general date detector),
+  <code>3/4/2026</code> not screened unless a reading hits an arm date,
+  <code>021</code> screened (disclosed collapse), <code>is</code> <strong>not</strong> screened,
+  <code>26</code> <strong>not</strong> screened (no arm component carries that value —
+  substring's false positives die), while <code>2</code> <strong>is</strong> screened: it
+  rung-matches the leap arm's zero-padded ISO month component
+  <code>02</code> under the same disclosed value collapse. (Corrected during
+  the build: the battery as first drafted claimed <code>2</code> unscreened,
+  which the executed screen disproved — the component set is
+  taken from the arm strings as rendered, padding included.)</li>
+</ul>
+<h2 id="records-g8-m4">Records (G8, M4)<a class="headerlink" href="#records-g8-m4" title="Permanent link">&para;</a></h2>
+<p>The record schema is leading's, adopted wholesale: one ground record
+per (candidate, fixture) holding the native cell plus one cell per
+treated arm; per-fixture classes <code>vacuous</code>, <code>expected_blank</code>,
+<code>echo_fixture</code>, <code>screened</code>, <code>message_date_bearing</code>; per-cell
+<code>input_tokens</code>, <code>boundary_found</code>, <code>boundary_text_match</code>, answer
+digest, construction classification (<code>id_exact</code> vs <code>text_level</code>
+with seam token ids — a candidate whose prefix merges into
+<code>[Context]</code> must be distinguishable from a clean render), and
+per-cell degradation (<code>arm_context_exceeded</code>,
+<code>control_evaluable: False</code>, never a silent drop).</p>
+<p><strong>M4's rule (from the numform F3 backlog): ground records carry
+answer digests only.</strong> The verdict is recomputed by the validator as
+<code>answer_digest == expected_digest ∧ boundary_found</code> — there is no
+stored derived answer field to forge. Any derived answer field
+(parsed date, normalised value, …) is forbidden in dateline records
+unless digest-bound; numform's own unbound field was closed the
+same way in cycle 190 (digest-bound answer text, re-parsed by
+its validator) — dateline never needed the fix, because it
+never stored the unbound field in the first place.</p>
+<p>Byte-cap arithmetic (the driver is cells per record, since the
+2,400 ground-record cap already folds in the candidate
+multiplication): leading carries ~3.9 KB/record at 5 cells (native +
+4 treated); dateline carries 29 cells (native + 28 treated) of the
+same minimal shape. The implementation must measure the real
+per-record bytes on the shipped schema before fixing
+<code>MAX_RECORDS_BYTES</code>, show the arithmetic in the module, and set the
+cap so the legal-maximum payload (2,400 records) fits under the
+32 MiB whole-file loader limit with headroom — if the measured
+schema cannot fit, the schema is trimmed, never the record cap
+lowered silently. (A's "~9.0 MiB at 19 cells" was an estimate, not
+a measurement — B §5; the build replaces it with the measured
+number.)</p>
+<h2 id="readouts-g3-g6-g9">Readouts (G3, G6†, G9†)<a class="headerlink" href="#readouts-g3-g6-g9" title="Permanent link">&para;</a></h2>
+<p>Scoring is the native exact-match + boundary conjunction, unchanged.</p>
+<p><strong>Headline: per-pair discordant contrasts, partitioned by pair
+type.</strong> The design's original headline — "fraction of fixtures
+whose verdict differs between any two date arms" — is a union over
+C(24,2) = 276 pairs under the amended format set, of which 84 are
+pure-date (same format, different value: 28 per format × 3), 24 are
+pure-format (same value, different format: 3 per value × 8), and 168
+change date and format together. A union over that population
+saturates under generic fragility — under independent per-arm
+failure probability q, P(any-pair flip) = 1 − (1−q)^k − q^k reaches
+0.56 at q = 0.05, k = 16 — so a checkpoint with 5% per-arm wobble
+would headline as "56% date-flip". (The independence assumption
+makes that table a worst case, not an expectation — real failures
+correlate across arms and lower the union — and it is quoted only
+with that caveat.) The shipped readouts are therefore:</p>
+<ul>
+<li><strong>Pure-date pair table (the headline family):</strong> per candidate,
+  per format, per value pair (28 × 3): discordant counts in leading's
+  shape (pass-A-only / pass-B-only / both / neither) with the frozen
+  floors below and a total classification function.</li>
+<li><strong>Pure-format pair table (the format control):</strong> per candidate,
+  per value, per format pair (3 × 8): same shape. This is numform's
+  axis, reported so a date claim can be checked against the format
+  effect on the same fixtures — never merged into a date number.</li>
+<li><strong>Cross-both pairs are not computed and feed no statistic.</strong> Any
+  retained union statistic is pure-date-only, uses the
+  all-arms-completed denominator (fixtures completed in every date
+  arm of the union — a different, smaller set than any per-pair
+  denominator, defined here because the design left it undefined),
+  and prints beside the date-loss baseline below, never alone.</li>
+</ul>
+<p><strong>Floors and classification:</strong> <code>MIN_PAIRED_EVALUABLE = 6</code>,
+<code>MIN_DISCORDANT = 2</code> (leading's frozen constants), and a total
+classification over (n_paired, a_only, b_only) in leading's
+vocabulary. Below the floors the readout is "insufficient" with
+denominators shown — the shipped example search set has 2 fixtures,
+so on the example every classification is insufficient by
+construction, and the CLI help says so with the real budget (the
+<code>--leading</code> help precedent).</p>
+<p><strong>Date-loss subset (G6†; the design's "pure-date caving",
+renamed).</strong> Nothing is planted here for the model to adopt, so
+leading's word "caving" — which in leading's payload splits by
+byte-exact <em>adoption</em> of the plant — is not reused. The subset is
+<strong>date-attributable loss</strong>, defined per date value with formats
+collapsed: a fixture counts toward value v's loss set when it passes
+the no-date control and fails v, over the denominator of fixtures
+evaluable in the control and in v in at least one format (per-value
+denominators, defined per value, not globally). The truth table per
+value carries the lie cell, which is what separates the readings:
+loss with the lie also failed is consistent with "any date text
+perturbs"; loss with the lie passed is content-specific. The
+<strong>asymmetric counterpart</strong> — fails the control, passes every date
+arm — is reported beside the loss counts; a subset printed without
+its counterpart and without the per-pair table is not a shipped
+readout shape.</p>
+<p><strong>Native's role (G6†, F7 as downgraded by B).</strong> Native enters no
+flip, loss, or paired population. Its only roles are the per-record
+baseline and the per-arm selection-flip comparison (the
+leading/distraction pattern). One sentence, frozen here because the
+design listed native first among "arms" and a builder could
+reasonably have included it.</p>
+<p><strong>Selection and the common population (G9†).</strong> Per-arm selection is
+re-applied per arm and withheld when completed fixture sets differ
+across candidates <em>for that condition</em> (withholding is per
+condition across candidates; arms do not withhold each other — A's
+"withheld almost always" prognosis is not adopted as a premise).
+The primary cross-candidate vehicle is leading's <strong>common-population
+readout</strong>: fixtures in every candidate's population, with the
+pure-date pair table recomputed over that population. Per-arm
+selection is the secondary readout.</p>
+<p><strong>Falsification (G11†, M1).</strong> The design's clause — "date arms
+never flip a verdict that the no-date control doesn't also flip" —
+is incoherent as written: a flip is a pairwise property and a single
+control arm cannot "also flip". Restated in the shipped vocabulary:
+<em>for a candidate, the date-content claim is falsified on this
+fixture set when every pure-date pair's discordant count is zero and
+every date value's loss count is zero — the section then reports
+exactly that (available, zero discordants, denominators shown).</em>
+That restated condition, not the original sentence, is what the
+section prints.</p>
+<h2 id="diff-validator-g8-f11">Diff validator (G8, F11)<a class="headerlink" href="#diff-validator-g8-f11" title="Permanent link">&para;</a></h2>
+<p><code>diff-reports</code> gains a <code>dateline</code> section held to the cycle-187
+standard. The validator carries its <strong>own literal copy</strong> of the arm
+table — every date string in every format, the block template, the
+joiner, the neutral unit, the sizing-rule name, the lie literal — as
+<code>_DATELINE_*</code> constants in <code>diffreports.py</code>, never imported from
+<code>dateline.py</code> (independence is the point; the <code>_LEADING_TEMPLATES</code> /
+<code>_numform_recompute</code> precedent). It rebuilds the protocol
+fingerprint from those frozen scalars plus the payload's
+fixture-set digest and backend fingerprint, recomputes every
+aggregate above from the ground records, verifies control matching
+from per-cell <code>input_tokens</code>, and enforces the record caps. Two
+validator-specific rules:</p>
+<ul>
+<li><strong>Weekday recomputation:</strong> the validator parses each arm string
+  back to (year, month, day) with its own frozen English month
+  table and recomputes the weekday via <code>datetime.date.weekday()</code>
+  mapped through its own frozen English weekday table (no
+  <code>strftime</code>, no locale — the validator carries a small date
+  parser, deliberately). Every non-lie weekday-bearing arm's weekday
+  name must equal the recomputed one; the lie arm must equal the
+  frozen lie literal <em>and</em> differ from its recomputed weekday. A
+  validator that derived weekdays instead of checking them would
+  silently correct the lie into an honest arm.</li>
+<li><strong>Stated limit:</strong> the eligibility screen is a property of
+  expected <em>text</em>, and payloads carry digests only. The validator
+  checks the screened/message-date-bearing flags' cross-candidate
+  constancy (leading's reference-field pattern) but cannot re-derive
+  them. This sentence also appears, in substance, in the validator's
+  docstring, as leading's does.</li>
+<li><strong>Primary-pair binding (cycle 196, oversight edge-case F3):</strong>
+  <code>primary_decision</code> / <code>primary_winner</code> are bound to the run-level
+  decision vocabulary (<code>compatible_on_fixture_set</code>,
+  <code>held_out_failed</code>, <code>ambiguous</code>, <code>no_candidate</code>, <code>cancelled</code>,
+  <code>failed</code>), with the winner required to be one of the payload's
+  own candidate names exactly when the decision is winner-bearing,
+  and <code>None</code> otherwise. Before the binding, the pair was only
+  type-checked, so a label contradicting its own section's arm
+  outcomes could validate. What the binding does <em>not</em> do is
+  recompute the parent run's decision: the section does not carry
+  the parent run's fixture outcomes, so within the vocabulary the
+  decision remains stage-attested. The same binding applies to the
+  repetition, distraction, and leading validators, which carry the
+  same pair under the same mapping.</li>
+<li><strong>Oracle ground truth (cycle-188 verifier caveat, closed as
+  documentation in cycle 216):</strong> the two test oracles recompute
+  the dateline arm table and weekday strings through the producer
+  module (<code>dateline.py</code>) — the oracle family's standing
+  producer-as-ground-truth pattern, stated in the oracles' own
+  docstrings — so the oracles are not a second literal copy of
+  the arm table, and a producer-side weekday drift would move a
+  payload and both oracles together. The independent literal
+  check is this validator: it carries its own frozen date tables
+  and weekday recomputation, and rejects a drifted payload even
+  when the payload's protocol and fingerprint are self-consistent
+  under the drift (executed in cycle 216: a payload rebuilt
+  through a producer with a swapped weekday table validates
+  before the drift and is rejected after it).</li>
+</ul>
+<p>Both test oracles (cycle-27 and cycle-67) mirror the validator in
+the same push, per the standing oracle blast-radius rule; after
+adding the section, the full <code>identical</code> conjunction is audited for
+silently omitted sections (the cycle-186 lesson).</p>
+<h2 id="budget-g2">Budget (G2†)<a class="headerlink" href="#budget-g2" title="Permanent link">&para;</a></h2>
+<p>Priced for the <strong>amended</strong> protocol, not the as-written design
+(whose §(d) claimed "~6–8 treated arms" for its own 18):</p>
+<table>
+<thead>
+<tr>
+<th>component</th>
+<th>arms</th>
+<th>generations at the legal maximum (24 candidates × 100 fixtures)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>date arms (8 values × 3 formats)</td>
+<td>24</td>
+<td>57,600</td>
+</tr>
+<tr>
+<td>no-date controls (1 per format)</td>
+<td>3</td>
+<td>7,200</td>
+</tr>
+<tr>
+<td>weekday-lie</td>
+<td>1</td>
+<td>2,400</td>
+</tr>
+<tr>
+<td><strong>treated total</strong></td>
+<td><strong>28</strong></td>
+<td><strong>67,200</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Native is reused at zero cost. 67,200 is 2.8× the largest budget
+shipped before (distraction, 24,000) — the price of the full
+value × format crossing plus per-format controls, stated here and
+in the CLI help with this decomposition, before any run. The
+de-crossed alternative (weekday-ISO on the anchor ±1-day pair only)
+was rejected: it would leave the lie's format present for only two
+values and break the pair partition's uniformity — but it is named
+here so the rejection is a decision, not an oversight.</p>
+<h2 id="pin-blast-radius-g12">Pin blast radius (G12†)<a class="headerlink" href="#pin-blast-radius-g12" title="Permanent link">&para;</a></h2>
+<p>Same push: <code>test_cycle44</code> source-file pin 52 → 53 (<code>dateline.py</code>);
+cycle-179 dispatch tables gain the <code>--dateline</code> row and the
+<code>_run_dateline_probe</code> helper; cycle-31/64/84 flag audits as they
+apply; reporting's three touchpoints (compute, TOC tuple, body
+concatenation) with the TOC entry immediately after <code>numform</code>,
+before the post-hoc block; the reporting section returns empty on a
+missing <code>dateline</code> key so sample-report regeneration stays
+byte-identical (the sample runs none of the post-cycle-179 probes —
+B M6); README/USAGE/VALIDATION/CHANGELOG updated with the measured
+test count and coverage after the gate, never before.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

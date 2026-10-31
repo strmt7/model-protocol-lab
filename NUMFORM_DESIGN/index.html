@@ -1,0 +1,2538 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Local conversation-protocol experiments with held-out evidence: exact token-sequence comparisons across chat-format families.">
+      
+      
+      
+        <link rel="canonical" href="https://strmt7.github.io/model-protocol-lab/NUMFORM_DESIGN/">
+      
+      
+        <link rel="prev" href="../NEGATION_DESIGN/">
+      
+      
+        <link rel="next" href="../PAYLOADSERIALIZATION_DESIGN/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Numeric form - Model Protocol Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#numeric-surface-form-probe-design-cycle-186-wave-7-rank-7" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Model Protocol Lab" class="md-header__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Model Protocol Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Numeric form
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Model Protocol Lab" class="md-nav__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Model Protocol Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/adr-index/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_LOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Research log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_READINESS_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release readiness 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_NOTES_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_PORTABILITY_2026-10-15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portability research (2026-10-15)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crawl4ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent tooling notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evidence notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_10" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_10" id="__nav_5_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design documents
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design documents
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ALIASING_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BATCH_PATH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CANONICALFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canonical form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHOICE_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choice audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFIDENCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DATELINE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DENSITY_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DETERMINISM_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Determinism audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DISTRACTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIELDORDER_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIXTURE_FUZZ_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HISTORYFRAME_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History frame
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRUNESWEEP_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prune sweep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONDISTANCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INVISIBLECHARS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Invisible characters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFUSABLESKELETON_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confusable skeleton
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LEADING_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Leading claim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTITURN_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEEDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEGATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-measures-in-one-sentence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it measures, in one sentence
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#domain-and-forms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Domain and forms
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tasks-and-prompts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tasks and prompts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#generation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stage-mechanics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stage mechanics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#records-and-decomposition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Records and decomposition
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tokenizer-grouping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tokenizer grouping
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#protocol-and-diff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Protocol and diff
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#honesty-items" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Honesty items
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PAYLOADSERIALIZATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLACEMENT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Placement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRECISION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Precision
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REPETITION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repetition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROTATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rotation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SCORER_LENS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scorer lens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEALED_BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sealed bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SURFACE_NOISE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surface noise
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template probe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_ROBUSTNESS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template robustness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TOKENDEPTH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Token depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-measures-in-one-sentence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it measures, in one sentence
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#domain-and-forms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Domain and forms
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tasks-and-prompts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tasks and prompts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#generation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stage-mechanics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stage mechanics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#records-and-decomposition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Records and decomposition
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tokenizer-grouping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tokenizer grouping
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#protocol-and-diff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Protocol and diff
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#honesty-items" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Honesty items
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="numeric-surface-form-probe-design-cycle-186-wave-7-rank-7">Numeric surface-form probe — design (cycle 186, wave-7 rank 7)<a class="headerlink" href="#numeric-surface-form-probe-design-cycle-186-wave-7-rank-7" title="Permanent link">&para;</a></h1>
+<p>Status: frozen pre-build design. Sources: wave-7 research §7 as
+corrected by the cycle-186 researcher refresh (Reddy et al. 2026,
+arXiv:2601.15251, and Yang et al.'s NUPA, arXiv:2411.03766, were
+missed by §7 and narrow the claim); red-team A (F1–F17, DO NOT
+BUILD AS SPECIFIED against the §7 sketch); red-team B's executed
+cross-check (BUILDABLE AS AMENDED — three of A's remedies
+disproved or replaced); the verifier's blast-radius brief. Where
+the briefs disagree, B's executed evidence governs.</p>
+<h2 id="what-it-measures-in-one-sentence">What it measures, in one sentence<a class="headerlink" href="#what-it-measures-in-one-sentence" title="Permanent link">&para;</a></h2>
+<p>For a user whose prompts carry figures, <code>run --numform</code> shows —
+per chat-template candidate, per task kind, per numeric surface
+form — whether the checkpoint copies, compares, and adds
+generated integers equally well when the same values are written
+plain, comma-grouped, space-grouped, or in scientific notation, so
+the user can choose a normalisation for numbers in their own
+prompts. Monday-morning decision: which written form to normalise
+figures to before rendering, for this checkpoint, per task kind.</p>
+<p>Scoped claim (the combination only): numeric surface form ×
+hand-rendered chat-template family, on a fixed local checkpoint,
+over generated fixtures with form-matched expected answers,
+per-candidate paired form contrasts, and the tokenizer's digit
+grouping measured at run time as a grouping variable only, was
+not found in the work surveyed in the cycle-186 uniqueness pass
+(LOGGED in docs/RESEARCH_LOG.md). Format variation over fixed
+arithmetic is published (Reddy et al. 2026, including a
+formatted-input → formatted-output condition); representation ×
+task benchmarks including scientific notation are published
+(NUPA); comma-enforced rechunking is published (Singh &amp; Strouse
+2024, arXiv:2402.14903). Per-form <em>selection</em> was part of the
+§7 sketch and is deliberately NOT in v1 (red-team B, GB5): over
+16 values per task an all-pass selection readout carries almost
+no information per unit of validator surface, and "the winning
+template changes under comma grouping" is exactly the overclaim
+the design must not invite. If selection is ever added it takes
+the <code>leading_analysis</code> form, never the hierarchy form.</p>
+<h2 id="domain-and-forms">Domain and forms<a class="headerlink" href="#domain-and-forms" title="Permanent link">&para;</a></h2>
+<p>Non-negative integers only. Negatives and fractions are excluded
+and named (with integers only, no decimal marker exists, so a
+comma can only be a grouping separator — the locale ambiguity
+Reddy's F2 exposes cannot arise). Digit bands: 1–3, 4–6, 7–9,
+10–12 digits. Values per task: 16 (4 drawn per band; a pair's
+recorded band is its larger operand's band, so compare's
+recorded per-band counts vary around 4 — read denominators
+from a payload's own <code>by_band</code> counts, not from this line).
+Operands never exceed 12 digits; a sum never exceeds 13.</p>
+<p>Renderers are total functions of the integer value alone, never
+of an operand string:</p>
+<ul>
+<li>plain(v) = str(v)</li>
+<li>comma(v): 3-3-3 grouping with "," (named 3-3-3 in the docs —
+  Indian 3-2-2 grouping exists and is not this arm)</li>
+<li>space(v): the same grouping with U+202F (narrow no-break
+  space, the SI grouping separator; ASCII space would collide
+  with operand separation in the prompt text, and the choice is
+  named in the CLI help)</li>
+<li>sci(v): 0 ↦ "0e0"; otherwise with d = str(v), exp = len(d)−1,
+  mantissa digits = d with trailing zeros stripped, rendered
+  first digit + ("." + rest if any) + "e" + str(exp). Lowercase
+  e, no "+", mantissa in [1, 10) — NUPA's significand precedent.</li>
+</ul>
+<p>Totality is proven by an exhaustive round-trip sweep (all values
+0–2000 plus edge values, × 4 forms, render → parse → identity,
+no scientific collisions) and by the regrouping/renormalisation
+battery (999,999 + 1 → 1,000,000 / 1e6; 9.99e6 + 9.99e6 →
+1.998e7; 1.25e6 + 1.25e6 → 2.5e6). Decimal appears nowhere in
+generation, rendering, or parsing: its default context rounds
+at 28 significant digits, its parser accepts underscores,
+whitespace, NaN and non-ASCII digits, and its string forms are
+not these forms (all executed by red-team B). Arithmetic is
+Python int; parsing is a frozen ASCII grammar.</p>
+<h2 id="tasks-and-prompts">Tasks and prompts<a class="headerlink" href="#tasks-and-prompts" title="Permanent link">&para;</a></h2>
+<p>Three task kinds; each value set is drawn once per task and
+rendered into all four forms (paired design). All four form arms
+of one value share one fixture id (<code>nf-{task}-{index}</code>), so
+<code>core.request_seed_for</code> pairs their request seeds. Frozen prompt
+templates (verbatim in numform.py, SHA-256 in the protocol)
+contain no digit and no worked example in any form — a single
+example is a few-shot arm for one form only, and few-shot
+recovery is the largest mitigation Reddy et al. measure. The
+templates instruct the model to answer in the operands' form;
+pass := correct value ∧ explicitly-requested form ∧ boundary
+found, which is Reddy's formatted-output condition held constant
+across arms — part of the task definition, not a confound that
+varies with the treatment.</p>
+<ul>
+<li>copy: "Copy this number exactly, character for character:"</li>
+<li>the operand on its own line. Expected: the operand string.</li>
+<li>add: "Add these two numbers and reply with only the sum,
+  written in the same format as the numbers:" + one operand per
+  line. Expected: render_form(a + b).</li>
+<li>compare: "Which of these two numbers is larger? Reply with
+  only the word first or second." + one operand per line.
+  Expected: the label <code>first</code> / <code>second</code>. The same-form rule is
+  amended to exempt compare (the label is form-invariant, which
+  makes compare the one arm where the scorer cannot be a form
+  confound); the exemption is stated in the reporting section.
+  Equal pairs are excluded by construction (a generator
+  invariant, recorded); mixed-form pairs are out of scope (the
+  mixed-notation cell is Yuchi et al. 2026's).</li>
+</ul>
+<h2 id="generation">Generation<a class="headerlink" href="#generation" title="Permanent link">&para;</a></h2>
+<p>Deterministic, SHA-256-derived (fixturefuzz pattern: parameters
+from SHA-256 over (seed, task, band, slot, counter); sorted
+iteration only; no <code>random.Random</code>, no <code>hash()</code>, no set order) —
+the generated set is byte-identical across runs and
+PYTHONHASHSEED values, proven by a two-hash-seed regeneration
+test. Candidate operand pairs are drawn from the hash stream
+and accepted when an independent digit-wise classifier confirms
+the target stratum class (bounded retries):</p>
+<ul>
+<li>copy: one value per slot; slots 0–1 of each band are the
+  round-value stratum (a power of ten; all-nines), labelled by
+  the <code>round</code> stratum. The label is intrinsic — random draws
+  exclude round values — so the validator can recompute it
+  from the value alone. Pairs carry no round label (compare
+  reorders its operands for presentation, so which operand
+  was drawn round is not a record-level fact); round first
+  operands in pair slots 0–1 remain a property of the
+  generated set, bound by <code>generator_sha256</code>.</li>
+<li>compare: margin classes cycle by slot — different_length,
+  same_length_early (first difference in the leading half),
+  same_length_last_digit; larger-first vs larger-second
+  alternates by slot parity.</li>
+<li>add: carry classes cycle by slot — none, some, full_chain —
+  computed digit-wise with carry-in propagation.</li>
+</ul>
+<p>A pair's band is the band of its larger operand's digit length.
+Strata ride in every ground record; band/stratum breakdowns are
+descriptive (below the contrast floor), and bands whose compared
+forms are byte-identical (plain/comma/space coincide below 1000)
+report <code>n_form_identical</code> and carry no headline.</p>
+<h2 id="stage-mechanics">Stage mechanics<a class="headerlink" href="#stage-mechanics" title="Permanent link">&para;</a></h2>
+<p>Mirror: hierarchy for synthetic-fixture <em>construction</em> only;
+leading/distraction for everything else. Per-fixture
+<code>evaluate()</code> (one call per candidate × task × form, ids shared
+across forms), <code>cancel</code> and <code>max_context</code> threaded, per-cell
+fixed-vocabulary details: <code>arm_context_exceeded</code> (rendered +
+max_new_tokens &gt; max_context), <code>answer_budget_exceeded</code>
+(expected answer + boundary cannot fit max_new_tokens —
+insurance at the frozen bands, stated as such),
+<code>form_not_in_render</code> (an operand string does not appear
+verbatim in the rendered prompt for that candidate — the check
+is per candidate × cell, on the real render), and
+<code>arm_evaluation_failed</code>. Stage-level: the frozen templates are
+screened with <code>audit_special_token_literals</code> before any
+generation (fail closed: <code>numform_template_screen_failed</code>);
+cancellation returns <code>available: False</code>, detail <code>cancelled</code>.
+The CLI wrapper consults neither the search entries nor the
+primary decision (there is no native arm and no dependence on
+the user's fixtures), honours the run's cancel event, and never
+raises: any failure degrades to <code>numform_unavailable</code>. The
+section is informational and never touches selection.</p>
+<p>Cost: candidates × 3 tasks × 16 values × 4 forms generations —
+4,608 at the legal maximum of 24 candidates — stated in the CLI
+help in those words. Caps frozen in numform.py and carried in
+the protocol: GENERATION_BUDGET 4608, MAX_GROUND_RECORDS 4608,
+MAX_RECORDS_BYTES 12 MiB; exceeding the record budget fails the
+stage closed (<code>numform_record_budget_exceeded</code>).</p>
+<h2 id="records-and-decomposition">Records and decomposition<a class="headerlink" href="#records-and-decomposition" title="Permanent link">&para;</a></h2>
+<p>Generated values are not user data, so records store the
+expected side's canonical integer values in the clear
+(operands, expected value) — and the validator does not merely
+trust them: it regenerates the whole set from the protocol's
+seed and compares every record's construction against the
+regenerated set (cycle 187; before that, the validator hashed
+whatever records were present, which vouched for a binding it
+never checked). The answer side, since cycle 190: a record
+carries the answer text verbatim (<code>answer_text</code>, the raw
+answer segment, never normalised) beside the value the stage
+parsed from it, and the cell carries the text's digest. The
+validator checks <code>sha256(answer_text) == answer_digest</code>
+(fail-closed on text that cannot be UTF-8 encoded) and
+re-parses the text under its own mirrored grammars,
+requiring the result to equal the stored value — the stage's
+parse is no longer trusted anywhere. Compare answers are
+words, not numbers: they are bound by the digest alone, and
+a numeric compare answer ("123") is a legal non-label
+record. A cell that never completed carries neither text nor
+value; the validator rejects either one appearing there.
+Pre-cycle-190 payloads are rejected (the record key set is
+exact); there is no migration shim, because a shim would
+re-open the forgery for exactly the payloads it accepted.
+Records ride in the public results.json (and in sealed
+bundles) regardless of <code>--include-evidence</code>, like every
+probe's ground records — an explicit decision, restated in
+the README: the prompts are synthetic and the stored text is
+the answer segment only, and stripping it would break
+<code>diff-reports</code> on the default artifact. The report never
+renders answer text.</p>
+<p>Two consequences of storing text, both accepted and pinned
+by test. First, byte accounting: the field costs ~26 bytes
+per record on faithful workloads (428 → 454 B/record;
+1.88 → 2.00 MiB at the legal maximum of 4,608 records), and
+the 12 MiB records cap leaves ~2,277 escaped bytes of
+headroom per record over that baseline — so a checkpoint
+that rambles to a large <code>--max-new-tokens</code> can now push a
+run into <code>numform_records_too_large</code> where the same run
+stayed available before (at the default 64 tokens the
+worst case still fits, at 8.75 MiB). The stage fails
+closed after spending the generation budget; the cap is
+unchanged. Second, an alternative was considered and
+rejected: store the text only when it parses (the longest
+parseable answer is 26 characters, so that field would
+cost ≤ ~42 B/record) and a sentinel otherwise. The
+projection is sound — every validator use of the value
+factors through the parse — but it makes the validator
+carry a second representation with its own honesty
+conditions (in the sentinel branch: digest ≠ expected
+digest, verdict false, value None) in place of one direct
+equality, to save bytes the cap already accommodates.</p>
+<p>Per-cell decomposition (recomputed by the validator from
+the re-parsed answer value):</p>
+<ul>
+<li>copy / add: <code>exact_pass</code> (verdict true); else
+  <code>value_pass_form_fail</code> when the parsed answer value equals
+  the expected value (reported split by boundary_found); else
+  <code>value_fail</code>. For copy, value_pass_form_fail is a failure of
+  the task, not a consolation — copying is form fidelity; the
+  class exists there to keep "right digits, wrong costume"
+  distinguishable from "wrong digits", and the section says so.</li>
+<li>compare: <code>exact_pass</code>; <code>wrong_label</code> (the answer is the other
+  label — groundable from digests alone, since the label set
+  has two known strings); <code>non_label</code> (anything else).</li>
+</ul>
+<p>The answer parser is grammar-gated with digit/exponent caps
+enforced BEFORE any conversion (total digits ≤ 20, exponent ≤
+999 with ≤ 3 exponent digits), applied to model answers as well
+as expected strings: an answer like <code>1e999999999</code> classifies
+<code>value_fail</code>, never allocates (the live Decimal/DoS surface is
+answer-side, red-team B GB3). The parser accepts the four form
+grammars plus plain digit strings (leading zeros parse), and
+for scientific a capital E or + exponent <em>when parsing only</em> —
+costume differences belong in value_pass_form_fail, not in
+value_fail. Wrong-width grouping (1,23,456) does not parse.</p>
+<p>Headline contrast: per candidate × task, for each of the six
+form pairs, paired discordant counts over the common-completer
+population (values completed in both forms): n_paired,
+n_pass_a_only, n_pass_b_only, n_both_pass, n_both_fail, McNemar
+exact p over the discordants (diagnostic only, never
+thresholded), and a classification from the total function of
+(n_paired, b, c): paired &lt; MIN_PAIRED_EVALUABLE (6) →
+<code>insufficient</code>; b = c = 0 → <code>no_difference_observed</code>;
+b ≥ MIN_DISCORDANT (2) ∧ b &gt; c → <code>{form_a}_advantage</code>;
+c ≥ 2 ∧ c &gt; b → <code>{form_b}_advantage</code>; b = c ≥ 2 →
+<code>mixed_discordance</code>; otherwise <code>below_threshold</code>. Marginal
+per-form rates are reported beside the contrasts with their
+denominators, never instead of them, and no rate or contrast
+is ever pooled across tasks (N3, enforced structurally: the
+payload has no cross-task total for the validator to certify).</p>
+<h2 id="tokenizer-grouping">Tokenizer grouping<a class="headerlink" href="#tokenizer-grouping" title="Permanent link">&para;</a></h2>
+<p>One run attaches one backend, so grouping takes exactly one
+value per run: it is a run-level descriptive label and a
+cross-run diff variable, never a within-run correlation. The
+classification is measured, never inferred from a family name
+(§7's "Llama/Gemma-style single-digit" was wrong for Llama 3+,
+which groups by 3 — TokSuite; Reddy Table 5). A frozen,
+count-based probe battery over <code>backend.encode</code>: plain
+renderings of digit strings of every length 1–12 (sequential,
+all-same-digit, zero-heavy) plus every form of a frozen probe
+value. Decision rule (frozen): <code>single_digit</code> iff every
+all-digit probe's token count equals its digit count;
+<code>chunked_up_to_3</code> iff every all-digit probe of length ≥ 2 has
+token count exactly ceil(len/3) and length-1 probes count 1;
+<code>irregular_or_mixed</code> iff every count lies between those two
+predictions without matching either rule; otherwise <code>unknown</code>
+(including any encode failure). Probe evidence (string → token
+count) is stored in the payload; the diff validator re-runs
+the decision rule over the stored evidence — a consistency
+check, labelled as such, since the validator has no tokenizer.
+<code>unknown</code> never blocks the per-form rates and always blocks
+grouping language in the section. §7's N2 is demoted from
+invariant to measured diagnostic: the payload reports the
+actual per-form operand token counts and deltas from plain;
+separator merges (a comma fusing with adjacent digits) are
+data, not classification errors.</p>
+<h2 id="protocol-and-diff">Protocol and diff<a class="headerlink" href="#protocol-and-diff" title="Permanent link">&para;</a></h2>
+<p>Protocol object: version, tasks, forms, bands, values_per_task,
+floors (6 / 2), budgets, space codepoint (U+202F), scientific
+grammar id, prompt templates + templates_sha256, renderer spec
+id, <code>generator_sha256</code> over the canonical generated set
+(operands and expected values per task/value/form), seed,
+backend fingerprint; <code>fingerprint</code> = SHA-256 over the canonical
+object. Generator drift ⇒ not comparable.</p>
+<p><code>diff_numform</code> recomputes from the records with independent
+code (no imports from numform.py): every form rendering and
+expected string (N1: all forms of a value parse to the same
+value), every aggregate, the decomposition, the paired
+contrasts, and the protocol fingerprints; it regenerates the
+generated set from the protocol's seed with its own mirror of
+the generator and compares every record's construction
+against it, checks that candidates agree on the expected
+answer's token count, and re-runs the grouping decision over
+stored evidence (consistency) with the stored token
+means/deltas held to the producer's arithmetic relation (each
+delta is its form's mean minus the plain mean, up to float
+summation order). Grouping
+drift between runs is reported and flags the form-contrast
+comparison; it does not by itself make sections incomparable.
+Impossible payloads are rejected: pass &gt; completed, rate ≠
+count/denominator, duplicate (task, value, form) record keys,
+a cell present iff its detail is empty, records over the caps,
+malformed digests, per-record construction fields (band,
+strata, operands, expected) inconsistent across candidates,
+records that are not the protocol seed's generated set, and
+any pooled cross-task total present at all.</p>
+<h2 id="honesty-items">Honesty items<a class="headerlink" href="#honesty-items" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Generated integer tasks, isolated operands, this exact prompt
+  wording, zero-shot, this checkpoint: the section states the
+  scope in the quantity's definition, and per-task readings
+  only — no pooled "best form". A form × template interaction
+  is a per-candidate contrast, never a pooled marginal.</li>
+<li>A low pass rate in a form means "cannot do the task AND
+  return the answer in this form, under byte-exact scoring" —
+  the decomposition is what licenses any narrower arithmetic
+  reading, and only from the value_fail class.</li>
+<li>The pre-registered null: all paired deltas at
+  no_difference_observed / below_threshold across forms — a
+  publishable "normalisation does not matter here" result.</li>
+<li>Compare is a verbalisation-under-form measurement (Yuchi et
+  al.: probed magnitude knowledge exceeds verbalised accuracy);
+  grouping explains nothing by itself within a run, and
+  cross-tokenizer claims require cross-run diffs of different
+  checkpoints, which confound weights with tokenizer.</li>
+<li>The decomposition's answer side rested on the stage's
+  parse until cycle 190 (see Records and decomposition);
+  the validator now re-parses the digest-bound answer text
+  itself. The parse grammars exist three times (producer,
+  diff validator, cycle-27 test oracle) and are pinned
+  equal — pattern texts by test, behaviour by a
+  differential battery over the grammar alphabet including
+  the five classic divergence classes (non-ASCII digits,
+  trailing newlines, digit-count caps, negative-shift
+  divisibility, uncapped scientific results).</li>
+<li>Named future work, not in v1: spelled-out number words,
+  locale forms (decimal-comma, 3-2-2 grouping), other space
+  codepoints, mixed-form fixtures, fractional operands,
+  negatives, per-form selection.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

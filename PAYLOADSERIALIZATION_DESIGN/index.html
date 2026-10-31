@@ -1,0 +1,5148 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Local conversation-protocol experiments with held-out evidence: exact token-sequence comparisons across chat-format families.">
+      
+      
+      
+        <link rel="canonical" href="https://strmt7.github.io/model-protocol-lab/PAYLOADSERIALIZATION_DESIGN/">
+      
+      
+        <link rel="prev" href="../NUMFORM_DESIGN/">
+      
+      
+        <link rel="next" href="../PLACEMENT_DESIGN/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Payload serialization - Model Protocol Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#payload-serialization-probe-design-round-adjudicated-no-build" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Model Protocol Lab" class="md-header__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Model Protocol Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Payload serialization
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Model Protocol Lab" class="md-nav__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Model Protocol Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/adr-index/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_LOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Research log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_READINESS_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release readiness 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_NOTES_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_PORTABILITY_2026-10-15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portability research (2026-10-15)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crawl4ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent tooling notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evidence notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_10" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_10" id="__nav_5_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design documents
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design documents
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ALIASING_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BATCH_PATH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CANONICALFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canonical form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHOICE_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choice audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFIDENCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DATELINE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DENSITY_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DETERMINISM_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Determinism audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DISTRACTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIELDORDER_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIXTURE_FUZZ_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HISTORYFRAME_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History frame
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRUNESWEEP_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prune sweep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONDISTANCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INVISIBLECHARS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Invisible characters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFUSABLESKELETON_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confusable skeleton
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LEADING_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Leading claim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTITURN_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEEDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEGATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NUMFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#round-summary-coordinator-35-design-round-only-nothing-built" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Round summary (coordinator #35, design round only — nothing built)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-why-no-build-the-fatal-defects-each-individually-blocking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Why NO-BUILD: the fatal defects (each individually blocking)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Why NO-BUILD: the fatal defects (each individually blocking)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#f1-the-task-payload-is-undefined-and-the-tree-gives-it-incompatible-meanings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F1 — "The task payload" is undefined, and the tree gives it incompatible meanings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f2-the-same-content-is-false-across-the-named-encodings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F2 — "The same content" is false across the named encodings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f3-serialization-bundles-at-least-six-simultaneous-treatments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F3 — "Serialization" bundles at least six simultaneous treatments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f4-the-byte-exact-scorer-output-format-priming-manufactures-and-hides-flips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F4 — The byte-exact scorer × output-format priming manufactures and hides flips
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f5-degenerate-populations-and-arms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F5 — Degenerate populations and arms
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f6-the-researchers-design-as-written-does-not-survive-its-own-amendments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F6 — The researcher's design as written does not survive its own amendments
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-resubmission-specification-not-a-build-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Resubmission specification (NOT a build order)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Resubmission specification (NOT a build order)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#monday-morning-utility-narrowed-instrument" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Monday-morning utility (narrowed instrument)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arms-frozen-byte-exact-stdlib-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arms (frozen, byte-exact, stdlib-only)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#population-and-controls-the-attribution-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Population and controls (the attribution contract)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scorer-pins-binding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scorer pins (binding)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fail-closed-vocabulary-frozen-before-building" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fail-closed vocabulary (frozen before building)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#report-shape-and-decision-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Report shape and decision rule
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-adjudication-evidence-coordinators-own-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Adjudication evidence (coordinator's own execution)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-removals-applied-verifier-6-none-of-these-enter-any-build-doc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Removals applied (verifier §6 — none of these enter any build doc)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-sources-the-resubmission-may-safely-cite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Sources the resubmission may safely cite
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-what-a-build-cycle-must-not-do-on-the-basis-of-this-doc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. What a build cycle must NOT do on the basis of this doc
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-fresh-review-of-the-2-resubmission-adjudicated-no-build-coordinator-55" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Fresh review of the §2 resubmission (ADJUDICATED: NO-BUILD, coordinator #55)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Fresh review of the §2 resubmission (ADJUDICATED: NO-BUILD, coordinator #55)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71-fatal-items-each-individually-blocking-coordinator-executed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.1 Fatal items (each individually blocking; coordinator-executed)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72-serious-items-confirmed-a-restated-candidate-must-cure-all" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.2 Serious items (confirmed; a restated candidate must cure all)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#73-refuted-or-downgraded-items-adjudicated-by-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.3 Refuted or downgraded items (adjudicated by execution)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#74-fabrication-sweep-clean" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.4 Fabrication sweep: CLEAN
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#75-what-survives-and-the-restated-candidate-not-a-build-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.5 What survives, and the restated candidate (NOT a build order)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#76-side-findings-reported-not-fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.6 Side findings (reported, not fixed)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-restated-candidate-as-amended-cycle-221-build-text-of-record" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Restated candidate as amended (cycle-221 build text of record)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0-settlement-map-what-this-restatement-decides-and-where" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0. Settlement map (what this restatement decides, and where)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-utility-and-claim-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Utility and claim scope
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-population-frozen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Population (frozen)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Population (frozen)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 Cases
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-fields-and-the-value-alphabet-all-fields-no-exceptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 Fields and the value alphabet (all fields, no exceptions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-generator-a-total-function-of-seed-case-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 Generator (a total function of (seed, case index))
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-closed-book-screen-arm-retained-cost-stated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 Closed-book screen arm (retained, cost stated)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-arms-frozen-literal-byte-exact" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Arms (frozen, literal, byte-exact)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Arms (frozen, literal, byte-exact)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-the-canonical-json-arm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 The canonical-JSON arm
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-the-prose-arm-and-the-injectivity-theorem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 The prose arm, and the injectivity theorem
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-worked-example-byte-exact-executed-proof_injectivitypy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 Worked example (byte-exact; executed, proof_injectivity.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-disclosed-asymmetries-part-of-the-named-bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 Disclosed asymmetries (part of the named bundle)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-scorer-and-decomposition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Scorer and decomposition
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Scorer and decomposition">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-cell-verdict-one-formula-stated-the-s2-cure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 Cell verdict (one formula, stated — the S2 cure)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-per-cell-decomposition-completed-cells-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 Per-cell decomposition (completed cells only)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-pair-decomposition-total-the-s5-cure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 Pair decomposition (total — the S5 cure)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-diagnostics-beside-the-headline-never-rescuing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4 Diagnostics (beside the headline, never rescuing)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-records-and-decidability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Records and decidability
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Records and decidability">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-record-shape-one-record-per-case-per-candidate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 Record shape (one record per case per candidate)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-validator-mirror-duties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 Validator mirror duties
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-decidability-class-by-class" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 Decidability, class by class
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-report-shape-descriptive-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Report shape — descriptive only
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Report shape — descriptive only">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61-no-falsification-classification-item-6-decided" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 No falsification classification (item 6, decided)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-token-id-divergence-reported-not-gated-item-9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 Token-ID divergence: reported, not gated (item 9)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63-no-winner-readout-in-v1-item-8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 No winner readout in v1 (item 8)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-fail-closed-vocabulary-frozen-two-layers-named" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Fail-closed vocabulary (frozen, two layers named)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-budget-frozen-with-derivations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Budget (frozen, with derivations)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-naming-item-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Naming (item 10)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-uniqueness-the-combination-and-the-honest-residue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Uniqueness — the combination, and the honest residue
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-sources-as-adjudicated-in-design-doc-5-fenced" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. Sources (as adjudicated in design-doc §5; fenced)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#12-scope-limits-of-v1-stated-not-discovered-later" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12. Scope limits of v1 (stated, not discovered later)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-fresh-review-adjudication-coordinator-65-build-as-amended" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Fresh-review adjudication (coordinator #65) — BUILD-as-amended
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLACEMENT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Placement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRECISION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Precision
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REPETITION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repetition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROTATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rotation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SCORER_LENS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scorer lens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEALED_BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sealed bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SURFACE_NOISE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surface noise
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template probe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_ROBUSTNESS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template robustness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TOKENDEPTH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Token depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#round-summary-coordinator-35-design-round-only-nothing-built" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Round summary (coordinator #35, design round only — nothing built)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-why-no-build-the-fatal-defects-each-individually-blocking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Why NO-BUILD: the fatal defects (each individually blocking)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Why NO-BUILD: the fatal defects (each individually blocking)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#f1-the-task-payload-is-undefined-and-the-tree-gives-it-incompatible-meanings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F1 — "The task payload" is undefined, and the tree gives it incompatible meanings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f2-the-same-content-is-false-across-the-named-encodings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F2 — "The same content" is false across the named encodings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f3-serialization-bundles-at-least-six-simultaneous-treatments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F3 — "Serialization" bundles at least six simultaneous treatments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f4-the-byte-exact-scorer-output-format-priming-manufactures-and-hides-flips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F4 — The byte-exact scorer × output-format priming manufactures and hides flips
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f5-degenerate-populations-and-arms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F5 — Degenerate populations and arms
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#f6-the-researchers-design-as-written-does-not-survive-its-own-amendments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        F6 — The researcher's design as written does not survive its own amendments
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-resubmission-specification-not-a-build-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Resubmission specification (NOT a build order)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Resubmission specification (NOT a build order)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#monday-morning-utility-narrowed-instrument" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Monday-morning utility (narrowed instrument)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arms-frozen-byte-exact-stdlib-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arms (frozen, byte-exact, stdlib-only)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#population-and-controls-the-attribution-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Population and controls (the attribution contract)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scorer-pins-binding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scorer pins (binding)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fail-closed-vocabulary-frozen-before-building" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fail-closed vocabulary (frozen before building)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#report-shape-and-decision-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Report shape and decision rule
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-adjudication-evidence-coordinators-own-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Adjudication evidence (coordinator's own execution)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-removals-applied-verifier-6-none-of-these-enter-any-build-doc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Removals applied (verifier §6 — none of these enter any build doc)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-sources-the-resubmission-may-safely-cite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Sources the resubmission may safely cite
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-what-a-build-cycle-must-not-do-on-the-basis-of-this-doc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. What a build cycle must NOT do on the basis of this doc
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-fresh-review-of-the-2-resubmission-adjudicated-no-build-coordinator-55" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Fresh review of the §2 resubmission (ADJUDICATED: NO-BUILD, coordinator #55)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Fresh review of the §2 resubmission (ADJUDICATED: NO-BUILD, coordinator #55)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71-fatal-items-each-individually-blocking-coordinator-executed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.1 Fatal items (each individually blocking; coordinator-executed)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72-serious-items-confirmed-a-restated-candidate-must-cure-all" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.2 Serious items (confirmed; a restated candidate must cure all)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#73-refuted-or-downgraded-items-adjudicated-by-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.3 Refuted or downgraded items (adjudicated by execution)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#74-fabrication-sweep-clean" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.4 Fabrication sweep: CLEAN
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#75-what-survives-and-the-restated-candidate-not-a-build-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.5 What survives, and the restated candidate (NOT a build order)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#76-side-findings-reported-not-fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.6 Side findings (reported, not fixed)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-restated-candidate-as-amended-cycle-221-build-text-of-record" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Restated candidate as amended (cycle-221 build text of record)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0-settlement-map-what-this-restatement-decides-and-where" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0. Settlement map (what this restatement decides, and where)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-utility-and-claim-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Utility and claim scope
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-population-frozen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Population (frozen)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Population (frozen)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1 Cases
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-fields-and-the-value-alphabet-all-fields-no-exceptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2 Fields and the value alphabet (all fields, no exceptions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-generator-a-total-function-of-seed-case-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3 Generator (a total function of (seed, case index))
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-closed-book-screen-arm-retained-cost-stated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4 Closed-book screen arm (retained, cost stated)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-arms-frozen-literal-byte-exact" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Arms (frozen, literal, byte-exact)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Arms (frozen, literal, byte-exact)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-the-canonical-json-arm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1 The canonical-JSON arm
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-the-prose-arm-and-the-injectivity-theorem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2 The prose arm, and the injectivity theorem
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-worked-example-byte-exact-executed-proof_injectivitypy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3 Worked example (byte-exact; executed, proof_injectivity.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-disclosed-asymmetries-part-of-the-named-bundle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4 Disclosed asymmetries (part of the named bundle)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-scorer-and-decomposition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Scorer and decomposition
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Scorer and decomposition">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-cell-verdict-one-formula-stated-the-s2-cure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.1 Cell verdict (one formula, stated — the S2 cure)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-per-cell-decomposition-completed-cells-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.2 Per-cell decomposition (completed cells only)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-pair-decomposition-total-the-s5-cure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.3 Pair decomposition (total — the S5 cure)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-diagnostics-beside-the-headline-never-rescuing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4.4 Diagnostics (beside the headline, never rescuing)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-records-and-decidability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Records and decidability
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Records and decidability">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#51-record-shape-one-record-per-case-per-candidate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.1 Record shape (one record per case per candidate)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#52-validator-mirror-duties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.2 Validator mirror duties
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#53-decidability-class-by-class" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5.3 Decidability, class by class
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-report-shape-descriptive-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Report shape — descriptive only
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Report shape — descriptive only">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61-no-falsification-classification-item-6-decided" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 No falsification classification (item 6, decided)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-token-id-divergence-reported-not-gated-item-9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 Token-ID divergence: reported, not gated (item 9)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63-no-winner-readout-in-v1-item-8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 No winner readout in v1 (item 8)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-fail-closed-vocabulary-frozen-two-layers-named" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Fail-closed vocabulary (frozen, two layers named)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-budget-frozen-with-derivations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Budget (frozen, with derivations)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-naming-item-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Naming (item 10)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-uniqueness-the-combination-and-the-honest-residue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Uniqueness — the combination, and the honest residue
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-sources-as-adjudicated-in-design-doc-5-fenced" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. Sources (as adjudicated in design-doc §5; fenced)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#12-scope-limits-of-v1-stated-not-discovered-later" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12. Scope limits of v1 (stated, not discovered later)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-fresh-review-adjudication-coordinator-65-build-as-amended" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Fresh-review adjudication (coordinator #65) — BUILD-as-amended
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="payload-serialization-probe-design-round-adjudicated-no-build">Payload-serialization probe — design round (ADJUDICATED: NO-BUILD)<a class="headerlink" href="#payload-serialization-probe-design-round-adjudicated-no-build" title="Permanent link">&para;</a></h1>
+<h2 id="round-summary-coordinator-35-design-round-only-nothing-built">Round summary (coordinator #35, design round only — nothing built)<a class="headerlink" href="#round-summary-coordinator-35-design-round-only-nothing-built" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Tree at main <code>960b70dcde87</code> (cycle 211 closed green, 8,402 tests, per the
+  round brief). This round was READ-ONLY except for this doc and the briefs;
+  no suite was run, no push was made, no tag was cut or discussed.</li>
+<li>Specialists (blind to each other): researcher
+  (<code>~/workspace/agents_out/payloadformat/research.md</code>), red-team A
+  (<code>redteam_a.md</code>), red-team B (<code>redteam_b.md</code>), verifier/claims auditor
+  (<code>verifier.md</code>). All four briefs landed; the verifier resolved every
+  externally checkable claim against primary sources and spot-checked the
+  load-bearing tree citations.</li>
+<li>Convergence: both red teams independently returned NO-BUILD, and the
+  verifier upheld both verdicts. The coordinator re-executed the
+  load-bearing claims itself (see "Adjudication evidence" below) and
+  concurs.</li>
+<li><strong>Verdict: NO-BUILD</strong> — for the candidate as tentatively framed
+  (<code>run --payload-format</code>: JSON vs plain text vs other encodings of "the
+  same content", verdict flips as headline) AND for the researcher's
+  design as written. The reasons are not implementation gaps; they are
+  defects in the defining claim (see §1). §2 specifies what a
+  resubmission would have to satisfy in full. A resubmission satisfying
+  §2 is a DIFFERENT, narrower instrument and must be reviewed as a new
+  design, not built as "this probe with amendments". Accepting the
+  amendments while keeping the original causal claim does not count as
+  accepting them.</li>
+</ul>
+<h2 id="1-why-no-build-the-fatal-defects-each-individually-blocking">1. Why NO-BUILD: the fatal defects (each individually blocking)<a class="headerlink" href="#1-why-no-build-the-fatal-defects-each-individually-blocking" title="Permanent link">&para;</a></h2>
+<h3 id="f1-the-task-payload-is-undefined-and-the-tree-gives-it-incompatible-meanings">F1 — "The task payload" is undefined, and the tree gives it incompatible meanings<a class="headerlink" href="#f1-the-task-payload-is-undefined-and-the-tree-gives-it-incompatible-meanings" title="Permanent link">&para;</a></h3>
+<p>Placement's payload is a prose fact passage (<code>placement.py:267-283</code>
+<code>arm_content</code>); a structured spec's context is prose
+(<code>structured.py:445-458</code> <code>render_prompt</code>); a structured spec's answer
+document is canonical JSON (<code>structured.py:463-480</code>
+<code>build_structured_fixtures</code>); shipped user fixtures are instructions, not
+data (<code>examples/fixtures.json</code>). No module defines a serializable
+task-data record type. A design that leaves the choice to the builder
+does not have a population, a scorer, or a headline — underspecification
+at this level is itself a build-blocker.</p>
+<h3 id="f2-the-same-content-is-false-across-the-named-encodings">F2 — "The same content" is false across the named encodings<a class="headerlink" href="#f2-the-same-content-is-false-across-the-named-encodings" title="Permanent link">&para;</a></h3>
+<p>Typing, loss, and parser-dependence change the content before any model
+runs. Executed in adjudication: <code>json.loads('{"a": 1, "a": 2}')</code> gives
+<code>{'a': 2}</code> (last-wins); JSON <code>349</code> is <code>int</code> while plain-text <code>349</code> is
+<code>str</code>; JSON <code>true</code>/<code>null</code> are boolean/null while plain-text <code>true</code>/<code>null</code>
+are strings; CSV flattens nesting; XML must choose attributes vs
+elements. There is no canonical-equivalence theorem for JSON-vs-prose
+comparable to canonical-form's UAX #15 basis, and prose has no parser to
+be equivalent under. A content-preserving claim needs, per arm, a frozen
+byte-exact renderer, a frozen key order, and a lossless value
+restriction — which the candidate as framed does not supply.</p>
+<h3 id="f3-serialization-bundles-at-least-six-simultaneous-treatments">F3 — "Serialization" bundles at least six simultaneous treatments<a class="headerlink" href="#f3-serialization-bundles-at-least-six-simultaneous-treatments" title="Permanent link">&para;</a></h3>
+<p>Token length, delimiters/punctuation, quoting/escaping, key order,
+whitespace, and output priming all move together. Key order is already
+a shipped probe (<code>run --field-order</code>); whitespace is <code>ws_canonical</code>'s
+territory; length/position are needle/distraction/density/placement
+axes. No paired contrast over such arms attributes a flip to
+"serialization" rather than to the bundle. The only supportable claim
+is descriptive pairwise discordance between named frozen renderings,
+with length and priming stated as bundled, never a causal
+"serialization changes verdicts" headline.</p>
+<h3 id="f4-the-byte-exact-scorer-output-format-priming-manufactures-and-hides-flips">F4 — The byte-exact scorer × output-format priming manufactures and hides flips<a class="headerlink" href="#f4-the-byte-exact-scorer-output-format-priming-manufactures-and-hides-flips" title="Permanent link">&para;</a></h3>
+<p>The verdict is byte-exact with no answer stripping:
+<code>core.py:797</code> (<code>exact_match = status == "completed" and answer ==
+case.expected</code>), conjoined with boundary presence in stage cells
+(<code>experiments.py:9515</code> pattern). A model answering correctly in the
+input arm's idiom (<code>{"code": "amber-1234"}</code> on the JSON arm) scores
+False against a bare expected value; a model failing to parse the JSON
+arm but guessing the bare code scores True on both. The fixes are
+closed: parse-then-compare redefines "verdict" relative to every sibling
+probe and the diff validator's digest identity (the fix canonical-form
+rejected); outcome-dependent exclusion deflates discordance exactly as
+field-order's F6 lesson discloses; the scorer-lens ladder has no
+label-strip operation and cannot rescue JSON-echo answers. The
+researcher's echo diagnostic beside the headline is necessary but does
+not cure this: it explains flips, it never rescues them, and the
+headline still bundles comprehension with priming.</p>
+<h3 id="f5-degenerate-populations-and-arms">F5 — Degenerate populations and arms<a class="headerlink" href="#f5-degenerate-populations-and-arms" title="Permanent link">&para;</a></h3>
+<p>Single-field cases collapse to punctuation differences (executed:
+scalar JSON <code>42</code> is byte-identical to plain <code>42</code>; single-field JSON
+differs from key-value lines only by braces, colon, and quotes).
+Multi-field populations are already partly owned: field-order owns key
+order over 15 specs, structured owns output adherence over 9 specs
+(1–2 fields only — not 1–4, as red-team A misstated; see §4).
+Whitespace-only JSON variants (compact vs spaced vs pretty) are a
+whitespace probe under a serialization name. The researcher's
+multi-record table population is the right <em>shape</em> of answer to F5, but
+it does not cure F1–F4, and its arm set and headline do not survive
+(see §2).</p>
+<h3 id="f6-the-researchers-design-as-written-does-not-survive-its-own-amendments">F6 — The researcher's design as written does not survive its own amendments<a class="headerlink" href="#f6-the-researchers-design-as-written-does-not-survive-its-own-amendments" title="Permanent link">&para;</a></h3>
+<p>Credit where due — the researcher already supplies a frozen multi-record
+population with unique keys and distinct values, frozen field order, a
+value alphabet plus a four-way byte-divergence assert, and an echo
+diagnostic beside the headline. What still kills it as written:</p>
+<ul>
+<li>The YAML arm must go in v1: zero runtime dependencies
+  (<code>pyproject.toml:28</code>, <code>dependencies = []</code>); no stdlib YAML parser;
+  YAML 6.0.1 importing in this VM is an environment accident, not a
+  declared dependency; a hand-rolled mirror parser is new untrusted
+  code whose quoting choices become hidden treatments. TOML has no
+  stdlib writer (<code>tomllib</code> has no <code>dumps</code>, executed); XML escaping
+  rewrites visible text. V1 arms must be stdlib-serializable frozen
+  renderings only.</li>
+<li>The falsification headline must be downgraded from causal to
+  descriptive pairwise discordance with ONE pre-registered primary pair;
+  the researcher's prose-vs-rest framing plus all-pairs matrix, with
+  placement's floors borrowed without operating characteristics for a
+  four-arm panel, does not survive the k(k−1)/2 multiplicity problem
+  (10 pairs at 5 arms).</li>
+<li>The prose "control" framing must go: prose is one encoding among
+  others. The researcher says this, then still computes prose-vs-rest
+  first. The decision rule must pick one framing before building.</li>
+<li>Missing mandatory machinery: a closed-book screen (placement pattern;
+  canonical-form's lack of one is a gap to avoid copying, not a
+  precedent); a boundary-only vs exact-only discordance decomposition;
+  the full selection-vocabulary transplant; per-arm attrition
+  reporting; a frozen fail-closed vocabulary with renderer failure
+  failing the whole stage closed.</li>
+</ul>
+<h2 id="2-resubmission-specification-not-a-build-order">2. Resubmission specification (NOT a build order)<a class="headerlink" href="#2-resubmission-specification-not-a-build-order" title="Permanent link">&para;</a></h2>
+<p>A resubmission is reviewable as a NEW design only if it satisfies ALL
+of the following in full. Partial compliance is still NO-BUILD. The
+resubmission's working name must reflect the narrowed claim (a
+descriptive frozen-renderer discordance probe); do NOT ship
+<code>--payload-format</code> until the naming audit against USAGE §8.46 passes,
+since placement's "payload" sense is reserved.</p>
+<h3 id="monday-morning-utility-narrowed-instrument">Monday-morning utility (narrowed instrument)<a class="headerlink" href="#monday-morning-utility-narrowed-instrument" title="Permanent link">&para;</a></h3>
+<p>A prompt-assembly owner, deciding whether to pin one frozen rendering
+(prose or canonical JSON) in their prompt assembly and re-run template
+selection under that pinned rendering — before a routine upstream
+format change silently flips eval verdicts. The readout answers "these
+two frozen renderings discord on N paired cases on this checkpoint",
+never "serialization is (in)ert in general", and never anything about
+weights.</p>
+<h3 id="arms-frozen-byte-exact-stdlib-only">Arms (frozen, byte-exact, stdlib-only)<a class="headerlink" href="#arms-frozen-byte-exact-stdlib-only" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Exactly one pre-registered primary pair, recommended: prose vs
+  canonical JSON as defined by <code>structured._canonical_json</code>
+  (<code>structured.py:336-343</code>: <code>json.dumps(document, sort_keys=True,
+  separators=(", ", ": "), allow_nan=False)</code>; default
+  <code>ensure_ascii=True</code>). Executed in adjudication: that rendering is
+  byte-unequal to compact <code>json.dumps</code> (<code>'{"age": 36, "name":
+  "Ada Lovelace"}'</code> vs <code>'{"age":36,"name":"Ada Lovelace"}'</code>), so the
+  canonical form must be pinned by name and by test, never assumed.</li>
+<li>Every arm is a named total function with a byte-exact specification
+  and a worked example in the resubmission doc, pinned by a test that
+  its output is byte-identical to the doc's example. "Plain text"
+  without such a function is not an arm name; it is a placeholder.
+  Pretty JSON, flow YAML, Markdown lists, and single-record tables are
+  excluded as duplicates, each with the duplicate it duplicates named.</li>
+<li>CSV stays deferred (loss analysis: CSV flattens nesting and drops
+  types). XML stays deferred (escaping rewrites visible text; no
+  canonical-serialization convention in the tree). YAML stays out of
+  v1 entirely (see F6); it may return only as a separately justified
+  v2 with a declared dependency or a frozen stdlib-only renderer the
+  validator can mirror. No other arms are decision inputs; any further
+  arms are descriptive context only.</li>
+</ul>
+<h3 id="population-and-controls-the-attribution-contract">Population and controls (the attribution contract)<a class="headerlink" href="#population-and-controls-the-attribution-contract" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Generated cases only, stage-local, never entering the user's
+  search/held-out Split (canonical-form invariant 3 pattern; Split
+  compares message inputs by NFC key, <code>core.py:193-214</code>, so variant
+  fixtures would collide — no fixture arm).</li>
+<li>Fresh multi-record tables (4–6 records × 3–4 fields), one key field
+  (unique per table), one answer field, 1–2 distractor fields whose
+  values are distinct from the answer value in every row. Cases whose
+  answer value appears in more than one row, or whose key field is not
+  unique, are excluded pre-generation with counts, never silently
+  dropped.</li>
+<li>Value restriction (v1, strictest form): flat, string-only, ASCII,
+  stem-disjoint, reader-entailed tables. Answer field is a plain
+  <code>word-number</code>-style code in every arm. No null, no nesting, no
+  duplicate keys, no floats, no non-string keys, no YAML-reserved
+  words (<code>yes</code>, <code>no</code>, <code>on</code>, <code>off</code>, <code>null</code>, <code>~</code>), no date-like strings,
+  no leading-digit strings. Non-answer fields are string-shaped too.
+  Integers/booleans are a v2 question with a frozen per-arm
+  type-rendering table, not a v1 entitlement.</li>
+<li>Held constant across arms (each a generator/validator assert):
+  the same record multiset, field values, key field, and answer field;
+  one frozen field order (alphabetical, the
+  <code>structured.describe_schema</code> convention, <code>structured.py:403-443</code>,
+  which sorts properties) in JSON keys, YAML keys (v2), and table
+  columns alike, and the same sentence field order in prose; a
+  byte-identical question and instruction string in the same position
+  relative to the table (question after the table in all arms); a
+  byte-identical output contract ("Answer with ONLY the value." or
+  equivalent, frozen); greedy decoding, the same <code>--max-new-tokens</code>,
+  the same boundary ids, the same seed, the same template family per
+  candidate. Templates are not touched: serialization lives inside
+  the user message content only.</li>
+<li>No format label in the instruction unless the label choice itself
+  is frozen identically across arms and its confound is stated.</li>
+<li>Closed-book screen arm (placement pattern, <code>placement.py:374-380</code>
+  <code>screened()</code>): a case the candidate passes closed-book is excluded
+  from the live populations, with <code>n_screened</code> and
+  <code>n_closed_book_incomplete</code> reported. Without it the headline is
+  dilutable by cases serialization cannot move.</li>
+<li>Answer-embedding audit: no field name, key, topic token, or neutral
+  sentence shares a 4-character prefix with, or is a prefix of, any
+  expected value (placement's stem-disjointness pin, extended to
+  keys). Reader-entailment audit per case: a reader given question +
+  table must derive the answer uniquely, or the case is
+  descriptive-only. If a resubmission instead reuses shipped specs,
+  it inherits field-order's <code>paired: False</code> flags verbatim — all
+  five: route-alert, route-order, classify-sentiment,
+  classify-urgency, classify-language (verified by grep: 5
+  <code>paired: False</code> entries, 10 <code>paired: True</code>, 15 specs total).</li>
+<li>Byte-divergence assert across arms per case, with excluded counts;
+  boundary-containment screen plus <code>audit_special_token_literals</code>
+  (<code>fixtures.py:471</code>) over every frozen renderer output for every
+  family before generation. Screened cases are excluded
+  pre-generation with counts, never silently dropped.</li>
+<li>Generation/record/payload caps and the generation count at the
+  legal maximum of 24 candidates are frozen in the module with
+  derivations and stated in CLI help (field-order precedent: 15
+  specs × 4 arms × 24 candidates = 1,440; canonical-form: 2 × 24 ×
+  24 = 1,152; placement: 4 × 24 × 24 = 2,304).</li>
+</ul>
+<h3 id="scorer-pins-binding">Scorer pins (binding)<a class="headerlink" href="#scorer-pins-binding" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Headline scorer, named before building: byte-exact verdict per
+  <code>core.evaluate</code> (<code>core.py:797</code>). No stripping, no parsing, no
+  normalization is added to the headline path for this probe.</li>
+<li>Beside the headline, never rescuing flips into passes: a
+  parsed-value / echo-substring diagnostic (per arm, the share of
+  byte-exact failures whose decoded answer contains the expected
+  value as a substring or as a parsed field value — the echo rate);
+  scorer-lens R1 (whitespace trim/collapse, <code>scorerlens.py:146-153</code>)
+  and fence-strip (<code>:176-187</code>) regrade rates as sensitivities; and
+  the exact-only vs boundary-only discordance decomposition (a
+  boundary-only discordance is a boundary effect, never a
+  serialization effect, and cannot falsify any claim).</li>
+<li>Expected values are pure ASCII (canonical-form SCORER PIN
+  transplant): decomposable characters live in carrier prose only.</li>
+<li>If byte-exact and parsed-value scorings disagree, the section
+  prints both and says which question each answers; it must not pick
+  the flattering one post hoc.</li>
+</ul>
+<h3 id="fail-closed-vocabulary-frozen-before-building">Fail-closed vocabulary (frozen before building)<a class="headerlink" href="#fail-closed-vocabulary-frozen-before-building" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Stage details exactly: <code>{cancelled,
+  payload_format_record_budget_exceeded,
+  payload_format_screen_failed}</code>. (The <code>payload_format_</code> prefix is
+  retained for the stage-detail pattern only; the CLI flag name is
+  still subject to the naming audit above.)</li>
+<li>Per-cell details exactly: <code>{"", arm_context_exceeded,
+  arm_evaluation_failed}</code>.</li>
+<li>Model parse outcomes exactly field-order's <code>document_kind</code> set
+  (<code>object</code> / <code>non_object</code> / <code>unparseable</code> / <code>""</code>), where
+  <code>unparseable</code> means JSON parse failure of the ANSWER only.</li>
+<li>Model parse failure is scored wrong, never a detail. Any renderer
+  failure, serializer exception, or non-UTF-8 payload degrades the
+  whole stage to <code>{"available": False, "detail":
+  "payload_format_unavailable"}</code> — never to a per-cell verdict.</li>
+<li>No new verdict words. In particular: no <code>arm_parse_failed</code>, no
+  <code>unparseable</code> as a cell detail for stage-produced inputs, no
+  <code>payload_too_large</code>, no per-arm "not applicable".</li>
+<li>Per-arm attrition (<code>n_context_exceeded</code>,
+  <code>n_evaluation_failed</code>) printed beside every paired rate; ungated
+  discordance printed as a sensitivity wherever any gating applies.</li>
+</ul>
+<h3 id="report-shape-and-decision-rule">Report shape and decision rule<a class="headerlink" href="#report-shape-and-decision-rule" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Headline population: both arms completed AND full-render id
+  sequences diverged (canonical-form invariants 9–10). Three-way
+  report per pair: ids-identical / divergent-concordant /
+  divergent-discordant, with the per-case <code>id_length_delta</code> list (in
+  case order) and <code>max_abs_id_delta</code>. Same-ids verdict flips are
+  recorded as determinism findings (<code>n_same_ids_verdict_flips</code>),
+  never as serialization fragility. A run landing 100% in the
+  ids-identical bucket reads "instrument inapplicable to this
+  tokenizer", never "the model is robust to serialization".</li>
+<li>Per-candidate classification over the id-divergent paired
+  population, with the resubmission's OWN operating
+  characteristics printed with the verdict (critical splits, power
+  at a stated gap, expected false falsifications across
+  candidates for its panel size). Borrowed floors are forbidden:
+  placement/canonical-form floors (<code>MIN_PAIRED_EVALUABLE = 6</code>,
+  <code>MIN_DISCORDANT = 2</code>, <code>placement.py:172-173</code>) and field-order
+  floors (6 discordant specs + sign test) may not be transferred
+  to a payload panel without that argument. Below the discordant
+  floor the verdict is <code>insufficient</code> — withheld, never defaulted
+  to acquittal.</li>
+<li>Selection vocabulary transplanted verbatim from canonical-form
+  (<code>canonicalform.py:566-641</code>): a candidate "passes" an arm iff it
+  passes every completed case on that arm; <code>winner_changed</code> only
+  when both arms select and winners differ;
+  <code>winner_abstention_asymmetric</code> for exactly one side selecting;
+  <code>winner_undefined</code> when neither selects or selection is
+  withheld (completed sets differ across candidates or are empty).
+  Selection-vs-abstention is NEVER a winner change. Per-arm
+  accuracy rates sit beside every selection readout; per-arm
+  completion and withheld rates are printed. The per-case
+  discordance classification is the primary readout; the winner
+  headline is secondary and labelled as such. Discordance is never
+  pooled across candidates/templates: per-candidate contrasts only.</li>
+<li>Records carry digests only (per-arm content digests, token
+  counts, <code>ids_identical</code>, <code>id_length_delta</code>, cells, details —
+  canonical-form record shape). The diff validator regenerates
+  every arm's rendering from its own literal renderer copies and
+  checks each digest plus pairwise digest inequality across arms,
+  plus <code>ids_identical</code> implies equal arm token counts. Reports
+  render counts/rates only, no payload/question/answer text, every
+  payload-derived string through <code>_escape_text</code> (<code>reporting.py:28</code>),
+  never bare <code>escape()</code>.</li>
+</ul>
+<h2 id="3-adjudication-evidence-coordinators-own-execution">3. Adjudication evidence (coordinator's own execution)<a class="headerlink" href="#3-adjudication-evidence-coordinators-own-execution" title="Permanent link">&para;</a></h2>
+<p>All snippets read-only; no suite was run.</p>
+<ul>
+<li><code>core.py:797</code>: <code>exact_match = status == "completed" and answer ==
+  case.expected</code> — verified exact line; no answer stripping in the
+  verdict path (only strip hits are field validation and a
+  prefix-trim repair variant, per the verifier's grep).</li>
+<li><code>structured._canonical_json</code> at <code>structured.py:336-343</code>:
+  <code>json.dumps(document, sort_keys=True, separators=(", ", ": "),
+  allow_nan=False)</code> — byte-unequal to compact <code>json.dumps</code>
+  (executed: <code>'{"age": 36, "name": "Ada Lovelace"}'</code> vs
+  <code>'{"age":36,"name":"Ada Lovelace"}'</code>).</li>
+<li>Duplicate-key parse: <code>json.loads('{"a": 1, "a": 2}')</code> →
+  <code>{'a': 2}</code> (last-wins) — executed.</li>
+<li><code>tomllib</code> has no <code>dumps</code> (executed: <code>hasattr(tomllib, 'dumps')</code>
+  is False); YAML 6.0.1 imports in this VM while
+  <code>pyproject.toml:28</code> declares <code>dependencies = []</code> — executed.</li>
+<li>Catalog: 29 <code>Format(</code> entries (<code>catalog.py:26</code>) — executed.</li>
+<li>Placement floors: <code>MIN_PAIRED_EVALUABLE = 6</code>,
+  <code>MIN_DISCORDANT = 2</code> at <code>placement.py:172-173</code> — verified.</li>
+<li>Field-order spec inventory: 15 specs, 10 <code>paired: True</code>, 5
+  <code>paired: False</code> (route-alert, route-order, classify-sentiment,
+  classify-urgency, classify-language) — verified by grep over
+  <code>fieldorder.py</code>.</li>
+<li>Placement <code>arm_content</code> at <code>placement.py:267-283</code> (prose payload,
+  question-position arms) — verified.</li>
+</ul>
+<h2 id="4-removals-applied-verifier-6-none-of-these-enter-any-build-doc">4. Removals applied (verifier §6 — none of these enter any build doc)<a class="headerlink" href="#4-removals-applied-verifier-6-none-of-these-enter-any-build-doc" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Researcher S2 §3.1 grammar sentence (descriptors, separators,
+  casing functions, itemizers; equivalence by shared rule
+  application): REMOVED until re-resolved from the Sclar primary
+  text. The Sclar headline (up to 76 accuracy points on
+  LLaMA-2-13B, weak cross-model correlation) is verified from the
+  abstract and survives; the grammar detail does not.</li>
+<li>Researcher S2 "(ICLR 2024)" venue tag: REMOVED until re-resolved
+  (the abstract page does not state it).</li>
+<li>Incorrect line ranges corrected, not carried forward:
+  structured canonical JSON 337–343 → 336–343 with
+  <code>allow_nan=False</code> added; placement 251–279 → 250–283; placement
+  50–51 → 50–52; cli 177–926 → 174–938; red-team A's
+  <code>experiments.py:9515-1520</code> range deleted (cell function
+  <code>_canonical_form_cell</code> at 9473–9522, verdict line 9515).</li>
+<li>POML Mistral second format corrected to "HTML (Ugly) (0.348)",
+  not plain HTML (Table 3 values otherwise verified).</li>
+<li>Red-team A F3/M1/M6 length figures (66/69/76/86/59/99/93) and
+  the derived "68% longer" / "25% longer" sentences REMOVED as
+  executed evidence: the brief never states the renderers, so the
+  numbers are not reproducible from the brief. The length-confound
+  argument survives on red-team B's reproducible case (canonical
+  JSON 35 chars vs one plain rendering 27 chars, a 29.6% delta)
+  and on canonical-form's per-case <code>id_length_delta</code> discipline.</li>
+<li>Red-team A F4 "structured spec set … with 1–4 fields" CORRECTED:
+  the shipped structured set is 1–2 fields (9 specs); 3–4-field
+  specs are field-order's six additions.</li>
+<li>Red-team A M4 prose-selection rendering <code>'winner': 'A'→ none</code>
+  REMOVED; correct form is <code>{'decision': 'no_candidate',
+  'winner': None}</code>.</li>
+<li>Red-team B M4 paired-flag sentence CORRECTED to all five
+  <code>paired: False</code> specs (see §2); B's m1 already handles the
+  single-field three, so the combined text must list five.</li>
+<li>Design-level removals: the YAML arm in v1; any causal headline
+  of the form "serialization changes verdicts"; prose as "the
+  control" / "baseline truth" / "natural format"; any new verdict
+  word (see §2); the attribution of <code>input_tokens</code> to
+  <code>placement.py</code> (it lives in <code>experiments.py</code> stage cells);
+  any borrowed floors without the resubmission's own operating
+  characteristics.</li>
+</ul>
+<h2 id="5-sources-the-resubmission-may-safely-cite">5. Sources the resubmission may safely cite<a class="headerlink" href="#5-sources-the-resubmission-may-safely-cite" title="Permanent link">&para;</a></h2>
+<ul>
+<li>He, Rungta, Koleczek, Sekhon, Wang, Hasan,
+  arXiv:2411.10541v1: Abstract (plain text, Markdown, JSON, YAML
+  templates; GPT-3.5-turbo varies by up to 40% on code
+  translation); §2.2 (five prompt components, content of each
+  placeholder stays the same, only structure/syntax differ);
+  §2.3 (OpenAI GPT-3.5/GPT-4 via Azure only); Table 1 / §3 (MMLU
+  59.7 JSON vs 50.0 Markdown on GPT-35-turbo-0613); Figure 1
+  caption ("Accuracy goes up by 42% for JSON compared to
+  Markdown" on MMLU international-law questions). Fencing that
+  must travel with it: He et al. bundle the whole prompt
+  template into one "format" treatment, cross no chat-template
+  family, run no local checkpoint under exact-token discipline,
+  and re-select no winner.</li>
+<li>Sclar, Choi, Tsvetkov, Suhr, arXiv:2310.11324v2: Abstract only
+  (up to 76 accuracy points on LLaMA-2-13B; format performance
+  only weakly correlates between models; meaning-preserving
+  formatting in few-shot settings on open models). The §3.1
+  grammar detail and the ICLR venue tag are REMOVED (see §4).</li>
+<li>Zhang, Chen, Xu, Yang (POML), arXiv:2508.13948v1, §7 Table 3
+  (100 sampled styles, WikiTQ subset): Claude 3 Haiku CSV
+  (0.449) / Markdown (0.424); DeepSeek V3 HTML (0.801) / JSON
+  (0.800); Gemini 2.0 Flash XML (0.791) / HTML (0.788); Mistral
+  AI 8x7B XML (0.365) / HTML (Ugly) (0.348); §7 text on
+  model-specific optimal table formats. Fencing: POML's 100
+  styles bundle table syntax with other styling dimensions; no
+  chat-template crossing or winner re-selection.</li>
+<li>Tam et al., arXiv:2408.02442, §4.1 (via the scoping already in
+  docs/FIELDORDER_DESIGN.md): emitted key order under
+  constrained JSON mode only (100% of GPT-3.5 JSON-mode
+  Last-Letter responses placed the "answer" key first). Fenced
+  off: emitted-order effects are not input-serialization effects.</li>
+<li>JSONSchemaBench, arXiv:2501.10868v2 (via the citation in
+  <code>structured.py:1-60</code>): output adherence only, fenced off on
+  the same ground.</li>
+<li>No "first" is claimed anywhere in this doc. The contribution
+  of any future resubmission is the combination stated in §2,
+  never priority. No fabricated citation was found in this round
+  (unlike the wave-9 round); the failures found were one
+  unresolved detail, one dropped qualifier, and sloppy line
+  ranges, all handled above by removal or correction.</li>
+<li>Two 2026 preprints the researcher saw only as search snippets
+  remain uncited and unrelied on; a resubmission wanting them
+  must verify them from primary text first.</li>
+</ul>
+<h2 id="6-what-a-build-cycle-must-not-do-on-the-basis-of-this-doc">6. What a build cycle must NOT do on the basis of this doc<a class="headerlink" href="#6-what-a-build-cycle-must-not-do-on-the-basis-of-this-doc" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Do not build the researcher's four-arm probe, the tentative
+  <code>run --payload-format</code> sketch, or any YAML arm in v1.</li>
+<li>Do not write a causal "serialization changes verdicts"
+  headline, a prose-control framing, or any new verdict word.</li>
+<li>Do not transfer placement/canonical-form or field-order floors
+  to a new panel without printing that panel's own operating
+  characteristics.</li>
+<li>Building, if it ever happens, is a separate cycle, on a fresh
+  design review of a resubmission satisfying §2 in full — and
+  only on a BUILD verdict from that review.</li>
+</ul>
+<h2 id="7-fresh-review-of-the-2-resubmission-adjudicated-no-build-coordinator-55">7. Fresh review of the §2 resubmission (ADJUDICATED: NO-BUILD, coordinator #55)<a class="headerlink" href="#7-fresh-review-of-the-2-resubmission-adjudicated-no-build-coordinator-55" title="Permanent link">&para;</a></h2>
+<p>Round: three blind specialists (researcher, red teams A and B —
+<code>~/workspace/agents_out/payloadserial2/</code>), coordinator adjudication
+by its own execution (<code>verification.md</code> in the same directory).
+Tree at main <code>18e4b4ca2e4f</code> (cycle 217 closed green). READ-ONLY
+round: nothing built, nothing pushed.</p>
+<p><strong>Verdict: NO-BUILD for §2 as written.</strong> §2 was required to
+satisfy ALL of itself in full ("Partial compliance is still
+NO-BUILD" — its own preamble), and it does not: it freezes no
+case count, its prose arm is not lossless over its own legal
+population, its mandated falsification classification has no
+stated null and no sane instantiation at its own panel, and its
+two mandated transplants (closed-book screen, canonical-form
+selection) are mutually incompatible as written. Even the
+researcher's FOR case concedes §2 needs a further document
+closing the case count (its D1) and the prose arm's literal text
+(its D2) before any build verdict. BUILD-as-amended is not
+available: the cures change the population (value alphabet), the
+headline machinery (classification), or the frozen vocabulary —
+the endpoints §2 exists to narrow. A restated candidate is
+recorded in §7.3; it is not a build order and is not queued ahead
+of anything.</p>
+<h3 id="71-fatal-items-each-individually-blocking-coordinator-executed">7.1 Fatal items (each individually blocking; coordinator-executed)<a class="headerlink" href="#71-fatal-items-each-individually-blocking-coordinator-executed" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>G1 — The prose arm is not lossless over the §2-legal
+  population (red-team A F1, CONFIRMED).</strong> §2's value restrictions
+  ban non-ASCII, null/nesting/duplicate keys, floats, non-string
+  keys, YAML-reserved words, date-like and leading-digit strings —
+  but not commas, spaces, or field-label phrases inside values,
+  and they freeze no value alphabet for non-answer fields. Two
+  distinct §2-legal tables whose distractor values contain a
+  separator plus the next field's label render byte-identically
+  in prose and distinctly in canonical JSON — executed by the
+  coordinator under two independent renderer templates (red-team
+  A's <code>", ".join</code> and the researcher's own Tree-3 ", and"
+  template, with the collision pair adapted to each; all crafted
+  values pass every §2 ban mechanically). The reader-entailment
+  property §2 requires is therefore not guaranteed by §2's
+  generator constraints: any unquoted prose template is
+  non-injective over a value set admitting separator + label.
+  Quoting/escaping cures injectivity only by making "prose" a
+  quoted key-value encoding. Cure: a frozen single-token value
+  alphabet for ALL fields — a population change.</li>
+<li><strong>G2 — The mandated per-candidate classification has no
+  stated null and no sane rule at §2's panel (red-team B F1,
+  red-team A F11, and the researcher's own OC table; ALL numbers
+  reproduced exactly by the coordinator's independent exact
+  enumeration).</strong> §2 mandates a classification printed with
+  "expected false falsifications" but states neither the rule
+  nor the claim/null being falsified. Executed at n_paired = 24
+  (the largest panel §2's precedents suggest): the canonical-form
+  transplant fires on a competent .9/.9 null with probability
+  0.8897 per candidate (family-wise 1.0000 over 24 candidates);
+  the researcher's derived Rule A (discordant ≥ 4) fires 0.650
+  at per-case discordance δ = 0.18 and, even under its
+  friendliest noise model (δ = 0.05), yields expected false
+  falsifications 0.71 per panel with P(≥ 1) = 0.516, rising to
+  5.14 expected at δ = 0.10; the family-wise-controlled sign
+  rule has power 0.0542 at a 25-point gap; McNemar power is
+  0.260 at a 20-point gap and 0.053 at a 10-point gap. The
+  descriptive core (discordance counts/rates, decomposition,
+  per-arm accuracies) needs no classification; the falsification
+  classification §2 mandates cannot be instantiated honestly at
+  this panel. Cure: drop the falsification classification for a
+  purely descriptive report, or a much larger panel — either
+  changes §2's headline machinery or population.</li>
+<li><strong>G3 — §2 freezes no case count, so its population and budget
+  never close (red-team B F2, conceded by the researcher as
+  D1).</strong> §2's only numbers are the table dimensions (4–6 × 3–4),
+  24 candidates, and other probes' precedents. Generations at
+  the legal maximum are 72·N for an unspecified N (2 headline
+  arms + 1 screen arm per candidate-case); the record and
+  payload caps are likewise underivable. The sibling standard
+  §2 invokes freezes the count in the design document
+  (<code>canonicalform.py</code> CASE_COUNT = 24; the negation design
+  froze its own arithmetic in-doc). Deferring the population
+  size to the builder is the underspecification §1's F1 called
+  a build-blocker.</li>
+<li><strong>G4 — The screen and selection transplants are mutually
+  incompatible as written (red-team A F4, CONFIRMED).</strong>
+  §2 mandates placement's closed-book screen AND canonical-form's
+  selection vocabulary "transplanted verbatim". But
+  canonical-form's shared-set machinery explicitly rests on
+  there being NO screen (<code>canonicalform.py:556</code>: "There is no
+  closed-book screen in this probe, so…"), while placement's
+  shared set is union-screened (<code>placement.py</code>
+  <code>shared_live_fixtures</code>). §2 never names which shared set its
+  selection readout runs over; red-team A executed constructed
+  records on which the two §2-compliant readings give opposite
+  winner headlines (<code>winner_changed</code> vs no winner on either
+  arm). The winner headline's population is undefined.</li>
+</ul>
+<h3 id="72-serious-items-confirmed-a-restated-candidate-must-cure-all">7.2 Serious items (confirmed; a restated candidate must cure all)<a class="headerlink" href="#72-serious-items-confirmed-a-restated-candidate-must-cure-all" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>S1 — <code>document_kind</code> transplant is semantically void on
+  §2's answers</strong> (both red teams; researcher concedes as D3).
+  Executed with the shipped <code>fieldorder.parse_document</code>: every
+  correct bare-code answer is <code>unparseable</code>; the only <code>object</code>
+  answers are JSON echoes — the §1 F4 failure mode. The frozen
+  set labels ~100% of correct cells with a failure word and is
+  a pure re-encoding of the echo variable. Cure changes §2's
+  frozen vocabulary.</li>
+<li><strong>S2 — Scorer pin names the wrong function</strong> (red-team A F5).
+  §2 pins the verdict to <code>core.py:797</code> alone; every transplanted
+  stage cell uses <code>exact_match and boundary_found</code>
+  (<code>experiments.py:9515</code>, verified), and §2's own decomposition
+  presupposes both components. The headline scorer §2 exists to
+  pin is left ambiguous between two functions.</li>
+<li><strong>S3 — The JSON arm is pinned as a function, not as a
+  document</strong> (red-team A F7). List vs keyed vs wrapped shapes of
+  the same table are byte-distinct under <code>_canonical_json</code>
+  (executed), the keyed shape reorders records via <code>sort_keys</code>,
+  and §2 holds only the record <em>multiset</em> constant — record
+  sequence (a position treatment) is unconstrained. §2-legal
+  values containing <code>"</code>, <code>\</code>, or tab render visibly differently
+  across arms (escaping), so "same content" fails at the byte
+  level for admitted values.</li>
+<li><strong>S4 — The mandated diagnostics are uncomputable from §2's
+  record shape</strong> (red-team A F10). Canonical-form cells carry an
+  answer digest only (verified: verdict, boundary_found,
+  boundary_text_match, input_tokens, answer_digest); §2's echo,
+  parsed-value, R1 and fence-strip diagnostics are functions of
+  the answer TEXT and cannot be recomputed from digests by the
+  diff validator. Field-order's cure — per-cell parsed
+  commitments (<code>experiments.py:10638ff</code>, verified) — is absent
+  from §2's enumerated shape.</li>
+<li><strong>S5 — The exact/boundary decomposition is not total</strong>
+  (red-team A F9). The scored answer is the pre-boundary segment
+  (<code>core.py:939</code>, verified), so a boundary miss manufactures an
+  exact failure; the both-components-differ discordance — the
+  common boundary-miss mode — has no §2 label and no
+  falsification rule.</li>
+<li><strong>S6 — The id-divergence gate is vacuous for this pair</strong>
+  (red-team B F6 = red-team A F8). The tree's HF backend accepts
+  only gpt2/llama byte-level BPE (<code>backends.py</code>, verified) whose
+  decode is lossless, so byte-distinct renderings are
+  id-divergent with probability 1: the ids-identical bucket and
+  the "instrument inapplicable" reading are unreachable, and the
+  three-way report collapses. The negation round already
+  adjudicated this shape: <code>docs/NEGATION_DESIGN.md</code> §3.4,
+  "Token-ID divergence: reported, not gated". §2 mandates the
+  gate without answering §3.4. (No estimand bias arises —
+  divergence is treatment-side; this is machinery misfit.)</li>
+<li><strong>S7 — The transplanted selection headline is near-inert on
+  §2's population</strong> (red-team B F7; researcher concedes as D4).
+  All-pass over 24 multi-row lookups: P(passes an arm) =
+  0.95²⁴ ≈ 0.292, 0.90²⁴ ≈ 0.080, 0.80²⁴ ≈ 0.005 (executed
+  arithmetic, all parties agree). The winner readout §2's
+  utility paragraph leans on ("re-run template selection") is
+  <code>winner_undefined</code>/abstention in the large majority of runs.</li>
+<li><strong>S8 — Duplication residue is thin</strong> (red-team B F5, ownership
+  inventory verified). After removing shipped parts (canonical-form's
+  three-way report, selection, record and validator skeleton;
+  placement's screen; <code>structured</code>'s renderer and field-order
+  convention; scorer-lens regrades; the field-order aggregate
+  already computes pairwise frozen-renderer discordance decisions
+  over structured specs), the genuinely new residue is one table
+  generator, one prose renderer, and the echo wiring — and G1
+  shows the residue's own renderer component fails over §2's
+  population. Duplication alone was not fatal in sibling rounds;
+  it is recorded here as context, not as an independent fatal.</li>
+</ul>
+<h3 id="73-refuted-or-downgraded-items-adjudicated-by-execution">7.3 Refuted or downgraded items (adjudicated by execution)<a class="headerlink" href="#73-refuted-or-downgraded-items-adjudicated-by-execution" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Red-team A F3 (frozen stage vocabulary self-contradictory):
+  <strong>REFUTED as fatal.</strong> The tree's own convention is two-layer —
+  <code>negation.py:101-112</code> freezes STAGE_DETAILS as exactly
+  {cancelled, negation_record_budget_exceeded,
+  negation_screen_failed}, excluding both <code>""</code> (the stage success
+  detail, returned by every sibling stage) and
+  <code>negation_unavailable</code> (the wrapper/analysis fallback,
+  <code>cli.py:2076</code>, <code>experiments.py:10027</code>). §2's two bullets mirror
+  that pattern. Downgraded to a wording imprecision: §2 should
+  name the wrapper layer for <code>payload_format_unavailable</code>.</li>
+<li>Red-team B F4 (naming gate unsatisfiable): <strong>DOWNGRADED</strong> from
+  fatal to friction. The collision table is real (68 CLI flags;
+  the Format/document/render senses are shipped), but §2 defers
+  the flag name to an audit and does not forbid coinage; sibling
+  rounds coined audited names (<code>--response-directive</code>;
+  <code>--multi-question</code> settled clean). Counted as one more deferred
+  load-bearing choice under G3's completeness pattern, not an
+  independent fatal.</li>
+<li>Red-team B F10 (validator overstatement): upheld as a wording
+  point only — the diff validator can check arithmetic
+  consistency of stage-asserted <code>ids_identical</code>/token counts,
+  not re-derive them (diffreports has no tokenizer). The mirror
+  machinery itself is precedented (<code>diffreports.py:10401</code>,
+  <code>:11201</code>, <code>:11341</code> — all refs verified).</li>
+<li>Red-team A F2 (priming manufactures/hides discordance): the
+  descriptive re-scope blunts the "manufactures" half (a priming
+  flip IS a verdict discordance between the two renderings,
+  which is all the descriptive headline claims); the "hides"
+  half and the classification interaction stand jointly with
+  G2 — on the parsed-value view the same executed run flips its
+  classification, and §2 never states which view its
+  falsification language consumes, because it never states the
+  falsified claim.</li>
+<li>Screen cost (both red teams; researcher D5): facts confirmed
+  (the screen arm is 1 of 3 arms — 576 of 1,728 generations at
+  N = 24 — with expected exclusions ≈ 0 for seed-generated
+  codes). Hygiene, not a defect of principle; a restated
+  candidate must state the cost and justify or drop the arm.</li>
+</ul>
+<h3 id="74-fabrication-sweep-clean">7.4 Fabrication sweep: CLEAN<a class="headerlink" href="#74-fabrication-sweep-clean" title="Permanent link">&para;</a></h3>
+<p>Every load-bearing number and citation was re-derived by the
+coordinator: 11 operating-characteristic values across three
+independent computations reproduce exactly (0.8897 / 0.9959 /
+0.0298 / 0.2143 / 0.6500 / 0.8850 / FWER 0.5160 / McNemar 0.0534,
+0.2598, 0.7994 / Bonferroni-sign 0.0542); parse kinds, renderer
+collisions, selection arithmetic, 68 CLI flags, the 20,132-line
+diffreports with its mirror line refs, USAGE §8.54/:2713 and
+§8.55/:2762, the 1,819-line / 76-test cycle-209 file — all exact.
+External sources: the coordinator fetched arXiv:2411.10541 and
+arXiv:2310.11324 primary texts; titles, authors, and the fenced
+figures match §5 exactly (POML Table 3 stands on round 1's
+verification plus this round's researcher re-verification; it
+was not independently re-fetched here, recorded honestly). The
+only errors found in any brief are the two interpretive
+overstatements adjudicated in §7.3 — no fabricated citation,
+symbol, or figure was found in any of the three briefs.</p>
+<h3 id="75-what-survives-and-the-restated-candidate-not-a-build-order">7.5 What survives, and the restated candidate (NOT a build order)<a class="headerlink" href="#75-what-survives-and-the-restated-candidate-not-a-build-order" title="Permanent link">&para;</a></h3>
+<p>Survives intact: the narrowed <em>question</em> — input-side
+serialisation of the same generated multi-record table inside
+the user message, template family held fixed per candidate, is
+owned by no shipped probe (rotation varies block order,
+placement question position, canonical-form sub-lexical
+normalisation, field-order schema presentation order with a JSON
+<em>output</em> document, structured output adherence). The uniqueness
+residue is real as a contrast; §2's instrument for it is what
+fails. The §5 sources and the §2 utility sentence survive
+unchanged.</p>
+<p>A restated candidate must, in its own text, before any fresh
+review: (1) freeze the case count N and derive its budget
+arithmetic including the screen arm; (2) freeze a single-token
+value alphabet for ALL fields (no spaces or punctuation in any
+value) and re-prove prose injectivity under it; (3) print the
+prose arm as a literal compositional total function over sorted
+keys with a worked example; (4) pin the JSON document shape
+(a list of record objects) and hold record SEQUENCE, not
+multiset, constant across arms; (5) state the cell verdict
+formula (the sibling <code>exact_match and boundary_found</code> pattern)
+and make the decomposition total over the four (exact,
+boundary) cells, with the both-differ class named; (6) drop the
+falsification classification — report discordance counts/rates,
+decomposition, and per-arm accuracies descriptively — OR state
+the falsified claim and its null and derive a rule whose
+executed operating characteristics at the frozen N are sane on
+both sides; (7) drop the <code>document_kind</code> transplant (the echo
+diagnostic carries the parse information, committed per cell in
+the record shape on the field-order pattern); (8) name the
+selection population composition (union-screened shared set, the
+placement pattern) or drop the winner readout in v1 (the
+negation precedent); (9) report token-ID divergence, not gate
+on it (negation §3.4); (10) coin the flag name and defend it
+against the whole of USAGE. Open decisions the restated text
+must settle itself: classification-vs-pure-description (item 6),
+screen retention at +50% budget for ≈0 expected exclusions, and
+selection in v1 vs dropped. This candidate is not queued ahead
+of anything; it enters only through a fresh blind design review
+returning BUILD.</p>
+<h3 id="76-side-findings-reported-not-fixed">7.6 Side findings (reported, not fixed)<a class="headerlink" href="#76-side-findings-reported-not-fixed" title="Permanent link">&para;</a></h3>
+<ul>
+<li>JSONSchemaBench currency (researcher): arXiv now lists a v3
+  (27 Feb 2025) as latest; the tree pins v2 deliberately
+  (<code>structured.py:5</code>). Not an error — a resubmission or docs
+  cycle should keep the v2 pin consciously or re-verify against
+  v3, never drift silently.</li>
+<li><code>diffreports.py</code> stands at 20,132 lines; each additional
+  probe's validator mirror costs ≥ 140 lines there. A growing
+  structural cost, noted for the parent's planning, not a
+  defect of this candidate.</li>
+</ul>
+<h2 id="8-restated-candidate-as-amended-cycle-221-build-text-of-record">8. Restated candidate as amended (cycle-221 build text of record)<a class="headerlink" href="#8-restated-candidate-as-amended-cycle-221-build-text-of-record" title="Permanent link">&para;</a></h2>
+<p>The text below is the restated candidate authored by
+coordinator #64 (<code>payloadserial_restated/candidate.md</code> in the
+agent workspace), incorporated AS AMENDED by the fresh
+review's eight binding amendments (§9 below): the RNG
+call sequence frozen in §2.3 (A); the instantiated-key
+overlap accounted in §2.3 and printed in the report (B); the
+§4.4 parsed/echo subset claim corrected (C); the §5.2 mirror
+given the input-token binding and the aggregate-eligible
+invariant, with §5.3's token row corrected to match (D); the
+§6.1 power figures given their marginal bases, with the
+base-.90 figures printed beside the mixed-base ones (E); the
+resolution printed beside the §6 discordance counts (F); the
+§8 margin claim corrected (G); the §9 flag census re-derived
+by parser instantiation (H). Amendment sites are marked in
+the text. One further condition from the review's researcher
+(condition C): the scope phrase "for this checkpoint and
+this candidate's template family" appears in the §1 utility,
+the CLI help, the USAGE section, and the report section.
+Everything not marked is the candidate's text verbatim,
+including its frozen numbers — every one of which the build
+re-derived by execution before relying on it (the worked
+example is byte-identical at 317/286 chars; the worst-case
+lengths are 653/594; the operating-characteristics table
+reproduces exactly under the candidate's own <code>oc_tables.py</code>
+enumeration method).</p>
+<h2 id="0-settlement-map-what-this-restatement-decides-and-where">0. Settlement map (what this restatement decides, and where)<a class="headerlink" href="#0-settlement-map-what-this-restatement-decides-and-where" title="Permanent link">&para;</a></h2>
+<p>The ten items §7.5 of the design doc requires a restated
+candidate to settle in its own text:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>Settlement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Freeze N; budget incl. screen arm</td>
+<td>N = 24 frozen (§2); full arithmetic (§8): 1,728 generations at the legal maximum, screen arm's 576 (+50%) inside the total</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Single-token value alphabet for ALL fields; re-prove prose injectivity</td>
+<td>Frozen alphabet (§2); injectivity theorem + exhibited inverse + executed round-trip over 100,000 legal tables (§3)</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Prose arm as a literal compositional total function over sorted keys, with worked example</td>
+<td>Literal function (§3) + byte-exact worked example (§3.3)</td>
+</tr>
+<tr>
+<td>4</td>
+<td>JSON shape pinned; record SEQUENCE held constant</td>
+<td>List of record objects; sequence, not multiset, is the held constant (§3.1)</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Cell verdict formula stated; decomposition total, both-differ class named</td>
+<td>Formula (§4.1); total decomposition with the <code>mixed</code> class (§4.3)</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Drop the falsification classification, or state claim+null and derive a sane rule</td>
+<td>DROPPED. Purely descriptive report (§6); the rejected rules' executed operating characteristics under independent, paired, and δ-noise nulls are printed there</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Drop the <code>document_kind</code> transplant</td>
+<td>Dropped (§4.4); the echo diagnostic carries the parse information</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Name the selection population, or drop the winner readout in v1</td>
+<td>Winner readout DROPPED in v1 (§6.3), negation precedent</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Token-ID divergence reported, not gated</td>
+<td>Reported, not gated (§6.2), negation §3.4 disposition verbatim in effect</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Coin the flag name; defend against the whole of USAGE</td>
+<td><code>--record-notation</code> coined and defended (§9)</td>
+</tr>
+</tbody>
+</table>
+<p>The three open decisions §7.5 names are settled as follows:
+classification-vs-pure-description → pure description (§6);
+screen retention at +50% budget for ≈0 expected exclusions →
+RETAINED, cost stated and justified (§2.4, §8); selection in v1
+vs dropped → dropped (§6.3). The §7.2 serious items are cured at:
+S1 §4.4, S2 §4.1, S3 §2.2+§3.1, S4 §5, S5 §4.3, S6 §6.2,
+S7 §6.3, S8 §10 (residue stated, not hidden).</p>
+<h2 id="1-utility-and-claim-scope">1. Utility and claim scope<a class="headerlink" href="#1-utility-and-claim-scope" title="Permanent link">&para;</a></h2>
+<p><strong>Monday-morning utility (one sentence).</strong> A prompt-assembly
+owner deciding whether to switch the frozen notation their
+prompt assembly uses for generated data tables — prose sentences
+or canonical JSON — learns, for this checkpoint, on how many of
+24 paired generated tables the two notations' byte-exact verdicts
+discord, in which direction, and whether the discordance is
+exact-only, boundary-only, or mixed, before making that switch
+in production prompts.</p>
+<p><strong>The claim is descriptive pairwise discordance between two
+named frozen renderings, and nothing else.</strong> It is never a causal
+claim ("serialization changes verdicts"), never a claim about
+weights, never a claim about notations not frozen here. The
+treatment is the two renderings <em>as wholes</em>: token length,
+delimiters and punctuation, lexical framing, field order as a
+reading sequence in prose (§3.4), and output priming (§4.4) all
+move together and are named as the bundle, never attributed
+individually. Component attribution belongs to the shipped
+single-axis probes (field-order owns key order; the whitespace
+scan owns whitespace).</p>
+<p><strong>What would prove this design's own load-bearing statements
+wrong.</strong> (a) Injectivity (§3.2): exhibit two distinct legal
+tables (§2) with byte-identical prose renderings. (b)
+Decidability (§5.3): exhibit a quantity printed in §6 that the
+diff validator cannot recompute from the record shape in §5.1
+plus the regenerated tables. (c) The descriptive-only decision
+(§6.1): exhibit a classification rule whose executed operating
+characteristics at N = 24 are sane on both sides under the null
+families in §6.1 — the authoring execution found none.</p>
+<h2 id="2-population-frozen">2. Population (frozen)<a class="headerlink" href="#2-population-frozen" title="Permanent link">&para;</a></h2>
+<h3 id="21-cases">2.1 Cases<a class="headerlink" href="#21-cases" title="Permanent link">&para;</a></h3>
+<p><code>CASE_COUNT = 24</code> generated cases per candidate, stage-local,
+never entering the user's search/held-out Split (canonical-form
+invariant-3 pattern; the Split compares message inputs by NFC
+key, <code>core.py:193-214</code>, so form-twin fixtures would collide — no
+fixture arm). One table per case. Table shape is a frozen
+function of the case index <code>i</code> (0-based):</p>
+<ul>
+<li>records: <code>n_records = 4 + (i mod 3)</code> ∈ {4, 5, 6};</li>
+<li>fields: 3 if <code>i</code> is even, 4 if <code>i</code> is odd.</li>
+</ul>
+<p>Over <code>i mod 6</code> the shapes are (4,3), (5,4), (6,3), (4,4), (5,3),
+(6,4) — every combination exactly once per six cases, exactly
+four times per panel.</p>
+<h3 id="22-fields-and-the-value-alphabet-all-fields-no-exceptions">2.2 Fields and the value alphabet (all fields, no exceptions)<a class="headerlink" href="#22-fields-and-the-value-alphabet-all-fields-no-exceptions" title="Permanent link">&para;</a></h3>
+<p>Field universe, alphabetical (the <code>structured.describe_schema</code>
+convention, <code>structured.py:403-443</code>): <code>code</code>, <code>label</code>, <code>mark</code>,
+<code>zone</code>. A 3-field table uses {code, label, zone}; a 4-field table
+adds <code>mark</code>. The answer field is always <code>code</code>; the key field is
+always <code>zone</code>.</p>
+<p>Every value in every field — answer, key, and distractor alike —
+matches <code>^[a-z]+-[0-9]{4}$</code>, its word part drawn from the frozen
+24-word list</p>
+<p>amber, birch, cedar, copper, coral, falcon, garnet, harbor,
+indigo, juniper, lagoon, magnet, marble, nickel, onyx, pepper,
+quartz, saddle, saffron, summit, tundra, velvet, walnut, willow</p>
+<p>and its number part in [1000, 9999]: a code space of 24 × 9000 =
+216,000 values. All cell values within a table are pairwise
+distinct (sampled without replacement; the largest table needs
+24 values of 216,000). Consequences, all intended: no value
+contains a space, a comma, a period, a quote, a backslash, a
+control character, or a non-ASCII character, so JSON escaping is
+unreachable over the legal population (executed: §3.2) and no
+value can contain a separator or a field-label phrase — the two
+holes the §2 population died on (G1, S3). No value is a
+YAML-reserved word, a date-like string, or a bare number. The
+population is a population of <em>code tables</em>: this is the stated
+price of a lossless prose arm, paid openly (§3.2), not a hidden
+narrowing.</p>
+<h3 id="23-generator-a-total-function-of-seed-case-index">2.3 Generator (a total function of (seed, case index))<a class="headerlink" href="#23-generator-a-total-function-of-seed-case-index" title="Permanent link">&para;</a></h3>
+<p>For case <code>i</code>: <code>rng = random.Random(seed * 1000 + i)</code>. Draw
+(word, number) pairs until <code>n_records × n_fields</code> distinct values
+are collected (duplicate draws are consumed and discarded — part
+of the frozen stream); fill the table row-major, fields in
+alphabetical order. The queried record index is the next draw,
+<code>rng.randrange(n_records)</code>. The question names that record's
+<code>zone</code> value; the expected answer is its <code>code</code> value. The diff
+validator regenerates every table with its own literal copy of
+this generator (§5.2).</p>
+<p><strong>Amendment A (binding, fresh review): the RNG call sequence
+is frozen, not paraphrased.</strong> The paragraph above admits
+faithful readings that diverge on 24/24 tables (a paired draw
+is not a call sequence). The frozen sequence, bound into the
+protocol fingerprint through the case material, is: per value
+draw, in order, <code>word = WORDS[rng.randrange(24)]</code>, then
+<code>number = rng.randrange(1000, 10000)</code>; a duplicate value is
+consumed and discarded; the table fills row-major, fields in
+alphabetical order; the queried record index is the next draw,
+<code>rng.randrange(n_records)</code>, after the table is complete. The
+generator in <code>recordnotation.py</code>, the validator's literal
+mirror, and the test oracle all execute exactly this sequence;
+a payload whose tables were generated under any other reading
+fails regeneration.</p>
+<p>Pre-generation audits, all with counts in the stage's audit
+block; any failure fails the whole stage closed
+(<code>record_notation_screen_failed</code>), never a silent per-case drop:</p>
+<ul>
+<li>alphabet conformance of every value; within-table
+  distinctness; key (<code>zone</code>) uniqueness (implied by
+  distinctness, asserted anyway);</li>
+<li>the answer value appears in exactly one row (implied by
+  distinctness, asserted anyway);</li>
+<li>byte-divergence of the two arm renderings per case (assert;
+  §3.2 makes failure a construction impossibility, so a failure
+  is a generator defect, which is what the assert is for);</li>
+<li>boundary-containment plus <code>audit_special_token_literals</code>
+  (<code>fixtures.py:471</code>) over both renderings, the question, and
+  the contract, for every candidate family;</li>
+<li>answer-embedding audit: no field name, question token, or
+  contract token shares a 4-character prefix with, or is a
+  prefix of, any value word. Executed over the frozen lists by
+  the authoring coordinator: 0 violations (<code>audit_alphabet.py</code>).
+  The stage re-runs it over its frozen lists at construction.</li>
+<li>instantiated-key accounting (<strong>amendment B, binding</strong>): the
+  audit above covers template tokens only. The instantiated
+  key is a drawn value, and the answer's word equals the key's
+  word in about 4.17 percent of cases (analytic 8999/215999
+  over ordered distinct value pairs). The overlap is printed
+  in the report beside the screen readout. It is
+  arm-symmetric — the question is byte-identical across arms,
+  so it cannot manufacture discordance — and it is NOT
+  redrawn: a redraw rule would change the population and is
+  not authorised.</li>
+</ul>
+<p>Reader-entailment is not a per-case audit in this design: it is
+<em>discharged by the injectivity theorem</em> (§3.2). A reader given
+the question and either rendering recovers the identical table;
+<code>zone</code> is unique in it; the answer is therefore uniquely
+derivable from either arm. This is strictly stronger than §2's
+per-case entailment check, and it is the reason the alphabet is
+frozen as it is.</p>
+<h3 id="24-closed-book-screen-arm-retained-cost-stated">2.4 Closed-book screen arm (retained, cost stated)<a class="headerlink" href="#24-closed-book-screen-arm-retained-cost-stated" title="Permanent link">&para;</a></h3>
+<p>Per candidate-case, a third generation: the question and
+contract with no table (§3.3 shows the exact content). Screening
+is per candidate (placement pattern, <code>placement.py:374-380</code>): a
+case a candidate passes closed-book (cell verdict true, §4.1)
+is excluded from <em>that candidate's</em> live populations;
+<code>n_screened</code> and <code>n_closed_book_incomplete</code> (screen cells that
+did not complete — never silently treated as screened or as
+passed) are printed per candidate. Expected exclusions are ≈ 0
+by construction: a closed-book pass requires guessing one value
+of 216,000 (executed P = 4.63e-06 per case). The arm is retained
+as fail-closed hygiene against generator or code-space drift —
+its pass count is itself a printed leak readout — at a stated
+cost of 576 of 1,728 generations (+50% over the headline arms,
+§8). The headline readouts are also printed over the unscreened
+paired set as a sensitivity (§6), so the screen's effect on any
+number is visible.</p>
+<h2 id="3-arms-frozen-literal-byte-exact">3. Arms (frozen, literal, byte-exact)<a class="headerlink" href="#3-arms-frozen-literal-byte-exact" title="Permanent link">&para;</a></h2>
+<p>Exactly two headline arms. No other arm is a decision input;
+there are no descriptive extra arms in v1. Templates are not
+touched: the notation lives inside the user message content
+only. Held constant across arms: the record <em>sequence</em> (not
+multiset — §3.1), all values, the key and answer fields,
+alphabetical field order, the question (byte-identical, after
+the table in both arms), the output contract (byte-identical),
+greedy decoding, <code>--max-new-tokens</code>, boundary ids, the seed,
+and the template family per candidate.</p>
+<h3 id="31-the-canonical-json-arm">3.1 The canonical-JSON arm<a class="headerlink" href="#31-the-canonical-json-arm" title="Permanent link">&para;</a></h3>
+<p><code>structured._canonical_json</code> (<code>structured.py:336-343</code>:
+<code>json.dumps(document, sort_keys=True, separators=(", ", ": "),
+allow_nan=False)</code>, default <code>ensure_ascii=True</code>) applied to the
+<strong>list of record objects, in record sequence order</strong>.
+<code>sort_keys</code> orders keys <em>inside</em> each record object; it never
+reorders the list — so record sequence, a position treatment if
+left free (S3), is held constant by construction and asserted
+by the validator's regeneration.</p>
+<h3 id="32-the-prose-arm-and-the-injectivity-theorem">3.2 The prose arm, and the injectivity theorem<a class="headerlink" href="#32-the-prose-arm-and-the-injectivity-theorem" title="Permanent link">&para;</a></h3>
+<p>The prose arm is this literal total function of the record
+sequence (fields in sorted-key order within each record; one
+sentence per record; sentences joined by a single space):</p>
+<ul>
+<li>1 field: <code>The &lt;f&gt; is &lt;v&gt;.</code></li>
+<li>2 fields: <code>The &lt;f1&gt; is &lt;v1&gt; and the &lt;f2&gt; is &lt;v2&gt;.</code></li>
+<li>k ≥ 3 fields: <code>The &lt;f1&gt; is &lt;v1&gt;, the &lt;f2&gt; is &lt;v2&gt;, …, and the
+  &lt;fk&gt; is &lt;vk&gt;.</code></li>
+</ul>
+<p><strong>Theorem (injectivity over the legal population).</strong> Two
+distinct legal tables never have the same prose rendering.
+Proof: the function has an exhibited inverse — split the
+rendering into sentences at <code>.</code> boundaries and the final <code>.</code>;
+within a sentence, strip the leading <code>The</code>, normalise the
+final-join forms (<code>, and the</code> / <code>and the</code>) to the separator
+<code>, the</code>, and split; each resulting segment has the unique form
+<code>the &lt;field&gt; is &lt;value&gt;</code>. Segmentation is unique because every
+separator contains a space, a comma, a period, or an uppercase
+letter, and <strong>no value and no field name contains any of those
+characters</strong> (values match <code>[a-z0-9-]+</code>, field names match
+<code>[a-z]+</code>); the field names are pairwise distinct and none is a
+prefix of another. The inverse is implemented in
+<code>renderers.py:parse_prose</code> and executed by the authoring
+coordinator (<code>proof_injectivity.py</code>): <code>parse(render(t)) == t</code>
+on 100,000 random legal tables across all six shapes, and on
+3,000 further tables of 1–6 fields <em>outside</em> the population
+(the function is total, not fitted to the population). The same
+execution confirms <code>json.loads(render_json(t)) == t</code> on every
+sample, that the JSON rendering contains <strong>no backslash</strong> on
+every sample (escaping unreachable under §2.2), and that the two
+renderings are byte-distinct on every sample. The G1 collision
+pair from the §2 review is not a counterexample: all four of its
+crafted values are illegal under §2.2 (executed rejection).
+Quoting or escaping values in prose — the only cure available
+to §2's population — is rejected here for §7's stated reason:
+it would make "prose" a quoted key-value encoding and change
+the treatment.</p>
+<h3 id="33-worked-example-byte-exact-executed-proof_injectivitypy">3.3 Worked example (byte-exact; executed, <code>proof_injectivity.py</code>)<a class="headerlink" href="#33-worked-example-byte-exact-executed-proof_injectivitypy" title="Permanent link">&para;</a></h3>
+<p>Table (4 records × {code, label, zone}); queried zone
+<code>garnet-6006</code>; expected answer <code>copper-4004</code>:</p>
+<p>Prose rendering (317 chars):</p>
+<div class="highlight"><pre><span></span><code>The code is amber-1001, the label is birch-2002, and the zone is cedar-3003. The code is copper-4004, the label is falcon-5005, and the zone is garnet-6006. The code is harbor-7007, the label is indigo-8008, and the zone is juniper-9009. The code is lagoon-1010, the label is magnet-2020, and the zone is nickel-3030.
+</code></pre></div>
+<p>Canonical-JSON rendering (286 chars):</p>
+<div class="highlight"><pre><span></span><code>[{"code": "amber-1001", "label": "birch-2002", "zone": "cedar-3003"}, {"code": "copper-4004", "label": "falcon-5005", "zone": "garnet-6006"}, {"code": "harbor-7007", "label": "indigo-8008", "zone": "juniper-9009"}, {"code": "lagoon-1010", "label": "magnet-2020", "zone": "nickel-3030"}]
+</code></pre></div>
+<p>Frozen message composition, both arms:
+<code>content = rendering + "\n\n" + question + " " + contract</code>,
+where the question is <code>What is the code of the record whose
+zone is garnet-6006?</code> and the frozen contract is <code>Answer with
+ONLY the value.</code> The closed-book (screen) content is
+<code>What is the code of the record whose zone is garnet-6006? Answer with ONLY the value.</code>
+A build pins every string in this section byte-identically by
+test, including this example (the §2 D2 discipline).</p>
+<h3 id="34-disclosed-asymmetries-part-of-the-named-bundle">3.4 Disclosed asymmetries (part of the named bundle)<a class="headerlink" href="#34-disclosed-asymmetries-part-of-the-named-bundle" title="Permanent link">&para;</a></h3>
+<ul>
+<li><em>Length.</em> The renderings differ in length per case (worked
+  example: prose 317 vs JSON 286 chars; worst case at 6×4:
+  prose 653, JSON 594 — executed). No length matching is claimed
+  or attempted; <code>id_length_delta</code> is printed per case (§6.2).
+  Both worst cases sit far below any context cap, so
+  arm-asymmetric <code>arm_context_exceeded</code> attrition is not
+  expected at these sizes; per-arm attrition is printed
+  regardless (§6).</li>
+<li><em>Order in prose.</em> Alphabetical order inside a JSON object is
+  presentational; inside a prose sentence it is a reading
+  sequence (the answer field is sentence-initial, the key field
+  sentence-final, in every record sentence). The assert holds
+  the <em>label order</em> constant, not the reading process (red-team
+  A F12 on §2). This asymmetry is part of the bundled contrast
+  the descriptive claim is about; it is disclosed here so no
+  reader mistakes the claim for a pure-delimiter contrast.</li>
+</ul>
+<h2 id="4-scorer-and-decomposition">4. Scorer and decomposition<a class="headerlink" href="#4-scorer-and-decomposition" title="Permanent link">&para;</a></h2>
+<h3 id="41-cell-verdict-one-formula-stated-the-s2-cure">4.1 Cell verdict (one formula, stated — the S2 cure)<a class="headerlink" href="#41-cell-verdict-one-formula-stated-the-s2-cure" title="Permanent link">&para;</a></h3>
+<p>A cell's verdict is</p>
+<div class="highlight"><pre><span></span><code>verdict = (status == "completed") and (answer == expected) and boundary_found
+</code></pre></div>
+<p>i.e. <code>core.evaluate</code>'s <code>exact_match</code> (<code>core.py:797</code>) conjoined
+with <code>boundary_found</code> — the sibling stage-cell pattern
+(<code>experiments.py:9515</code>), not <code>core.py:797</code> alone. The scored
+answer is the decoded pre-boundary segment (<code>core.py:939</code>).
+<code>exact_match</code> and <code>boundary_found</code> are stored separately per
+cell (§5.1), so every readout below is a function of stored
+components. Model parse failure is a verdict of false, never a
+cell detail (§7).</p>
+<h3 id="42-per-cell-decomposition-completed-cells-only">4.2 Per-cell decomposition (completed cells only)<a class="headerlink" href="#42-per-cell-decomposition-completed-cells-only" title="Permanent link">&para;</a></h3>
+<p>A missing cell is attrition with a cell detail (§7), never a
+class. Every completed cell is exactly one of:</p>
+<ul>
+<li><strong>pass</strong> — verdict true;</li>
+<li><strong>boundary_only</strong> — answer digest equals the expected digest
+  and <code>boundary_found</code> is false (negation's class, same
+  meaning: the answer text was right, the boundary was missed;
+  a boundary effect, never a notation effect);</li>
+<li><strong>other failure</strong> — counted, and characterised only through
+  the §4.4 diagnostics; no class word is coined for it.</li>
+</ul>
+<p>Counts of all three are printed per arm per candidate.</p>
+<h3 id="43-pair-decomposition-total-the-s5-cure">4.3 Pair decomposition (total — the S5 cure)<a class="headerlink" href="#43-pair-decomposition-total-the-s5-cure" title="Permanent link">&para;</a></h3>
+<p>Over discordant pairs in the headline population (§6), the
+negation construction (<code>negation.py:543-568</code>), which is total:</p>
+<ul>
+<li>verdicts differ and answer digests are equal →
+  <strong>boundary_only</strong>;</li>
+<li>verdicts differ, digests differ, and both cells found their
+  boundary → <strong>exact_only</strong>;</li>
+<li>verdicts differ otherwise → <strong>mixed</strong> (reported, never
+  attributed).</li>
+</ul>
+<p>Totality: if verdicts differ and digests are equal, the exact
+components are equal (same answer text, same expected value),
+so the verdict difference is the boundary component alone;
+if both boundaries were found, the verdict reduces to the
+exact component on both sides, so a verdict difference is an
+exact difference; the remaining discordant pairs are exactly
+<code>mixed</code>. The three classes partition the discordant pairs.
+<code>mixed</code> is the both-components-differ class §2 lacked a name
+for; its expected shape is a boundary miss inflating the
+pre-boundary segment (<code>core.py:939</code> coupling), stated here so
+nobody reads <code>mixed</code> as two independent failures. A
+boundary-only discordance is a boundary effect: it is reported
+in its own count and cannot support any notation reading.</p>
+<h3 id="44-diagnostics-beside-the-headline-never-rescuing">4.4 Diagnostics (beside the headline, never rescuing)<a class="headerlink" href="#44-diagnostics-beside-the-headline-never-rescuing" title="Permanent link">&para;</a></h3>
+<p>The <code>document_kind</code> transplant is <strong>dropped</strong> (item 7): on this
+instrument's bare-code answers it labels every correct cell
+<code>unparseable</code> and is a pure re-encoding of the echo variable
+(S1). The parse information is carried by the echo diagnostic
+instead, committed per cell in the record (§5) so the validator
+recomputes it:</p>
+<ul>
+<li><strong>Echo rate</strong> per arm: the share of the arm's completed
+  byte-exact failures whose answer contains the expected value
+  as a substring.</li>
+<li><strong>Parsed-value rate</strong> per arm: the share whose answer parses
+  via <code>json.loads</code> as an object whose value at the answer-field
+  key (<code>code</code>) equals the expected value. (<strong>Amendment C,
+  binding correction:</strong> an earlier draft of this section
+  claimed a parsed-value hit is always a substring hit, making
+  the parsed rate a subset of the echo rate. That claim is
+  FALSE, executed counterexample: an answer whose <code>code</code> value
+  carries the escaped hyphen — <code>\u002d</code> as six literal
+  characters — parses to the expected value while the raw text
+  does not contain it as a substring; conversely a prose
+  answer can contain the value without parsing. The two rates
+  are independent diagnostics, printed beside each other,
+  neither a subset of the other.)</li>
+<li><strong>Regrade sensitivities</strong>: pair discordance recomputed with
+  each answer replaced by <code>scorerlens._norm_r1(answer)</code>
+  (whitespace trim/collapse, <code>scorerlens.py:146-153</code>) and,
+  separately, by <code>scorerlens._fence_strip(answer)</code>
+  (<code>scorerlens.py:176-187</code>), the boundary conjunct unchanged.</li>
+</ul>
+<p>Priming (a model answering in the input arm's idiom) moves the
+byte-exact headline and is <em>measured</em> by the echo and
+parsed-value rates; it is never corrected away, and — the
+structural cure for red-team A F2 — <strong>there is no classification
+for it to contaminate</strong> (§6.1): no downstream readout consumes
+one scoring view over another, and where the byte-exact and
+parsed-value views disagree on a case's concordance, the counts
+for both views are what the report prints.</p>
+<h2 id="5-records-and-decidability">5. Records and decidability<a class="headerlink" href="#5-records-and-decidability" title="Permanent link">&para;</a></h2>
+<h3 id="51-record-shape-one-record-per-case-per-candidate">5.1 Record shape (one record per case per candidate)<a class="headerlink" href="#51-record-shape-one-record-per-case-per-candidate" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>fixture</code> (frozen case id), <code>n_records</code>, <code>n_fields</code>,
+  <code>expected_digest</code> (SHA-256 of the expected code);</li>
+<li>per headline arm: <code>content_digests</code> (SHA-256 of the arm's
+  full user-message content), <code>arm_tokens</code> (full-render id
+  length), <code>id_digests</code> (SHA-256 of the full-render id
+  sequence);</li>
+<li><code>ids_identical</code> (bool), <code>id_length_delta</code> (canonical-JSON id
+  length minus prose id length);</li>
+<li><code>cells</code>: per arm (both headline arms and <code>closed_book</code>) a
+  cell or null, plus <code>cell_details</code> per arm (§7);</li>
+<li>a headline-arm cell is <code>{verdict, boundary_found,
+  boundary_text_match, input_tokens, answer_digest,
+  answer_text}</code>; a screen-arm cell omits <code>answer_text</code>.</li>
+</ul>
+<p><code>answer_text</code> is the decoded pre-boundary answer string,
+bound by <code>answer_digest = SHA-256(answer_text)</code> — the
+cycle-190 pattern (numform's digest-bound carried text). This
+is a deliberate, stated deviation from §2's digest-only record
+shape: §2's own mandated diagnostics are functions of the
+answer text and are uncomputable from digests (S4), so §2's
+shape could not carry §2's report. Reports still render
+counts and rates only; answer text never reaches a report.</p>
+<h3 id="52-validator-mirror-duties">5.2 Validator mirror duties<a class="headerlink" href="#52-validator-mirror-duties" title="Permanent link">&para;</a></h3>
+<p>The diff validator regenerates every table from (seed, case
+index) with literal copies of the generator and both renderers;
+checks each content digest and pairwise digest inequality
+across arms; checks the expected digest; verifies each
+headline cell's <code>answer_digest</code> against its carried
+<code>answer_text</code>, then recomputes verdicts, the §4.2/§4.3
+decompositions, all §4.4 diagnostics, and every count, rate,
+and split in §6 from the records alone. <strong>Amendment D
+(binding):</strong> the mirror also verifies every completed cell's
+<code>input_tokens</code> against the record's <code>arm_tokens[arm]</code> — the
+cycle-218/219 binding this candidate's draft omitted, under
+which a payload with fabricated token fields passes. The
+stage measures the arm token count at encode time; the
+cell's <code>input_tokens</code> come from the evaluation's own
+observation, so a backend whose encode disagreed with itself
+fails validation. Cells exist only from aggregate-eligible
+reports, so a non-null cell certifies a completed evaluation
+and the verdict's status conjunct is discharged structurally;
+that invariant is part of the mirror's contract, stated here
+and in its docstring.</p>
+<h3 id="53-decidability-class-by-class">5.3 Decidability, class by class<a class="headerlink" href="#53-decidability-class-by-class" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Printed quantity</th>
+<th>Decidable from</th>
+<th>Validator path</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cell verdict</td>
+<td>carried answer_text + expected_digest + boundary_found</td>
+<td>digest check, then §4.1 recomputed</td>
+</tr>
+<tr>
+<td>boundary_only cell class</td>
+<td>answer_digest, expected_digest, boundary_found</td>
+<td>digest equality (§4.2)</td>
+</tr>
+<tr>
+<td>Pair decomposition</td>
+<td>both cells' verdicts, digests, boundary flags</td>
+<td>§4.3 construction</td>
+</tr>
+<tr>
+<td>Echo / parsed-value rates</td>
+<td>carried answer_text + expected value (regenerated)</td>
+<td>substring test; <code>json.loads</code></td>
+</tr>
+<tr>
+<td>R1 / fence regrades</td>
+<td>carried answer_text</td>
+<td>literal mirrors of <code>scorerlens</code> functions</td>
+</tr>
+<tr>
+<td>Screen verdict</td>
+<td>screen cell digest + boundary flag (no text carried; no text-derived quantity is reported for the screen arm)</td>
+<td>digest equality (§4.1)</td>
+</tr>
+<tr>
+<td>Content/expected digests</td>
+<td>(seed, case index)</td>
+<td>literal regeneration (§5.2)</td>
+</tr>
+<tr>
+<td>ids_identical, id_length_delta, arm token counts</td>
+<td>recorded token-id digests + stage encode counts + each evaluation's own input_tokens</td>
+<td>ids_identical re-derived from the recorded digests; id_length_delta must equal the canonical-JSON minus prose count difference; every completed cell's input_tokens bound to the record's arm_tokens (§5.2, amendment D). The mirror has no tokenizer and does not re-tokenize; the two independent token measurements the stage records are cross-bound instead (the §5.3 draft's "arithmetic consistency only" understated this and is corrected)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="6-report-shape-descriptive-only">6. Report shape — descriptive only<a class="headerlink" href="#6-report-shape-descriptive-only" title="Permanent link">&para;</a></h2>
+<p>Per candidate, in order: audit counts (<code>n_screened</code>,
+<code>n_closed_book_incomplete</code>); per-arm completed counts, pass
+counts and rates over completed cells, §4.2 class counts, and
+per-arm attrition (<code>n_context_exceeded</code>, <code>n_evaluation_failed</code>)
+beside every rate; the headline population and its readouts;
+the §4.4 diagnostics; the id report (§6.2); the sensitivities
+(discordance over the unscreened paired set; regrade
+discordance counts). Rates over an empty denominator print as
+the reporting layer's existing <code>n/a</code>. Discordance is never
+pooled across candidates or template families: per-candidate
+contrasts only.</p>
+<p>The <strong>headline population</strong> is: live cases (§2.4) with both
+headline-arm cells completed, minus any same-ids anomaly
+(§6.2). Readouts over it: <code>n_paired</code>; discordant count <code>d</code>, with the
+resolution <code>100 / n_paired</code> points per discordant case printed
+beside the count (<strong>amendment F, binding</strong> — a count without
+its resolution invites a finer reading than the panel
+supports);
+directional split <code>n_prose_only</code> / <code>n_canonical_json_only</code>
+(cases passing on exactly that arm — symmetric by construction;
+this instrument has <strong>no baseline arm</strong>, and no arm is a
+control); decomposition counts <code>n_exact_only</code>,
+<code>n_boundary_only</code>, <code>n_mixed</code> (§4.3); per-arm pass rates over
+the paired population beside the per-arm rates over all
+completed cells. The estimand, stated once and printed with
+the section: <em>discordance between these two frozen renderings,
+over live cases both arms completed, for this candidate's
+template family on this checkpoint.</em></p>
+<h3 id="61-no-falsification-classification-item-6-decided">6.1 No falsification classification (item 6, decided)<a class="headerlink" href="#61-no-falsification-classification-item-6-decided" title="Permanent link">&para;</a></h3>
+<p>V1 prints no per-candidate classification and falsifies no
+claim. The claim that was considered — "the two notations are
+verdict-equivalent for this candidate", falsified by a
+discordance rule — cannot be instantiated honestly at N = 24.
+Executed by the authoring coordinator (exact multinomial
+enumeration over per-case outcomes, <code>oc_tables.py</code>), at
+n_paired = 24, 24 candidates:</p>
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Competent null .9/.9 (indep.)</th>
+<th>.9/.9 paired φ=0.5</th>
+<th>δ=0.05 fair-direction noise</th>
+<th>Power, 25-pt gap</th>
+<th>Power, 20-pt gap</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Canonical-form transplant (n≥6, max-dir ≥2)</td>
+<td>fires 0.8897; FWER E = 21.35, P(≥1) = 1.0000</td>
+<td>fires 0.5088</td>
+<td>fires 0.2276</td>
+<td>— (fires on noise)</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Rule A (d ≥ 4, §2 review's derived rule)</td>
+<td>fires 0.6500</td>
+<td>fires 0.1648</td>
+<td>fires 0.0298; FWER E = 0.71, P(≥1) = 0.516</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>McNemar (d ≥ 6, sign p ≤ 0.05)</td>
+<td>fires 0.0061</td>
+<td>fires 0.0005</td>
+<td>fires 0.0000</td>
+<td>0.3547</td>
+<td>0.2598</td>
+</tr>
+<tr>
+<td>Sign, Bonferroni (α = 0.05/24)</td>
+<td>fires 0.0000</td>
+<td>fires 0.0000</td>
+<td>fires 0.0000</td>
+<td><strong>0.0542</strong></td>
+<td>0.0242</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Amendment E (binding): the power columns carry their
+marginal bases.</strong> The 25-point column runs on marginals
+.85/.60 and the 20-point column on .90/.70; the two columns
+are not on a common base and must not be read as one curve.
+At the table's own competent base .90, a 25-point gap
+(.90/.65) gives McNemar power 0.4000 (not a figure in the
+printed columns). The N = 96 Bonferroni power below is
+0.7452 on the .85/.60 marginals and 0.8329 at the .90 base;
+both are printed wherever the panel figure is cited.</p>
+<p>Every count-based rule is a false-falsification machine on
+distant surfaces under every null family executed (independent,
+paired/correlated, and fair-direction δ-noise — δ is the
+per-case flip probability under any token perturbation, and
+nothing in this instrument bounds δ for a prose-vs-JSON pair);
+every family-wise-controlled rule is near-inert at the gaps
+that matter. The larger-panel branch was executed, not assumed:
+at N = 96 the Bonferroni sign rule reaches false-fire 0.0008
+with power 0.7452 at a 25-point gap on marginals .85/.60
+(0.8329 at the .90 base, amendment E) — sane, at 6,912
+generations (4× this candidate's budget, §8), to license a
+<em>directional-superiority</em> claim this instrument's utility (§1)
+does not consume. V1 therefore reports the discordance counts
+the utility actually reads. A future v2 that wants a
+classification must freeze the larger panel and its rule in
+its own text, with this table as its starting evidence.</p>
+<h3 id="62-token-id-divergence-reported-not-gated-item-9">6.2 Token-ID divergence: reported, not gated (item 9)<a class="headerlink" href="#62-token-id-divergence-reported-not-gated-item-9" title="Permanent link">&para;</a></h3>
+<p>The headline population is <strong>not</strong> conditioned on id
+divergence (negation §3.4: gating would gate on a condition
+true by construction and hide the one informative event).
+Reported per candidate: <code>n_ids_identical</code>, the per-case
+<code>id_length_delta</code> list in case order, <code>max_abs_id_delta</code>, and
+<code>n_same_ids_verdict_flips</code>. Under the tree's HF backends
+(gpt2/llama byte-level BPE, lossless decode) byte-distinct
+renderings are id-divergent, so <code>n_ids_identical</code> is expected
+to be 0; a same-ids case, if one ever occurs, is excluded from
+the headline population and counted as a rendering anomaly,
+and a same-ids verdict flip is recorded as a determinism
+finding — never as notation fragility, never as robustness.
+A run landing 100% ids-identical would read "instrument
+inapplicable to this tokenizer", never "the model is robust
+to notation".</p>
+<h3 id="63-no-winner-readout-in-v1-item-8">6.3 No winner readout in v1 (item 8)<a class="headerlink" href="#63-no-winner-readout-in-v1-item-8" title="Permanent link">&para;</a></h3>
+<p>The canonical-form selection transplant is <strong>not</strong> carried.
+Executed arithmetic (agreed by all parties in two rounds): a
+candidate passes an arm only by passing every completed case,
+so P(passes an arm) = 0.95²⁴ ≈ 0.292, 0.90²⁴ ≈ 0.080,
+0.80²⁴ ≈ 0.005 over 24 multi-row lookups — the winner headline
+would be undefined or abstention in the large majority of runs
+(S7), and §2's pairing of the selection transplant with the
+closed-book screen left its population undefined (G4).
+Dropping selection dissolves both defects; the negation
+precedent ("no winner readout in v1") governs. Per-arm
+accuracies are printed (§6) as the selection-adjacent readout.
+A v2 wanting selection must name its population composition
+(union-screened shared set, the placement pattern) in its own
+text.</p>
+<h2 id="7-fail-closed-vocabulary-frozen-two-layers-named">7. Fail-closed vocabulary (frozen, two layers named)<a class="headerlink" href="#7-fail-closed-vocabulary-frozen-two-layers-named" title="Permanent link">&para;</a></h2>
+<p>Following the tree's two-layer convention (<code>negation.py:101-112</code>
+and the wrapper pattern), named layer by layer so neither layer
+contradicts the other:</p>
+<ul>
+<li>Stage details (the stage's own returns), exactly:
+  <code>{cancelled, record_notation_record_budget_exceeded,
+  record_notation_screen_failed}</code>.</li>
+<li>Per-cell details, exactly: <code>{"", arm_context_exceeded,
+  arm_evaluation_failed}</code>.</li>
+<li>Whole-stage fallback at the wrapper/analysis layer: any
+  renderer failure, serializer exception, generator failure,
+  or non-UTF-8 payload degrades the whole stage to
+  <code>{"available": False, "detail": "record_notation_unavailable"}</code>
+  — never to a per-cell verdict.</li>
+</ul>
+<p>No other words. In particular: no classification labels (§6.1),
+no <code>document_kind</code> (§4.4), no <code>arm_parse_failed</code>, no
+<code>payload_too_large</code>, no per-arm "not applicable", no new
+verdict words of any kind.</p>
+<h2 id="8-budget-frozen-with-derivations">8. Budget (frozen, with derivations)<a class="headerlink" href="#8-budget-frozen-with-derivations" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>MAX_CANDIDATES = 24</code> (the tree's legal maximum).</li>
+<li><code>CASE_COUNT = 24</code> (§2.1).</li>
+<li><code>MAX_GROUND_RECORDS = 24 × 24 = 576</code> (sibling derivation:
+  <code>placement.py:179</code>, <code>canonicalform.py:64</code>).</li>
+<li><code>GENERATION_BUDGET = 3 arms × 576 = 1,728</code> — 1,152 headline
+  (2 arms) + 576 screen (1 arm). The screen arm's +50% over the
+  headline count is stated here, in the CLI help, and in §2.4,
+  per the field-order precedent that generation counts at the
+  legal maximum are stated in CLI help.</li>
+<li><code>MAX_RECORDS_BYTES = 12 MiB</code> (sibling constant:
+  <code>placement.py:183</code>, <code>canonicalform.py:69</code>). (<strong>Amendment G,
+  binding correction:</strong> the draft's "4.0× margin" claim was
+  false. 2,048 chars IS the tree's 64-token answer-text bound
+  (<code>fieldorder.py</code>), not "far beyond a 64-token decode"; and
+  measured on the built §5.1 record shape — which carries
+  fields the draft's 5,442-byte synthetic record omitted —
+  the ASCII worst case is 5,507 bytes per record → 3.03 MiB
+  per panel, a headroom of 3.96×, not 4.0×. A
+  non-ASCII-stressed panel (CJK answer texts at the cap,
+  25,987 bytes per record under <code>ensure_ascii</code> escaping)
+  measures about 14.28 MiB, OVER the cap: such a panel fails
+  closed with <code>record_notation_record_budget_exceeded</code>. The
+  fail-closed budget behaviour is unchanged; only the printed
+  claim is corrected. A typical record (bare-code answers)
+  measures about 0.79 MiB per 24-candidate panel.)</li>
+</ul>
+<h2 id="9-naming-item-10">9. Naming (item 10)<a class="headerlink" href="#9-naming-item-10" title="Permanent link">&para;</a></h2>
+<p>The flag is <strong><code>--record-notation</code></strong>; the module is
+<code>recordnotation.py</code>; the stage-detail prefix is
+<code>record_notation_</code> (sibling convention: flag → module →
+prefix). The name is a coinage, defended against the whole of
+USAGE and the CLI namespace (executed, <code>namespace_audit.py</code>):</p>
+<ul>
+<li>Not taken: (<strong>amendment H, binding correction:</strong> the
+  draft's "69 flags" census was wrong under every counting
+  method). By parser instantiation at review time the tree
+  carried 77 distinct long options including <code>--help</code> (76
+  excluding); at build time (post-cycle-220) it carried 79
+  including <code>--help</code> (78 excluding), 62 of them on <code>run</code>
+  including <code>--help</code>; <code>--record-notation</code> is not among them,
+  no existing option contains the stem "record", and
+  "record notation" / <code>record_notation</code> occur nowhere in the
+  package or docs. Post-build census: 80 distinct long
+  options, 63 on <code>run</code>. The coinage was free under every
+  method; the audit is recorded in the cycle-221 build log
+  and the research log.</li>
+<li>"Notation" has no shipped sense: <code>cli.py</code> contains no
+  occurrence; USAGE's only hit is the substring in "an
+  annotation" (<code>docs/USAGE.md:2693</code>). The word is used in its
+  ordinary sense — the written form in which the records are
+  expressed — which is exactly the treatment: identical records,
+  two notations.</li>
+<li>Every stem red-team B's naming table killed is absent
+  (executed check): not <code>--payload-*</code> (placement's prose
+  payload sense is reserved, USAGE §8.46 — and the stage prefix
+  is renamed to match the coinage, so the reserved word is not
+  spent in protocol vocabulary either, curing the §2 breach
+  red-team B noted); not <code>*-format</code> (<code>Format</code> is the catalog
+  chat-template class, <code>core.py:33</code>); not <code>*serializ*</code> (the
+  bundled causal word §1 of the design doc disowns, and the
+  tree's output-serialisation sense); not <code>--document-*</code>
+  (documents are the model's <em>output</em> JSON in this tree); not
+  <code>--table-*</code> (tables are report/portability artefacts in
+  USAGE, and the prose arm is not a table rendering); not
+  <code>--render*</code> (<code>Format.render</code> owns template rendering — the
+  arm outputs are called renderings in prose, as sibling
+  designs do, but the flag does not spend the stem); not
+  <code>--encoding-*</code> (deliforge/fake-turn token-encoding arms);
+  not <code>--prose-json</code> (hard-codes the pair and reinstates a
+  named-first baseline — this instrument has no baseline arm,
+  §6, and a v2 notation joins under the same flag without
+  renaming).</li>
+<li>"Syntax" was considered and rejected: it already carries the
+  tool-call syntax-adherence sense in CLI help (<code>cli.py:374</code>)
+  and the parked <code>--document-syntax</code> coinage spends it for
+  output documents.</li>
+<li>The nearest parked coinages (<code>--document-syntax</code>,
+  <code>--response-directive</code>, <code>--multi-question</code>) do not collide.
+  The USAGE section number is assigned at build time (the next
+  free §8 section), as in sibling cycles.</li>
+</ul>
+<h2 id="10-uniqueness-the-combination-and-the-honest-residue">10. Uniqueness — the combination, and the honest residue<a class="headerlink" href="#10-uniqueness-the-combination-and-the-honest-residue" title="Permanent link">&para;</a></h2>
+<p>What each shipped neighbour measures, and why none is this
+instrument (inventory verified in two review rounds): rotation
+varies block <em>order</em> in prose; placement varies <em>question
+position</em> around a prose payload; distraction/needle vary
+filler <em>dose</em> / fact <em>depth</em>; canonical-form varies <em>sub-lexical</em>
+Unicode normalisation (NFC/NFD) of the same prose; negation
+varies instruction <em>wording</em>; field-order varies <em>schema
+presentation order</em> — its input is context prose plus a schema
+description and its answer is a JSON document, never a
+serialised data table in two notations; structured measures
+<em>output</em> JSON adherence. The surviving residue (§7.5): the
+<strong>input-side serialisation of the same generated multi-record
+table inside the user message, template family held fixed per
+candidate, is owned by no shipped probe</strong>. The contribution is
+that combination — local checkpoint × chat-template families ×
+frozen-renderer input contrast × paired byte-exact verdicts ×
+digest-verified renderings with a validator mirror — stated as
+a combination, with no priority claim.</p>
+<p>The residue's size is stated as plainly (S8): the genuinely
+new components are one table generator, one prose renderer,
+and the diagnostic wiring, built on canonical-form's stage /
+validator / reporting skeleton. The renderer is precisely the
+component that failed in §2 (G1); §3.2 is this restatement's
+answer, and a fresh review should attack it first.</p>
+<h2 id="11-sources-as-adjudicated-in-design-doc-5-fenced">11. Sources (as adjudicated in design-doc §5; fenced)<a class="headerlink" href="#11-sources-as-adjudicated-in-design-doc-5-fenced" title="Permanent link">&para;</a></h2>
+<ul>
+<li>He et al., arXiv:2411.10541v1 — hosted-GPT prompt-template
+  format sensitivity (MMLU 59.7 JSON vs 50.0 Markdown, Table 1).
+  Fencing: bundles the whole prompt template; no chat-template
+  crossing, no local checkpoint, no winner re-selection.</li>
+<li>Sclar et al., arXiv:2310.11324v2 — Abstract only: up to 76
+  accuracy points on LLaMA-2-13B from meaning-preserving
+  formatting; weak cross-model correlation. (The §3.1 grammar
+  detail and venue tag stay removed per design-doc §4.)</li>
+<li>Zhang, Chen, Xu, Yang (POML), arXiv:2508.13948v1, §7 Table 3
+  — model-specific optimal table formats on hosted models.
+  Fencing: 100 styles bundle table syntax with other styling.</li>
+<li>Tam et al., arXiv:2408.02442, §4.1 — emitted key order under
+  constrained JSON mode; fenced off (emitted-order ≠
+  input-serialisation).</li>
+<li>JSONSchemaBench, arXiv:2501.10868v2 — output adherence only,
+  fenced off. The tree pins v2 deliberately (<code>structured.py:5</code>);
+  a v3 exists (27 Feb 2025) — this candidate keeps the tree's
+  pin consciously and does not drift it.</li>
+</ul>
+<p>No "first" is claimed anywhere in this text.</p>
+<h2 id="12-scope-limits-of-v1-stated-not-discovered-later">12. Scope limits of v1 (stated, not discovered later)<a class="headerlink" href="#12-scope-limits-of-v1-stated-not-discovered-later" title="Permanent link">&para;</a></h2>
+<p>No classification or falsification claim (§6.1). No winner
+readout (§6.3). No typed values — integers/booleans are a v2
+question requiring a frozen per-arm type-rendering table. No
+CSV, XML, or YAML arms (CSV flattens and drops types; XML
+escaping rewrites visible text; YAML has no declared dependency
+or stdlib parser). No length-matched or component-level
+attribution (§1, §3.4). No generalisation beyond the two frozen
+renderings, the generated code-table population (§2.2), and a
+candidate's own template family. The readout's resolution is
+one case in 24 (≈4.2 points of discordance rate); the count is
+the readout, and no finer claim is printed.</p>
+<h2 id="9-fresh-review-adjudication-coordinator-65-build-as-amended">9. Fresh-review adjudication (coordinator #65) — BUILD-as-amended<a class="headerlink" href="#9-fresh-review-adjudication-coordinator-65-build-as-amended" title="Permanent link">&para;</a></h2>
+<p>The text below is the fresh review's adjudication
+(<code>recordnotation/ADJUDICATION.md</code> in the agent workspace),
+reproduced verbatim as far as the archived file extends.
+<strong>Archival note (stated, not papered over):</strong> the archived
+file is truncated — it ends mid-sentence at defect 6 with a
+literal truncation marker, at 10,589 bytes. Defects 1–5 and
+the verdict survive verbatim. Defects 6–8 and the formal
+amendment texts F–H are completed after the verbatim text
+from the round's surviving record (the specialists' briefs
+in the same directory, the parent agent's cycle-221 brief,
+and the long-term memory entry written the same evening,
+which agree on all three).</p>
+<h1 id="fresh-review-adjudication-payload-serialization-restated-candidate-record-notation-coordinator-65-2026-10-28">Fresh-review adjudication — payload-serialization restated candidate <code>--record-notation</code> (coordinator #65, 2026-10-28)<a class="headerlink" href="#fresh-review-adjudication-payload-serialization-restated-candidate-record-notation-coordinator-65-2026-10-28" title="Permanent link">&para;</a></h1>
+<p><strong>Verdict: NO-BUILD as written. BUILD-as-amended</strong>, under the parent's
+amendment test: every required amendment below is text, pins, reporting,
+or record-binding; none touches the endpoints (the two frozen renderings
+— prose sentences vs canonical JSON — of the same generated table), the
+population (N = 24 generated cases, the frozen single-token alphabet,
+the 4–6 × 3–4 shape schedule, the closed-book screen), or the headline
+scorer (§4.1: <code>status == "completed"</code> ∧ <code>answer == expected</code> ∧
+<code>boundary_found</code>). A build that omits any of amendments A–H is not this
+verdict's build. If BUILD: do not build in this round — the parent
+sequences build cycles (this would be cycle 221, behind 219/220).</p>
+<p>Round: three blind specialists (researcher, red teams A and B —
+briefs in this directory), coordinator adjudication by its own
+execution (scripts in /tmp during the round; every load-bearing figure
+below was re-derived by the coordinator or cross-executed by two
+parties independently). Tree: main <code>18e4b4ca2e4f</code> plus cycle 218's
+working-tree changes. READ-ONLY round: nothing built, nothing pushed,
+no design-doc append (parallelism guard — the parent reconciles the
+append when the tree is quiet). Candidate of record:
+<code>~/workspace/agents_out/payloadserial_restated/candidate.md</code>.</p>
+<h2 id="what-survived-blind-attack-executed">What survived blind attack (executed)<a class="headerlink" href="#what-survived-blind-attack-executed" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Injectivity — the previous round's fatal G1 is genuinely cured.</strong>
+  Four independent implementations agree: the drafter's exhibited
+  inverse (100,000 tables), red team A's own parser/generator (120,000
+  random legal tables, 0 failures, 0 collisions; exhaustive small
+  domains; injectivity survives <em>without</em> within-table distinctness —
+  4,352 exhaustive duplicate-allowed tables — and with scaffolding-word
+  values and prefix-related field names), the researcher's sampler
+  (~44,000 round-trips, 20,000-table collision search, 0 collisions),
+  and the coordinator's renderer+parser written from §3.2's text alone
+  (18,000 population tables + 2,800 totality tables incl. prefix field
+  names + 2,000 duplicate-value/record tables; seed differs from the
+  drafter's). The worked example (§3.3) reproduces <strong>byte-identically
+  from the text alone</strong> (prose 317 / JSON 286 chars — the coordinator's
+  independent implementation of the printed function produces the
+  printed bytes), and the §3.4 worst case is exact (prose 653 / JSON
+  594 at 6×4). G1's four crafted collision values are rejected by the
+  frozen alphabet (all parties). No backslash appears in any JSON
+  rendering over the legal population (escaping unreachable — S3's
+  visible-text divergence is cured as a side effect).</li>
+<li><strong>The OC table (§6.1) is exact.</strong> Every printed figure reproduces
+  under three independent exact enumerations (drafter, red team B by
+  an independent DP method, coordinator; researcher makes four):
+  transplant fire 0.8897 with FWER E = 21.35 / P(≥1) = 1.0000; Rule A
+  0.6500 (independent), 0.1648 (paired φ=0.5), 0.0298 at δ=0.05 with
+  FWER E = 0.71 / P = 0.516; McNemar fire 0.0061 / 0.0005; the N=96
+  branch (Bonferroni false-fire 0.0008, 6,912 generations). The
+  descriptive-only drop and the winner drop (§6.3 arithmetic
+  0.95²⁴ ≈ 0.292, 0.90²⁴ ≈ 0.080, 0.80²⁴ ≈ 0.005 — verified by all
+  parties) are forced by these numbers, not chosen.</li>
+<li><strong>Decomposition totality (§4.2/§4.3).</strong> The construction is negation's
+  shipped one (<code>negation.py:543-568</code>, read directly); red team A's
+  brute force over concrete discordant combinations found 10 combos,
+  0 double-counted / unlabelled / mislabelled. The both-differ class
+  §2 lacked is named (<code>mixed</code>, reported, never attributed) — S5 cured.</li>
+<li><strong>Decidability (§5.3) holds, with two pins (amendments D).</strong> The
+  verdict's status conjunct is discharged structurally: stage cells
+  are recorded only from <code>aggregate_eligible</code> reports (the sibling
+  gate at <code>experiments.py</code> ~:9515, cited by §4.1), and
+  <code>aggregate_eligible</code> requires a completed report, whose invariants
+  (<code>core.py:313-330</code>, <code>:343-345</code>) force every recorded observation's
+  status to "completed" — so digest-equality ∧ <code>boundary_found</code>
+  recomputes the verdict exactly for every recordable cell. Red team
+  A executed the edge the text glosses: a raw <code>core.evaluate</code>
+  observation CAN carry answer == expected ∧ boundary_found ∧
+  status = cancelled — such an observation never becomes a cell under
+  the gate, but the candidate never states the invariant its §5.3 row
+  rests on. The digest-bound <code>answer_text</code> (cycle-190 pattern) makes
+  every §4.4 diagnostic genuinely recomputable; the screen row is
+  decidable from digest + boundary flag (needle's digest-only binding
+  precedent). The id/token row states the correct weaker claim —
+  arithmetic consistency only, diffreports has no tokenizer — matching
+  the shipped canonical-form mirror's actual standard
+  (<code>diffreports.py:11300-11331</code>: token counts are stage-asserted,
+  type-checked, and bound by <code>ids_identical</code> ⇒ equal counts and
+  <code>id_length_delta</code> == difference).</li>
+<li><strong>Screen arm (§2.4).</strong> The guess probability is exactly 1/216,000
+  per case for ANY guessing strategy (the expected value is uniform
+  over the code space by generator construction — red team A's
+  execution: round-number priors buy nothing; reaching E = 1 exclusion
+  per panel needs a 375× inflation). Coordinator's arithmetic:
+  expected exclusions 0.0027 per panel, P(≥1) ≈ 0.27% panel-wide,
+  1.11e-04 per candidate. The arm's effect on printed numbers is
+  disclosed (§6 prints <code>n_screened</code> / <code>n_closed_book_incomplete</code> first
+  and the unscreened paired discordance as a sensitivity — red team
+  B's disclosure sub-attack failed on the text). Retention follows
+  design-doc §2's mandate and §7.3's adjudication ("hygiene, not a
+  defect of principle; state the cost and justify or drop") — the cost
+  is stated in §2.4, §8, and (at build) CLI help, and the justification
+  (fail-closed guard against generator/code-space drift; pass count as
+  leak readout) is the one §7.3 accepted.</li>
+<li><strong>Uniqueness (§10).</strong> Verified by direct reading (researcher) and
+  coordinator spot-execution: field-order's aggregate computes paired
+  discordance between schema-<em>presentation orders</em> over structured
+  specs whose answers are JSON documents — it never serialises a data
+  table in two notations as input; structured owns output adherence;
+  canonical-form varies sub-lexical normalisation. The residue is as
+  thin as §10 itself states (one generator, one prose renderer,
+  diagnostic wiring on canonical-form's skeleton) and is stated, not
+  hidden (S8's disposition).</li>
+</ul>
+<h2 id="defects-in-the-candidate-as-written-each-executed-classification">Defects in the candidate as written (each executed; classification)<a class="headerlink" href="#defects-in-the-candidate-as-written-each-executed-classification" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>§2.3's generator is not a total function of the text (red team A
+   kill 1; coordinator-confirmed).</strong> "Draw (word, number) pairs" names
+   no RNG calls and no within-pair draw order. Faithful readings
+   diverge: word-first vs number-first vs single-<code>randrange(216000)</code>
+   differ on 24/24 tables at seeds 0/1/42 (A); the coordinator's
+   word-first vs number-first implementations produce different tables
+   at seed 0, case 0 (<code>marble-7890…</code> vs <code>nickel-7311…</code>), and the
+   queried index differs across readings on most cases. The population
+   <em>distribution</em> is fully pinned (alphabet, shapes, without-replacement
+   distinctness, row-major fill, query as next draw); the seed→table
+   mapping that §5.2's validator regeneration and §1(b)'s decidability
+   claim rest on is not. Since stage and validator mirror are separate
+   literal implementations, the build would have to invent the mapping
+   — exactly the looseness-at-the-novel-point pattern. <strong>Amendment A.</strong></li>
+<li><strong>§2.3's answer-embedding audit overstates its guard set (red team
+   A kill 2; coordinator-verified against <code>audit_alphabet.py</code>).</strong> The
+   executed audit replaces <code>{key}</code> with "x" in the question template,
+   so the printed "0 violations" silently drops design §2's mandated
+   subject — the instantiated key. The instantiated question embeds
+   the key value, which shares a 4-char prefix with its own word for
+   24/24 possible key words, and the answer's word equals the key's
+   word in ≈4.17% of cases (analytic 8999/215999; A executed
+   2,064/48,000 = 4.30%). The phenomenon is arm-symmetric (the question
+   is byte-identical across arms) and cannot manufacture discordance;
+   the defect is the audit sentence claiming a guard the execution
+   didn't run. <strong>Amendment B</strong> (reporting cure only — a redraw rule
+   would change the population and is NOT authorised by this verdict).</li>
+<li><strong>§4.4's parsed ⊆ echo claim is false (red teams A and B,
+   independently; coordinator-confirmed).</strong> Executed counterexample:
+   the answer <code>{"code": "amber\u002d1001"}</code> parses via <code>json.loads</code> to
+   the expected value (a parsed-value hit) while the literal expected
+   string never appears in the answer text (no substring hit). JSON
+   string escapes break the claimed subset relation; the two rates are
+   independent diagnostics. One printed sentence is wrong.
+   <strong>Amendment C.</strong></li>
+<li><strong>§5.2/§5.3 omit one sibling binding and one invariant (red team B
+   partial kill, sustained in narrow form; coordinator-verified in
+   source).</strong> Every shipped mirror binds each cell's <code>input_tokens</code>
+   to that arm's carried token count (<code>diffreports.py:10507</code>
+   placement, <code>:11329</code> canonical-form); the candidate carries both
+   fields but never enumerates the equality, and B's executed forgery
+   (token fields fabricated, all §5.3 checks green) passes where the
+   sibling standard rejects. The candidate also never states the
+   aggregate-eligible-only recording invariant (item under
+   "Decidability" above). Both are record-binding text.
+   <strong>Amendment D.</strong></li>
+<li><strong>§6.1's power columns state no model (red team A kill 3;
+   coordinator-verified against <code>oc_tables.py</code>).</strong> The null columns
+   are exact (above), but "Power, 25-pt gap" = 0.3547 is exact only
+   at marginals .85/.60 and "Power, 20-pt gap" = 0.2598 only at
+   .90/.70 — two different, unstated bases; at the table's own
+   competent base (.90), a 25-pt gap gives McNemar 0.4000 and the
+   N=96 Bonferroni power is 0.8329, not the printed 0.7452 (A's exact
+   enumeration). Gap alone does not determine power. The
+   descriptive-only decision survives every model (all parties), so
+   the defect is confined to the table's labelling. <strong>Amendment E.</strong></li>
+<li><strong>§6 prints no resolution beside its counts (defect
+   completed from the round's record).</strong> The discordance
+   count is the headline readout, but the section as written
+   prints the count without the panel's resolution — at
+   N = 24 one discordant case is 4.17 points of discordance
+   rate, and a reader given only the count will read it more
+   finely than the panel supports. <strong>Amendment F</strong> (reporting
+   cure: print the resolution beside every discordant count,
+   in the design text, the report section, and the CLI/USAGE
+   surfaces).</li>
+<li><strong>§8's "4.0× margin" claim is false (defect completed
+   from the round's record).</strong> The 2,048-character answer
+   cap the budget stresses to IS the tree's 64-token bound
+   (<code>fieldorder.py</code>), not "far beyond a 64-token decode";
+   and a non-ASCII-stressed panel measures about 14.2 MiB
+   (about 25,856–25,987 bytes per record) — over the 12 MiB
+   cap. The panel fails closed via the frozen budget detail
+   (<code>record_notation_record_budget_exceeded</code>), so the
+   behaviour is safe; the printed claim is wrong (4.0× holds
+   only for ASCII, and measures 3.96× on the built record
+   shape). <strong>Amendment G</strong> (correct the claim everywhere it
+   renders; keep the fail-closed budget behaviour).</li>
+<li><strong>§9's "69 flags" census is wrong (defect completed from
+   the round's record).</strong> By parser instantiation the tree
+   at review time carried 77 distinct long options including
+   <code>--help</code> (76 excluding). The coinage itself was free under
+   every counting method — the defect is the printed census,
+   not the name. <strong>Amendment H</strong> (re-audit the flag name
+   against the post-cycle-220 namespace by parser
+   instantiation at build time and record the audit in the
+   build log and the research log).</li>
+</ol>
+<p>The eight amendments, as built in cycle 221: <strong>A</strong> freeze
+the RNG call sequence in text and code (§2.3). <strong>B</strong> print
+and account for the instantiated-key overlap (about 4.17
+percent, analytic 8999/215999) — reporting only, no redraw
+(§2.3). <strong>C</strong> correct the §4.4 parsed/echo claim — the two
+rates are independent diagnostics (§4.4). <strong>D</strong> bind
+<code>input_tokens == arm_tokens[arm]</code> in the validator mirror
+and state the aggregate-eligible-only recording invariant
+(§5.2/§5.3). <strong>E</strong> state the §6.1 power columns' marginal
+bases and print the base-.90 figures beside them (§6.1).
+<strong>F</strong> print the resolution beside the discordance counts
+(§6). <strong>G</strong> correct the §8 margin claim; keep the fail-closed
+budget (§8). <strong>H</strong> re-derive the flag census by parser
+instantiation (§9). Plus the researcher's condition C: the
+scope phrase "for this checkpoint and this candidate's
+template family" in the §1 utility, the CLI help, USAGE,
+and the report section. The fabrication sweep for the round
+was CLEAN. Build sequenced as cycle 221, behind 219/220;
+built and closed in cycle 221 (see the research log).</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

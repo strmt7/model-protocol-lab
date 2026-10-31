@@ -1,0 +1,2374 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Local conversation-protocol experiments with held-out evidence: exact token-sequence comparisons across chat-format families.">
+      
+      
+      
+        <link rel="canonical" href="https://strmt7.github.io/model-protocol-lab/FIXTURE_FUZZ_DESIGN/">
+      
+      
+        <link rel="prev" href="../FIELDORDER_DESIGN/">
+      
+      
+        <link rel="next" href="../HISTORYFRAME_DESIGN/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Fixture fuzz - Model Protocol Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#fixture-fuzzer-design" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Model Protocol Lab" class="md-header__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Model Protocol Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Fixture fuzz
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Model Protocol Lab" class="md-nav__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Model Protocol Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/adr-index/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_LOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Research log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_READINESS_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release readiness 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_NOTES_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_PORTABILITY_2026-10-15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portability research (2026-10-15)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crawl4ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent tooling notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evidence notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_10" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_10" id="__nav_5_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design documents
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design documents
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ALIASING_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BATCH_PATH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CANONICALFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canonical form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHOICE_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choice audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFIDENCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DATELINE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DENSITY_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DETERMINISM_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Determinism audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DISTRACTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIELDORDER_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-the-contract-under-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. The contract under test
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-corpus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Corpus
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-pre-registered-findings-found-by-probing-and-the-swarm-pre-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Pre-registered findings (found by probing and the swarm, pre-build)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-determinism" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Determinism
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-claims-and-falsifiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Claims and falsifiers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-non-goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Non-goals
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HISTORYFRAME_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History frame
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRUNESWEEP_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prune sweep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONDISTANCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INVISIBLECHARS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Invisible characters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFUSABLESKELETON_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confusable skeleton
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LEADING_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Leading claim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTITURN_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEEDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEGATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NUMFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PAYLOADSERIALIZATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLACEMENT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Placement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRECISION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Precision
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REPETITION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repetition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROTATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rotation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SCORER_LENS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scorer lens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEALED_BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sealed bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SURFACE_NOISE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surface noise
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template probe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_ROBUSTNESS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template robustness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TOKENDEPTH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Token depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-the-contract-under-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. The contract under test
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-corpus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Corpus
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-pre-registered-findings-found-by-probing-and-the-swarm-pre-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Pre-registered findings (found by probing and the swarm, pre-build)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-determinism" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Determinism
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-claims-and-falsifiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Claims and falsifiers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-non-goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Non-goals
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="fixture-fuzzer-design">Fixture fuzzer — design<a class="headerlink" href="#fixture-fuzzer-design" title="Permanent link">&para;</a></h1>
+<p><strong>Status:</strong> built in cycle 172 (<code>model_protocol_lab/fixturefuzz.py</code>);
+this document is the published contract table the corpus implements. <strong>Instrument name (honest):</strong>
+<em>fixture fuzzer</em> — a contract fuzzer for the lab's own fixture loaders.
+It is not coverage-guided fuzzing and does not explore: the mutator
+table is fixed, published below, and every case carries its expected
+outcome from the loaders' documented contract.</p>
+<p><strong>Monday-morning utility:</strong> a maintainer who just changed the fixture
+loaders (or is about to accept contributed fixture files) runs
+<code>model-protocol-lab fixtures fuzz</code> to prove the loaders still reject
+hostile or malformed fixture files gracefully — with the loaders' own
+<code>ValueError</code> vocabulary — instead of crashing mid-run or silently
+accepting a file the rest of the pipeline cannot handle.</p>
+<p><strong>Positioning (web-checked 2026-10-20, see <code>docs/RESEARCH_LOG.md</code>
+cycle 172):</strong> fuzzing <em>models</em> is occupied (PromptFuzz/ps-fuzz and
+garak fire jailbreak/injection attacks at endpoints), and fuzzing
+<em>code</em> is occupied (Atheris/libFuzzer are coverage-guided engines a
+developer wires to a target). No LLM evaluation harness checked ships
+a first-class command that fuzz-tests <em>its own fixture loaders</em>
+against a published accept/reject contract, across both of its input
+formats (strict JSON at runtime, CSV at authoring time). That
+combination is the contribution; nothing stronger is claimed.</p>
+<h2 id="1-the-contract-under-test">1. The contract under test<a class="headerlink" href="#1-the-contract-under-test" title="Permanent link">&para;</a></h2>
+<p>The loaders (<code>datasets.parse_dataset</code> / <code>load_dataset</code>,
+<code>fixtures.parse_fixture_csv</code> / <code>read_authoring_file</code>, discipline via
+<code>core.Split</code>) document a fail-closed contract: any malformed input is
+refused with <code>ValueError</code>; valid input is accepted exactly as written
+(stored fixture data stays byte-exact; only comparisons normalize).
+Outcomes:</p>
+<ul>
+<li><code>accept</code> — the loader returns normally.</li>
+<li><code>reject</code> — the loader raises <code>ValueError</code> (any message).</li>
+<li><code>accept_warn</code> — CSV only: the loader returns normally <em>and</em> the
+  fixture is named in the returned empty-<code>expected</code> list (the
+  documented vacuous-pass warning channel).</li>
+</ul>
+<p>A case whose observed outcome differs is a <strong>finding</strong>, classified:</p>
+<ul>
+<li><code>crash</code> — a non-<code>ValueError</code> exception escaped the loader;</li>
+<li><code>unexpected_accept</code> / <code>unexpected_reject</code> — the outcome flipped;</li>
+<li><code>warning_mismatch</code> — the warning channel disagreed.</li>
+</ul>
+<h2 id="2-corpus">2. Corpus<a class="headerlink" href="#2-corpus" title="Permanent link">&para;</a></h2>
+<p>Two base corpora, both minimal and known-valid (each carries a control
+case proving the harness itself is green before any mutation is
+trusted): a JSON dataset (2 search + 2 held-out fixtures, distinct
+ids/groups/message sets) and the equivalent authoring CSV. Mutators
+apply exactly one contract violation (or one documented non-violation)
+each; combination mutations are out of scope because their expected
+outcome is not independently derivable. Seed-parameterized mutators
+(overlong lengths, confusable choice) vary values, never the expected
+outcome class. Case classes, per target:</p>
+<ul>
+<li><strong>JSON:</strong> marker literal in content/expected (accept — content has
+  no blocklist at load time; the special-token audit is a separate,
+  warning-only layer), homoglyph twin id/group/messages (accept —
+  documented out-of-scope in <code>core.Split</code>: no normalization form
+  unifies confusables), NFD/NFC twin id, group, and message set plus
+  the U+2126/U+03A9 canonical-singleton twin (reject — NFC
+  uniqueness/leakage), the U+FB01 ligature near-twin and
+  within-partition identical messages and trailing-space/case-differing
+  cross-partition groups (accept — <code>Split</code> compares NFC-normalized,
+  unstripped, case-sensitive keys across partitions only), overlong
+  and at-limit fields (char-counted, including a 16,384-astral-char
+  field), empty and whitespace-only <code>expected</code> (accept, no warning
+  channel), duplicate ids (same/cross partition), cross-partition
+  group, identical cross-partition messages, missing/extra top-level
+  keys, duplicate JSON keys (top-level, nested, and
+  escape-equivalent), a legitimately escape-spelled key (accept),
+  <code>NaN</code>/<code>Infinity</code> constants, <code>1e999</code> overflow and 5,000-digit
+  integers, deep nesting (5,000 — outcome-asserted only; the guard
+  that fires is depth- and interpreter-dependent), truncated,
+  trailing-garbage, BOM-prefixed, empty, and whitespace-only text,
+  top-level non-object, wrong field types (number/null/float in
+  string fields), missing / extra fixture and message fields,
+  messages not a list, empty / over-long / misalternating /
+  assistant-final message lists, blank id/group with the exact code
+  point named (space rejects; U+00A0 rejects — <code>strip()</code> removes it;
+  U+200B-only accepts — it does not), empty partition, 101-fixture
+  partition, 100-fixture partitions (accept boundary), byte-oversize
+  document, exactly-2,000,000-byte document (accept boundary),
+  control characters raw in the source string (reject — strict JSON)
+  vs escape form (accept), zero-width content (accept), key order
+  permuted (accept), lone surrogates per field (§3).</li>
+<li><strong>CSV:</strong> bad header (case-changed), BOM-prefixed header (reject —
+  deliberately visible per the module docstring), fully quoted header
+  (accept), trailing empty header column (reject), message columns
+  out of order / too many / none, bad partition, blank id/group with
+  another cell present, an all-empty row (accept — silently skipped
+  by the reader; pinned so the leniency is contractual, not
+  accidental), overlong message cell / <code>expected</code> / id / group
+  (reject — id/group are §3-class fixes, see below), id at the limit
+  (accept), first-message empty, gap-then-content, assistant-final
+  conversation, short row ending after a user message (accept —
+  trailing columns are simply absent), duplicate ids,
+  cross-partition group and identical messages, NFD twin id, too
+  many rows, partition overflow, missing partition, field over the
+  csv parser limit, bare-CR line endings (reject), extra cells in a
+  row, quoted newline in a cell (accept — documented), CRLF line
+  endings (accept), quoting leniencies (unterminated quote at EOF,
+  quoted field with trailing junk, quote mid-field — all accept:
+  the csv reader is non-strict and the stored value is pinned),
+  marker literal in a cell (accept), empty <code>expected</code>
+  (<code>accept_warn</code>), whitespace-only <code>expected</code> (accept, <em>no</em> warning —
+  the warning channel fires on the exact empty string only),
+  literal <code>null</code>/<code>123</code> field text (accept — CSV fields are strings),
+  empty and whitespace-only documents (reject by different paths),
+  lone-surrogate cell (reject — §3). Raw NUL in a CSV cell is
+  <strong>excluded</strong>: it accepts on CPython 3.12, but the behaviour is not
+  verified on 3.11/3.13, and a version-dependent case would falsify
+  F3 — the table does not pin what it cannot guarantee.</li>
+<li><strong>Files</strong> (written to a fresh temp directory by the runner):
+  valid control, invalid UTF-8 bytes, CESU-8 surrogate bytes
+  (reject as not-valid-UTF-8 — the file-level surrogate case),
+  BOM bytes (reject at parse), byte-oversize file, directory as
+  path, missing file, FIFO as path (reject, no hang — the readers'
+  <code>O_NONBLOCK</code> + <code>fstat</code> defence), symlink to a regular file
+  (accept — the readers follow links by design) — for both
+  <code>load_dataset</code> and the <code>read_authoring_file</code> + parse path.</li>
+</ul>
+<p>Two construction rules the swarm forced (red-team A2/B8): a case's
+payload construction is part of its identity — raw-text cases are
+built as raw text, structured cases via <code>json.dumps</code> (which escapes
+control characters) — because the same semantic value has different
+contract outcomes in the two constructions; and a reject case may
+carry a <strong>message pin</strong>: where the loaders' vocabulary is genuinely
+fixed (their own literal messages: the nonfinite-constant message,
+the size-limit messages, the csv parser-limit message, and the §3
+surrogate messages), the case asserts the exception is exactly
+<code>ValueError</code> and the message contains the pinned text. Everywhere
+else (JSON syntax errors, nesting) only the <code>ValueError</code> class is
+asserted — those messages are the interpreter's and vary by version
+(red-team B3).</p>
+<p>The corpus digest is SHA-256 over the canonical case list (names,
+targets, payloads); it is reported with every run so two runs can be
+compared without diffing output.</p>
+<h2 id="3-pre-registered-findings-found-by-probing-and-the-swarm-pre-build">3. Pre-registered findings (found by probing and the swarm, pre-build)<a class="headerlink" href="#3-pre-registered-findings-found-by-probing-and-the-swarm-pre-build" title="Permanent link">&para;</a></h2>
+<p>Three genuine loader defects, all of one family — <em>the loaders
+accept or report something their own contract disowns</em> — each fixed
+fail-closed in cycle 172 and pinned by fuzzer cases plus direct
+regression tests:</p>
+<ol>
+<li><strong>Lone surrogates (JSON).</strong> Cycle 86 settled the <em>serializer</em>:
+   a lone surrogate "can never be written to a UTF-8 fixture file",
+   and <code>split_to_json_text</code> refuses it deliberately. The loader was
+   never extended the same rule — <code>parse_dataset</code> <strong>accepts</strong> JSON
+   escape-form surrogates (<code>"\ud800"</code> in the source text) into every
+   fixture field, producing Splits the repo's own serializer refuses
+   and that strict-encode helpers downstream meet with bare
+   <code>UnicodeEncodeError</code>s. (Rendering and evaluation tolerate
+   surrogates in degraded form — red-team B verified — so the claim
+   is <em>unwritable and un-round-trippable</em>, not "unusable
+   everywhere"; the loader extension is a new decision registered
+   here, with its falsifier below.) Both parsers also rejected
+   <em>raw</em>-surrogate source text only accidentally: the byte-cap
+   <code>len(text.encode("utf-8"))</code> raises a bare <code>UnicodeEncodeError</code>
+   (a <code>ValueError</code> subclass, so callers survive, but the message is
+   a codec leak, not the loaders' vocabulary). Fix: <code>datasets._text</code>
+   rejects any field containing a lone surrogate (covers the escape
+   form in every stored field — id, group, expected, content; a
+   decoded check, so valid surrogate <em>pairs</em> decoding to astral
+   characters stay accepted); both parsers convert the byte-cap
+   encode failure into a deliberate <code>ValueError</code> naming the
+   surrogate. CSV needs no decoded-value check: it has no escape
+   form, and files cannot carry raw surrogates past the readers'
+   strict UTF-8 decode. Falsifier: if any in-repo consumer is shown
+   to legitimately require surrogate fixture text <em>through the
+   loader</em>, the cases flip to <code>accept</code> and the fix is reverted —
+   none is known (the one surrogate-tolerant consumer, <code>core</code>
+   seed derivation, constructs fixtures directly), and the burden
+   of proof sits with acceptance, because acceptance is what
+   produces unserializable Splits. Note the swarm's vacuity catch
+   (red-team B1): outcome-only assertions cannot pin this fix for
+   raw-surrogate text (it already raised a <code>ValueError</code> subclass),
+   so the raw-surrogate cases carry message pins.</li>
+<li><strong>CSV id/group length (red-team A1).</strong> <code>parse_fixture_csv</code>
+   length-checked message cells and <code>expected</code> but never <code>id</code> or
+   <code>group</code>: a 17,000-char id was accepted, and the resulting Split
+   then failed <code>split_to_json_text</code>'s round-trip — the authoring
+   path accepting exactly what its own by-construction guarantee
+   refuses, and a JSON↔CSV coherence break with no documented
+   reason. Fix: the same <code>MAX_TEXT</code> check, same message, extended
+   to <code>id</code> and <code>group</code>.</li>
+<li><strong>csv.Error mislabel (red-team A4).</strong> The CSV reader's error
+   handler reported <em>every</em> parse error as "field exceeds the
+   parser limit" — e.g. bare-CR line endings, which contain no
+   large field at all. Fix: the size message is kept for the
+   genuine field-limit error (existing pins depend on it); other
+   parse errors report as parse errors.</li>
+</ol>
+<h2 id="4-determinism">4. Determinism<a class="headerlink" href="#4-determinism" title="Permanent link">&para;</a></h2>
+<p>Generation is a pure function of the seed: parameter values are
+derived from SHA-256 over <code>(seed, case name, parameter)</code> — the
+repo's own seed-derivation precedent — never from <code>random.Random</code>
+methods beyond <code>random()</code>, whose cross-version reproducibility
+CPython does not guarantee (red-team B4). Same seed → same case
+list → same digest. The digest is SHA-256 over case names, targets,
+and payload <strong>bytes</strong> (file-case payloads are their bytes; no temp
+path ever enters a case identity, the digest, or the report —
+red-team B6). Reports contain no timestamps and <strong>no exception
+message text</strong>: a conforming case records a fixed detail token, and
+a finding records the outcome classification plus, for a crash, the
+exception class name — because interpreter messages (nesting
+guards, integer-digit limits, JSON syntax positions) vary by
+version and configuration even when the outcome does not (red-team
+B3). Exception details are sanitized (control/bidi/surrogate-
+stripped, length-bounded) before they enter any human-facing
+summary — hostile fixture text must not reach a terminal through
+the fuzzer's own output. The runner executes cases on the calling
+thread only: the JSON parser's recursion failure mode is
+stack-sensitive off the main thread (red-team B5). Running the
+corpus is time-bounded by construction: both loaders check the
+2 MB byte cap before parsing, the largest case is a ~2 MB document,
+and the <code>Split</code> discipline checks are set-based over at most
+100 fixtures per partition.</p>
+<h2 id="5-claims-and-falsifiers">5. Claims and falsifiers<a class="headerlink" href="#5-claims-and-falsifiers" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>F1</strong> Every reject case raises <code>ValueError</code> and nothing else; a
+  single non-<code>ValueError</code> escape falsifies the loaders' fail-closed
+  claim, and the fuzzer exists to catch exactly that.</li>
+<li><strong>F2</strong> Every accept case returns a <code>Split</code> (or split + warnings)
+  whose stored data equals the loader's <em>decoded</em> field values
+  exactly (red-team A17 rescoped this from "byte-exact against the
+  input": JSON escapes resolve, CSV quoting is removed, CRLF is
+  stripped, short rows are padded — stored data is post-decode by
+  construction; NFC normalization is comparison-only and never
+  rewrites it). A stored value that differs from the decoded source
+  field falsifies F2.</li>
+<li><strong>F3</strong> Same seed → identical digest and identical report, on any
+  supported Python (3.11–3.13). A case whose outcome depends on the
+  interpreter version falsifies F3 and must be redesigned, not
+  pinned per-version.</li>
+<li><strong>F4 (honest limit)</strong> A green fuzz run proves the published table
+  holds — nothing more. It does not prove the loaders accept exactly
+  the valid files, nor that unmutated classes are safe.</li>
+</ul>
+<h2 id="6-non-goals">6. Non-goals<a class="headerlink" href="#6-non-goals" title="Permanent link">&para;</a></h2>
+<p>No diff-reports section and no HTML report block: fuzz output is a
+maintenance artifact, not experiment output (the <code>pack</code>/<code>verify</code>
+precedent). No fixture-<em>quality</em> judgment (a boring but valid fixture
+passes; that is correct). No coverage-guided search (see
+Positioning). No new dependencies; stdlib only.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

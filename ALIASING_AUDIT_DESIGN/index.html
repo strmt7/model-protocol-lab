@@ -1,0 +1,2447 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Local conversation-protocol experiments with held-out evidence: exact token-sequence comparisons across chat-format families.">
+      
+      
+      
+        <link rel="canonical" href="https://strmt7.github.io/model-protocol-lab/ALIASING_AUDIT_DESIGN/">
+      
+      
+        <link rel="prev" href="../evidence/">
+      
+      
+        <link rel="next" href="../BATCH_PATH_DESIGN/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Aliasing audit - Model Protocol Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#candidate-aliasing-audit-design-contract" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Model Protocol Lab" class="md-header__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Model Protocol Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Aliasing audit
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Model Protocol Lab" class="md-nav__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Model Protocol Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/adr-index/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_LOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Research log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_READINESS_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release readiness 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_NOTES_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_PORTABILITY_2026-10-15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portability research (2026-10-15)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crawl4ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent tooling notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evidence notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_10" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_10" id="__nav_5_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design documents
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design documents
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-answers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it answers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-class-notions-never-conflated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two class notions, never conflated
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cohorts-and-evaluable-cells-a1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cohorts and evaluable cells (A1')
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-redundant-count-one-formula" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The redundant count (one formula)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-determinism-tripwire-a2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The determinism tripwire (A2')
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-alias-suspect-flag-a3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The alias-suspect flag (A3')
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-payload-and-its-ground-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The payload and its ground layer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#back-porting-stated-precisely" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Back-porting, stated precisely
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diff-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diff semantics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#provenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provenance
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BATCH_PATH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CANONICALFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canonical form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHOICE_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choice audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFIDENCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DATELINE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DENSITY_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DETERMINISM_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Determinism audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DISTRACTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIELDORDER_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIXTURE_FUZZ_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HISTORYFRAME_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History frame
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRUNESWEEP_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prune sweep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONDISTANCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INVISIBLECHARS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Invisible characters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFUSABLESKELETON_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confusable skeleton
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LEADING_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Leading claim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTITURN_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEEDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEGATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NUMFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PAYLOADSERIALIZATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLACEMENT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Placement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRECISION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Precision
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REPETITION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repetition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROTATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rotation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SCORER_LENS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scorer lens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEALED_BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sealed bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SURFACE_NOISE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surface noise
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template probe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_ROBUSTNESS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template robustness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TOKENDEPTH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Token depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-answers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it answers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-class-notions-never-conflated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two class notions, never conflated
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cohorts-and-evaluable-cells-a1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cohorts and evaluable cells (A1')
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-redundant-count-one-formula" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The redundant count (one formula)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-determinism-tripwire-a2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The determinism tripwire (A2')
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-alias-suspect-flag-a3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The alias-suspect flag (A3')
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-payload-and-its-ground-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The payload and its ground layer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#back-porting-stated-precisely" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Back-porting, stated precisely
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diff-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diff semantics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#provenance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provenance
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="candidate-aliasing-audit-design-contract">Candidate aliasing audit — design contract<a class="headerlink" href="#candidate-aliasing-audit-design-contract" title="Permanent link">&para;</a></h1>
+<p>Status: shipped in cycle 181 (wave-7 research rank 2). This document
+is the frozen contract for <code>model_protocol_lab/aliasing.py</code> and the
+<code>aliasing</code> payload; the digest definition travels inside every
+payload as protocol data, so this prose and the payloads can be
+checked against each other.</p>
+<h2 id="what-it-answers">What it answers<a class="headerlink" href="#what-it-answers" title="Permanent link">&para;</a></h2>
+<p>Candidates are names for renderings. On a given tokenizer and
+fixture set, two differently named formats can render
+byte-identical prompt token sequences on every search fixture — a
+BOS mutation that is a no-op for a family whose framing already
+starts with that token, two families whose framing coincides on
+short single-turn messages, a field the fixture set's turn shapes
+never exercise. A leaderboard cannot see the collapse (tied rows
+look normal); this lab can, because it renders every candidate
+itself and abstains on ties — and a tie between two names for one
+token sequence is a different event from a tie between two
+genuinely different prompts.</p>
+<p>Utility, in one sentence: an operator who ran a 24-candidate sweep
+uses the audit to decide whether to prune the candidate set before
+the next (expensive) run — and whether an <code>ambiguous</code> abstention
+was two genuinely different templates tying, or one token sequence
+wearing two name tags.</p>
+<h2 id="two-class-notions-never-conflated">Two class notions, never conflated<a class="headerlink" href="#two-class-notions-never-conflated" title="Permanent link">&para;</a></h2>
+<p>The design's first draft defined one equivalence (identical
+<code>input_ids</code>) and spent it as three different things. The cross-check
+(red-team A F1, upheld as amended by red-team B) split it:</p>
+<ul>
+<li><strong>Render class</strong> — identical recorded <code>input_ids</code> on every
+  fixture of the cohort. Supports exactly one claim: these names
+  produced the same prompt token sequences on this fixture set.</li>
+<li><strong>Measurement class</strong> — a render class refined by the candidate's
+  own response boundary (<code>boundary_token_ids</code>). Boundaries are part
+  of the measurement: each candidate is judged under its own
+  terminator, and under <code>--boundary-map</code> two candidates with
+  identical prompts and different boundaries are different
+  experiments that happen to share a prompt.</li>
+</ul>
+<p>Effective counts are reported for both notions
+(<code>n_effective_render</code>, <code>n_effective_measurement</code>) next to
+<code>n_candidates_recorded</code> and <code>n_primary_cohort</code>. Pruning language
+and the alias-suspect flag cite measurement classes only. In the
+default configuration (no <code>--boundary-map</code>) every candidate shares
+one boundary and the two notions coincide; the distinction is
+load-bearing exactly in the mode where it matters.</p>
+<h2 id="cohorts-and-evaluable-cells-a1">Cohorts and evaluable cells (A1')<a class="headerlink" href="#cohorts-and-evaluable-cells-a1" title="Permanent link">&para;</a></h2>
+<p>Classes exist only inside <strong>cohorts</strong> of candidates with identical
+completed fixture sets: pairwise identity over differing sets is
+not transitive, so union "classes" would not be classes. On genuine
+runs the eligible candidates always share the full search set and
+at most one ineligible interrupter exists; the cohort discipline is
+what keeps foreign or interrupted records honest. The primary
+cohort is chosen by a total deterministic order (most candidates,
+then most fixtures, then lexicographic) so the producer and the
+diff validator derive the same cohort from the same records.</p>
+<p>A cell counts only if it is <strong>evaluable</strong>: <code>status == "completed"</code>,
+<code>input_ids</code> a nonempty list/tuple of exact ints (bools excluded)
+<code>&gt;= 0</code>, the fixture unique within its entry, and the observation's
+<code>candidate</code> field present and equal to the entry's name. The
+nonempty rule is load-bearing: the abort path in <code>core.evaluate</code>
+records <code>input_ids == ()</code> for render/encode failures, so the empty
+tuple is a failure sentinel that collides with itself — two failed
+candidates would "coincide" on it. A completed cell with empty or
+malformed IDs is an artifact defect (<code>recorded_ids_invalid</code>, the
+determinism audit's vocabulary), never a class member. Duplicate
+fixture IDs and candidate-field mismatches fail the whole candidate
+closed with named details; duplicate search entries for one name
+make that name unavailable (<code>duplicate_candidate_entry</code>).</p>
+<p>Classes are computed from recorded <code>input_ids</code> <strong>only</strong> — never
+from <code>candidate_fingerprint</code>, the <code>format</code> dict, or <code>input_text</code>.
+The fingerprint hashes <code>asdict(fmt)</code> <em>including the name</em> (its own
+docstring says so deliberately), so fingerprint classes would be
+singletons by construction: the audit would report "no aliasing" on
+every run, forever. Named tests pin the two executed counter-pairs
+(name-only difference with <code>repeat_bos</code> under an empty BOS;
+<code>assistant_turn_end</code> difference on single-turn fixtures) as aliased
+despite different fingerprints and different format dicts.</p>
+<h2 id="the-redundant-count-one-formula">The redundant count (one formula)<a class="headerlink" href="#the-redundant-count-one-formula" title="Permanent link">&para;</a></h2>
+<p><code>n_redundant_completed_observations</code> = Σ over the primary cohort's
+fixtures of (candidates completed on the fixture − distinct
+<code>(input_ids, boundary_token_ids)</code> tuples on it). It counts each
+redundant observation once, is additive over fixtures, sees partial
+aliasing that a global-class formula misses, and is recomputable
+from the ground records. The render analogue travels under its own
+name (<code>n_redundant_render_observations</code>); the two are never summed,
+and pair-matrix entries are never summed into either (pairs overlap
+by construction). The word "wasted" appears nowhere in the payload:
+a boundary-distinct evaluation is a distinct measurement, not
+waste, and even a measurement-redundant evaluation is the replicate
+the A2' cross-check consumes.</p>
+<h2 id="the-determinism-tripwire-a2">The determinism tripwire (A2')<a class="headerlink" href="#the-determinism-tripwire-a2" title="Permanent link">&para;</a></h2>
+<p>Within one measurement class, the recorded <code>output_ids</code> are
+identical per fixture, and the outcome fields (<code>exact_match</code>,
+<code>boundary_found</code>, <code>boundary_text_match</code>, <code>status</code>) are identical —
+checked as independent corollaries, not consequences (the outcome
+fields pass through the backend's decode). The premise is checkable
+and checked: <code>core.request_seed_for(seed, case_id)</code> derives the
+per-request seed from the run seed and the fixture ID only — the
+candidate is not an input — and the generation cap is run-global,
+so identical measurement configurations present identical
+<code>generate()</code> inputs.</p>
+<p>A violation is reported per (class, fixture) as a
+<strong>determinism-suspect cell</strong>, kind <code>output</code> (output digests differ),
+<code>outcome</code> (outcome fields differ), or <code>both</code>: recorded cells a
+deterministic backend could not have produced from one measurement
+configuration, attributable to backend nondeterminism (stateful or
+order-dependent backends included — candidates are evaluated
+sequentially in one run) or artifact corruption. The audit asserts
+neither cause; <code>verify --determinism</code> replay is the discriminating
+follow-up. This mirrors the house precedent in
+<code>experiments.ws_canonicalization</code> (<code>n_same_ids_verdict_flips</code>:
+same IDs, different verdict ⇒ determinism anomaly, never counted as
+the probe's own effect), at the native-run layer.</p>
+<h2 id="the-alias-suspect-flag-a3">The alias-suspect flag (A3')<a class="headerlink" href="#the-alias-suspect-flag-a3" title="Permanent link">&para;</a></h2>
+<p><code>alias_suspect_abstention</code> fires iff (i) the recorded decision is
+<code>ambiguous</code>; (ii) the passing set — primary-cohort, eligible
+candidates whose every evaluable cell passes — recomputed from the
+ground records has ≥ 2 members; (iii) the passing set is contained
+in a single measurement class; and (iv) that class contains no
+outcome-suspect cell. Withholding reasons are produced in a fixed
+priority order, and the validator recomputes the expected reason in
+the same order: <code>candidate_unavailable</code>, <code>decision_not_ambiguous</code>,
+<code>passing_set_inconsistent</code>, <code>determinism_suspect_in_class</code>,
+<code>passing_spans_classes</code>, <code>boundaries_differ_within_passing_set</code>.
+<code>alias_suspect_detail</code> is <code>""</code> exactly when the flag fires (the
+scorer-lens <code>winner_detail</code> discipline); the fired case's class
+members travel in <code>alias_suspect_class_members</code>.</p>
+<p>Two negative cases are pinned as tests because users will ask about
+them. A tie whose passing set <em>spans</em> classes never fires: two
+different prompts both passing everything is a genuine tie between
+distinct measurements — the lab working as intended, not an
+artifact. And a <em>post-boundary-only</em> output divergence inside the
+containing class does not suppress the flag: every
+selection-relevant quantity is identical there, so the aliasing
+explanation of the tie is intact; the cell is still reported as a
+suspect cell. The flag is advisory — it never modifies the recorded
+decision or <code>selected_candidate</code>, and it asserts the structural
+containment only, not that any candidate would have survived
+held-out (held-out was never run for any of them).</p>
+<h2 id="the-payload-and-its-ground-layer">The payload and its ground layer<a class="headerlink" href="#the-payload-and-its-ground-layer" title="Permanent link">&para;</a></h2>
+<p>Token IDs in a payload are prompt text by proxy (the house strips
+recorded ID subsequences from the public view for exactly this
+reason), so the payload carries, per candidate: the boundary tuple
+(operator configuration, already public in every search entry),
+eligibility, planned count, and per-fixture ground records
+<code>{fixture, status, evaluable, input_sha256, output_sha256,
+exact_match, boundary_found, boundary_text_match}</code> — digests and
+small enums only. Digests are <code>None</code> for non-evaluable cells, never
+a digest of the empty list (the abort sentinel must not re-enter
+through the digest layer). The digest definition is one canonical
+form, frozen as protocol data: SHA-256 of the compact JSON encoding
+of the ID list, version string <code>sha256-json-intlist-v1</code>, computed
+identically for input and output IDs. At top level the payload also
+carries <code>decision</code>, <code>selected_candidate</code>, <code>backend_fingerprint</code>,
+<code>seed</code>, and <code>max_new_tokens</code>, so it is interpretable standalone at
+the diff's payload-only interface.</p>
+<p>What the validator's recompute buys, stated without overselling:
+<code>_valid_aliasing</code> re-derives cohorts, both class partitions, both
+effective counts, both redundant counts, the pair matrix, every
+suspect cell, the passing set, and the flag from the ground records
+with independent code, and rejects duplicate candidate names,
+duplicate fixtures, and payloads beyond the run caps (24 candidates,
+2400 cells). That is an <strong>internal-consistency</strong> recompute — it
+detects aggregates inconsistent with their records; it cannot
+detect fabricated ground records. That limitation is the standing
+one for every house ground layer (refusals, scorer-lens), and the
+design says so rather than claiming verifiability. Digest handling
+in the validator is version-agnostic (equality only): a coherent
+foreign digest version validates internally, and a version mismatch
+across a diff is <code>protocol_drift</code>.</p>
+<p>Two size/privacy facts settle the flag-gating: the ground layer is
+the largest per-cell payload the lab ships — measured 921,192
+bytes (≈0.92 MB) at the 2400-cell cap in the indented public JSON —
+so the audit runs behind <code>run --aliasing</code>, following the
+refusals/scorer-lens precedent. And an unsalted SHA-256 of a short,
+structured token sequence is a guess-confirmation oracle: anyone
+holding the payload, a candidate prompt, and the tokenizer can
+verify a guess offline. The docs claim exactly that and no more:
+no raw token IDs or text; per-cell digests permit offline
+confirmation of a guessed prompt. The same trade was already
+accepted for <code>prompt_sha256</code> in the surface-noise probe.</p>
+<h2 id="back-porting-stated-precisely">Back-porting, stated precisely<a class="headerlink" href="#back-porting-stated-precisely" title="Permanent link">&para;</a></h2>
+<p>The profile runs over the in-memory result at run time. Back-porting
+to stored artifacts works over <code>--include-evidence</code> artifacts only:
+<code>reporting._public_view</code> strips <code>search[].observations</code> from the
+default public <code>results.json</code>. An entry with no <code>observations</code> key
+degrades its candidate to <code>observations_missing</code>; the top-level
+payload is <code>{"available": false, "detail": "observations_stripped"}</code>
+only when <em>every</em> search entry lacks the key (the
+<code>determinism._plan</code> test) — otherwise the top level stays available
+with per-candidate records (the refusal-profile precedent). A run
+made without <code>--aliasing</code> carries no <code>aliasing</code> key at all, and
+reporting/diff render that as "not recorded", never "no aliasing
+found".</p>
+<h2 id="diff-semantics">Diff semantics<a class="headerlink" href="#diff-semantics" title="Permanent link">&para;</a></h2>
+<p><code>diff_aliasing</code> reports measurement-partition drift over the common
+candidates (<code>pairs_joined</code> / <code>pairs_split</code>), per-candidate boundary
+drift, count drift over the effective counts, the redundant count,
+and the suspect-cell count, flag drift, candidates
+added/removed/excluded, and the evaluable-mismatch change. Three
+drift gates set <code>comparable: false</code> while still listing drift:
+<code>fixture_set_drift</code> (classes are fixture-set-relative),
+<code>backend_drift</code>, and <code>protocol_drift</code> (digest definition).
+<code>backend_drift</code> means the recorded backend fingerprints differ —
+tokenizer identity <em>not proven equal</em>, because the fingerprint also
+binds device, context limit, and dependency versions; it must never
+be paraphrased as "a different tokenizer". The pair matrix is
+pairwise data with explicit denominators and is never clustered
+into "partial classes" in the HTML or the diff.</p>
+<h2 id="provenance">Provenance<a class="headerlink" href="#provenance" title="Permanent link">&para;</a></h2>
+<p>Wave-7 research rank 2. Red-team A returned DO NOT BUILD AS
+SPECIFIED (10 findings). Red-team B's cross-check upheld the
+verdict, downgraded five severities, refuted one sub-claim (the
+scorer-lens precedent A cited for duplicate fixtures accepts them —
+the duplicate rule is new, not a transplant), caught an internal
+contradiction in A's own <code>n_nominal</code> definitions, and repaired
+four of A's prescribed fixes (the stripped-artifact trigger, the
+redundant-formula ambiguity, flag suppression keyed on any suspect
+cell instead of outcome-suspect cells, and the inverted
+detail-field precedent), plus four findings A missed (the
+guess-confirmation wording, the missing run-configuration fields,
+the digest-of-empty rule, duplicate search entries). The build
+follows gates 1, 4, 10 as A wrote them and gates 2, 3, 5, 6, 7, 8,
+9 as B amended them. All A1'–A3' claims are pinned by named tests
+in <code>tests/test_cycle181_aliasing.py</code>, including a brute-force
+oracle differential for A1' and a <code>run_experiment</code> construction of
+the flag case through the real run flow.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

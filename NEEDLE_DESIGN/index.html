@@ -1,0 +1,2581 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Local conversation-protocol experiments with held-out evidence: exact token-sequence comparisons across chat-format families.">
+      
+      
+      
+        <link rel="canonical" href="https://strmt7.github.io/model-protocol-lab/NEEDLE_DESIGN/">
+      
+      
+        <link rel="prev" href="../MULTITURN_DESIGN/">
+      
+      
+        <link rel="next" href="../NEGATION_DESIGN/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Needle depth - Model Protocol Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#needle-depth-probe-design" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Model Protocol Lab" class="md-header__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Model Protocol Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Needle depth
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Model Protocol Lab" class="md-nav__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Model Protocol Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/adr-index/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_LOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Research log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_READINESS_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release readiness 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_NOTES_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_PORTABILITY_2026-10-15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portability research (2026-10-15)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crawl4ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent tooling notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evidence notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_10" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_10" id="__nav_5_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design documents
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design documents
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ALIASING_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BATCH_PATH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CANONICALFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canonical form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHOICE_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choice audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFIDENCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DATELINE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DENSITY_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DETERMINISM_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Determinism audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DISTRACTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIELDORDER_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIXTURE_FUZZ_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HISTORYFRAME_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History frame
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRUNESWEEP_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prune sweep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONDISTANCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INVISIBLECHARS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Invisible characters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFUSABLESKELETON_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confusable skeleton
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LEADING_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Leading claim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTITURN_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#where-this-sits-against-prior-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where this sits against prior work
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cases
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arms-and-assembly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arms and assembly
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#measurement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Measurement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sizing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sizing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#claims-and-denominators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Claims and denominators
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#records-and-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Records and validation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEGATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NUMFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PAYLOADSERIALIZATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLACEMENT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Placement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRECISION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Precision
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REPETITION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repetition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROTATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rotation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SCORER_LENS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scorer lens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEALED_BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sealed bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SURFACE_NOISE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surface noise
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template probe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_ROBUSTNESS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template robustness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TOKENDEPTH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Token depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#where-this-sits-against-prior-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where this sits against prior work
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cases
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arms-and-assembly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arms and assembly
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#measurement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Measurement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sizing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sizing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#claims-and-denominators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Claims and denominators
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#records-and-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Records and validation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="needle-depth-probe-design">Needle-depth probe — design<a class="headerlink" href="#needle-depth-probe-design" title="Permanent link">&para;</a></h1>
+<p>Cycle 191 (wave-8 rank 3). A practitioner pasting retrieved
+chunks around a question learns, per template family, at which
+depth of the surrounding bulk their checkpoint stops finding a
+planted fact — a per-template recall-vs-depth curve at exact
+rendered-token depths — instead of a single "long context
+good/bad" number measured through a vendor's own template.</p>
+<p>The probe plants one fact sentence carrying a unique synthetic
+value inside neutral filler, at five depths of the filler span
+and two filler doses, and asks for the value. The independent
+variable is the chat template: same checkpoint, same generated
+cases, same filler — only the hand-rendered format changes.
+The stage lives in <code>experiments.needle_stage</code>, the frozen
+protocol and arithmetic in <code>model_protocol_lab/needle.py</code>, the
+HTML section in <code>reporting.py</code>, and the full-recompute diff
+validator in <code>diffreports.py</code>.</p>
+<p>Design history: v1 of this document specified contiguous
+needle-run acceptance over an unstated textual assembly.
+Red-team A returned DO NOT BUILD AS SPECIFIED (run-existence is
+fatal on the literal reading; the validator omitted the
+verdict↔digest binding); red-team B upheld the verdict,
+downgraded A's impossibility claim with a counter-assembly,
+refuted the coordinator's first repair sketch (a marker-derived
+head anchor with a systematic −1 bias), and supplied the
+surviving measurement (the prefix-anchored difference <code>D</code>).
+This v2 is the adjudicated contract: delta-based dose, <code>D</code>-
+anchored offsets, digest-bound verdicts, one headline
+population. The briefs are in <code>~/workspace/agents_out/wave8/</code>
+(<code>cycle191_redteam_a.md</code>, <code>cycle191_redteam_b.md</code>).</p>
+<h2 id="where-this-sits-against-prior-work">Where this sits against prior work<a class="headerlink" href="#where-this-sits-against-prior-work" title="Permanent link">&para;</a></h2>
+<p>The depth phenomenon is published and is not claimed here:
+Liu et al. (<em>Lost in the Middle</em>, arXiv:2307.03172) measured a
+U-shaped recall curve over document position in API-served
+models, with mid-context accuracy sometimes dropping below the
+closed-book bound; NoLiMa (arXiv:2502.05167) extends
+needle-in-a-haystack with minimal-lexical-overlap needles
+and a proportion-based placement sweep over the haystack
+(its §4.4.2; an earlier draft of this paragraph also credited
+it with unique-token counting and needles inserted at
+25/50/75% — neither is in the paper, corrected in cycle 216);
+RULER
+(arXiv:2404.06654) runs synthetic local-model tasks at
+flexible length and complexity configurations, scored by
+recall-based presence accuracy (its paper states depth-level
+position control is not yet reported); BABILong (arXiv:2406.10149)
+distributes multiple facts through book text; Chroma's
+<em>Context Rot</em> report (July 2025,
+https://research.trychroma.com/context-rot) varies total length
+with a fixed needle and shows distractor similarity and
+needle–question similarity move scores materially. Depth as an
+axis, token-exact placement, literal needles, and distributed
+facts all exist. What no surveyed harness reports is the
+combination this probe ships: a recall-vs-depth curve <strong>as a
+function of hand-rendered chat-template family</strong> on one local
+checkpoint, with the depth offset verified on each candidate's
+own rendered token sequence, a needle-absent false-recall floor
+and a duplicate-needle control as arms of the same probe, and
+the lab's conservative selection rule (unique winner or
+abstain) re-applied per depth cell. The uniqueness pass behind
+this paragraph, with per-harness coverage, is logged in
+docs/RESEARCH_LOG.md (cycle 191 entry).</p>
+<p>The boundary against the shipped distractor-dilution probe
+(cycle 184) is one sentence: distract varies <em>how much</em> filler
+surrounds the fixture's own question and whether a planted
+wrong answer captures the model; needle varies <em>where</em> an
+answer-bearing fact sits inside a fixed amount of filler.
+Distract's conditions are dose × placement of filler around
+existing fixtures; needle's are dose × depth of the fact
+itself, over generated cases whose only question is the plant.</p>
+<h2 id="cases">Cases<a class="headerlink" href="#cases" title="Permanent link">&para;</a></h2>
+<p>Cases are generated inside the stage from the run seed (the
+multiturn pattern: self-contained, no dependence on the user's
+fixtures or the recorded search). Twenty cases, ids
+<code>needle-00</code> … <code>needle-19</code>. The derivation is frozen exactly,
+because the diff validator's mirror must reproduce it bit for
+bit: one draw is
+<code>int.from_bytes(sha256(f"{seed}|needle|{index}|{slot}|{counter}"
+.encode("ascii")).digest()[:8], "big")</code> with <code>counter</code> starting
+at 0. Slot 0 gives the code word <code>WORDS[draw % 64]</code>; slot 1
+gives the number <code>1000 + draw % 9000</code>. The value is
+<code>"{word}-{number}"</code>. If a case's value equals an earlier case's
+value, <code>counter</code> increments and both slots redraw. Topic <em>i</em> is
+<code>TOPICS[i]</code> from the frozen list of twenty in <code>needle.py</code>
+("astronomy society", "beekeeping circle", …). The fact
+sentence is one frozen template rendered with the corpus's own
+trailing-space convention: <code>The {topic} code is {value}.</code>
+The question is <code>What is the {topic} code?</code>; the expected
+answer is the value, scored by the standard pipeline
+(boundary-cut answer, exact match — <code>core.evaluate</code>'s literal
+equality). Question and needle share the topic phrase and the
+word "code" by construction — needle–question lexical match is
+deliberate (Chroma's finding is that it moves scores; an
+unmatched question would measure vocabulary guessing, not
+position). The protocol carries <code>case_material_sha256</code>, the
+SHA-256 of the canonical JSON of (fact template, topics,
+words), so the frozen lists are bound by digest, and
+<code>ground_sha256</code> over the canonical generated rows (multiturn's
+pattern), so the seed's case set is bound as a whole.</p>
+<p>Generation-time screens (a failure is a protocol bug, raised
+before any generation, never a per-cell outcome): topics and
+words are screened against the filler corpus (case-folded
+substring) — the frozen lists pass and a test pins that; the
+twenty values are pairwise distinct by the redraw rule; no
+value occurs in the corpus. The corpus contains no digits at
+all, so the numeric half of every value is unplanted by
+construction everywhere except the needle.</p>
+<h2 id="arms-and-assembly">Arms and assembly<a class="headerlink" href="#arms-and-assembly" title="Permanent link">&para;</a></h2>
+<p>Fifteen cells per case per candidate. The assembly is frozen
+exactly (v1's silence here was build-blocking): a case is a
+single user message whose content is segment concatenation
+with <strong>no joiner anywhere</strong> — filler and needle sentences
+carry the corpus trailing space, and the question follows the
+bulk directly as the final sentence.</p>
+<ul>
+<li><code>dose_0</code> — content = needle sentence + question. The control
+  arm: it proves the case is answerable when nothing surrounds
+  the fact. (The wave-8 brief called the recorded native run
+  the dose-0 control; the recorded search runs the user's
+  fixtures with their own questions and contains no observation
+  of these generated cases, so the stage-generated arm plays
+  the control role — the multiturn honesty settlement, stated
+  here rather than discovered later.)</li>
+<li><code>dose_{1024,4096}_depth_{0,25,50,75,100}</code> — content =
+  prefix filler + needle + suffix filler + question.</li>
+<li><code>absent_{1024,4096}</code> — content = filler + question, no
+  needle. Any pass is fabrication or guessing; the pass rate
+  is the false-recall floor, reported per dose beside that
+  dose's curve.</li>
+<li><code>duplicate_{1024,4096}</code> — content = prefix filler + needle +
+  middle filler + needle + suffix filler + question, the two
+  needles at 25% and 75%. Separates position from exposure
+  count, with the independence baseline of the Claims section
+  keeping the readout honest.</li>
+</ul>
+<p>Dose scoping: the brief's doses {1024, 4096} ship as written.
+The 4096 dose needs <code>--max-context</code> above 4096 plus the
+generation budget and prompt overhead; under the default 2048
+cap every 4096 cell is <code>arm_context_exceeded</code> — reported per
+cell, never truncated into existence. The full control set
+(floor and duplicate) is live at 1024 under defaults, so the
+default run still carries the falsification framing; the brief's
+{1024, 2048} fallback was not taken because a 2048 filler dose
+also exceeds the default cap once the needle, question, and
+generation budget are added, so it buys no default-liveness
+and halves the dose axis. The CLI help states the arithmetic
+before the run.</p>
+<h2 id="measurement">Measurement<a class="headerlink" href="#measurement" title="Permanent link">&para;</a></h2>
+<p>All quantities are measured on rendered token ids under three
+cached renders per (candidate, case): <code>Q</code> (question-only
+content), <code>Z</code> (the dose-0 content), and the arm render itself.
+<code>needle_len := len(Z) − len(Q)</code> is the needle's rendered length
+in the dose-0 context for that candidate and case; a case with
+<code>needle_len &lt;= 0</code> for a candidate is degenerate and all its
+cells for that candidate are <code>arm_unmatchable</code>.</p>
+<ul>
+<li><strong>Dose is a rendered delta</strong> (distraction's semantics,
+  stated plainly): a treated cell is accepted only when
+  <code>len(arm) − len(Z) == dose</code> on the final render — the arm
+  prompt is exactly <code>dose</code> rendered tokens longer than the
+  same case's dose-0 prompt. The absent cell is accepted only
+  when <code>len(arm) − len(Q) == dose</code> — the same equation with
+  the needle term removed, not a separate statistic. The
+  duplicate cell: <code>len(arm) − len(Z) == dose + needle_len</code>.
+  Seam merges at the needle's edges are absorbed into the
+  delta and compensated by the sizing search; the design does
+  not claim the filler <em>text</em> totals the dose standalone.</li>
+<li><strong>Offset is the prefix-anchored difference <code>D</code>.</strong>
+  <code>D(arm, comp) := LCP(arm_ids, comp_ids) − LCP(Z_ids, Q_ids)</code>,
+  where <code>comp</code> is the render of the arm's text up to just
+  before the measured needle, with the question appended
+  (needle 1: prefix + question; needle 2 in duplicate:
+  prefix + needle + middle + question). The dose-0 arm is the
+  anchor: its needle sits at offset 0 by construction, and the
+  head-merge term — the generic BPE case, a template head
+  ending in a space or newline merging with the following
+  token — is present in both LCPs and cancels. Acceptance
+  requires <code>D == depth% × dose / 100</code> exactly (both doses make
+  every target an integer). A construction whose seams move
+  <code>D</code> off target is rejected and the search continues; it is
+  never relabelled. No marker-derived constant appears anywhere
+  in the measurement path (red-team B executed the marker
+  anchor failing outright under the repo's word tokenizer and
+  biasing −1 under merging heads; <code>D</code> matched token-span ground
+  truth in every executed case).</li>
+<li><strong>Joint final verification is the load-bearing invariant.</strong>
+  Both equalities (delta, and <code>D</code> for each needle) are
+  evaluated on the accepted construction's own final ids
+  before the cell is generated. The two-phase search below is
+  an optimisation whose phase-1 measurements the suffix could
+  in principle move (rank-ordered BPE reach-back); the joint
+  check on the final render is what makes acceptance sound —
+  every reach-back case changes the final render's LCP or
+  length and is rejected there, never wrongly accepted.</li>
+</ul>
+<h2 id="sizing">Sizing<a class="headerlink" href="#sizing" title="Permanent link">&para;</a></h2>
+<p>Rule <code>needle-phased-exact-v1</code>; its full text is this section,
+and the protocol carries <code>sizing_rule_sha256</code> over the frozen
+rule text constant in <code>needle.py</code> (the multiturn
+<code>template_digest</code> pattern — a bare version number binds
+nothing). The filler stream is <code>NEUTRAL_CORPUS</code> cycled in
+order, six cycles (426 sentences), sentences consumed in
+stream order: a span is <code>span_text</code> over the stream (distract's
+whole-sentences-plus-one-truncated-suffix construction), and
+the next span continues at the sentence after the previous
+span's last whole sentence (a truncated sentence counts as
+consumed). One corpus pass is ≈1,278 tokens under a typical
+tokenizer, so a 4096 bulk wraps the stream about 3.2 times —
+each sentence appears three or four times in a 4096 bulk,
+a stated property of the arm.</p>
+<p>Phases per treated cell: (1) prefix search — candidates from
+<code>span_candidates</code> (distract's closeness order; the estimate
+orders, never decides) targeting the depth offset; a probe is
+the candidate's arm-context render (prefix + needle +
+question) plus its comparator render (prefix + question);
+the first prefix whose <code>D</code> equals the target wins. Depth 0
+takes the empty prefix with no search. (2) suffix search —
+candidates continuing the stream, targeting the remaining
+delta; a probe is the full arm render; the first suffix
+satisfying the delta equality (with <code>D</code> re-verified on the
+same ids) wins. Depth 100 takes the empty suffix. Duplicate
+adds a middle phase between (1) and (2): candidates
+continuing the stream targeting needle 2's offset, probed as
+(prefix + needle + middle + needle + question) plus its
+comparator; then the suffix phase targets the duplicate delta
+equality, re-verifying both offsets on the final ids.</p>
+<p>Encode budget <code>SIZING_ENCODE_BUDGET = 512</code> per cell, counting
+every probe encode in the phases (a phase-1 probe is 2
+encodes; a suffix/middle probe is 1, plus its comparator in
+the middle phase). The cached <code>Q</code>/<code>Z</code> renders and an accepted
+prefix's comparator are infrastructure, computed once per
+(candidate, case[, prefix]) and not counted; the joint final
+verification reuses the accepted construction's renders and
+adds no encodes. The chars-per-token estimate is measured
+once per stage from the corpus under the run's backend
+(distract precedent); it affects search order only, so
+budget-edge <code>arm_unmatchable</code> outcomes are
+backend-determined — stated, not hidden. Executed feasibility
+(coordinator and red-team B, independently): the full
+word/char grid at both doses and all depths accepts well
+inside budget (worst observed 257 encodes); merging-tokenizer
+residue is reject-mode (unmatchable), not wrong-accept, once
+<code>D</code> is the anchor.</p>
+<p>One liveness limit is structural, found by executing the
+built stage against a merge-dense digraph tokenizer: every
+span is a prefix of its stream segment, so the rendered
+delta is a single step function of span length, and where a
+span's last character toggles a seam merge (a trailing space
+that merges with the following text, lost as the span grows
+past it) the step is +2 — the walk steps <em>over</em> the target
+and no span at any length hits it for that cell. Those cells
+are <code>arm_unmatchable</code> (about 30% of cells under the
+adversarial digraph tokenizer in the cycle-191 tests, 0%
+under word and byte tokenizers); the step-skip can only ever
+remove cells, never corrupt one — every accepted cell still
+satisfies both equalities on its final render, and the
+readouts run over recorded cells with printed denominators.</p>
+<p>Per-cell screening runs on the filler texts only (the needle
+is the plant): filler containing the case value or the
+candidate's decoded boundary text makes the cell
+<code>arm_screened</code>. Stage-level, the frozen texts (fact template
+with slots emptied, topics, words, corpus) are audited for
+special-token literals against every candidate format before
+any generation; a hit fails the whole stage closed
+(<code>needle_screen_failed</code>) because it would forge turn structure
+in every cell — the multiturn settlement. The screening rule
+is likewise carried as <code>screening_rule_sha256</code> over its frozen
+text in <code>needle.py</code>: per-span, case-folded, the value screen
+and the boundary-text screen of this paragraph.</p>
+<p>Cell detail vocabulary is frozen: <code>""</code>, <code>arm_unmatchable</code>,
+<code>arm_screened</code>, <code>arm_context_exceeded</code>,
+<code>arm_evaluation_failed</code>; a cell is present exactly when its
+detail is <code>""</code>. Stage details: <code>needle_record_budget_exceeded</code>,
+<code>needle_screen_failed</code>, <code>cancelled</code>; the payload-level
+fail-closed form is <code>{"available": false, "detail":
+"needle_unavailable"}</code>.</p>
+<h2 id="claims-and-denominators">Claims and denominators<a class="headerlink" href="#claims-and-denominators" title="Permanent link">&para;</a></h2>
+<p>Every rate travels with its denominator; readouts are
+withheld, never zeroed. One <strong>headline population</strong> per dose
+keeps every comparative readout like-for-like: the cases
+where <em>every</em> candidate in the run passed <code>dose_0</code> with all
+five depth cells at that dose recorded. (Per-candidate
+populations were rejected on red-team execution: a flat
+per-candidate curve could coexist with a +0.50 deficit over a
+differently-conditioned subset, and per-candidate deficits
+over different residues are not the comparison this probe
+exists to make.)</p>
+<ul>
+<li>Curves: per dose, per depth, <code>n_pass / n_population / rate</code>
+  over the headline population — one denominator per dose,
+  shared by all depths and all candidates. A flat curve over
+  this population makes the deficit exactly zero, by
+  construction.</li>
+<li><code>mid_depth_deficit</code> per dose: <code>(rate(0%) + rate(100%))/2 −
+  rate(50%)</code> over the headline population — <em>Lost in the
+  Middle</em>'s functional form (edge mean minus middle),
+  credited, not renamed. Withheld (<code>None</code>) when the headline
+  population is below <code>MIN_HEADLINE_POPULATION = 6</code>.</li>
+<li><code>first_failure</code> per dose: over the headline population,
+  counts of the first failing depth in 0→100 order, plus
+  <code>n_no_failure</code>; withheld with the deficit.</li>
+<li>Dose-0 control per candidate: recorded/pass counts and rate
+  over the 20 cases (the candidate's own control level; not
+  part of the headline population arithmetic).</li>
+<li><code>false_recall</code> per dose per candidate: evaluable count,
+  false-pass count, rate from that dose's absent cell (own
+  recorded cells — a within-candidate floor, denominators
+  printed).</li>
+<li><code>duplicate</code> per dose per candidate, over its own population
+  (dose_0 pass ∧ duplicate recorded ∧ the 25% and 75% cells at
+  that dose recorded): pass count/rate; the independence
+  baseline <code>1 − (1 − r25)(1 − r75)</code> from the same population's
+  single-needle rates, and <code>excess_over_independence</code> —
+  printed as a descriptive contrast under a stated modelling
+  assumption, not a test; plus mid-fail rescue counts
+  (depth-50 fail ∧ duplicate pass) and the rescue rate over
+  mid-fails (<code>None</code> when there are none).</li>
+<li>Selection per cell key (all fifteen): the conservative rule
+  over candidates on that cell's completed case set, withheld
+  — decision <code>unavailable</code>, detail
+  <code>selection_withheld_mismatched_sets</code> — when a completed set
+  is empty or the sets differ across candidates. <code>flip</code>
+  compares the cell's outcome to the <code>dose_0</code> selection
+  <strong>recomputed on the same completed set</strong> (a paired-restricted
+  baseline; comparing against the full-set dose-0 outcome
+  would mix set differences into the flip), and is <code>None</code>
+  when either side is withheld. The <code>dose_0</code> condition entry
+  reports the selection over its own completed set with
+  <code>flip: false</code> when not withheld.</li>
+</ul>
+<p>There is no summary classification and no latency claim of any
+kind (the cycle-179 closure: depth curves are verdict curves).
+The falsification reading is stated, not encoded: a candidate
+whose curve is flat across depths at both doses — no depth
+effect beyond its own false-recall floor — falsifies "this
+template exhibits position-dependent recall" for that
+candidate, and the section prints the curve either way. Two
+scope limits are part of the readout, not footnotes: the
+filler is topically <em>dissimilar</em> prose (Chroma showed similar
+distractors hurt more, so these curves are a lower bound on
+position effects under realistic retrieval bulk), and each
+cell is one greedy generation — the curve is a 5-point sample
+of position, with per-depth resolution set by the headline
+population's denominator.</p>
+<h2 id="records-and-validation">Records and validation<a class="headerlink" href="#records-and-validation" title="Permanent link">&para;</a></h2>
+<p>Payloads carry ids, counts, and digests only — never needle
+values or answer text. Each record stores the case id, topic,
+the expected answer's SHA-256 digest, and <code>question_tokens</code>
+(the length of the case's <code>Q</code> render for that candidate);
+each cell stores verdict, boundary fields, input tokens,
+answer digest, and the measured needle offsets (<code>[t]</code> treated,
+<code>[t1, t2]</code> duplicate, <code>[0]</code> for <code>dose_0</code>, <code>[]</code> for absent).
+There are no construction/seam fields: under delta acceptance
+the seam classification of earlier probes needs a new
+definition, and the offsets and deltas carry the evidence —
+silence was the one wrong option (red-team B), so the fields
+are dropped, not attested.</p>
+<p>The verdict is bound, at the multiturn standard:
+<code>verdict == (answer_digest == sha256(expected)) and
+boundary_found</code>, with the expected digest taken from the
+record and the case set mirror-regenerated by the validator
+(the cycle-187 numform F2 settlement — a payload-derived case
+hash would be tautological). The diff validator recomputes
+everything else: the case set from the protocol seed by its
+own mirror of the derivation table (fixture ids, topics, and
+expected digests, in order); the protocol fingerprint;
+cross-candidate fixture order; the cell identities — treated
+<code>input_tokens − dose_0.input_tokens == dose</code>, duplicate
+<code>== dose + needle_len</code> with <code>needle_len</code> derived as
+<code>dose_0.input_tokens − question_tokens</code>, absent
+<code>input_tokens − question_tokens == dose</code>; needle offsets equal
+to the frozen targets; and all aggregates and per-cell
+selection (including the paired-restricted flip baselines)
+with independent arithmetic.</p>
+<p><strong>Honesty (attested links, disclosed).</strong> Three fields are
+stage-attested, at the same standard multiturn discloses:
+the needle offsets (the validator checks them against the
+frozen targets; it has no renders and cannot re-derive them —
+a stage that wrote the targets without measuring would pass,
+which is why the stage's measurement is itself test-pinned
+against scripted tokenizers); the absolute level of
+<code>input_tokens</code> (every identity is a difference, and unlike
+distraction — whose native counts anchor in the recorded
+primary run — needle's dose-0 is stage-generated, so no
+external anchor exists); and <code>question_tokens</code> in the corner
+where both absent cells of a record are unrecorded (one
+unobserved degree of freedom shared with the derived
+<code>needle_len</code>; it feeds no aggregate). The digest-only verdict
+binding proves internal consistency, not that a generation
+occurred — the multiturn standard, one step below
+numform-190's answer-text binding, and stated as such.
+Needle cells are generations on generated fixtures, not
+recorded search observations, so they are outside
+<code>verify --determinism</code> scope (the multiturn settlement).</p>
+<h2 id="cost">Cost<a class="headerlink" href="#cost" title="Permanent link">&para;</a></h2>
+<p>Fifteen generations per candidate per case; 7,200 at the
+caps (24 candidates × 20 cases × 15), which is also the
+ground-record arithmetic: <code>MAX_GROUND_RECORDS = 480</code>,
+<code>GENERATION_BUDGET = 7,200</code>. Prompts reach ~4,100 bulk tokens
+at the top dose under full-prefix recompute with no KV cache;
+forwards per generation scale as M·L + M(M−1)/2 in generated
+length M and prompt length L. The CLI help states the counts,
+the forwards formula, and the <code>--max-context</code> requirement for
+the 4096 dose before the run. The run's cancel event is
+threaded dispatch → wrapper → stage → evaluate, checked
+between cases and between cells.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

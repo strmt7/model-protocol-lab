@@ -1,0 +1,3261 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Local conversation-protocol experiments with held-out evidence: exact token-sequence comparisons across chat-format families.">
+      
+      
+      
+        <link rel="canonical" href="https://strmt7.github.io/model-protocol-lab/SECURITY/">
+      
+      
+        <link rel="prev" href="../USAGE/">
+      
+      
+        <link rel="next" href="../explanation/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Security and data handling - Model Protocol Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#security-and-data-handling" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Model Protocol Lab" class="md-header__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Model Protocol Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Security and data handling
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Model Protocol Lab" class="md-nav__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Model Protocol Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#trust-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trust boundaries
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-audit-2026-10-12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security audit (2026-10-12)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security audit (2026-10-12)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#findings-and-resolutions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Findings and resolutions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#red-team-round-2026-10-12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Red-team round (2026-10-12)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#red-team-round-2-2026-10-13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Red-team round 2 (2026-10-13)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#red-team-round-3-2026-10-13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Red-team round 3 (2026-10-13)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Red-team round 3 (2026-10-13)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#red-team-round-4-final-pre-release-sweep-2026-10-16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Red-team round 4 — final pre-release sweep (2026-10-16)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#red-team-round-5-wave-2-adversarial-audit-2026-10-18" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Red-team round 5 — wave-2 adversarial audit (2026-10-18)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#proven-safe-adversarial-pocs-observed-not-inferred" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Proven safe (adversarial PoCs, observed not inferred)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Proven safe (adversarial PoCs, observed not inferred)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#residual-risks-accepted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Residual risks (accepted)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-disclosure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data disclosure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#operational-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Operational limits
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#supported-versions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported versions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verifying-a-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verifying a release
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Verifying a release">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-no-sbom-is-shipped-cycle-210-adjudication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why no SBOM is shipped (cycle 210 adjudication)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-security-and-dependency-review-cycle-215" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow security and dependency review (cycle 215)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deepsource-analysis-cycle-217" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DeepSource analysis (cycle 217)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deepsource-remediation-cycle-222" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DeepSource remediation (cycle 222)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#findings-integrity-cycle-225" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Findings integrity (cycle 225)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reporting-defects" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reporting defects
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/adr-index/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_LOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Research log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_READINESS_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release readiness 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_NOTES_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_PORTABILITY_2026-10-15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portability research (2026-10-15)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crawl4ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent tooling notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evidence notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_10" id="__nav_5_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design documents
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design documents
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ALIASING_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BATCH_PATH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CANONICALFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canonical form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHOICE_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choice audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFIDENCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DATELINE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DENSITY_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DETERMINISM_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Determinism audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DISTRACTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIELDORDER_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIXTURE_FUZZ_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HISTORYFRAME_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History frame
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRUNESWEEP_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prune sweep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONDISTANCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INVISIBLECHARS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Invisible characters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFUSABLESKELETON_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confusable skeleton
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LEADING_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Leading claim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTITURN_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEEDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEGATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NUMFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PAYLOADSERIALIZATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLACEMENT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Placement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRECISION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Precision
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REPETITION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repetition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROTATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rotation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SCORER_LENS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scorer lens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEALED_BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sealed bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SURFACE_NOISE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surface noise
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template probe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_ROBUSTNESS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template robustness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TOKENDEPTH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Token depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#trust-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trust boundaries
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-audit-2026-10-12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security audit (2026-10-12)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security audit (2026-10-12)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#findings-and-resolutions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Findings and resolutions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#red-team-round-2026-10-12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Red-team round (2026-10-12)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#red-team-round-2-2026-10-13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Red-team round 2 (2026-10-13)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#red-team-round-3-2026-10-13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Red-team round 3 (2026-10-13)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Red-team round 3 (2026-10-13)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#red-team-round-4-final-pre-release-sweep-2026-10-16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Red-team round 4 — final pre-release sweep (2026-10-16)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#red-team-round-5-wave-2-adversarial-audit-2026-10-18" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Red-team round 5 — wave-2 adversarial audit (2026-10-18)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#proven-safe-adversarial-pocs-observed-not-inferred" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Proven safe (adversarial PoCs, observed not inferred)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Proven safe (adversarial PoCs, observed not inferred)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#residual-risks-accepted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Residual risks (accepted)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-disclosure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data disclosure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#operational-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Operational limits
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#supported-versions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supported versions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verifying-a-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verifying a release
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Verifying a release">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-no-sbom-is-shipped-cycle-210-adjudication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why no SBOM is shipped (cycle 210 adjudication)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-security-and-dependency-review-cycle-215" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow security and dependency review (cycle 215)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deepsource-analysis-cycle-217" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DeepSource analysis (cycle 217)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#deepsource-remediation-cycle-222" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DeepSource remediation (cycle 222)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#findings-integrity-cycle-225" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Findings integrity (cycle 225)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reporting-defects" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reporting defects
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="security-and-data-handling">Security and data handling<a class="headerlink" href="#security-and-data-handling" title="Permanent link">&para;</a></h1>
+<h2 id="trust-boundaries">Trust boundaries<a class="headerlink" href="#trust-boundaries" title="Permanent link">&para;</a></h2>
+<p>Treat checkpoints, tokenizer files, fixtures, generated text and reports as separate trust boundaries. Local-only loading and safetensors reduce exposure; they do not make arbitrary files, native dependencies or GPU drivers safe. Run unfamiliar model assets in an appropriately isolated environment with resource limits.</p>
+<p>Use trusted, immutable checkpoint directories. Do not grant this process unnecessary filesystem or network access. The adapter requests local-only model resolution, disables remote model code and rejects pickle weight layouts; runtime network isolation is verified by <code>test_no_network_access_during_doctor_and_backend_init</code>. Run <code>doctor</code> on any unfamiliar checkpoint before evaluation; it validates assets without loading weights.</p>
+<h2 id="security-audit-2026-10-12">Security audit (2026-10-12)<a class="headerlink" href="#security-audit-2026-10-12" title="Permanent link">&para;</a></h2>
+<p>A full audit was conducted against this tree and every finding was resolved or
+explicitly accepted below. Methodology: <code>pip-audit 2.10.1</code> (OSV DB) on the
+installed dependency set; <code>bandit 1.9.4</code> on <code>model_protocol_lab/</code>; ruff
+flake8-bandit (<code>S</code>) rules in CI; manual line-by-line review of all package
+modules; adversarial PoCs (XSS payloads through <code>render_html</code>, path-traversal
+names through <code>_member</code>, 100 kB ReDoS probes, deeply-nested/NaN JSON through
+the dataset loader). <code>semgrep</code> could not run (sandbox <code>/tmp</code> exhaustion);
+bandit + ruff <code>S</code> + manual review covered the same ground.</p>
+<h3 id="findings-and-resolutions">Findings and resolutions<a class="headerlink" href="#findings-and-resolutions" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Severity</th>
+<th>Finding</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F1</td>
+<td>Medium</td>
+<td>No lockfile/hashes; <code>torch&gt;=2.6</code> unbounded — fresh installs trust PyPI tip-of-range.</td>
+<td>Upper-bound discipline documented; <code>pip-audit</code> runs as a CI gate (<code>security</code> job) on every build; torch CVE posture tracked below. <code>torch</code> capped <code>&lt;3</code> in cycle 201 (2026-10-23); the lockfile gap remains accepted (residual 2).</td>
+</tr>
+<tr>
+<td>F2</td>
+<td>Low</td>
+<td><code>pip-audit</code> cannot see <code>torch 2.14.1+cpu</code> (local version tag).</td>
+<td>Manual CVE review 2026-10-12: postdates fixes for CVE-2025-3000 and CVE-2025-32434; CVE-2026-4538 (<code>torch.export.load</code>) is not reachable — the codebase never calls <code>torch.export.load</code>/<code>torch.load</code>; weights load only via <code>from_pretrained(use_safetensors=True, weights_only=True)</code>. Re-verify on every torch bump.</td>
+</tr>
+<tr>
+<td>F3</td>
+<td>Low</td>
+<td>Report files created with default umask (0644) — readable by other local users.</td>
+<td>Fixed: <code>save_report</code> now creates the directory with <code>0o700</code> and files with <code>0o600</code>, using <code>O_EXCL</code> exclusive creation. Regression test asserts the modes.</td>
+</tr>
+<tr>
+<td>F4</td>
+<td>Info</td>
+<td><code>_read_json</code> caps JSON at 128 MB but HF re-reads <code>tokenizer.json</code> uncapped.</td>
+<td>Fixed: <code>stat()</code> size check (128 MB) on <code>tokenizer.json</code> before <code>PreTrainedTokenizerFast</code> loads it; sparse-file regression test.</td>
+</tr>
+<tr>
+<td>F5</td>
+<td>Info</td>
+<td>Deeply nested JSON raised bare <code>RecursionError</code>, not <code>ValueError</code>.</td>
+<td>Fixed: caught and re-raised as <code>ValueError("Dataset nesting too deep")</code>.</td>
+</tr>
+<tr>
+<td>F6</td>
+<td>Info</td>
+<td><code>load_dataset</code> on a TTY/char device could block indefinitely.</td>
+<td>Fixed: refuse character/block devices with <code>ValueError</code>. Superseded by H1 (2026-10-12): FIFOs, sockets and directories are now refused too; only regular files are accepted.</td>
+</tr>
+<tr>
+<td>F7</td>
+<td>Low</td>
+<td>CI used mutable action tags and had no audit gate.</td>
+<td>Fixed: actions pinned to SHAs; new <code>security</code> CI job runs <code>pip-audit</code> (after <code>pip install -U pip setuptools</code>) and <code>bandit</code>, both gating.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="red-team-round-2026-10-12">Red-team round (2026-10-12)<a class="headerlink" href="#red-team-round-2026-10-12" title="Permanent link">&para;</a></h3>
+<p>An adversarial review round found 1 high, 1 medium and 4 low issues; all
+fixed with regression tests:</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Severity</th>
+<th>Finding</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>H1</td>
+<td>High</td>
+<td>F6 was fixed incompletely: a named FIFO with no writer hangs <code>load_dataset</code> forever (no timeout), contradicting F6's own rationale.</td>
+<td>Fixed: <code>load_dataset</code> now opens with <code>O_NONBLOCK</code> and <code>fstat</code>s the fd, refusing everything that is not a regular file (char/block devices, FIFOs, sockets, directories). The fd-based check also closes the stat→open TOCTOU. Watchdog-thread regression test proves no hang.</td>
+</tr>
+<tr>
+<td>M1</td>
+<td>Medium</td>
+<td>Output-path failures surfaced only after the expensive run; the completed result was discarded with it.</td>
+<td>Fixed: the CLI claims the output directory (via new <code>prepare_report_dir</code>) before backend init; on any failure before the report is saved the empty dir is released so retries still see a fresh path. Regression tests cover init failure and path-through-file.</td>
+</tr>
+<tr>
+<td>L1</td>
+<td>Low</td>
+<td>Empty <code>expected</code> answers are trivially satisfiable (a backend emitting only the boundary passes) with no warning.</td>
+<td>Fixed: <code>inspect</code> and <code>run</code> now warn on stderr naming the vacuous fixtures; documented in <code>docs/USAGE.md</code>.</td>
+</tr>
+<tr>
+<td>L2</td>
+<td>Low</td>
+<td><code>candidate_fingerprint</code> was syntactic: <code>repeat_bos=True</code> with <code>bos=""</code> fingerprinted differently from <code>repeat_bos=False</code>, contradicting <code>local_repairs</code>' own dedup notion of identity.</td>
+<td>Fixed: the fingerprint payload is normalized exactly like the dedup key.</td>
+</tr>
+<tr>
+<td>L3</td>
+<td>Low</td>
+<td>Intermediate report parent dirs were 0o755, overstating the "readable only by the invoking user" claim.</td>
+<td>Fixed: <code>prepare_report_dir</code> chmods every created path component to 0o700; regression test asserts all components.</td>
+</tr>
+<tr>
+<td>L4</td>
+<td>Low</td>
+<td><code>doctor</code>'s <code>tokenizer_deep</code> failure interpolated raw dependency exception text into machine-readable output — the one hole in the sanitized-error discipline.</td>
+<td>Fixed: maps to the fixed code <code>tokenizer_deep_check_failed</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>The red team also verified dynamically (socket firewall raising on any
+<code>connect</code>) that <code>doctor</code>, backend init and generation perform zero network
+access — this retires residual risk #4 below. A regression test
+(<code>test_no_network_access_during_doctor_and_backend_init</code>) now guards it.</p>
+<p><code>pip-audit</code> raw results: 6 vulns in <code>pip 24.0</code> and 2 in <code>setuptools 78.1.0</code>
+(install-time tools only; the package has zero runtime dependencies) —
+resolved by upgrading (<code>pip install -U pip setuptools</code>); post-upgrade audit is
+clean. <code>transformers 5.19.0</code>, <code>safetensors 0.8.0</code>, <code>tokenizers 0.23.3</code> audited
+clean.</p>
+<h3 id="red-team-round-2-2026-10-13">Red-team round 2 (2026-10-13)<a class="headerlink" href="#red-team-round-2-2026-10-13" title="Permanent link">&para;</a></h3>
+<p>A second adversarial round probed novel vectors only (round-1 vectors were not
+re-tested). 9 of 10 vectors came back defended with PoC evidence: path
+traversal variants (<code>../</code>, absolute, <code>..\</code>, URL-encoded, null bytes — IDs never
+reach the filesystem); symlink TOCTOU (16,731 file↔symlink swaps: 6,480 clean
+loads, 14,791 sanitized <code>ValueError</code>s, zero unexpected exceptions, zero hangs);
+malicious fixtures (200k-deep nesting, duplicate keys, <code>NaN</code>/<code>Infinity</code>, 50 MB
+strings, invalid UTF-8 — all rejected; control chars and lone surrogates flow
+safely via <code>ensure_ascii</code> JSON and HTML escaping); HTML injection round 2 (12
+hostile payloads through the full pipeline: zero raw payloads in <code>report.html</code>;
+CSP verified byte-for-byte; <code>frame-ancestors</code> cannot be expressed via meta tag
+— noted limitation); concurrent runs (atomic <code>mkdir(exist_ok=False)</code> + <code>O_EXCL</code>
+prevent corruption; loser fails fast); resource exhaustion (caps exact,
+cooperative cancellation measured at 0.41 s into a ~18 s run, flat memory);
+CLI edge cases (<code>/</code>, <code>/dev/null</code>, dangling symlinks, fullwidth digits, 5000-digit
+ints — all clean argparse errors); tempfile hygiene (zero <code>tempfile</code> usage;
+reports written directly with <code>O_EXCL</code>). Two genuine findings, both fixed:</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Severity</th>
+<th>Finding</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>U1</td>
+<td>Low–Medium</td>
+<td>Unicode normalization evasion: NFD/NFC variants of the same visual string (e.g. <code>café</code> vs <code>café</code>) evaded the fixture-ID uniqueness and cross-split identical-message checks, allowing silent held-out contamination.</td>
+<td>Fixed: <code>Split.__post_init__</code> compares NFC-normalized keys for IDs, groups and message contents; stored fixture data stays byte-exact so the exact-token-sequence principle is preserved. Homoglyph/confusable detection is out of scope (no normalization form unifies those) and is documented in <code>core.py</code>. Regression tests cover ID, message and group variants.</td>
+</tr>
+<tr>
+<td>T1</td>
+<td>Low</td>
+<td>Terminal escape injection: <code>inspect</code>/<code>run</code> interpolated raw fixture IDs into stderr warnings, so a hostile fixture file could rewrite the operator's terminal title or clear the screen.</td>
+<td>Fixed: control characters (C0/C1) are stripped from IDs before display in both warnings (<code>cli._display_id</code>). Regression test asserts no ESC bytes on stderr.</td>
+</tr>
+</tbody>
+</table>
+<p><code>doctor</code>'s machine-readable output was additionally reviewed: checkpoint-controlled
+strings there are always emitted through <code>json.dumps</code> (<code>ensure_ascii=True</code>),
+which neutralizes terminal escapes — no change needed.</p>
+<h3 id="red-team-round-3-2026-10-13">Red-team round 3 (2026-10-13)<a class="headerlink" href="#red-team-round-3-2026-10-13" title="Permanent link">&para;</a></h3>
+<p>A third adversarial round targeted the five new round-3 capabilities plus
+re-verification of every documented command. Novel vectors only; round-1/2
+vectors were covered by the regression suite. Five genuine findings, all
+fixed with regression tests:</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Severity</th>
+<th>Finding</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>H3-1</td>
+<td>High</td>
+<td><code>_hf_overhang_match</code> (the <code>StopStringCriteria</code> port behind the stop matrix) missed the tensor implementation's end-overlap class where the stop string ends <em>inside</em> the final token (e.g. token <code>" world"</code>, stop <code>"or"</code>; token <code>"xstop"</code>, stop <code>"stop"</code>). The port only tried prefix overhangs (<code>stop[-i:] == token[:i]</code>), so the stop matrix systematically under-reported HF stops. Found by differential testing against the real <code>transformers</code> criterion (18/300 random trials diverged, all lab-miss-real-fire).</td>
+<td>Fixed: the port now mirrors <code>_stop_string_get_matching_positions</code> exactly (every end-overlap from dropping <code>k</code> trailing chars of the final token, then the valid-position walk backwards). Re-verified: 1500/1500 random trials agree on a byte-level BPE tokenizer, plus an exhaustive 256-combination scan on a second vocab with zero divergences. Residual (documented): token texts come from per-token <code>decode</code> while HF matches on cleaned vocab strings / raw bytes, so UTF-8-fragment tokens can still diverge — unfixable through the <code>Backend</code> protocol.</td>
+</tr>
+<tr>
+<td>H3-2</td>
+<td>Medium</td>
+<td><code>template_diff</code> is super-quadratic on adversarially fragmented inputs: an alternating equal/divergent token pattern of just n=2000 takes ~45 s (≈cubic scaling — ~6 min at n=4000), hanging <code>template_conformance</code> per (format, fixture) pair. Reachable via a hostile checkpoint template + hostile fixture.</td>
+<td>Fixed: the difflib matching-blocks loop is replicated with a 10 s wall-clock budget checked between <code>find_longest_match</code> calls (each call is linear, so the total is bounded); on expiry it raises <code>ValueError("template_diff_too_fragmented")</code>, which the existing per-pair handler degrades to <code>"unavailable"</code>. Output is byte-identical to unbounded difflib on 400 randomized inputs; ordinary 20K-token diffs still complete in ~0.1 s.</td>
+</tr>
+<tr>
+<td>H3-3</td>
+<td>Medium</td>
+<td><code>doctor</code>'s reference-model path (<code>_portability_check</code>) and <code>template_conformance</code> loaded <code>tokenizer.json</code> through <code>PreTrainedTokenizerFast</code> with <strong>no</strong> 128 MB pre-load cap — the round-1 fix applied only to <code>LocalHFBackend</code>. A swapped-in oversized <code>tokenizer.json</code> in a reference checkpoint is parsed into memory uncapped (PoC: 200 MB sparse file triggered a real loader call).</td>
+<td>Fixed: new <code>_tokenizer_file()</code> helper enforces the cap before every HF loader call site (reference portability, primary deep check, conformance); oversized files degrade to the fixed <code>"skipped"</code>/<code>"unavailable"</code> codes without parsing. Sparse-file regression tests assert the loader is never invoked.</td>
+</tr>
+<tr>
+<td>H3-4</td>
+<td>High</td>
+<td>A hostile Jinja <code>chat_template</code> in <code>tokenizer_config.json</code> renders unbounded text: <code>{{ 'x' * 100000000 }}</code> OOM-killed the <code>template_conformance</code> worker (exit 137) during render/encode — no exception, the process dies.</td>
+<td>Fixed: the template source is capped at 1 MB chars (<code>"unavailable"</code> / <code>"chat_template_too_large"</code>) and every rendered output at 1 MB chars (pair degrades to <code>"unavailable"</code> instead of encoding the bomb). Regression tests assert both degradations and that the loader/encoder never sees the bomb. Residual: CPU burn <em>inside</em> the Jinja render itself is the same exposure as HF's own <code>apply_chat_template</code> — run unfamiliar checkpoints with resource limits (see trust boundaries).</td>
+</tr>
+<tr>
+<td>H3-5</td>
+<td>Medium</td>
+<td>The round-3 test file broke the <code>[dev]</code>-only suite: 7 test classes import <code>tokenizers</code>/<code>transformers</code> at test time with no skip guard, so the README quick-start path (<code>pip install -e ".[dev]"</code>) errored instead of skipping. (Round 2 had validated that path green before <code>test_round3.py</code> existed.)</td>
+<td>Fixed: <code>HAS_HF</code> module guard + <code>@unittest.skipUnless</code> on the seven HF-dependent classes, restoring <code>[dev]</code>-only to skip-clean.</td>
+</tr>
+</tbody>
+</table>
+<p>Probed and verified defended (PoC evidence, no change needed):</p>
+<ul>
+<li><strong>XSS via hostile candidate names:</strong> 5 hostile payloads (<code>&lt;script&gt;</code>, <code>&lt;img onerror&gt;</code>, <code>&lt;svg onload&gt;</code>, entity/quote breaking, <code>{{7*7}}</code>) through <code>run_experiment</code> → <code>save_report</code> → <code>render_html</code>, plus hostile names injected into all four new sections (conformance, stop matrix, sweep, taxonomy banner): zero raw payloads in <code>report.html</code>; <code>{{7*7}}</code> renders as inert text (no HTML metacharacters). New regression test pins this.</li>
+<li><strong><code>doctor --reference-model</code> traversal/symlink:</strong> the asset name is the fixed literal <code>"tokenizer.json"</code> (<code>_member</code> rejects <code>..</code>/separators/symlinks); a symlinked <code>tokenizer.json</code> → <code>"skipped"</code>; a symlink loop → <code>"skipped"</code> (no hang); a symlinked <em>directory</em> resolves per operator choice and works. No traversal possible by construction.</li>
+<li><strong><code>truncate_text_tail</code>:</strong> 20 adversarial cases (multi-byte splits, emoji, flag grapheme clusters, combining marks, empty/negative/bool inputs, lone-surrogate input): never emits lone surrogates (decode either succeeds to a valid <code>str</code> or the cut degrades to <code>None</code>); lone-surrogate input raises <code>UnicodeEncodeError</code>, a <code>ValueError</code> subclass, consistent with the contract. Grapheme-cluster splits stay at codepoint granularity as documented.</li>
+<li><strong><code>prompt_sensitivity_sweep</code>:</strong> compute bounded (<code>max_drop_bytes</code> 1–8 enforced in CLI and function; depth count == bound); pre-cancelled sweep returns in 0.00 s (cancellation honored through every <code>run_experiment</code>); codepoint-splitting depths record the documented <code>"failed"</code> decision.</li>
+<li><strong><code>failure_taxonomy</code>:</strong> 17 adversarial observation shapes (backend-error priority, cancelled grouping, mismatch-before-EOS priority, corrupt <code>output_ids</code>, empty dict, falsy non-bools) all classify as documented; non-dict input rejected.</li>
+<li><strong><code>check_boundary_portability</code>:</strong> raising/lying <code>secondary_encode</code> callables degrade to the fixed <code>secondary_encode_failed</code> / <code>secondary_encode_invalid</code> codes, never raise.</li>
+<li><strong>vLLM emulation vs the real <code>vllm/v1/engine/detokenizer.py</code>:</strong> the <code>find</code> window, earliest-completion selection, <code>bisect_left</code> truncation and <code>stop_buffer_length</code> semantics all match the fetched upstream source; the <code>new_char_count == 0</code> early-return is now ported too -- the old "cannot observably diverge" claim was wrong: for single-character stops (e.g. <code>"\n"</code>) the window start <code>1 - len(stop)</code> is 0 on a zero-new-char step, so a stop completed during the <code>min_tokens</code> gate was refound where upstream stays silent (found by the <code>tests/test_cycle14_holdback.py</code> differential harness, fixed 2026-10-15). Approximation documented: per-prefix batch decodes vs incremental <code>DecodeStream</code> (can differ on UTF-8 fragments), <code>min_tokens=0</code> assumed.</li>
+<li><strong>Old surfaces:</strong> fixture-loading hostile inputs, report-dir permissions and the sanitized error vocabulary re-verified via the full suite (361 tests); new code paths emit only fixed-vocabulary details (int step counts, int ID lists) — no raw checkpoint/backend text.</li>
+</ul>
+<h4 id="red-team-round-4-final-pre-release-sweep-2026-10-16">Red-team round 4 — final pre-release sweep (2026-10-16)<a class="headerlink" href="#red-team-round-4-final-pre-release-sweep-2026-10-16" title="Permanent link">&para;</a></h4>
+<p>Three parallel adversarial agents probed novel surfaces only (rounds 1–3
+vectors were covered by the regression suite): the <code>model-protocol-lab debug</code> REPL + CLI
+input handling, <code>doctor</code>/<code>examine_model</code> hostile checkpoints, and the
+scoring / report-diff / backend-emulation modules. Eight genuine findings,
+all fixed with regression tests in <code>tests/test_cycle96_redteam_sweep.py</code>:</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Severity</th>
+<th>Finding</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R4-1</td>
+<td>Medium</td>
+<td>Lone surrogates (<code>\ud800</code>) in hostile <code>results.json</code> / fixture content crashed strict stream writes: <code>model-protocol-lab diff-reports</code> died with uncaught <code>UnicodeEncodeError</code> on stderr, and the debug REPL session died (violating its "never die" invariant). The <code>_CONTROL_CHARS</code> sanitizers did not cover <code>\ud800–\udfff</code>.</td>
+<td>All four <code>_CONTROL_CHARS</code> regexes (<code>debug.py</code>, <code>cli.py</code>, <code>diffreports.py</code>, <code>fixtures.py</code>) now strip lone surrogates; astral characters (single codepoints) are unaffected.</td>
+</tr>
+<tr>
+<td>R4-2</td>
+<td>Medium</td>
+<td><code>BaseException</code> from a misbehaving backend escaped the sanitization boundary: <code>core.evaluate</code> (<code>except Exception</code> around <code>backend.generate</code>) and <code>scoring.score_target_logprobs</code> (<code>except Exception</code> around <code>forward_logits</code>) propagated, turning an hours-long run into a total loss instead of one failed observation.</td>
+<td>Both sites now catch <code>BaseException</code> and map to the fixed codes (<code>generate_failed</code> / <code>forward_failed</code>), with explicit re-raise of <code>KeyboardInterrupt</code>/<code>SystemExit</code> so Ctrl+C keeps working.</td>
+</tr>
+<tr>
+<td>R4-3</td>
+<td>Medium</td>
+<td>Raw <code>RecursionError</code> escaped <code>examine_model</code> via a deeply-nested safetensors header (<code>doctor._check_weight_headers</code>): <code>json.loads</code> was wrapped in <code>except (UnicodeDecodeError, json.JSONDecodeError)</code> only, unlike <code>_read_json</code> which also catches <code>RecursionError</code>.</td>
+<td>Added <code>RecursionError</code> to the except tuple, mirroring <code>_read_json</code>.</td>
+</tr>
+<tr>
+<td>R4-4</td>
+<td>Medium</td>
+<td>FIFO-swap hang: <code>_read_json</code>, <code>_manifest</code> (backends.py) and <code>_check_weight_headers</code> (doctor.py) used plain blocking <code>open()</code> after validation, so a FIFO swapped in for an asset hung the opener forever. The race window spans the whole weight-hashing phase.</td>
+<td>New shared <code>_open_regular_read()</code> helper: <code>O_NONBLOCK</code> open + <code>fstat</code> <code>S_ISREG</code> check on the fd (the <code>datasets.py</code> pattern); <code>_manifest</code> now fstats the opened fd for its before-snapshot. All three call sites fail closed with fixed vocabulary.</td>
+</tr>
+<tr>
+<td>R4-5</td>
+<td>Medium</td>
+<td>Jinja chat-template memory bomb: <code>template_conformance</code> called <code>apply_chat_template</code> which materializes the full rendered string <em>before</em> the 1MB <code>_RENDERED_MAX_CHARS</code> check -- a 26-byte <code>{{ 'x' * 500_000_000 }}</code> template grew RSS by 1.9GB first (larger multipliers OOM-kill).</td>
+<td>The render now runs under a transient <code>RLIMIT_AS</code> (current virtual size + 256MB headroom): a bomb raises catchable <code>MemoryError</code> -&gt; <code>"unavailable"</code> with zero RSS growth; legitimate renders unaffected. Falls back to unbounded render on non-Unix platforms.</td>
+</tr>
+<tr>
+<td>R4-6</td>
+<td>Low–Medium</td>
+<td><code>portability_matrix</code> raised raw <code>OSError</code> on an unreadable second checkpoint (<code>_read_json</code> wrapped in <code>except ValueError</code> only), breaking its "never raises for checkpoint problems" contract for direct API users.</td>
+<td>Now catches <code>OSError</code> -&gt; <code>"unavailable"</code> / <code>"missing_or_unsafe_asset"</code>.</td>
+</tr>
+<tr>
+<td>R4-7</td>
+<td>Low</td>
+<td>Unbounded checkpoint-controlled <code>model_type</code> interpolated into machine-readable output (<code>f"unsupported model_type: {model_type!r}"</code>): a 5MB <code>model_type</code> produced a 5MB detail string, breaking the fixed-vocabulary discipline.</td>
+<td>Preview truncated to 200 chars.</td>
+</tr>
+<tr>
+<td>R4-8</td>
+<td>Low</td>
+<td>Quadratic transcript accounting in the debug REPL: <code>onecmd</code> re-summed the entire transcript on every command (~20s for a 10k-line script at the advertised caps).</td>
+<td>Running <code>self._transcript_chars</code> counter, recomputed only on truncation.</td>
+</tr>
+</tbody>
+</table>
+<p>Probed and verified defended (PoC evidence, no change needed): <code>.read</code>
+recursion/nesting (14 sub-probes), hostile renders (escape stripping at
+byte level), <code>.save</code> path handling, <code>_parse_id_list</code> strictness, the 128MB
+tokenizer cap on the debug path, argparse edges on all subcommands,
+<code>_build_primary_tokenizer</code> hostiles, symlink/special-file games,
+<code>examine_dataset</code> hostiles, scoring NaN/inf/empty/shape edges,
+<code>diffreports</code>/<code>diffbackends</code> hostile inputs (40MB files, 10k nesting,
+duplicate keys, FIFOs), SGLang/HF/vLLM emulation bounds, and
+<code>experiments.py</code> cancellation/corruption handling.</p>
+<h4 id="red-team-round-5-wave-2-adversarial-audit-2026-10-18">Red-team round 5 — wave-2 adversarial audit (2026-10-18)<a class="headerlink" href="#red-team-round-5-wave-2-adversarial-audit-2026-10-18" title="Permanent link">&para;</a></h4>
+<p>Six read-only specialists (security red-team A, adversarial red-team B
+tasked with <em>disproving</em> A's findings, cross-verifier, perf, researcher,
+docs-coherence) audited the cycles 134–144 feature code with a mandatory
+cross-check protocol. 10 CONFIRMED findings; the builder re-verified
+each against the current tree before fixing (cycle 145):</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Severity</th>
+<th>Finding</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C1</td>
+<td>High</td>
+<td><code>margin_trajectory</code> still O(B·C) quadratic: the point cap bounds total points, not candidates — C candidates × 1 point each projected to ~1–2h per <code>diff-reports</code> pair on a hostile few-MB payload (measured ~4.1× per doubling by two agents).</td>
+<td>Restructured to an O((E+B) log (E+C)) event sweep with a lazily-deleted leader heap; 0/1400 differential mismatches vs the old sweep; C=2000 in 0.008s (was ~1.4s). Perf regression test pins subquadratic scaling.</td>
+</tr>
+<tr>
+<td>C2</td>
+<td>Low</td>
+<td>Raw <code>old_decision</code>/<code>new_decision</code> interpolation injected terminal escapes into stderr in the transfer/robustness/perturbation drift renderers, falsifying <code>render_summary</code>'s sanitization comment.</td>
+<td>All three wrapped in <code>_display_id</code>; sanitization tests pin escape-stripping.</td>
+</tr>
+<tr>
+<td>C3</td>
+<td>Low</td>
+<td>Non-string decision/winner/tier values crashed <code>render_summary</code> with <code>TypeError</code> (<code>_display_id</code> regex-sub on non-str), contradicting the degrade-gracefully contract.</td>
+<td><code>_display_id</code> is now total (None → "(none)", others via <code>str()</code>); non-string payloads render instead of crashing.</td>
+</tr>
+<tr>
+<td>C4/C5</td>
+<td>Low</td>
+<td><code>diff_transfer</code>/<code>diff_contamination</code> <code>changed</code> flags had unpinned disjuncts (cell-drift-only, tier-escalation-only mutants survived the suite); same gap class in <code>diff_perturbation</code>.</td>
+<td>Single-cause pinning tests for every disjunct; all five mutants re-run and killed.</td>
+</tr>
+<tr>
+<td>C6</td>
+<td>Cosmetic</td>
+<td><code>checkpoint_drift</code> renderer uncapped.</td>
+<td>Capped at 10 with "... and N more", like <code>cell_drift</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Disputed as security findings (real patterns, proven unreachable —
+JSON keys are always strings; in-repo callers pass str-keyed data):
+non-string dict keys in HTML sections, missing key-type check in
+<code>diff_boundary_audit</code>. Template firewall note (F5): the static AST
+scan misses concatenated-dunder subscripts by construction; six bypass
+payloads were thrown at the stack and all died in
+<code>ImmutableSandboxedEnvironment</code> + jinja2 3.1.6 — the "denies the RCE
+primitives" docstring now describes the static layer's actual scope.</p>
+<p>New security-relevant features since round 4, all covered above and by
+their own test suites: the <strong>template conformance firewall</strong> (cycle
+136: static Jinja AST scan denying dunder access, <code>|attr</code>, dangerous
+globals before any render; <code>doctor.template_conformance</code> refuses
+denied templates fail-closed), <strong>chat-marker isolation conformance</strong>
+(cycle 135: hostile marker strings must not become control tokens),
+and the <strong>cycle-141 hostile-input hardening</strong> (three <code>TypeError</code>
+crashes on non-string dict keys fixed fail-closed).</p>
+<h2 id="proven-safe-adversarial-pocs-observed-not-inferred">Proven safe (adversarial PoCs, observed not inferred)<a class="headerlink" href="#proven-safe-adversarial-pocs-observed-not-inferred" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>XSS:</strong> hostile payloads in every dynamic <code>render_html</code> field render fully
+  neutralized (<code>html.escape</code>, <code>quote=True</code>), including inside <code>data-sort</code>
+  attribute values; CSS classes from internal dicts; CSP <code>default-src 'none'</code>
+  with <code>script-src</code> allowlisting only the SHA-256 hash of the single fixed
+  inline table sorter; no external assets, no other <code>&lt;script&gt;</code>.</li>
+<li><strong>Path traversal:</strong> <code>_member</code> rejects <code>..</code>/separators/symlinks (regex
+  <code>^[A-Za-z0-9_.-]+$</code> + <code>is_symlink</code>/<code>is_file</code> checks); shard names constrained
+  to <code>[A-Za-z0-9_.-]+\.safetensors</code>; <code>save_report</code> writes only fixed filenames.</li>
+<li><strong>ReDoS:</strong> the two regexes are linear char classes (100 kB near-miss in ~1 ms);
+  no nested quantifiers or alternation.</li>
+<li><strong>Deserialization:</strong> <code>NaN</code>/<code>Infinity</code>/duplicate keys rejected; 2 MB cap before
+  <code>json.loads</code>; no <code>pickle</code>/<code>yaml</code>/<code>marshal</code>/<code>eval</code>/<code>subprocess</code> in the package.</li>
+<li><strong>Supply chain:</strong> the only network-adjacent calls are two <code>from_pretrained</code>
+  (<code>local_files_only=True</code>, <code>trust_remote_code=False</code>, <code>token=False</code>), one
+  <code>PreTrainedTokenizerFast(tokenizer_file=…)</code> (local file), and
+  <code>importlib.metadata.version()</code> (local). No <code>hf_hub_download</code>,
+  <code>snapshot_download</code>, sockets, or HTTP clients anywhere. This is the
+  structural defense against the CVE-2026-80047 class (transformers writing
+  remote repository code to the local module cache before the trust-consent
+  check): the lab never loads remote repositories and never enables
+  <code>trust_remote_code</code>, so the vulnerable code path is unreachable. Pinned by
+  <code>tests/test_cycle117_local_loading_invariant_audit.py</code> (AST guards:
+  no <code>trust_remote_code=True</code>, every <code>from_pretrained</code> passes
+  <code>local_files_only=True</code>, no download helpers, no truthy <code>token=</code>).
+  <strong>Deserialization:</strong> the model-weight <code>from_pretrained</code> additionally passes
+  <code>use_safetensors=True</code> (transformers never touches the pickle unpickler)
+  and <code>weights_only=True</code> (defense in depth if a fallback ever engaged),
+  and no <code>torch.load</code> / <code>pickle.load(s)</code> appears in the package. This is the
+  structural defense against the CVE-2025-32434 (torch &lt;2.6.0) and
+  CVE-2026-24747 (torch &lt;=2.9.1, fixed 2.10.0; CVSS 8.8 — the
+  <code>weights_only=True</code> unpickler itself was bypassable) classes. The
+  installed torch 2.14.1+cpu is not affected by either, but the lab's
+  defense does not depend on that: pinned by
+  <code>tests/test_cycle119_pickle_deserialization_invariant_audit.py</code>
+  (AST guards: no <code>torch.load</code>/<code>pickle.load(s)</code>; every model-weight
+  <code>from_pretrained</code> passes <code>use_safetensors=True</code> and <code>weights_only=True</code>).</li>
+<li><strong>TOCTOU:</strong> <code>_manifest</code> hashes every asset before and after HF loading and
+  compares size/mtime/ino + sha256; swaps fail closed.</li>
+<li><strong>Cancellation:</strong> the generate <code>Event</code> is checked before lock acquisition, in
+  the lock-retry loop, and between forward steps; all public caps are hard.</li>
+</ul>
+<h3 id="residual-risks-accepted">Residual risks (accepted)<a class="headerlink" href="#residual-risks-accepted" title="Permanent link">&para;</a></h3>
+<ol>
+<li>torch's <code>+cpu</code> local tag stays invisible to <code>pip-audit</code>; its CVE posture
+   needs manual re-verification on every bump.</li>
+<li>No hash-pinned lockfile: fresh installs trust PyPI within the declared
+   ranges; mitigated by the CI <code>pip-audit</code> gate. Partially tightened
+   2026-10-23 (cycle 201): the <code>hf</code> extra now caps <code>torch</code> below its next
+   major (<code>torch&gt;=2.6,&lt;3</code>, matching the existing <code>transformers&lt;6</code> cap), so
+   the largest dependency can no longer cross a major release silently;
+   the lockfile gap itself remains accepted as recorded here.</li>
+<li>~~<code>_manifest</code> reads every weight file twice per run (before/after init) —
+   hundreds of GB of I/O on very large checkpoints; documented, not a defect.~~
+   <strong>Retired 2026-10-17 (cycle 115):</strong> the backend now hashes each weight
+   file once and verifies a cheap stat fingerprint
+   (<code>st_size</code>, <code>st_mtime_ns</code>, <code>st_ino</code>) after the load; the double full-hash
+   is gone. Documented trade-off: a content swap preserving size,
+   nanosecond mtime <em>and</em> inode inside the load window would evade the
+   stat check — catching it needs the full re-hash.</li>
+<li>~~Runtime network isolation of the adapter has not been verified by test
+   (code review only).~~ <strong>Retired 2026-10-12:</strong> verified dynamically under a
+   socket firewall (zero <code>connect</code> attempts across <code>doctor</code>, backend init and
+   generation); guarded by
+   <code>test_no_network_access_during_doctor_and_backend_init</code>.</li>
+<li>The HF stop emulation matches on per-token <code>decode</code> strings while real HF
+   matches on cleaned vocab strings / raw bytes: UTF-8-fragment tokens can
+   make real HF fire where the emulation does not (verified: no divergence
+   on 1500 random byte-level trials or an exhaustive 256-combination scan
+   outside the fragment case). Unfixable through the <code>Backend</code> protocol;
+   documented in <code>docs/USAGE.md</code> §8.2.</li>
+<li>A hostile Jinja chat template can burn CPU inside the render itself
+   (transformers' sandbox restricts code execution, not resource use).
+   Template source and rendered output are capped at 1 MB each (round-3
+   fix); on Unix, in the main thread, each render additionally runs under
+   a 10 s SIGALRM wall-clock budget (<code>_render_with_time_budget</code>) and
+   aborts with <code>_RenderTimeBudgetExceeded</code>, degrading the pair to
+   <code>"unavailable"</code> (cycle-116 fix). Residual: off the main thread or on
+   non-Unix platforms the watchdog cannot be installed and the render
+   runs unbounded -- the same exposure as HF's own <code>apply_chat_template</code>.
+   Run unfamiliar checkpoints with resource limits. (Re-verified
+   dynamically in the 2026-10-22 oversight audit: rendering a
+   CPU-bomb template (a <code>{% for %}</code> loop over a 200k range, ~1.6e10
+   inner steps) from a worker thread left the render still running
+   after 16 s while the calling thread proceeded — confirming the
+   watchdog never arms off the main thread, exactly as stated here.)</li>
+<li><code>template_diff</code> degrades (not hangs) after a 10 s budget per
+   (format, fixture) pair on adversarially fragmented inputs; a fully
+   hostile checkpoint can still cost ~10 s per pair before each degrades.</li>
+<li>Invisible format characters (zero-width space, BOM, soft hyphen, word
+   joiner, ...) survive the terminal sanitizers by design: they cannot
+   reorder text or inject controls, so they are preserved for diagnostic
+   fidelity. Residual: lookalike fixture IDs (<code>admin</code> vs <code>admin\u200b</code>)
+   render identically in listings and diffs -- verify IDs byte-wise before
+   acting on them.</li>
+<li>Unicode bidi controls survive into <code>report.html</code> text: HTML-escaping
+   keeps them inert (no tag breakout, no script execution; verified
+   byte-level), so at most the operator's own local report could
+   visually spoof ordering. The terminal path strips them. Accepted.</li>
+</ol>
+<h2 id="data-disclosure">Data disclosure<a class="headerlink" href="#data-disclosure" title="Permanent link">&para;</a></h2>
+<p>No network reporting or telemetry is implemented in this package. Dependency behavior has not been audited. Default report JSON excludes raw observation arrays, but names, format strings, fingerprints, counts and decisions remain. Evidence mode retains answer text and input/output token IDs. Token IDs are not anonymization.</p>
+<p>Do not publish actual prompts, outputs, datasets, weights, local paths, credentials, account configuration or dependency diagnostic logs without reviewing them. The source archive contains synthetic examples only. <code>.gitignore</code> is a convenience, not a secret scanner or access-control boundary.</p>
+<p>The report renderer escapes displayed strings and uses a restrictive content-security policy. Browser behavior and hostile-content rendering still require testing. Do not expand it to render model output as HTML or execute supplied JavaScript. The one inline script is fixed, author-controlled and hash-pinned in the CSP; it never touches model-derived text.</p>
+<h2 id="operational-limits">Operational limits<a class="headerlink" href="#operational-limits" title="Permanent link">&para;</a></h2>
+<p>Current safeguards limit fixture size, candidate count, token output and configured context. They do not guarantee bounded memory, runtime or GPU utilization. Model loading can be expensive before evaluation starts. Cancellation does not preempt a running native operation.</p>
+<p>Do not expose the library or CLI directly as a multi-user network service. Authentication, tenant isolation, safe job scheduling, audit logging and resource enforcement are not implemented.</p>
+<h2 id="supported-versions">Supported versions<a class="headerlink" href="#supported-versions" title="Permanent link">&para;</a></h2>
+<p>Security fixes ship on the latest release line only; older lines are
+not backported. Supported Python versions are those in
+<code>pyproject.toml</code>'s <code>requires-python</code> that CI exercises (currently
+3.11, 3.12, 3.13). No response-time commitment is made for reports;
+the private reporting route below is the channel, and fixes land on
+the latest line.</p>
+<h2 id="verifying-a-release">Verifying a release<a class="headerlink" href="#verifying-a-release" title="Permanent link">&para;</a></h2>
+<p>Releases are built reproducibly and published with PEP 740
+attestations (see <code>.github/workflows/release.yml</code>). To verify an
+artifact you downloaded:</p>
+<div class="highlight"><pre><span></span><code>gh<span class="w"> </span>attestation<span class="w"> </span>verify<span class="w"> </span>&lt;artifact&gt;<span class="w"> </span>--repo<span class="w"> </span>strmt7/model-protocol-lab
+</code></pre></div>
+<p>To reproduce the artifacts yourself, build twice from the tagged
+tree with the tagged commit's timestamp as the epoch and compare
+SHA-256 hashes with the published assets:</p>
+<div class="highlight"><pre><span></span><code><span class="nv">EPOCH</span><span class="o">=</span><span class="k">$(</span>git<span class="w"> </span>log<span class="w"> </span>-1<span class="w"> </span>--format<span class="o">=</span>%ct<span class="w"> </span>&lt;tag&gt;<span class="k">)</span>
+python<span class="w"> </span>tools/release_build.py<span class="w"> </span>--source<span class="w"> </span>.<span class="w"> </span>--output<span class="w"> </span>/tmp/mpl-verify-dist<span class="w"> </span>--epoch<span class="w"> </span><span class="s2">"</span><span class="nv">$EPOCH</span><span class="s2">"</span>
+</code></pre></div>
+<p>The base wheel installs zero dependencies — check its METADATA:
+every <code>Requires-Dist</code> line is gated on an extra (<code>extra == "hf"</code>
+or <code>extra == "dev"</code>), so a plain <code>pip install</code> pulls nothing.
+The <code>[hf]</code> extra is declared as version ranges in
+<code>pyproject.toml</code>, not a lockfile;
+inventory your resolved set after installing it (for example with
+<code>pip freeze</code>) rather than trusting any bill of materials the
+release does not ship.</p>
+<h3 id="why-no-sbom-is-shipped-cycle-210-adjudication">Why no SBOM is shipped (cycle 210 adjudication)<a class="headerlink" href="#why-no-sbom-is-shipped-cycle-210-adjudication" title="Permanent link">&para;</a></h3>
+<p>No SPDX/CycloneDX bill of materials is attached to releases, by a
+twice-considered decision (cycle 208 S3, re-adjudicated on the
+procurement merits in cycle 210). A bill of materials for this wheel
+would contain exactly one package — the wheel itself — because it has
+zero runtime dependencies; the inventory information it would carry is
+already inside the artifact as METADATA, verifiable with
+<code>unzip -p dist/*.whl '*/METADATA'</code>. A bill of materials for the
+<code>[hf]</code> resolved set would be stale on arrival (version ranges) or
+would require the multi-GB CUDA download in the release job. And any
+SBOM step would live in the tag-only release job, which never runs
+until the first real release — adding a blocking third-party step
+there, unexercised, is the wrong trade. This is revisited only at the
+first release rehearsal, once the publish path has actually run.</p>
+<h3 id="workflow-security-and-dependency-review-cycle-215">Workflow security and dependency review (cycle 215)<a class="headerlink" href="#workflow-security-and-dependency-review-cycle-215" title="Permanent link">&para;</a></h3>
+<p>The workflows hold the OIDC grants (PyPI publishing, Codecov,
+Pages), so their own hygiene is enforced, not just practised.
+Workflow permissions are job-scoped: a top-level block grants at
+most <code>contents: read</code>, and every write grant sits on the one job
+that needs it, with a comment saying why. A dedicated lane lints
+<code>.github/workflows/</code> with zizmor (pinned at 1.31.1, pedantic
+persona, lowest severity and confidence floor, offline) on every
+push and pull request that touches a workflow; run locally with
+the exact CI command over the tree this cycle fixed, it reported
+no findings — the fourteen findings the same command produced
+before the fixes (five workflow-level write grants, five
+undocumented grants, one template expansion inside a run script,
+two unnamed jobs, one missing concurrency limit) were each fixed
+in the workflows themselves, with no suppressions: there is no
+zizmor config file and no inline ignore anywhere in the tree.</p>
+<p>Dependency changes get a second, separate gate: a dependency
+review runs on pull requests only (never on pushes, so it cannot
+block the push pipeline) and fails the check when a pull request
+would introduce a vulnerability of severity high or above in the
+runtime or development scopes, or a dependency under a copyleft
+license (the GPL, AGPL and LGPL families). The shipped package has
+zero runtime dependencies, so in practice the gate watches the
+dev/docs tooling and any future dependency. Two limits are the
+action's own, stated here so the gate is not over-read: a
+dependency whose license cannot be detected is reported but does
+not fail the check, and the deny-licenses option is deprecated
+upstream in the pinned v5.0.0 (functional there; a future major
+bump must re-decide the license posture rather than inherit it).</p>
+<h3 id="deepsource-analysis-cycle-217">DeepSource analysis (cycle 217)<a class="headerlink" href="#deepsource-analysis-cycle-217" title="Permanent link">&para;</a></h3>
+<p>The <a href="https://app.deepsource.com/gh/strmt7/model-protocol-lab">DeepSource GitHub integration</a>
+analyzes commits and pull requests through the <code>deepsource-io</code> GitHub
+App. The connection is app-only. Through cycle 221 there was no
+DeepSource config file in this repo and analyzer settings lived in
+the DeepSource dashboard; since cycle 222 the repo carries a
+<code>.deepsource.toml</code>, but it holds only the few settings the
+remediation below adjudicated — an exclusion for two prose files
+and two analyzer meta pins, each justified in the file itself. It is
+not a copied configuration: do not copy another repository's
+analyzer set into this repo's docs or audits. The enabled set for
+this repo is whatever its own DeepSource configuration says, and
+the inventory tool below surfaces that configuration (<code>configJson</code>)
+with every capture. Read it before asserting coverage.</p>
+<p>Retrieve the complete active default-branch inventory with
+<code>tools/deepsource_inventory.py</code>, ported verbatim from the reference
+implementation (cycle 217) except for its user-agent identity. It
+calls the documented repository occurrence API directly, needs only
+the standard library, and binds its findings to the exact commit:</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>tools/deepsource_inventory.py<span class="w"> </span>--repository<span class="w"> </span>strmt7/model-protocol-lab<span class="w"> </span>--commit<span class="w"> </span>FULL_MAIN_SHA<span class="w"> </span>--output<span class="w"> </span>out/deepsource-review
+</code></pre></div>
+<p>Use a new output directory and the full main SHA. Authenticate with
+the official CLI (<code>deepsource auth login</code>, config at
+<code>~/.deepsource/config.toml</code>) or set <code>DEEPSOURCE_TOKEN</code>; the
+environment token takes precedence. Never put a token in a command,
+a report, or Git. The tool refuses redirects, bounds each page to
+4 MiB and 45 seconds, rejects duplicate occurrence IDs, count drift,
+changed repository/commit/configuration, and unfinished analyses,
+and reconciles the collected count against the native <code>totalCount</code>
+with a final re-observation. Inspect <code>manifest.json</code> first: it must
+say <code>complete: true</code> for the intended repository and commit.
+<code>findings.json</code> is the full list; the native pages stay alongside
+it with their digests. A failed run keeps its pages and an
+incomplete manifest — that is evidence, not a zero.</p>
+<p>Two readings of DeepSource state that have already misled this
+project (2026-10-27, corrected the same evening): the absence of a
+config file does not mean the app is not installed, and the absence
+of check <em>runs</em> does not mean the app is absent — the app registers
+a check <em>suite</em> on each commit that may sit queued with zero runs.
+Read app presence from check suites, never from runs alone.</p>
+<p>Acceptance: the findings guard (<code>.github/workflows/findings-guard.yml</code>)
+fails on any DeepSource finding for the audited commit, and on more
+than two open CodeQL code findings. A dashboard aggregate count, a
+green unrelated workflow, or a capped CLI export does not establish
+acceptance — only a complete, source-matched inventory manifest
+does. When the credential is absent, the guard reports
+NOT-CONFIGURED explicitly and fails closed; that is a missing input,
+not a passing check, and the input is the <code>DEEPSOURCE_TOKEN</code> secret
+in the repo's Actions settings.</p>
+<h3 id="deepsource-remediation-cycle-222">DeepSource remediation (cycle 222)<a class="headerlink" href="#deepsource-remediation-cycle-222" title="Permanent link">&para;</a></h3>
+<p>Cycle 222 drove the active DeepSource inventory to zero and recorded
+the adjudication of every occurrence. The working baseline was the
+complete inventory at <code>4cf8e0f5</code> (3,546 occurrences, 64 rules),
+independently cross-checked before any fix: manifest integrity and
+the recount reproduced exactly, and a 105-occurrence source sample
+verified 102 citations and refuted 3 analyzer claims. The cycle's
+Phase-0 capture at the cycle-221 head (<code>0e4ee685</code>) reported 3,775
+occurrences; the delta was the new record-notation surface plus
+line-shifted occurrences of the same rules — no rule appeared or
+vanished. Both analysis runs ended in the provider's FAILURE status
+(partial analysis); the captures are complete traversals of what
+the provider reported for those commits, and the zero below is
+stated against the final head's complete capture on the same terms.</p>
+<p>Every occurrence was adjudicated into exactly one class:</p>
+<ul>
+<li><strong>Fixed in code.</strong> The bulk: missing docstrings inserted
+  (including, after the provider's full-strength runs reported them,
+  the test suite's methods and classes), docstring formatting
+  normalized, methods that never use their instance converted to
+  static methods file by file, explicit <code>check=False</code> on subprocess
+  calls whose sites inspect the return code themselves, unused
+  names renamed to discards after per-site verification,
+  overlapping except-tuple entries removed, type annotations
+  completed in <code>tools/</code> and <code>examples/</code>, a launcher import deferred
+  into its entry function, and two security items hardened (the
+  findings guard now asserts its API URL stays on the fixed
+  <code>https://api.github.com/</code> host before opening it; the CocoIndex
+  tool resolves <code>git</code> to an absolute path once instead of starting
+  it from a partial path). One report was a genuine defect: a test
+  method nested inside another method, collected by no runner, was
+  dedented to class level and now executes.</li>
+<li><strong>Suppressed per site, with the justification in the repo.</strong> Used
+  only where a rule's premise does not apply to a deliberate pattern
+  of this codebase. A <code>.deepsource.toml</code> was landed early in the
+  cycle and then withdrawn: controlled captures proved the provider
+  does not apply repo-file configuration for this repository's
+  connection (the reported configuration was byte-identical across
+  commits with and without the file, and neither its path excludes
+  nor its complexity threshold changed any outcome), and the
+  connection is documented in <code>AGENTS.md</code> as needing no repo config
+  file. Every occurrence is therefore dispositioned in code or by a
+  per-site <code># skipcq</code> comment with its reason: function-local
+  imports that keep validator mirrors self-contained and the import
+  graph acyclic, single-element tuple unpacks that are the
+  assertion being tested, <code>next()</code> calls in tests whose
+  <code>StopIteration</code> is the intended failure, the mutation-gate <code>exec</code>
+  sites (the gates execute this repo's own module source, mutated
+  in memory, never external input), above-band complexity in
+  gate-pinned oracle and stage functions whose branch count is
+  specification count, and deliberate test-fixture patterns. The
+  secrets analyzer's two hits are prose fragments in this file and
+  the changelog (a negated example flag and a permission word in a
+  quoted scope string), adjudicated false positives in place; the
+  prose was not edited to dodge the pattern.</li>
+<li><strong>Proven false positives.</strong> A small set of analyzer claims the
+  source refutes — imports reported unused that are used on the
+  following lines, a dict reported as a list append, keyword
+  arguments reported missing or duplicated that arrive through
+  <code>**</code> unpacking, a SQL-expression rule fired on a repo with no
+  SQLAlchemy. Each carries a per-site comment stating the refutation
+  in one line; the full proofs were established by the independent
+  cross-check and the remediation plan before the cycle started.
+  None of these was "fixed" by changing correct code.</li>
+</ul>
+<p>The end state is proven the same way the baseline was: a complete
+inventory capture at the cycle's final head, read with the tool
+above, reporting zero occurrences.</p>
+<h3 id="findings-integrity-cycle-225">Findings integrity (cycle 225)<a class="headerlink" href="#findings-integrity-cycle-225" title="Permanent link">&para;</a></h3>
+<p>On 2026-10-30 the owner restated the findings rule in absolute
+form: address every code-scanning and DeepSource finding without
+suppressing, closing, or hiding anything, and reopen anything
+previously dismissed. A finding now closes only when a scanner
+auto-closes it as fixed after a code change, or it stands open and
+enumerated. This section is the cycle-225 record under that rule;
+it supersedes the cycle-222 disposition wherever the two differ
+(the cycle-222 text above stays as the historical record of that
+cycle's terms).</p>
+<p><strong>CodeQL #24/#25.</strong> The two <code>py/clear-text-logging-sensitive-data</code>
+alerts (the standalone diff tool's two print statements) had been
+dismissed as false positives in cycle 217; the owner reopened both
+on 2026-10-30 (they were the only two dismissals in the repo's
+history). Cycle 225 fixed them in code: the labeled-block section
+of a results payload now travels through
+<code>model_protocol_lab/diffreports.py</code> as data addressed by key (the
+<code>_payload_section</code> accessor and the <code>section_diffs</code> /
+<code>section_asymmetric</code> maps inside <code>diff_reports</code>), so the lexical
+sensitive-data flow the query tracks — payload access through
+section-named identifiers and functions into the print sinks — no
+longer exists by construction. The CLI's JSON and summary output
+are byte-identical to the pre-fix pipeline (pinned by
+<code>tests/test_cycle225_findings_integrity.py</code>, the cycle-67
+differential fuzz and mutation gates, and the cycle-169 diff
+tests). A local CodeQL run (bundle 2.27.3, the query that produced
+the alerts) reproduced exactly the two alerts on the pre-fix file
+and reports zero on the fixed file; the alerts' post-push
+auto-closure as fixed is verified in the cycle-225 report.</p>
+<p><strong>Why the DeepSource SUCCESS count moved 2 → 112.</strong> The complete
+capture at <code>e2f9c3aa</code> (cycle 222's final head) reported 2
+occurrences; the complete capture at <code>75d359cb</code> (cycle 224's head)
+reported 112. The open hypothesis was analyzer-scope drift.
+Provenance checks against the two commits refute it: every one of
+the 110 new occurrences sits in code created by cycles 223–224,
+after the <code>e2f9c3aa</code> capture — the two test files did not exist at
+<code>e2f9c3aa</code>; <code>reporting.py</code>'s two flagged section functions and
+<code>experiments.py</code>'s <code>_RedrawExhausted</code> (0 occurrences at <code>e2f9c3aa</code>,
+4 at <code>75d359cb</code>) were added by those cycles; <code>test_cycle67</code> grew
+from 20,412 to 22,582 lines, its third <code>unicodedata</code> import among
+the additions. The analyzer did not widen; cycles 223–224 shipped
+new code that had not passed through a remediation pass. The 2
+remaining occurrences are the previously adjudicated prose items.</p>
+<p><strong>Disposition of the 112</strong> (fix-or-open, per occurrence class):</p>
+<ul>
+<li>Fixed in code (98): FLK-D209 ×69 (docstring closing quotes moved
+  to their own line in the cycle-223/224 test files), PY-D0003 ×18
+  and PY-D0002 ×1 (truthful docstrings inserted), PYL-R0201 ×6
+  (methods converted to static methods), PYL-W0612 ×3 (unused
+  unpack member renamed to a discard), PY-R1000 ×1
+  (<code>decompose_cell</code> in <code>model_protocol_lab/confusableskeleton.py</code>
+  decomposed into predicate helpers, computation unchanged).
+  Correction, verified against the cycle's final capture: an
+  earlier draft of this section credited two PY-R1000 fixes; the
+  second target, <code>audit_population</code>, was reduced (branch nodes
+  16 → 14 by the same extractions) but remains above the
+  analyzer's threshold, so it stands open below — the fixed count
+  is 98, not 99.</li>
+<li>Standing open (14): PY-R1000 ×5 (the two <code>reporting.py</code> section
+  composers — one uniform pattern across the report's section
+  builders, whose refactor the 2026-10-29 diff-reports audit
+  rejected — two test oracle/world functions whose flatness is
+  the measured property, and <code>audit_population</code>, above),
+  PYL-W0212 ×4 (the deliberate <code>_RedrawExhausted</code> protocol double
+  shared across cycles), PYL-W0404 ×2 (function-local re-imports
+  inside the cycle-67 mutation-gate machinery), PTC-W0063 ×1 (a
+  <code>next()</code> whose <code>StopIteration</code> is the test's intended failure),
+  SCT-A000 ×2 (the prose false positives adjudicated in cycle
+  222; the records are not edited to dodge a scanner). The final
+  capture also flags two confusableskeleton functions
+  (<code>validate_case</code>, <code>aggregate_candidate</code>) whose code is
+  byte-identical to the previous capture, in which they were not
+  flagged — analyzer threshold variance at the margin, recorded
+  here rather than chased.</li>
+</ul>
+<p><strong>The per-site annotation surface is withdrawn.</strong> Cycle 222's
+<code># skipcq</code> comments — 874 lines across 165 files — were removed in
+full in cycle 225, and no other suppression mechanism replaces
+them: no dismissals, no dashboard ignores, no repo config file.
+One annotated class was fixed in code instead: PYL-E0601 ×1
+(<code>model_protocol_lab/diffbackends.py</code> — the loader import split
+into its own try, so the failure-code helper is provably bound
+when the tokenizer failure handler runs). Every other annotated
+class stands open at its sites, enumerated here by rule with the
+cycle-222 adjudication as its reason: PY-R1000 ×319 (above-band
+complexity in gate-pinned oracle, mirror, and stage functions
+whose branch count is specification count), PYL-W0404 ×285
+(function-local imports that keep validator mirrors self-contained,
+mutation gates working on copied modules, and the import graph
+acyclic), PTC-W0063 ×102 (<code>next()</code> calls whose <code>StopIteration</code> is
+the intended failure), PYL-W0632 ×41 (single-element unpacks that
+are the assertion being tested), PYL-W0621 ×33 (fixture-argument
+shadowing by design), FLK-E501 ×24 (frozen literal text pinned by
+tests), PYL-R0124 ×10 (self-comparisons that are the assertion,
+including total-NaN checks), PTC-W0046 ×9, FLK-E402 ×7 (deliberate
+import placement), PYL-R0201 ×5 (zero-argument <code>super()</code> method
+shapes where conversion changes the call), PYL-W0122 ×5
+(<code>exec</code> of this repo's own module source inside mutation gates,
+never external input), PYL-W1114 ×4 (argument-order mirrors of the
+functions under test), PYL-W0640 ×3 (cell-variable mirrors),
+PYL-E0202 ×3, PYL-W0603 ×3 (test-only global fixtures), PY-W2000
+×2, PTC-W0043 ×2, PYL-E1125 ×2, PYL-W0102 ×2, PYL-W0622 ×2
+(builtin-name parameters mirroring the measured APIs), PY-W0800
+×1, PY-D0003 ×1 (a docstring inside gate-pinned mirror text),
+PTC-W0060 ×1, PTC-W0050 ×1, PTC-W0047 ×1, PY-W0070 ×1,
+PYL-W0231 ×1, PY-W0072 ×1, PYL-R0401 ×1. The next complete capture
+at the cycle's final head enumerates these at line level; the
+findings guard continues to fail on any DeepSource finding, as
+designed, until the inventory is genuinely empty.</p>
+<h2 id="reporting-defects">Reporting defects<a class="headerlink" href="#reporting-defects" title="Permanent link">&para;</a></h2>
+<p>For public issues, provide a minimal synthetic reproduction and dependency versions. Exclude credentials, proprietary prompts, private model files and personally identifying data. For sensitive defects, use GitHub's private vulnerability reporting for this repository — it is enabled (verified through the GitHub API, 2026-10-23): open the repository's <strong>Security</strong> tab and choose <strong>Report a vulnerability</strong>, or go to <code>https://github.com/strmt7/model-protocol-lab/security/advisories/new</code>. Reports there are visible only to the maintainer until a fix ships.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>

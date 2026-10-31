@@ -1,0 +1,2789 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Local conversation-protocol experiments with held-out evidence: exact token-sequence comparisons across chat-format families.">
+      
+      
+      
+        <link rel="canonical" href="https://strmt7.github.io/model-protocol-lab/DENSITY_DESIGN/">
+      
+      
+        <link rel="prev" href="../DATELINE_DESIGN/">
+      
+      
+        <link rel="next" href="../DETERMINISM_AUDIT_DESIGN/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
+    
+    
+      
+        <title>Density - Model Protocol Lab</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#instruction-density-design-cycle-204-v2-adjudicated" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Model Protocol Lab" class="md-header__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Model Protocol Lab
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Density
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Model Protocol Lab" class="md-nav__button md-logo" aria-label="Model Protocol Lab" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Model Protocol Lab
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/strmt7/model-protocol-lab" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    strmt7/model-protocol-lab
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../how-to/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-to guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-to guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FAQ/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../reference/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SECURITY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security and data handling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../explanation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Explanation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../explanation/adr-index/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_LOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Research log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_READINESS_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release readiness 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASE_NOTES_0.1.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release notes 0.1.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RESEARCH_PORTABILITY_2026-10-15/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Portability research (2026-10-15)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../crawl4ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent tooling notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evidence notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_10" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_10" id="__nav_5_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design documents
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Design documents
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ALIASING_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliasing audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../BATCH_PATH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batch path
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CANONICALFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Canonical form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CHOICE_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choice audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFIDENCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DATELINE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dateline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Density
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#utility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Utility
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-probe-is-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this probe is not
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-digest-decidability-constraint-slate-adjudication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The digest-decidability constraint (slate adjudication)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Construction
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Construction">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#constraint-vocabulary-frozen-and-kind-allocation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constraint vocabulary (frozen) and kind allocation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#satisfiability-invariant-generator-enforced-mirrored" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Satisfiability invariant (generator-enforced, mirrored)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#word-commitment-and-normalization-frozen-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Word commitment and normalization (frozen rule)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rendering-frozen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rendering (frozen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#draw-rules-frozen-the-mirror-reproduces-them-exactly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Draw rules (frozen; the mirror reproduces them exactly)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#screening-rotation-shaped" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Screening (rotation-shaped)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arms
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#records" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Records
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#readouts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Readouts
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Readouts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#falsification-pre-registered-scoped" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Falsification (pre-registered, scoped)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diff-validator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diff validator
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Budget
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pin-blast-radius-rewritten-from-executed-greps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pin blast radius (rewritten from executed greps)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#open-points-dispositions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open points — dispositions
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DETERMINISM_AUDIT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Determinism audit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DISTRACTION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIELDORDER_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Field order
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FIXTURE_FUZZ_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixture fuzz
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../HISTORYFRAME_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History frame
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRUNESWEEP_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prune sweep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INSTRUCTIONDISTANCE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instruction distance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../INVISIBLECHARS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Invisible characters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CONFUSABLESKELETON_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Confusable skeleton
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../LEADING_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Leading claim
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../MULTITURN_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-turn drift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEEDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Needle depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEGATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Negation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NUMFORM_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Numeric form
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PAYLOADSERIALIZATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Payload serialization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PLACEMENT_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Placement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PRECISION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Precision
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REPETITION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repetition
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ROTATION_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rotation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SCORER_LENS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scorer lens
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEALED_BUNDLE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sealed bundle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SURFACE_NOISE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Surface noise
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_PROBE_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template probe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TEMPLATE_ROBUSTNESS_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Template robustness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../TOKENDEPTH_DESIGN/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Token depth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#utility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Utility
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-probe-is-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this probe is not
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-digest-decidability-constraint-slate-adjudication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The digest-decidability constraint (slate adjudication)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Construction
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Construction">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#constraint-vocabulary-frozen-and-kind-allocation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constraint vocabulary (frozen) and kind allocation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#satisfiability-invariant-generator-enforced-mirrored" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Satisfiability invariant (generator-enforced, mirrored)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#word-commitment-and-normalization-frozen-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Word commitment and normalization (frozen rule)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rendering-frozen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rendering (frozen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#draw-rules-frozen-the-mirror-reproduces-them-exactly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Draw rules (frozen; the mirror reproduces them exactly)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#screening-rotation-shaped" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Screening (rotation-shaped)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arms
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#records" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Records
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#readouts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Readouts
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Readouts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#falsification-pre-registered-scoped" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Falsification (pre-registered, scoped)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diff-validator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diff validator
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Budget
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pin-blast-radius-rewritten-from-executed-greps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pin blast radius (rewritten from executed greps)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#open-points-dispositions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open points — dispositions
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="instruction-density-design-cycle-204-v2-adjudicated">Instruction-density design (cycle 204, v2 — adjudicated)<a class="headerlink" href="#instruction-density-design-cycle-204-v2-adjudicated" title="Permanent link">&para;</a></h1>
+<p>Wave-9 rank 3. Question: when one prompt carries many
+simultaneous instructions, at which density does adherence
+start dropping, and how does satisfaction vary by serial
+position — measured per template family on a local checkpoint,
+with every constraint decidable from a digest commitment and
+every verdict re-derived by the diff validator. v1 was
+rejected by the cycle-204 adversarial round (two FATAL
+findings: no satisfiability guarantee; an uncalibrated
+falsification statistic); this v2 incorporates the
+adjudication in <code>agents_out/cycle204/coordinator_adjudication.md</code>.</p>
+<h2 id="utility">Utility<a class="headerlink" href="#utility" title="Permanent link">&para;</a></h2>
+<p>A practitioner stacking simultaneous instructions into one
+prompt learns, per template family on their own checkpoint,
+how adherence falls as simultaneous-instruction density rises
+from solo to sixteen, and how satisfaction at full density
+varies across early, middle, and late serial positions —
+before shipping a template under which the later instructions
+silently stop being followed. Position claims are scoped to
+what the denominators support (see Readouts): per-position
+rates at full density carry n = 20 per cell, so the headline
+position readout is band-pooled.</p>
+<h2 id="what-this-probe-is-not">What this probe is not<a class="headerlink" href="#what-this-probe-is-not" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Not IFScale (Jaroslawicz, Whiting, Shah &amp; Maamari,
+  arXiv:2507.11538 — verified against the abstract in this
+  cycle): 500 keyword-inclusion instructions on a long
+  business report, 20 frontier API models, best 68% at max
+  density, bias towards earlier instructions. That is the
+  phenomenon at API scale on long free-form output; it does
+  not vary the chat template, does not run under exact-token
+  discipline, and its output imports a verbosity confound
+  this design removes with short answers. The uniqueness
+  here is the combination: simultaneous-instruction density
+  × serial position × template family, on a local
+  checkpoint, with digest-decidable constraints and a
+  recomputing diff validator. The claim is the combination,
+  never first.</li>
+<li>Not <code>hierarchy</code> (two conflicting privileged instructions),
+  not <code>distraction</code> (irrelevant text carrying no demands),
+  not <code>multiturn</code> (instructions spread over turns), not
+  <code>structured</code> (one schema, adherence only). None varies the
+  count of simultaneous compatible instructions as the
+  independent variable.</li>
+<li>Not a judge-based instrument: no LLM scores anything.</li>
+</ul>
+<h2 id="the-digest-decidability-constraint-slate-adjudication">The digest-decidability constraint (slate adjudication)<a class="headerlink" href="#the-digest-decidability-constraint-slate-adjudication" title="Permanent link">&para;</a></h2>
+<p>The diff validator derives satisfaction from stored digest
+data alone — never from stored satisfaction booleans. The
+vocabulary is capped to what a word-level commitment can
+decide, and the cap is printed here: case, sentence, and
+paragraph structure constraints (all-lowercase, no-commas,
+N sentences, bullet form) are NOT decidable from the
+commitment and are excluded from v1 by name. One deliberate
+measurement choice, stated where a reader can see it: word
+identity is exact after normalization — <code>include_word("seven")</code>
+scores an answer of "7" as failure; there is no digit↔word
+mapping.</p>
+<h2 id="construction">Construction<a class="headerlink" href="#construction" title="Permanent link">&para;</a></h2>
+<p>CASE_COUNT = 20 cases, generated from the run seed by a
+frozen generator (<code>density.py</code>); the diff validator carries
+an independent mirror of the generator, the rendering, and
+the checking rule.</p>
+<p>Each case has:</p>
+<ul>
+<li>A base task from a frozen pool of short-answer task
+  templates over synthetic content. The base instruction
+  asks for a short answer and carries NO numeric length
+  demand (length demands live only in <code>word_count_at_most</code>,
+  where they are counted). Each case carries
+  <code>expected_word_digest</code>: the SHA-256 of the task value's
+  normalized word (multi-word values: the ordered hash
+  list's digest), so task performance is measurable from
+  the commitment (task-value presence) without a whole-answer
+  digest — a compliant answer at high density necessarily
+  differs from the canonical task answer as a string.</li>
+<li>A frozen ordered list of 16 constraints, positions 1..16.
+  The K-density prompt for K in {2, 4, 8, 16} is the base
+  task plus the first K constraints; K = 1 is the solo arm
+  of constraint 1 (see Arms). A constraint's serial position
+  is identical at every density that includes it.</li>
+</ul>
+<h3 id="constraint-vocabulary-frozen-and-kind-allocation">Constraint vocabulary (frozen) and kind allocation<a class="headerlink" href="#constraint-vocabulary-frozen-and-kind-allocation" title="Permanent link">&para;</a></h3>
+<p>Kinds (each a pure function of the word commitment):</p>
+<ol>
+<li><code>include_word(W)</code> — the answer's word multiset contains W.</li>
+<li><code>start_word(W)</code> — the answer's first normalized word is W.</li>
+<li><code>end_word(W)</code> — the answer's last normalized word is W.</li>
+<li><code>word_count_at_most(N)</code> — the answer's word count &lt;= N.</li>
+</ol>
+<p>Kind allocation per case is FIXED: 4 include, 4 start, 4 end,
+4 count, in a kind order that rotates across cases by case
+index (case c starts the repeating kind cycle at offset
+c mod 4), so each position carries each kind exactly 5 times
+across the 20 cases. Count parameters come from the frozen
+set {8, 12, 16, 24}.</p>
+<h3 id="satisfiability-invariant-generator-enforced-mirrored">Satisfiability invariant (generator-enforced, mirrored)<a class="headerlink" href="#satisfiability-invariant-generator-enforced-mirrored" title="Permanent link">&para;</a></h3>
+<p>Per case: all <code>start_word</code> constraints share ONE target; all
+<code>end_word</code> constraints share ONE target; the distinct word
+targets across groups — 4 include targets, the start target,
+the end target, the expected task word — are pairwise
+distinct AFTER normalization (D &lt;= 7 distinct words); and
+min(N over the case's count constraints) &gt;= D, which the
+frozen N set guarantees (8 &gt; 7). A satisfying answer always
+exists (start target, include targets, task word, end target
+in &lt;= 7 words). The invariant is proven by test over the
+pools and seed sweeps, including a pinned perfect-model test:
+a constructed perfect follower scores discordance f = 0 and
+joint satisfaction 20/20. Stated limit: at k16 the start and
+end demands repeat (same target four times), so for
+positional kinds the density treatment is partly a
+repetition treatment; per-kind readouts keep this visible.</p>
+<h3 id="word-commitment-and-normalization-frozen-rule">Word commitment and normalization (frozen rule)<a class="headerlink" href="#word-commitment-and-normalization-frozen-rule" title="Permanent link">&para;</a></h3>
+<p>For each generated answer the stage records ONE commitment
+object: <code>word_hashes</code>, the ordered list of SHA-256 hashes of
+the answer's normalized words (multiplicity preserved), and
+<code>word_list_digest</code>, SHA-256 of the list's canonical encoding
+(compact JSON, frozen in the RULE_TEXT). A word is a maximal
+run of alphanumeric characters, case-folded; every other
+character is a separator. Derived from the list, everywhere
+(stage aggregation and validator alike): the word multiset
+(count the list), <code>word_count</code> (the list's length), the
+first word (list head) and last word (list tail), or None
+when the list is empty. The first word is the first
+NORMALIZED word: leading tokens that normalize to nothing
+are skipped by construction.</p>
+<p>Satisfaction of every constraint is DERIVED from the
+commitment; no satisfaction boolean is stored (the rotation
+F4 pattern — the primitive determines the verdicts for all
+four kinds). Records also carry <code>answer_digest</code> (SHA-256 of
+the exact boundary-cut answer text, the standing pattern).</p>
+<p>Stated limits. (1) Fidelity residue: the commitment's
+internal consistency is validator-checked (digest over the
+list), but its fidelity to the generated answer is
+stage-attested — no digest of free text admits membership
+recompute against the text itself, and the verbatim-text
+alternative (the numform cycle-190 exception) was ruled out
+for this probe by the slate adjudication. (2) Exposure: the
+ordered hash list discloses the answer's word SEQUENCE to a
+dictionary pass over the (public) frozen pools — a strictly
+greater degree of disclosure than a whole-answer digest, of
+the same class; accepted because the determination property
+(F4) requires the ordered primitive, and the answers are
+short synthetic-task outputs.</p>
+<h3 id="rendering-frozen">Rendering (frozen)<a class="headerlink" href="#rendering-frozen" title="Permanent link">&para;</a></h3>
+<p>Each kind's instruction template, the constraint-list joiner
+and numbering, the base task templates, and the neutral
+statements are frozen text in <code>density.py</code>, carried by digest
+in the protocol (the needle SIZING_RULE_TEXT pattern). The
+payload carries, per (case, arm), the user-turn content
+digest; the validator's mirror re-renders the content and
+requires digest equality — the treatment is derived, not
+attested. Records carry <code>input_tokens</code> under the rotation
+arm_tokens discipline.</p>
+<h3 id="draw-rules-frozen-the-mirror-reproduces-them-exactly">Draw rules (frozen; the mirror reproduces them exactly)<a class="headerlink" href="#draw-rules-frozen-the-mirror-reproduces-them-exactly" title="Permanent link">&para;</a></h3>
+<p>Slot order per case: task template, task parameters, the
+sham arm's neutral statements, then per position 1..16 the
+constraint kind (fixed by the allocation rotation) and its
+parameter. Collision rule, with "occurs" defined as
+normalized-word equality: word targets must be distinct
+across groups (above) and must not occur in the case's base
+task text; constraint 1's target additionally must not occur
+in the case's neutral statements (the only constraint that
+shares an arm with them). Redraw scope: the offending
+parameter only, at its own slot counter; redrawn parameters
+are re-checked against the same frozen texts. Termination:
+pools are sized so the redraw always has a fresh candidate
+(pool sizes frozen in density.py and stated in the protocol;
+the generator test sweeps seeds to prove termination).
+Pool screen (pinned property, proven by test): all pool
+words are pairwise distinct after normalization, and no pool
+word equals a number word after normalization.</p>
+<h2 id="screening-rotation-shaped">Screening (rotation-shaped)<a class="headerlink" href="#screening-rotation-shaped" title="Permanent link">&para;</a></h2>
+<p>Stage level: before generation, all frozen texts (task
+templates, kind renderings, neutral pool, word pools) are
+audited with <code>audit_special_token_literals</code> against every
+candidate, and boundary-text containment is checked; failure
+fails the stage closed with <code>density_screen_failed</code>.
+Per case: a case whose rendered texts contain a candidate's
+decoded boundary text is screened as a unit, with its own
+counter. Records carry a per-record detail in
+{"", arm_evaluation_failed, arm_context_exceeded}; records
+with a detail, and boundary-screened cases' records, are
+present in the record list (completeness below) with
+<code>word_hashes</code> = [] and <code>word_count</code> = 0.</p>
+<p>Live population: records with detail "" whose case is not
+boundary-screened for that candidate. There is NO word-cap
+screen: generation is bounded by the frozen max_new_tokens
+(64), so every live record's commitment is complete and every
+kind's verdict is decidable for it in both directions.
+Zero-word live records (empty answer: first emitted token is
+the boundary, or the answer normalizes to no words) carry
+their own counter and are excluded from <code>word_count_at_most</code>
+checked denominators (their count verdicts are vacuous);
+they still fail word-target kinds, decidably.</p>
+<p>Screen accounting per candidate, counters disjoint by the
+stated order (boundary screen first, then detail, then
+zero-word within live): n_generated, n_boundary_screened,
+n_detail_screened, n_zero_word, n_live — all printed.</p>
+<h2 id="arms">Arms<a class="headerlink" href="#arms" title="Permanent link">&para;</a></h2>
+<p>Per case and candidate, 21 generations:</p>
+<ul>
+<li>16 solo arms <code>solo_1..solo_16</code>: base task + only
+  constraint j — the per-constraint paired baselines.
+  <code>solo_1</code> IS the K=1 density arm (the v1 design generated
+  it twice under two names; merged).</li>
+<li>4 density arms <code>k2, k4, k8, k16</code>: base task + the first
+  K constraints.</li>
+<li>1 sham arm <code>sham</code>: base task + constraint 1 + neutral
+  statements selected by the frozen rule below, separating
+  "many instructions" from "much text".</li>
+</ul>
+<p>Sham construction: block length is the user-turn word count
+of the appended block. Neutrals are appended in frozen slot
+order, wrapping to the start of the drawn list, until the
+sham block's word count first reaches or exceeds the case's
+k16 block word count; both block lengths are recorded per
+record through the content commitment, and the selection is
+a deterministic function the mirror recomputes. (Build-time
+amendment, measured: without wrapping the sham stayed
+shorter than k16 in 3,992 of 4,000 generated cases — the
+length match the control exists for almost never held.
+Wrapping adds no pool words: the neutrals are pinned
+pool-free, so repetition cannot smuggle a target in.) The
+sham readout is computed over cases live in all three arms
+(solo_1, sham, k16), denominators printed.</p>
+<h2 id="records">Records<a class="headerlink" href="#records" title="Permanent link">&para;</a></h2>
+<p>Exactly 21 × CASE_COUNT records per candidate, in canonical
+(case, arm) order; the validator rejects any other count,
+order, or arm set, and rejects duplicate candidate names
+(the run-level guard's clause, stated as rotation's
+validator states it). Each record carries: candidate, case
+index, arm id, detail, <code>answer_digest</code>, <code>word_hashes</code>,
+<code>word_list_digest</code>, <code>word_count</code>, <code>input_tokens</code>, the
+content digest of its arm, and the backend fingerprint via
+the shared <code>_backend_fingerprint</code> guard (cycle-202 F2). The
+protocol object carries: the frozen rule texts by digest
+(generation, rendering, normalization+checking), pool sizes,
+densities, CASE_COUNT, the paired floor and discordant-case
+floor, alpha, the word cap implied by max_new_tokens, and
+the record/payload caps. Caps: MAX_DENSITY_RECORDS = 10,080
+(21 × 20 × 24); MAX_DENSITY_PAYLOAD_BYTES = 52 MiB (sizing:
+a record's ordered list is at most 64 entries × 68 B
+≈ 4.4 KB plus ≈ 0.4 KB of fields ≈ 4.8 KB; 10,080 × 4.8 KB
+≈ 48.4 MiB — the derivation, printed per the house pattern).
+Stage detail vocabulary: {cancelled,
+density_record_budget_exceeded, density_screen_failed}.</p>
+<h2 id="readouts">Readouts<a class="headerlink" href="#readouts" title="Permanent link">&para;</a></h2>
+<p>Per candidate, over live records; every rate is None iff
+its denominator is 0; every readout prints its denominators.</p>
+<ul>
+<li>Satisfaction by density: for each K in {1, 2, 4, 8, 16},
+  the pooled satisfaction over that arm's constraints
+  (K = 1 reads solo_1), printed BESIDE the same constraints'
+  pooled solo rate (the composition control). The raw curve
+  is labelled not composition-controlled.</li>
+<li>Task-value presence by arm (the F6 readout): share of
+  live records whose commitment contains the expected task
+  word, per arm, beside the constraint readouts.</li>
+<li>Position at full density: per-position satisfaction
+  within k16 (16 rates, n = 20 denominators, descriptive),
+  and the band-pooled headline: positions 1–5, 6–11,
+  12–16 pooled rates with denominators.</li>
+<li>Per-kind satisfaction at solo and at k16, with
+  denominators (the repetition-limit readout for positional
+  kinds).</li>
+<li>Joint satisfaction at k16: share of live k16 records with
+  all 16 constraints satisfied, with denominator (the
+  IFScale headline analogue — meaningful only because the
+  satisfiability invariant guarantees it is attainable).</li>
+<li>Sham readout: position-1 satisfaction in solo_1, sham,
+  and k16 over the intersected live population, with the
+  two block lengths printed.</li>
+<li>Discordance: per (case, position) paired solo vs k16
+  satisfaction over eligible pairs (both records live; for
+  count-kind pairs, neither record zero-word): f =
+  solo-pass/k16-fail count, p = solo-fail/k16-pass count,
+  printed pooled and per position (the per-position table
+  is a density-and-position mixture — solo_j sits at
+  effective position 1 — and is labelled as such).</li>
+</ul>
+<h3 id="falsification-pre-registered-scoped">Falsification (pre-registered, scoped)<a class="headerlink" href="#falsification-pre-registered-scoped" title="Permanent link">&para;</a></h3>
+<p>Claim, scoped to the contrast the test supports: for a
+candidate, per-constraint satisfaction at full density
+(k16) equals its solo satisfaction — independence of the
+endpoint density contrast; intermediate densities are
+descriptive (the satisfaction curve), and a non-monotone
+intermediate dip does not falsify and is not claimed to.
+Decision, a total function per candidate over the eligible
+pairs: aggregate discordance per case, d_c = f_c − p_c.
+If the candidate has no live records, its block is
+unavailable. If the number of cases with d_c != 0 is below
+6, the verdict is <code>insufficient</code> — the boolean is withheld,
+never defaulted to acquittal, and the counts are printed.
+Otherwise: falsified iff Σf &gt; Σp AND the exact two-sided
+sign test over the discordant cases gives p &lt;= 0.05; the
+p-value, f, p, and the discordant-case count are printed
+beside the boolean. The level is per-candidate; across 24
+candidates at alpha = 0.05, roughly one false falsification
+is expected by chance (1 − 0.95^24 ≈ 0.71 for at least one),
+and the section text says so.</p>
+<h2 id="diff-validator">Diff validator<a class="headerlink" href="#diff-validator" title="Permanent link">&para;</a></h2>
+<p><code>diff_density</code> in diffreports.py with a full independent
+mirror: regenerate the cases, re-render every arm's content
+and require the payload's content digests to match, verify
+each record's commitment (list digest), derive every
+satisfaction verdict, task-presence verdict, headline, and
+the falsification decision (including the sign test), and
+require equality with the payload. Availability and
+<code>insufficient</code> states are mirrored per candidate. The
+diff-section blast radius is the standing three-element one
+(test_cycle67 oracle + flip_identical anchor +
+<code>_identical_expected</code>; test_cycle27 oracle + stub), verified
+by executed grep at build time.</p>
+<h2 id="budget">Budget<a class="headerlink" href="#budget" title="Permanent link">&para;</a></h2>
+<p>Generations: 21 arms × 20 cases = 420 per candidate;
+10,080 at the 24-candidate legal max. Solo arms are 16 of
+21 arms; they earn their cost because the decision (fixed)
+and the composition control both consume them — the
+cycle-204 F17 sequencing condition. Construction is one
+render per arm. Records and payload caps as above.</p>
+<h2 id="pin-blast-radius-rewritten-from-executed-greps">Pin blast radius (rewritten from executed greps)<a class="headerlink" href="#pin-blast-radius-rewritten-from-executed-greps" title="Permanent link">&para;</a></h2>
+<p>cli.py flag <code>--density</code> + dispatch + help; experiments.py
+stage mirroring <code>rotation_stage</code>; reporting.py three
+touchpoints (compute, TOC tuple, body concatenation);
+diffreports.py section + validator; new test file
+tests/test_cycle204_density.py plus the scoped test files
+the gate names; test_cycle27 and test_cycle67 oracle
+extensions (grep-counted at build time, rotation's
+footprint: 25 / 80 placement-era hits are the model);
+test_cycle179 dispatch e2e pattern; test_cycle44 mypy
+source-file pin 60 → 61; test_cycle178 VALIDATION header
+pin cycles 10–204 AND the live counts it pins (VALIDATION
+test-count lines and the CI-scope ruff file count);
+VALIDATION.md first-Evidence prose probe list gains the
+density entry; README test count, capability bullet, and
+BOTH section enumerations (the diff-reports sentence and
+the sample-report paragraph — grep both); USAGE §8.51;
+CHANGELOG entry in the same push; RESEARCH_LOG cycle-204
+entry (exists — design phase already appended; the build
+appends its closure half); sample-report impact verified at
+build time (regenerate byte-identically twice if the
+section joins it).</p>
+<h2 id="open-points-dispositions">Open points — dispositions<a class="headerlink" href="#open-points-dispositions" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Solo-arm cost: PAID (16 solos kept; k1 merged into
+   solo_1). The entry-density alternative covers positions
+   1–8 only and changes the estimand per position; rejected
+   with the reason recorded.</li>
+<li>Sham position confound: position 1 is matched across
+   solo_1/sham/k16 (held by both red teams); the length and
+   population confounds are fixed by the frozen selection
+   rule and the intersected population.</li>
+<li>Fidelity residue: stands as a stated limit (above); the
+   commitment's internal structure is now fully determining
+   (F5 fix), so the residue covers origin only.</li>
+<li>Vacuous count satisfaction: zero-word records are
+   counted and excluded from count-kind denominators (F13
+   fix); the residue is printed, not hidden.</li>
+<li>Pooled-only boolean: replaced by the case-aggregated
+   sign decision with an <code>insufficient</code> state (F2/F10
+   fixes); the claim is scoped to the endpoint contrast
+   (B-F5).</li>
+<li>Replication control (B's alternative for the duplicated
+   arm): considered and deferred — the case-level decision
+   does not consume a noise-floor readout; if a future
+   cycle needs one, the duplicate arm is the place to add
+   it, with this paragraph as the pointer.</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
+      
+    
+  </body>
+</html>
