@@ -6,6 +6,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 226 — JSON discipline, 2026-10-31)
+
+- The surface-noise probe loader (`surfacenoise._load_probe_json`)
+  now enforces the tree's shared JSON discipline its sibling loaders
+  already had: duplicate keys, NaN/Infinity literals, overflowing
+  floats (`1e999`) and lone surrogates are refused, and pathological
+  nesting is a loader refusal instead of a raw `RecursionError`
+  escaping the CLI. The loader also verifies the payload is a probe
+  report (the skeleton every ok/cancelled/unavailable report
+  carries), so `surface-noise diff` no longer certifies two garbage
+  files as `identical: true` — it exits 1 on non-report input.
+- `recordnotation._parsed_hit` and its `diffreports` mirror parse
+  model answers with the fail-closed hooks the toolcall parser
+  already used and treat a pathologically nested answer as a miss;
+  previously it killed the candidate aggregation with a
+  `RecursionError`.
+- `tools/agent_context.load_state` routes through the strict hooks
+  the same file's evidence reader already enforced (duplicate
+  members, non-finite constants, overflowing floats refused;
+  nesting converted to the file's `ValueError` vocabulary) instead
+  of a plain `json.loads` that crashed the startup path on a hostile
+  state file.
+- Pinned by `tests/test_cycle226_json_discipline.py`; one existing
+  pin moved: the cycle-211 open-flags test now feeds the loader a
+  minimal real probe-report skeleton instead of `{"a": 1}`, which
+  the loader correctly refuses now (the flag behaviour it tests is
+  unchanged).
+
 ### Fixed (cycle 226 — production-readiness claims corrections, 2026-10-31)
 
 - Two citations in the cycle-224 research-log entry are removed

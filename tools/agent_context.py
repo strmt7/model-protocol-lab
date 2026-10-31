@@ -89,7 +89,21 @@ def load_state(root: Path, name: str) -> dict[str, Any]:
     if not path.exists():
         return {"schema": 1}
     text, _ = read_source(root, name)
-    value = json.loads(text)
+    try:
+        # The same strict discipline json_report enforces for evidence
+        # files: duplicate members, non-finite constants and
+        # overflowing floats are refused, and pathological nesting is
+        # converted to the ValueError vocabulary. A plain json.loads
+        # here let a hostile state file crash the startup path with a
+        # raw RecursionError (cycle 226, B-16).
+        value = json.loads(
+            text,
+            object_pairs_hook=unique_json_object,
+            parse_constant=reject_json_constant,
+            parse_float=finite_json_float,
+        )
+    except RecursionError:
+        raise ValueError("JSON evidence exceeds the decodable nesting depth") from None
     if not isinstance(value, dict) or value.get("schema") != 1:
         raise ValueError("unsupported context state; use a new session/key")
     return value

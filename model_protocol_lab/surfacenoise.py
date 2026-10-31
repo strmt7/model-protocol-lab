@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import stat
@@ -1506,6 +1507,57 @@ def _build_cli_backend(args: Any) -> Any:
     return LocalHFBackend(args.model)
 
 
+def _unique_probe_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Build a probe-report object, refusing duplicate keys.
+
+    The shared JSON discipline (datasets, diffreports): a duplicated
+    key makes the payload ambiguous — which value a diff would
+    certify would depend on parser last-wins behaviour — so the
+    loader refuses it instead of guessing (cycle 226, B-05).
+    """
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON field {key!r}")
+        result[key] = value
+    return result
+
+
+def _reject_probe_constant(value: str) -> Any:
+    """Refuse NaN/Infinity literals in a probe report (B-05)."""
+    raise ValueError(f"nonfinite JSON constant {value!r}")
+
+
+def _reject_probe_nonfinite_float(text: str) -> float:
+    """Refuse float literals that overflow to infinity (``1e999``)."""
+    number = float(text)
+    if not math.isfinite(number):
+        raise ValueError(f"nonfinite JSON number {text!r}")
+    return number
+
+
+def _reject_lone_surrogates(value: Any) -> None:
+    """Refuse lone surrogates anywhere in a decoded probe report.
+
+    A ``\\ud800`` escape decodes to a lone surrogate that no UTF-8
+    consumer downstream can encode; the sibling loaders refuse the
+    class at their field checks, and the probe loader refuses it
+    structurally (cycle 226, B-05). The walk is iterative, so the
+    check itself cannot exhaust the stack on a nested payload.
+    """
+    stack: list[Any] = [value]
+    while stack:
+        item = stack.pop()
+        if type(item) is str:
+            if any(0xD800 <= ord(char) <= 0xDFFF for char in item):
+                raise ValueError("lone surrogate in a JSON string")
+        elif type(item) is dict:
+            stack.extend(item.keys())
+            stack.extend(item.values())
+        elif type(item) is list:
+            stack.extend(item)
+
+
 def _load_probe_json(path: Path) -> Any:
     """Load probe json."""
     target = Path(path)
@@ -1534,9 +1586,42 @@ def _load_probe_json(path: Path) -> Any:
     if len(raw) > 16 << 20:
         raise ValueError(f"{path} exceeds 16 MiB")
     try:
-        return json.loads(raw.decode("utf-8"))
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path} is not valid JSON: {exc}") from exc
+    try:
+        # The shared JSON discipline the sibling loaders already
+        # enforce (datasets, diffreports): duplicate keys, NaN /
+        # Infinity literals, overflowing floats and lone surrogates
+        # are refused, and pathological nesting is a loader refusal
+        # in this module's vocabulary — a plain json.loads here let
+        # every one of those classes through, and deep nesting
+        # escaped as a raw RecursionError (cycle 226, B-05).
+        value = json.loads(
+            text,
+            object_pairs_hook=_unique_probe_object,
+            parse_constant=_reject_probe_constant,
+            parse_float=_reject_probe_nonfinite_float,
+        )
+        _reject_lone_surrogates(value)
+    except RecursionError:
+        raise ValueError(f"{path} is not valid JSON: nesting too deep") from None
     except ValueError as exc:
         raise ValueError(f"{path} is not valid JSON: {exc}") from exc
+    if (
+        type(value) is not dict
+        or value.get("instrument") != PROBE_NAME
+        or type(value.get("status")) is not str
+        or type(value.get("protocol")) is not dict
+        or type(value.get("prompt_sha256")) is not str
+    ):
+        # Not a probe report at all. Every report the probe writes —
+        # ok, cancelled, or unavailable — carries this skeleton;
+        # anything else is refused here, at the boundary, instead of
+        # reaching the diff, which previously certified two garbage
+        # payloads as identical (cycle 226, B-14).
+        raise ValueError(f"{path} is not a surface-noise probe report")
+    return value
 
 
 def run_surface_noise(args: Any, _parser: Any) -> int:
