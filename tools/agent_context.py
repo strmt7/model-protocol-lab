@@ -388,12 +388,20 @@ def json_report(root: Path, args: argparse.Namespace) -> dict:
     Outputs: Source-bound page and explicit omissions.
     """
     text, digest = read_source(root, args.path, max_bytes=MAX_REPORT_BYTES)
-    value = json.loads(
-        text,
-        object_pairs_hook=unique_json_object,
-        parse_constant=reject_json_constant,
-        parse_float=finite_json_float,
-    )
+    try:
+        value = json.loads(
+            text,
+            object_pairs_hook=unique_json_object,
+            parse_constant=reject_json_constant,
+            parse_float=finite_json_float,
+        )
+    except RecursionError:
+        # The decoder recurses per nesting level; which exception an
+        # over-deep document raises (RecursionError on the pure-Python
+        # scanner, a decode error from the C scanner) depends on the
+        # interpreter. Both are the same refusal here: the evidence is
+        # deeper than this tool will decode.
+        raise ValueError("JSON evidence exceeds the decodable nesting depth") from None
     selected = json_pointer(value, args.pointer)
     fields = args.field
     if fields and (
