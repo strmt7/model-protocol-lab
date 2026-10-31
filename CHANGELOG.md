@@ -35,6 +35,25 @@ All notable changes to this project are documented here. The format follows
   were brought to the repository's docstring and style standard
   (FLK-D209, PY-D0002, PY-D0003, PYL-R0201, PYL-W0612).
 
+### Fixed (cycle 225 — findings-accounting correction, 2026-10-31)
+
+- Two helper methods in the cycle's own findings-integrity tests
+  that did not use `self` are now static methods (PYL-R0201 — the
+  same honest fix applied to the six methods in the findings
+  push; the final DeepSource capture showed these two new
+  occurrences in the new test file, and they are fixed rather
+  than left standing).
+- The findings ledger in `docs/SECURITY.md` is corrected against
+  that capture: of the 112 occurrences at the cycle's base, 98
+  were fixed in code (not 99) — the confusableskeleton
+  `decompose_cell` decomposition cleared its complexity finding,
+  while `audit_population` was reduced but remains above the
+  analyzer's threshold and stands open (14 standing from the 112,
+  not 13). The same capture flags two further confusableskeleton
+  functions whose code is byte-identical to the previous capture,
+  in which they were not flagged; that is recorded as analyzer
+  threshold variance, not chased.
+
 ### Changed (cycle 225 — toolchain currency, 2026-10-30)
 
 - Every versioned surface was inventoried against its primary
