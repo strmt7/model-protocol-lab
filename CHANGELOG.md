@@ -1,7 +1,7 @@
 # Changelog
 
 All notable changes to this project are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
+[Keep a Changelog](https://keepachangelog.com/en/2.0.0/); versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
@@ -34,6 +34,42 @@ All notable changes to this project are documented here. The format follows
   predicate helpers (PY-R1000), and the cycle-223/224 test files
   were brought to the repository's docstring and style standard
   (FLK-D209, PY-D0002, PY-D0003, PYL-R0201, PYL-W0612).
+
+### Added (cycle 225 — documentation and agent-tooling parity, 2026-10-30)
+
+- Documentation repair pass (drafts prepared by a dedicated research
+  lane, landed here): the README's Capabilities section and
+  report-contents summary now cover the eight newest probes
+  (`--canonical-form`, `--negation`, `--instruction-distance`,
+  `--history-frame`, `--prune-sweep`, `--record-notation`,
+  `--invisible-chars`, `--confusable-skeleton`), which the usage
+  guide already documented; `tests/test_cycle178_docs_currency.py`
+  now pins all eight flags against the README so the omission
+  cannot recur silently. A `## Contributing` section routes to the
+  rewritten `CONTRIBUTING.md`, which now states the real
+  verification gate (the exact coverage command, ruff, mypy and
+  bandit) instead of the unittest-only command it previously
+  showed; the pull-request template states the same gate.
+  `CODE_OF_CONDUCT.md` adopts Contributor Covenant 3.0 with its
+  enforcement ladder. The root `SECURITY.md` gains supported-version
+  and response-expectation summaries over the unchanged pointer to
+  `docs/SECURITY.md`. A new orientation page,
+  `docs/explanation/architecture.md`, joins the docs nav.
+  `CITATION.cff` gains its `url:` field.
+- Agent-tooling parity with the owner's reference repository,
+  restored on the owner's explicit 2026-10-30 order: the README
+  tool badges (cocoindex-code, caveman, crawl4ai) are back. This
+  reverses cycle 210's deliberate badge removal; the cycle-210 pin
+  in `tests/test_cycle210_enterprise_hardening.py` now guards the
+  restored state. `tools/agent_context.py` gains the bounded `json`
+  report operation (RFC 6901 pointer, projection, paging, 16 MiB
+  cap) with six new contract tests; the CocoIndex wrapper moves to
+  cocoindex-code 0.2.42 with the versioned state layout; the
+  Crawl4AI tool moves to crawl4ai 0.9.5 (playwright 1.64.1). The
+  three tools' license texts are vendored under `docs/licenses/`.
+  The reference repository's source-built patched crawl4ai wheel
+  was deliberately not ported: this repo stays on the upstream
+  wheel.
 
 ### Added (cycle 224 — confusable-skeleton substitution probe, 2026-10-30)
 

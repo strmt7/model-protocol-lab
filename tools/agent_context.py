@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import tempfile
@@ -20,6 +21,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 MAX_FILE_BYTES = 1024 * 1024
+MAX_REPORT_BYTES = 16 * 1024 * 1024
 SKILLS = ("caveman", "cocoindex-code-search")
 KEY = re.compile(r"[a-z0-9][a-z0-9-]{0,63}\Z")
 
@@ -65,16 +67,16 @@ def safe_path(root: Path, name: str) -> Path:
     return selected
 
 
-def read_source(root: Path, name: str) -> tuple[str, str]:
+def read_source(root: Path, name: str, *, max_bytes: int = MAX_FILE_BYTES) -> tuple[str, str]:
     """Purpose: Read bounded exact text.
-    Inputs: root/path.
+    Inputs: root/path and byte budget.
     Outputs: UTF-8 text and SHA-256; rejects binary/large input.
     """
     path = safe_path(root, name)
     with path.open("rb") as source:
-        raw = source.read(MAX_FILE_BYTES + 1)
-    if len(raw) > MAX_FILE_BYTES or b"\0" in raw:
-        raise ValueError("source exceeds 1 MiB or contains binary data")
+        raw = source.read(max_bytes + 1)
+    if len(raw) > max_bytes or b"\0" in raw:
+        raise ValueError(f"source exceeds {max_bytes} bytes or contains binary data")
     return raw.decode("utf-8-sig"), hashlib.sha256(raw).hexdigest()
 
 
@@ -298,6 +300,163 @@ def recall(root: Path, key: str) -> dict[str, Any]:
     }
 
 
+def unique_json_object(pairs: list[tuple[str, object]]) -> dict:
+    """Purpose: Refuse ambiguous evidence.
+    Inputs: Decoded JSON members.
+    Outputs: Unique-key object or error.
+    """
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON member; evidence selection is ambiguous")
+        result[key] = value
+    return result
+
+
+def reject_json_constant(value: str) -> None:
+    """Purpose: Reject non-JSON numbers. Inputs: Decoder constant. Outputs: Explicit refusal."""
+    raise ValueError(f"non-finite JSON number is not evidence: {value}")
+
+
+def finite_json_float(value: str) -> float:
+    """Purpose: Reject overflowing JSON numbers.
+    Inputs: Numeric text.
+    Outputs: Finite float or explicit refusal.
+    """
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("JSON number exceeds the finite float range")
+    return number
+
+
+def json_pointer(value: object, pointer: str) -> object:
+    """Purpose: Select exact evidence.
+    Inputs: JSON value and RFC 6901 pointer.
+    Outputs: Selected value or error.
+    """
+    if not pointer:
+        return value
+    if not pointer.startswith("/") or re.search(r"~(?![01])", pointer):
+        raise ValueError("expected an RFC 6901 JSON pointer")
+    for encoded in pointer[1:].split("/"):
+        key = encoded.replace("~1", "/").replace("~0", "~")
+        if isinstance(value, dict):
+            value = value[key]
+        elif isinstance(value, list) and re.fullmatch(r"0|[1-9][0-9]*", key):
+            value = value[int(key)]
+        else:
+            raise ValueError("JSON pointer does not identify an object member or array item")
+    return value
+
+
+def json_shape(value: object) -> dict:
+    """Purpose: Describe omitted payloads honestly.
+    Inputs: JSON value.
+    Outputs: Type and exact extent.
+    """
+    if isinstance(value, dict):
+        return {"kind": "object", "count": len(value)}
+    if isinstance(value, list):
+        return {"kind": "array", "count": len(value)}
+    if isinstance(value, str):
+        return {"kind": "string", "characters": len(value)}
+    return {"kind": "scalar"}
+
+
+def compact_json(value: object) -> str:
+    """Purpose: Measure the actual emitted representation.
+    Inputs: JSON value.
+    Outputs: Compact ASCII JSON.
+    """
+    return json.dumps(value, ensure_ascii=True, separators=(",", ":"), allow_nan=False)
+
+
+def json_member(pointer: str, value: object) -> dict:
+    """Purpose: Bound one displayed value.
+    Inputs: Exact pointer/value.
+    Outputs: Scalar or explicit omitted shape.
+    """
+    result = {"pointer": pointer, **json_shape(value), "expanded": False}
+    if not isinstance(value, (dict, list)) and len(compact_json(value)) <= 512:
+        result.update(expanded=True, value=value)
+    return result
+
+
+def json_report(root: Path, args: argparse.Namespace) -> dict:
+    """Purpose: Inspect evidence without flooding context.
+    Inputs: Bounded JSON, exact pointer and page/output budgets.
+    Outputs: Source-bound page and explicit omissions.
+    """
+    text, digest = read_source(root, args.path, max_bytes=MAX_REPORT_BYTES)
+    value = json.loads(
+        text,
+        object_pairs_hook=unique_json_object,
+        parse_constant=reject_json_constant,
+        parse_float=finite_json_float,
+    )
+    selected = json_pointer(value, args.pointer)
+    fields = args.field
+    if fields and (
+        not isinstance(selected, list) or len(fields) > 16 or len(fields) != len(set(fields))
+    ):
+        raise ValueError("field projection requires an array and 1-16 unique member names")
+    shape = json_shape(selected)
+    result = {
+        "path": args.path,
+        "sha256": digest,
+        "pointer": args.pointer,
+        **shape,
+        "acceptance": "not_established_by_context_tool",
+    }
+    if not isinstance(selected, (dict, list)):
+        if args.offset:
+            raise ValueError("scalar JSON selection has no page offset")
+        full = {**result, "expanded": True, "value": selected}
+        result = (
+            full if len(compact_json(full)) <= args.max_chars else {**result, "expanded": False}
+        )
+    else:
+        if args.offset > len(selected):
+            raise ValueError("JSON page offset exceeds the selected container")
+        members = (
+            list(selected.items()) if isinstance(selected, dict) else list(enumerate(selected))
+        )
+        result.update(offset=args.offset, items=[], next_offset=args.offset, omitted_values=0)
+        for index, (key, item) in enumerate(
+            members[args.offset : args.offset + args.limit], args.offset
+        ):
+            pointer = args.pointer + "/" + str(key).replace("~", "~0").replace("/", "~1")
+            entry = json_member(pointer, item)
+            if fields:
+                if not isinstance(item, dict):
+                    raise ValueError("field projection requires object array items")
+                entry["fields"] = [
+                    json_member(
+                        pointer + "/" + field.replace("~", "~0").replace("/", "~1"), item[field]
+                    )
+                    for field in fields
+                ]
+            candidate = {
+                **result,
+                "items": [*result["items"], entry],
+                "next_offset": index + 1 if index + 1 < len(members) else None,
+                "omitted_values": result["omitted_values"] + int(not entry["expanded"]),
+            }
+            if len(compact_json(candidate)) > args.max_chars:
+                break
+            result = candidate
+        if args.offset == len(members):
+            result["next_offset"] = None
+        if result["next_offset"] == args.offset:
+            raise ValueError(
+                "JSON page budget cannot fit one item; select a narrower pointer "
+                "or increase the budget"
+            )
+    if len(compact_json(result)) > args.max_chars:
+        raise ValueError("JSON metadata exceeds the output budget; use a larger explicit budget")
+    return result
+
+
 def startup(root: Path) -> dict[str, Any]:
     """Purpose: Expose mandatory skills and the authoritative research route.
     Inputs: checkout.
@@ -350,6 +509,13 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("startup")
     outline = commands.add_parser("outline")
     outline.add_argument("path")
+    report = commands.add_parser("json")
+    report.add_argument("path")
+    report.add_argument("--pointer", default="")
+    report.add_argument("--field", action="append", default=[])
+    report.add_argument("--offset", type=int, default=0)
+    report.add_argument("--limit", type=int, default=12)
+    report.add_argument("--max-chars", type=int, default=4000)
     read = commands.add_parser("read")
     read.add_argument("path")
     read.add_argument("--section")
@@ -373,6 +539,12 @@ def main(argv: list[str] | None = None) -> int:
         elif args.action == "outline":
             text, digest = read_source(ROOT, args.path)
             result = {"path": args.path, "sha256": digest, "headings": headings(text)}
+        elif args.action == "json":
+            if not 512 <= args.max_chars <= 32000 or not 1 <= args.limit <= 100 or args.offset < 0:
+                raise ValueError(
+                    "pages need 512-32000 characters, 1-100 items and a nonnegative offset"
+                )
+            result = json_report(ROOT, args)
         elif args.action == "read":
             if not 1 <= args.max_chars <= 32000 or (
                 args.section and (args.start != 1 or args.end is not None)

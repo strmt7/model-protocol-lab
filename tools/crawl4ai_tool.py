@@ -24,7 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 LOCK = ROOT / "tools" / "requirements" / "crawl4ai.txt"
-VERSION = "0.9.4"
+VERSION = "0.9.5"
 ATTRIBUTION = (
     "This product includes software developed by UncleCode (https://x.com/unclecode) "
     "as part of the Crawl4AI project (https://github.com/unclecode/crawl4ai)."

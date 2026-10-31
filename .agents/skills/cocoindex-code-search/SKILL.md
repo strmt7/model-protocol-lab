@@ -30,7 +30,7 @@ part of the lab's measurement runtime or training data.
    or correctness. If semantic results miss the target, use bounded
    `rg -l` and refine once. Never change code based on a semantic hit
    alone.
-4. Exact `--path` file filters work. CocoIndex Code 0.2.41 returned
+4. Exact `--path` file filters work. CocoIndex Code 0.2.42 returned
    empty results for wildcard filters on the reference host;
    this wrapper rejects them. Use unscoped semantic routing followed by
    `rg` for path narrowing.

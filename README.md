@@ -6,6 +6,9 @@
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Cite](https://img.shields.io/badge/cite-CITATION.cff-informational)](CITATION.cff)
+[![cocoindex-code](https://img.shields.io/static/v1?label=&message=cocoindex-code&color=555&logo=github&logoColor=white)](https://github.com/cocoindex-io/cocoindex-code)
+[![caveman](https://img.shields.io/static/v1?label=&message=caveman&color=555&logo=github&logoColor=white)](https://github.com/JuliusBrussee/caveman)
+[![crawl4ai](https://img.shields.io/static/v1?label=&message=crawl4ai&color=555&logo=github&logoColor=white)](https://github.com/unclecode/crawl4ai)
 
 **Is a local language model failing because of its weights, or because its conversations are formatted incorrectly?**
 
@@ -17,7 +20,7 @@ What sets it apart: it measures checkpoints on token sequences their own chat te
 
 ## Status
 
-**Production-hardened and tested.** The package installs cleanly, the full test suite passes (9049 tests, 94.9% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made. CI tests Linux x86-64 for the full suite; a separate cross-OS smoke workflow verifies install plus the offline CLI on macOS and Windows, while the Jinja render watchdog, the MCP server's SIGALRM budget, and doctor's resource fallbacks still degrade there.
+**Production-hardened and tested.** The package installs cleanly, the full test suite passes (9055 tests, 94.9% line coverage — CI gate: 95%), `ruff` and `mypy` are clean, and the optional Hugging Face adapter is integration-tested against a locally generated tiny GPT-2 checkpoint. See [VALIDATION.md](VALIDATION.md) for the exact commands, counts, dates and environment — and for what is still *not* established (real-model runs beyond the synthetic checkpoint, browser rendering checks). No benchmark-superiority or unique-invention claim is made. CI tests Linux x86-64 for the full suite; a separate cross-OS smoke workflow verifies install plus the offline CLI on macOS and Windows, while the Jinja render watchdog, the MCP server's SIGALRM budget, and doctor's resource fallbacks still degrade there.
 
 ## Contents
 
@@ -28,6 +31,7 @@ What sets it apart: it measures checkpoints on token sequences their own chat te
 - [How this differs from nearby tools](#how-this-differs-from-nearby-tools)
 - [How to interpret a result](#how-to-interpret-a-result)
 - [Repository layout](#repository-layout)
+- [Contributing](#contributing)
 - [Privacy](#privacy)
 
 ## Quick start
@@ -148,7 +152,7 @@ sharability, confidentiality, the answer-collision audit, and the held-out
 stage with its verification-floor callout. Sections whose inputs a run does
 not produce (template conformance, backend divergence, the stop matrix,
 sensitivity sweep, the log-likelihood diagnostic, token healing, template
-robustness, field ablation, scorer lens, candidate aliasing, prompt repetition, distractor dilution, leading-claim caving, numeric surface form, date-line sensitivity, multi-turn drift, needle depth, question/payload placement, context rotation, instruction density, schema field order, choice-scoring audit) render only when the data exists and are absent
+robustness, field ablation, scorer lens, candidate aliasing, prompt repetition, distractor dilution, leading-claim caving, numeric surface form, date-line sensitivity, multi-turn drift, needle depth, question/payload placement, context rotation, instruction density, schema field order, choice-scoring audit, canonical-form sensitivity, antonym-negated description discordance, instruction distance, history frame, prune sweep, record notation, invisible characters, confusable skeleton) render only when the data exists and are absent
 from the sample. It is one self-contained file — a single
 tiny inline table-sorting script (hash-allowlisted in its
 Content-Security-Policy), no fonts or remote assets — and it never embeds
@@ -221,6 +225,14 @@ raw prompts or generations.
 - Load precision (`run --precision`): loads the same checkpoint a second time in bfloat16 and re-evaluates every search candidate on the search split against the recorded fp32 native run — the per-candidate verdict-flip matrix over paired fixtures, the output-divergence rate, teacher-forced expected-answer logprob deltas, and whether the fp32 winner survives as the selection under bf16 (withheld on mismatched completed sets). This is dtype precision, not quantization: the bf16 arm is a load-time cast of the same unquantized weights. Monday morning: you will serve this checkpoint in bf16 — is the template winner you picked under fp32 still the winner there? Search split only; held-out behaviour under bf16 is not measured.
 - Verbalized confidence (`run --confidence`): appends one frozen suffix to each search fixture's last user message asking the model to end its reply with `Confidence: <integer 0-100>`, parsed under a frozen grammar and scored against the same exact-match verdicts — per candidate: the compliance rate, mean stated confidence on correct vs incorrect compliant answers, a four-bin table, and the verdict flips the suffix itself caused. A generated donor-key control (planted-fact cases whose payload binds a different key, so the asked fact is simply absent) tests whether the stated number drops when the answer is not knowable from the prompt. A stated confidence is model output text, not a probability, and no readout is a calibration score. Monday morning: when this checkpoint states a confidence under each template, does the number track whether it was right — and does it drop when the answer is not in the prompt? Search split only; held-out fixtures are never treated.
 - Teacher-forced log-likelihood diagnostic (`run --logprob-diagnostic`): the log-probability of each fixture's expected answer under every candidate, reported as a banded heuristic next to the exact verdicts — where the greedy answer and the model's own scoring disagree, the band says so instead of hiding it.
+- Canonical-form sensitivity (`run --canonical-form`): 24 generated cases carrying accented text, each rendered with the accents composed (NFC) and decomposed (NFD) — whether Unicode normalization form changes verdicts, per template family. A tokenizer that normalizes before tokenizing makes the two arms token-identical; the probe reports that as instrument-inapplicable, never as robustness.
+- Antonym-negated description discordance (`run --negation`): generated compare pairs asked affirmatively ("larger") and in antonym-negated form ("not the smaller") — whether a negated criterion is understood as exactly its affirmative complement, per template family. The claim is the discordance between the two phrasings, never "negation" in the abstract.
+- Instruction distance (`run --instruction-distance`): 256 or 1024 tokens of filler placed between a format directive and the question it governs, against the same filler placed after the question — whether distance alone collapses format compliance, per template family, and where the collapse starts.
+- History frame (`run --history-frame`): a frozen six-turn synthetic history prepended to every search fixture, reframed in the prepended segment only — the fixture's own messages are never reframed — so the readout isolates what the frame a history arrives in does to the verdict on the fixture itself.
+- Prune sweep (`run --prune-sweep`): seeded nested doses of a frozen fact-recall passage's non-answer-bearing words deleted — whether the verdict survives the interior trimming that question-aware compression, retrieval trimming and word-level redaction pipelines perform.
+- Record notation (`run --record-notation`): the same generated data table rendered as prose sentences and as canonical JSON — where the two serializations of identical content disagree, per candidate, for anyone deciding how records should be written into a prompt.
+- Invisible characters (`run --invisible-chars`): one invisible character (zero-width space, variation selector, tag, soft hyphen, word joiner) inserted into a generated fact sentence at frozen sites — whether a single invisible code point moves the answer to a wrong value, against a matched visible-character control, for anyone deciding whether pasted or retrieved text needs sanitising first.
+- Confusable skeleton (`run --confusable-skeleton`): Latin letters in a generated fact sentence replaced by their UTS #39 skeleton-equivalent Cyrillic/Greek letters — whether look-alike substitution moves answers to wrong values, with a same-script non-confusable rarity control, for anyone deciding whether ingested documents and frozen fixtures need confusable screening.
 
 **Operator experience.**
 - `doctor` pre-flight validation of checkpoint assets and fixtures without loading weights, with actionable next-command suggestions; `--portability-matrix` renders the cross-tokenizer boundary-portability matrix for every attached checkpoint in one pass; `--template-probe` behaviourally probes the checkpoint's own chat template (see Capabilities).
@@ -315,6 +327,16 @@ DEVELOPMENT_PLAN.md       Architecture, milestones, test matrices and release ga
 VALIDATION.md             Verification evidence and limitations
 CHANGELOG.md              What changed and when
 ```
+
+## Contributing
+
+Contributions are welcome — start with [CONTRIBUTING.md](CONTRIBUTING.md)
+for the development setup, the exact verification gate every change must
+pass, and the conventions (evidence over claims, determinism, a stable
+public CLI). Questions and problem reports follow [SUPPORT.md](SUPPORT.md);
+security reports never go in public issues — see [SECURITY.md](SECURITY.md),
+which points to the full policy in [docs/SECURITY.md](docs/SECURITY.md).
+Discussion in project spaces follows [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## Privacy
 

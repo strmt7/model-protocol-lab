@@ -46,7 +46,7 @@ class CocoIndexAgentSearchTests(unittest.TestCase):
                     {
                         "source_digest": digest,
                         "config_digest": CONFIG_DIGEST,
-                        "cocoindex_code": "0.2.41",
+                        "cocoindex_code": "0.2.42",
                     }
                 ),
                 encoding="utf-8",
@@ -100,7 +100,7 @@ class CocoIndexAgentSearchTests(unittest.TestCase):
                     {
                         "source_digest": source_digest(entries),
                         "config_digest": CONFIG_DIGEST,
-                        "cocoindex_code": "0.2.41",
+                        "cocoindex_code": "0.2.42",
                     }
                 ),
                 encoding="utf-8",
@@ -186,7 +186,7 @@ class CocoIndexAgentSearchTests(unittest.TestCase):
             marker = base / "active" / (mirror.name + ".json")
             marker.parent.mkdir()
             marker.write_text(
-                json.dumps({"source_digest": "incorrect", "cocoindex_code": "0.2.41"}),
+                json.dumps({"source_digest": "incorrect", "cocoindex_code": "0.2.42"}),
                 encoding="utf-8",
             )
             with (
