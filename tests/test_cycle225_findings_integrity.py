@@ -199,7 +199,8 @@ class LabeledBlockPipelineTests(unittest.TestCase):
 class DiffCliOutputTests(unittest.TestCase):
     """The diff CLI's two sinks emit exactly the derived diff."""
 
-    def _run_cli(self, old_payload, new_payload):
+    @staticmethod
+    def _run_cli(old_payload, new_payload):
         """Run run_diff_reports on temp files; return code, streams, labels."""
         with tempfile.TemporaryDirectory() as tmp:
             old_path = Path(tmp) / "old.json"
@@ -244,7 +245,8 @@ class DiffCliOutputTests(unittest.TestCase):
 class DiffBackendsLoaderBindingTests(unittest.TestCase):
     """The split import keeps the failure-code function bound."""
 
-    def _args(self):
+    @staticmethod
+    def _args():
         """Minimal valid diff-backends arguments."""
         return argparse.Namespace(
             min_tokens=0,

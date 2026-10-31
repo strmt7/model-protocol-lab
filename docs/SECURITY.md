@@ -548,25 +548,35 @@ remaining occurrences are the previously adjudicated prose items.
 
 **Disposition of the 112** (fix-or-open, per occurrence class):
 
-- Fixed in code (99): FLK-D209 ×69 (docstring closing quotes moved
+- Fixed in code (98): FLK-D209 ×69 (docstring closing quotes moved
   to their own line in the cycle-223/224 test files), PY-D0003 ×18
   and PY-D0002 ×1 (truthful docstrings inserted), PYL-R0201 ×6
   (methods converted to static methods), PYL-W0612 ×3 (unused
-  unpack member renamed to a discard), PY-R1000 ×2 (two
-  over-complexity functions in
-  `model_protocol_lab/confusableskeleton.py` decomposed into
-  predicate helpers, computation unchanged).
-- Standing open (13): PY-R1000 ×4 (the two `reporting.py` section
+  unpack member renamed to a discard), PY-R1000 ×1
+  (`decompose_cell` in `model_protocol_lab/confusableskeleton.py`
+  decomposed into predicate helpers, computation unchanged).
+  Correction, verified against the cycle's final capture: an
+  earlier draft of this section credited two PY-R1000 fixes; the
+  second target, `audit_population`, was reduced (branch nodes
+  16 → 14 by the same extractions) but remains above the
+  analyzer's threshold, so it stands open below — the fixed count
+  is 98, not 99.
+- Standing open (14): PY-R1000 ×5 (the two `reporting.py` section
   composers — one uniform pattern across the report's section
   builders, whose refactor the 2026-10-29 diff-reports audit
-  rejected — and two test oracle/world functions whose flatness is
-  the measured property), PYL-W0212 ×4 (the deliberate
-  `_RedrawExhausted` protocol double shared across cycles),
-  PYL-W0404 ×2 (function-local re-imports inside the cycle-67
-  mutation-gate machinery), PTC-W0063 ×1 (a `next()` whose
-  `StopIteration` is the test's intended failure), SCT-A000 ×2
-  (the prose false positives adjudicated in cycle 222; the records
-  are not edited to dodge a scanner).
+  rejected — two test oracle/world functions whose flatness is
+  the measured property, and `audit_population`, above),
+  PYL-W0212 ×4 (the deliberate `_RedrawExhausted` protocol double
+  shared across cycles), PYL-W0404 ×2 (function-local re-imports
+  inside the cycle-67 mutation-gate machinery), PTC-W0063 ×1 (a
+  `next()` whose `StopIteration` is the test's intended failure),
+  SCT-A000 ×2 (the prose false positives adjudicated in cycle
+  222; the records are not edited to dodge a scanner). The final
+  capture also flags two confusableskeleton functions
+  (`validate_case`, `aggregate_candidate`) whose code is
+  byte-identical to the previous capture, in which they were not
+  flagged — analyzer threshold variance at the margin, recorded
+  here rather than chased.
 
 **The per-site annotation surface is withdrawn.** Cycle 222's
 `# skipcq` comments — 874 lines across 165 files — were removed in
