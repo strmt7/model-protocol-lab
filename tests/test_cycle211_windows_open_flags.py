@@ -123,9 +123,20 @@ class TestWindowsOpenFlags(unittest.TestCase):
 
     def test_load_probe_json_without_o_nonblock(self) -> None:
         target = self.tmp_path / "probe.json"
-        target.write_text('{"a": 1}', encoding="utf-8")
+        # A minimal real probe-report skeleton: since cycle 226
+        # (B-14) the loader refuses payloads that are not probe
+        # reports at all, so the flag-discipline assertion feeds the
+        # smallest payload the loader accepts. The open-flag
+        # behaviour under test is unchanged.
+        payload = {
+            "instrument": "surface-noise-probe",
+            "status": "cancelled",
+            "protocol": {},
+            "prompt_sha256": "0" * 64,
+        }
+        target.write_text(json.dumps(payload), encoding="utf-8")
         with _WithoutUnixFlags(self):
-            self.assertEqual(_load_probe_json(target), {"a": 1})
+            self.assertEqual(_load_probe_json(target), payload)
 
     def test_load_results_without_o_nonblock(self) -> None:
         target = self.tmp_path / "results.json"

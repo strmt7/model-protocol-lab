@@ -14895,8 +14895,12 @@ def _recordnotation_parsed_hit(answer_text: str, expected: str) -> bool:
     import json as _json
 
     try:
-        parsed = _json.loads(answer_text)
-    except ValueError:
+        parsed = _json.loads(
+            answer_text,
+            parse_constant=_reject_constant,
+            parse_float=_reject_nonfinite_float,
+        )
+    except (RecursionError, ValueError):
         return False
     return type(parsed) is dict and parsed.get(_RECORDNOTATION_ANSWER_FIELD) == expected
 

@@ -175,6 +175,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import random
 import re
 from typing import Any
@@ -775,16 +776,45 @@ def _ids_identical(record: dict[str, Any]) -> bool:
     )
 
 
+def _reject_constant(value: str) -> Any:
+    """Reject NaN/Infinity/-Infinity JSON constants (fail-closed)."""
+    raise ValueError(f"non-finite constant {value!r}")
+
+
+def _reject_nonfinite_float(text: str) -> float:
+    """Reject float literals that overflow to infinity (``1e999``).
+
+    ``parse_constant`` only fires for the ``NaN``/``Infinity``
+    literals; ``float()`` conversion of a huge exponent reaches
+    ``inf`` without ever calling it, so the finiteness guarantee
+    needs this hook too (the toolcall answer parser's form).
+    """
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError(f"non-finite float literal {text!r}")
+    return value
+
+
 def _parsed_hit(answer_text: str, expected: str) -> bool:
     """The parsed-value diagnostic (candidate section 4.4):
     the answer parses via json.loads as an object whose value
     at the answer-field key equals the expected value. JSON
     string escapes are honoured by the parser, so a parsed hit
     need not be a substring hit (amendment C).
+
+    The parse is the tree's fail-closed answer discipline (the
+    toolcall form): NaN/Infinity literals and overflowing floats
+    are refused, and a pathologically nested answer is a miss,
+    never a RecursionError escaping the candidate aggregation
+    (cycle 226, B-07).
     """
     try:
-        parsed = json.loads(answer_text)
-    except ValueError:
+        parsed = json.loads(
+            answer_text,
+            parse_constant=_reject_constant,
+            parse_float=_reject_nonfinite_float,
+        )
+    except (RecursionError, ValueError):
         return False
     return type(parsed) is dict and parsed.get(ANSWER_FIELD) == expected
 
