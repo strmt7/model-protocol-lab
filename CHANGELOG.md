@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 226 — pack container vocabulary, 2026-10-31)
+
+- `verify --bundle` no longer dies with a raw
+  `NotImplementedError` traceback on a bundle whose central
+  directory declares an extract version newer than the running
+  Python's zipfile supports: `pack.verify_bundle_bytes` normalizes
+  that construction failure to the fixed
+  `bundle_container_invalid` vocabulary, like every sibling
+  container defect, and the CLI exits 1 with the code on stderr.
+  Pinned by `tests/test_cycle226_pack_container.py` (the bundle is
+  built with the module's own writer, then its
+  version-needed-to-extract field is rewritten to 222).
+
 ### Fixed (cycle 226 — JSON discipline, 2026-10-31)
 
 - The surface-noise probe loader (`surfacenoise._load_probe_json`)
