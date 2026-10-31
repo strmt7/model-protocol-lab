@@ -9378,7 +9378,7 @@ Evals, DSPy, garak) apply no cyclic-shift treatment to a
 multi-block prompt crossed with hand-rendered template
 families on a local checkpoint with an abstaining selection
 rule re-applied per shift. Uniqueness is the combination, as
-always. Lialin (arXiv:2404.02054) and Richardson
+always. Shivagunde et al. (arXiv:2404.02054) and Richardson
 (arXiv:2310.20081) are struck as rotation sources (cycle-202
 entry carries the autopsy). arXiv:2511.20836 is premise
 evidence only, cited as v3 ("Structured Prompts Improve
@@ -10984,21 +10984,7 @@ code-scanning open 24 = 5 CodeQL + 19 Scorecard) and the
   makes no detection claim); UAX #15 (cited only to
   delimit NFKC, which cannot produce this population);
   confusables.txt 15.0.0 (MA/LA header scope semantics;
-  the population's enumeration source); Sarabamoun,
-  "Invisible Prompts, Visible Threats" (arXiv
-  2602.24647v1: the skeleton/heuristic flagging passage
-  quoted and used as a screening-step component at
-  DESIGN.md §1/§10 — the check this probe prices —
-  carried with its full context: Table 3's 92.1/92.9/97.9
-  figures are Claude Sonnet 4.5's detection rates on
-  NEXT-AGENT chain-of-thought, §4.2+§4.5's 45–52 percent
-  is Sonnet self-reports of noticing, and §4.1's 30.2
-  percent is a user-report statistic; the identity
-  between the ar5iv HTML rendering and the v2 PDF was
-  verified by extracting the passage from both); Patsakis
-  et al. (arXiv 2509.22294v1: the abstract's
-  malicious-instruction colon, the 85-percent figure
-  scoped to its encoding-search methodology). The claim
+  the population's enumeration source). The claim
   made is the combination, in
   `docs/CONFUSABLESKELETON_DESIGN.md`.
 - **Naming audit (executed by parser instantiation of
@@ -11030,3 +11016,110 @@ code-scanning open 24 = 5 CodeQL + 19 Scorecard) and the
   outside the frozen grammar print as non-answer and are
   outside the headline claim; screening cost on clean text
   is not measured by this arm set.
+
+## Cycle 226 — production-readiness claims corrections (2026-10-31)
+
+This cycle consumes the claims findings of the 2026-10-31
+production-readiness audit (coordinator #83; backlog items
+B-01, B-02, B-08, B-09, B-21, B-22, B-23). Every item was
+re-verified by the coordinator against the primary source
+before editing — the arXiv API records for the five
+identifiers in question, read 2026-10-31. Two claims in
+this log were wrong at the citation level; both are removed
+in place above, and the removals are recorded here so the
+record shows both the error and its repair.
+
+- **B-01 (HIGH) — a cited paper that does not exist at its
+  ID.** The cycle-224 entry credited "Sarabamoun, *Invisible
+  Prompts, Visible Threats* (arXiv:2602.24647v1)" with a
+  skeleton/heuristic flagging passage said to be quoted and
+  used at CONFUSABLESKELETON_DESIGN.md §1/§10, and with
+  table-level figures (Table 3's 92.1/92.9/97.9 detection
+  rates; §4.2+§4.5's 45–52 percent; §4.1's 30.2 percent).
+  Verification: the arXiv API returns no record for
+  2602.24647 and the abstract page is 404; the design doc
+  contains no such quotation and never cites the ID (its
+  Sarabamoun citation is the genuine arXiv:2508.14070,
+  verified in the audit). The genuine holder of the cited
+  title is Xiong et al., *Invisible Prompts, Visible
+  Threats: Malicious Font Injection in External Resources
+  for Large Language Models* (EMNLP 2025 Findings) —
+  different authors, a different subject, none of the
+  figures — and per the standing rule it is NOT substituted:
+  the coordinator has not read it and its substance would
+  not carry these claims. The citation and every figure
+  drawn from it are REMOVED from the cycle-224 entry. The
+  uniqueness claim there never depended on them — it is
+  scoped to the combination, and its remaining sources
+  (UTS #39 rev 27, UAX #15, confusables.txt 15.0.0) each
+  resolve in full — but a uniqueness record that cites a
+  non-existent paper is a defect in itself. This is the
+  cycle-197 F-01 failure class recurring in cycle 224, and
+  it is recorded here as one.
+- **B-02 (HIGH) — wrong-paper citation.** The same
+  cycle-224 paragraph cited "Patsakis et al.
+  (arXiv:2509.22294v1)" for a malicious-instruction colon
+  and an 85-percent figure scoped to an encoding-search
+  methodology. The arXiv record for 2509.22294 is Li et
+  al., *A Multi-Level Framework for Multi-Objective
+  Hypergraph Partitioning* — no Patsakis, no malicious
+  instructions, no 85 percent. A genuine-source hunt found
+  no paper carrying the attributed claim; Patsakis's LLM
+  paper (arXiv:2404.19715) carries neither the colon claim
+  nor the figure and is not substituted. The citation and
+  the 85-percent figure are REMOVED.
+- **B-08 (MED) — a withdrawn characterization still
+  standing in a design doc.** PLACEMENT_DESIGN.md's status
+  summary still described arXiv:2605.28188 as a few-shot
+  exemplar instrument whose mitigation is order swaps plus
+  majority vote — the characterization cycle 207 withdrew
+  in full in this log while asserting it appeared nowhere
+  else in the repo; the design doc falsified that
+  assurance. It now prints the corrected characterization
+  (FRAGILE: value-tinted narration, temporal slice,
+  narrative vividness; VALIGN, a representation-level
+  mitigation; never a placement instrument), matching this
+  log's cycle-207 corrected text, which verifies against
+  the paper's abstract on every point.
+- **B-09 (MED) — XSTest figures from the wrong table
+  half, in a code docstring.** refusals.py's docstring
+  paired Table 2's +4.8 (the safe-prompt half, GPT-4) with
+  the ~29-point values (the unsafe-prompt half, Mistral)
+  unscoped — the exact defect cycle-197 F-04 corrected in
+  this log but not in the shipped docstring. The docstring
+  now scopes both halves explicitly, matching the
+  corrected text of this log's cycle-193 entry.
+- **B-21 (LOW) — wrong author attribution.**
+  DIRECTIVE_DESIGN.md named "Qiu & Srivastava" for
+  arXiv:2511.04108 at three sites, one of them presenting
+  the form as a correction of "Srivastava et al.". The
+  current arXiv record lists ten authors, first Saurabh
+  Srivastava; no author named Qiu appears. (The record's
+  version history notes an updated author list, so a
+  v1-era list cannot be excluded from the current record
+  alone; as printed — unversioned, present-tense — the
+  attribution did not match the primary record.) All three
+  sites now read Srivastava et al.; the paper remains
+  dropped as load-bearing at every site, so the impact is
+  record accuracy only.
+- **B-22 (LOW) — wording exceeds evidence.**
+  control_tokens.py called Phantom (arXiv:2602.16958) "a
+  CVE-assigned attack class". The paper reports one
+  redacted CVE assignment (CVE-2025-6***4) for a specific
+  MCP flaw its authors exposed; no CVE is assigned to the
+  attack class as such. The docstring now states exactly
+  what the paper reports.
+- **B-23 (MINOR) — non-first-author surname shorthand.**
+  This log's cycle-202 entry cited "Lialin
+  (arXiv:2404.02054)"; the record's first author is
+  Shivagunde, Lialin second. Corrected in place to
+  Shivagunde et al.
+
+No behaviour changes in this push: the two code files
+touched carry docstring text only. A full mechanical
+citation sweep (every arXiv identifier in docs/, README.md
+and the package docstrings, resolved against the arXiv
+API) is re-run after this push lands, per the claims
+skill's rule that corrections written from memory
+reintroduce the class they fix; its result is recorded in
+the cycle's final report.

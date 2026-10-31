@@ -366,8 +366,10 @@ re-litigate the sketch, which is dead.
 1. **Corrections applied before review.** Tree line ranges as
    corrected in §5 (JOINER `confidence.py:78`; parser def
    `confidence.py:177`, body to :205; SUFFIX `confidence.py:85-89`;
-   answer span `core.py:939` / `:966`); the author of
-   arXiv:2511.04108 is Qiu & Srivastava and the paper is dropped
+   answer span `core.py:939` / `:966`); the first author of
+   arXiv:2511.04108 is Srivastava (Saurabh Srivastava et al.;
+   no author named Qiu appears in the current arXiv record)
+   and the paper is dropped
    as load-bearing in any case (§5); the RESEARCH_LOG naming
    claim is three prose hits (`:3814`, `:5596`, `:5755`), not
    two; the rule table's "0.0000" per-decision rate at N=100 is
@@ -580,7 +582,9 @@ All snippets read-only; no suite was run.
   for these arms; the 7,200-generation figure without its
   search-only and recorded-cap qualifications.
 - **Researcher:** "Srivastava et al." for arXiv:2511.04108 →
-  Qiu & Srivastava (dropped as load-bearing regardless);
+  Srivastava et al. (the current arXiv record's author list;
+  an earlier printing named "Qiu & Srivastava", corrected in
+  cycle 226; dropped as load-bearing regardless);
   `confidence.py:76` JOINER → `:78`; parser range 168–207 →
   def `:177`, body to `:205`; SUFFIX range 85–90 → 85–89;
   "only hits" in RESEARCH_LOG → three hits (`:3814`, `:5596`,
@@ -630,7 +634,7 @@ level; fencing must travel with each):
   small — which is why the contract/truncation channels (F1, F5)
   dominate the sketch and must be designed out, not disclosed
   away.
-- Qiu & Srivastava, arXiv:2511.04108 — batching multiple queries
+- Srivastava et al., arXiv:2511.04108 — batching multiple queries
   into one prompt suppresses overthinking in large reasoning
   models. NOT directive evidence; the researcher drops it as
   load-bearing and a resubmission should too.

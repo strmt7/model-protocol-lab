@@ -6,6 +6,39 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 226 — production-readiness claims corrections, 2026-10-31)
+
+- Two citations in the cycle-224 research-log entry are removed
+  outright: the "Sarabamoun, Invisible Prompts, Visible Threats"
+  citation (arXiv:2602.24647) has no record in the arXiv index — a
+  fabricated citation — and the "Patsakis et al." citation
+  (arXiv:2509.22294) resolves to an unrelated hypergraph-partitioning
+  paper by different authors. Every downstream claim that rested on
+  them (the 92.1/92.9/97.9 detection figures, the 45–52 percent
+  residual-gain band, the 30.2 percent alignment statistic, the 85
+  percent layout-variation figure) is removed with them; the surviving
+  uniqueness reasoning is the project's own, over the verified source
+  list. Nothing is substituted: the genuine holder of the removed
+  title (Xiong et al., EMNLP 2025 Findings) is named in the log's
+  cycle-226 correction entry for the record and explicitly not cited
+  in place of the fabrication.
+- `docs/PLACEMENT_DESIGN.md` no longer prints the framing
+  characterization that cycle 207 withdrew (few-shot exemplars, order
+  swaps): the status summary again describes arXiv:2605.28188 as what
+  it is — fact-preserved framing variants and a representation-level
+  mitigation (VALIGN), never a placement instrument.
+- The `refusals.py` module docstring no longer mixes the two halves
+  of XSTest Table 2: the counting error's sign and size are
+  model- and population-dependent (GPT-4 safe-prompt refusals
+  over-counted by +4.8 points; Mistral safe-prompt error 0.0/-3.6;
+  Mistral unsafe-prompt refusals under-counted by ~29 points).
+- Three attribution corrections: arXiv:2511.04108 is Srivastava
+  et al., not "Qiu & Srivastava" (no Qiu in the arXiv record);
+  arXiv:2404.02054 is cited as Shivagunde et al. (Lialin is second
+  author); the control-tokens survey now reports the redacted CVE
+  assignment (CVE-2025-6***4) its source states, not "a CVE-assigned
+  attack class".
+
 ### Changed (cycle 225 — findings integrity, 2026-10-30)
 
 - Code-scanning alerts #24/#25 (`py/clear-text-logging-sensitive-data`
