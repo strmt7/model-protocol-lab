@@ -526,11 +526,14 @@ def verify_bundle_bytes(data: bytes, expect_digest: str | None = None) -> dict[s
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
         infos = archive.infolist()
-    except (zipfile.BadZipFile, UnicodeDecodeError):
+    except (zipfile.BadZipFile, UnicodeDecodeError, NotImplementedError):
         # A name carrying the UTF-8 flag with invalid UTF-8 bytes
-        # fails filename decoding (oversight security S-6b): that is
-        # a container defect, in the fixed vocabulary — never a raw
-        # codec traceback.
+        # fails filename decoding (oversight security S-6b), and a
+        # central directory declaring an extract version newer than
+        # this Python's zipfile supports raises NotImplementedError
+        # from the same construction (cycle 226, B-06): both are
+        # container defects, in the fixed vocabulary — never a raw
+        # codec or version traceback.
         raise ValueError("bundle_container_invalid") from None
     checks: list[dict[str, str]] = []
     names = [info.filename for info in infos]
