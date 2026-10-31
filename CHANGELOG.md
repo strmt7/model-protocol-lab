@@ -69,7 +69,13 @@ All notable changes to this project are documented here. The format follows
   three tools' license texts are vendored under `docs/licenses/`.
   The reference repository's source-built patched crawl4ai wheel
   was deliberately not ported: this repo stays on the upstream
-  wheel.
+  wheel. One portability defect in the ported `json` operation was
+  found by the Python 3.11 CI leg and fixed in this cycle: an
+  over-deep JSON document raises `RecursionError` from the 3.11
+  decoder instead of the decode error newer interpreters produce,
+  and `json_report` now converts it to the tool's standard refusal
+  (exit 2), so unbounded evidence is refused identically on every
+  supported interpreter.
 
 ### Added (cycle 224 — confusable-skeleton substitution probe, 2026-10-30)
 
