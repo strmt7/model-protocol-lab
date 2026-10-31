@@ -1,8 +1,10 @@
 """Chat-marker isolation conformance (research backlog R4).
 
 Structural template injection (ChatInject, arXiv 2509.22830v2; Phantom,
-arXiv 2602.16958, a CVE-assigned attack class) forges role/control markers
-inside untrusted text: with HF's ``split_special_tokens=False`` default, a
+arXiv 2602.16958 — the paper reports a redacted CVE assignment,
+CVE-2025-6***4, for one specific MCP flaw its authors exposed) forges
+role/control markers inside untrusted text: with HF's
+``split_special_tokens=False`` default, a
 literal ``<|im_start|>`` typed by a user *becomes a real control token*.
 The defense-side measurement is tokenizer-level and deterministic: render a
 prompt, inject hostile user content containing literal marker strings, and

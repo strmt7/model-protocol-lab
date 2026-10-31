@@ -52,9 +52,12 @@ detector version, never a silent edit):
 
 What the numbers mean, stated plainly: string matching is the
 field's known-weak baseline. XSTest's own validation (Table 2) shows
-it over-counting one model's refusals (+4.8 points -- empathy
-openers such as "I'm sorry to hear...") and under-counting
-another's (~29 points), with the sign of the error model-dependent;
+its string matching over-counting GPT-4's safe-prompt refusals
+by +4.8 points (empathy openers such as "I'm sorry to hear..."),
+near-zero error for Mistral in the safe-prompt half (0.0 points
+for MistrI, -3.6 for MistrG), and under-counting Mistral's
+refusals by ~29 points in the unsafe-prompt half -- the error's
+sign and size are model- and population-dependent;
 StrongREJECT ranks string matching its worst evaluator. No published
 accuracy figure transfers to this lab's fixture distribution, which
 is why every rate here is named *suspected*, every hit names the

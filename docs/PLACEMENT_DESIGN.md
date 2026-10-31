@@ -4,14 +4,17 @@ Status: v2 — adjudicated, buildable as amended. Swarm record:
 the researcher verified the uniqueness claim live (HOLDS WITH
 NARROWING; the narrowed wording is in docs/RESEARCH_LOG.md,
 cycle 193, with three corrections to the wave-8 brief — the
-arXiv:2605.28188 instrument is few-shot exemplar segments, not a
-value anchor; the healthcare role-relocation result is
+arXiv:2605.28188 instrument is FRAGILE — fact-preserved
+framing variants (value-tinted narration, temporal slice,
+narrative vividness), not a value anchor; the healthcare role-relocation result is
 arXiv:2601.18334, recorded in docs/RESEARCH_LOG.md's
 cycle-185 entry, on closed-weights hosted models (an earlier
 printing of this summary named the wrong ID and the wrong
 home; corrected in cycle 197); the framing paper's
-mitigation is order swaps plus majority vote, never a placement
-instrument). Red-team A returned DO NOT BUILD AS SPECIFIED (17
+mitigation is VALIGN, a representation-level method, never a
+placement instrument (an earlier printing of this summary
+carried the few-shot-exemplar / order-swap characterization
+that cycle 207 withdrew in full; corrected in cycle 226). Red-team A returned DO NOT BUILD AS SPECIFIED (17
 findings, 3 fatal). Red-team B cross-checked every finding with
 its own enumerations and probes: it refuted A's F1/F8
 contradiction claim under the design's operative reading,
