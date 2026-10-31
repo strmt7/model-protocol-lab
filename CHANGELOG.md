@@ -35,6 +35,31 @@ All notable changes to this project are documented here. The format follows
   were brought to the repository's docstring and style standard
   (FLK-D209, PY-D0002, PY-D0003, PYL-R0201, PYL-W0612).
 
+### Changed (cycle 225 — toolchain currency, 2026-10-30)
+
+- Every versioned surface was inventoried against its primary
+  source and moved to the latest release as of 2026-10-30. All
+  GitHub Actions were already current (SHA-identical). The
+  ruff-pre-commit hook moves v0.17.1 → v0.17.3 (it had lagged the
+  pyproject floor); the mypy floor moves to 2.4.1 and the
+  hypothesis floor to 6.170.14, with the hashed dev set
+  regenerated. The HF stack moves to torch 2.15.0, transformers
+  5.22.1 and safetensors 0.8.0 via the regenerated hashed dev-hf
+  closure (the nvidia-cu13 lines refresh to the 13.4/13.2 family;
+  the marker-split numpy/networkx pins are unchanged — their
+  splits were re-verified release by release). The docs
+  requirements closure moves platformdirs 4.14.0 and tzdata
+  2026.6; `pylock.toml` is regenerated consistently. One candidate
+  was rejected with evidence: mpmath 1.4.1 is latest, but sympy
+  1.14.0 declares `mpmath<1.4`, so the closure keeps 1.3.0 until a
+  sympy release admits the new line. The ClusterFuzzLite base
+  image stays at its pinned digest: the pin is immutable content,
+  and re-resolving the `v1` tag from this host is currently
+  impossible (the registry's anonymous token endpoint redirects
+  to a console page on every regional host, and no docker/skopeo
+  client is installed) — the re-verification is recorded as an
+  open item rather than the pin being changed on unverified data.
+
 ### Added (cycle 225 — documentation and agent-tooling parity, 2026-10-30)
 
 - Documentation repair pass (drafts prepared by a dedicated research

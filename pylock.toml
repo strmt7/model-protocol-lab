@@ -1,5 +1,5 @@
 # PEP 751 lock for the DEVELOPMENT environment (the [dev] extra),
-# generated 2026-10-28 with pip 26.2.2 on CPython 3.12 / Linux x86_64.
+# generated 2026-10-30 with pip 26.2.2 on CPython 3.12 / Linux x86_64.
 # It pins what a contributor's dev venv resolves to, with wheel hashes.
 # It does not constrain library consumers (they get the pyproject
 # ranges), and CI does not install from it: CI deliberately installs the
@@ -35,14 +35,14 @@ sha256 = "85932227e9dd38e62cd29c17fefdfecfb919eead6af1e3259522d03cf85de983"
 
 [[packages]]
 name = "hypothesis"
-version = "6.170.12"
+version = "6.170.14"
 
 [[packages.wheels]]
-name = "hypothesis-6.170.12-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
-url = "https://files.pythonhosted.org/packages/70/ff/4f1eb1bb67283240aac366b77e2ebbf864e1fd4d93c3762399f499d200db/hypothesis-6.170.12-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+name = "hypothesis-6.170.14-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl"
+url = "https://files.pythonhosted.org/packages/7f/7a/311a4ec14dbde1ce82cbd4d8957665c4d68e9139524b10e0a622db98bc4e/hypothesis-6.170.14-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl"
 
 [packages.wheels.hashes]
-sha256 = "51ccd8964291b6cba57709b6acf1cad2e9c4347e993198ef8ece5653cdafcbdc"
+sha256 = "cde7e98694a9baa1d9761c1b595b3d617467c876200c0798a40f2016a0e85304"
 
 [[packages]]
 name = "iniconfig"
@@ -75,14 +75,14 @@ editable = true
 
 [[packages]]
 name = "mypy"
-version = "2.4.0"
+version = "2.4.1"
 
 [[packages.wheels]]
-name = "mypy-2.4.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
-url = "https://files.pythonhosted.org/packages/f3/9e/bcc9af755425ad17790bf11d73c2ea7592914cf309ee1340997670f9d57a/mypy-2.4.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
+name = "mypy-2.4.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
+url = "https://files.pythonhosted.org/packages/5d/b8/7313212b29de570c25c9859d7c8e4ef2251a6d34338a1e20031d94297721/mypy-2.4.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
 
 [packages.wheels.hashes]
-sha256 = "29eb0b9427a6b11b992e452f6cceb8af724f4dceb47e779d0b35e405e996ea5e"
+sha256 = "a20ff6cd2af7a670c64f089bfa5fbcebe8ff3bf896c5e6ac7c9862c7960e4494"
 
 [[packages]]
 name = "mypy-extensions"
