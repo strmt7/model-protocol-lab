@@ -1238,7 +1238,7 @@ class TestSensitivityControls(unittest.TestCase):
     def test_mutant_bumped_version_detected(self) -> None:
         """Test mutant bumped version detected."""
         source = (
-            (REPO_ROOT / "model_protocol_lab" / "__init__.py").read_text().replace("0.1.0", "9.9.9")
+            (REPO_ROOT / "model_protocol_lab" / "__init__.py").read_text().replace("0.2.0", "9.9.9")
         )
         mutant = self._load_mutant_init(source, "version")
         with self.assertRaises(AssertionError):
