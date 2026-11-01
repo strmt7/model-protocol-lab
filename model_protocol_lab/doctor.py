@@ -116,6 +116,54 @@ def _check(status: str, detail: str = "") -> dict[str, str]:
 _SAFETENSORS_HEADER_CAP = 64 * 1024 * 1024
 
 
+def _reject_header_constant(_value: str) -> Any:
+    """``parse_constant`` hook: NaN/Infinity are not header JSON."""
+    raise ValueError("invalid_safetensors_header")
+
+
+def _reject_header_nonfinite_float(text: str) -> float:
+    """``parse_float`` hook: reject literals that overflow to
+    infinity (``1e999``); ``parse_constant`` never sees them because
+    ``float()`` conversion reaches ``inf`` directly.
+    """
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError("invalid_safetensors_header")
+    return value
+
+
+def _unique_header_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """``object_pairs_hook``: duplicate keys are invalid header JSON
+    (security audit 2, C-03: a duplicated tensor entry would
+    otherwise be decided by position, and this check would certify
+    headers the real loader rejects).
+    """
+    obj: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in obj:
+            raise ValueError("invalid_safetensors_header")
+        obj[key] = value
+    return obj
+
+
+def _reject_header_lone_surrogates(value: Any) -> None:
+    """Refuse lone surrogates anywhere in a decoded header (the
+    sibling loaders' structural discipline; the walk is iterative,
+    so the check itself cannot exhaust the stack).
+    """
+    stack: list[Any] = [value]
+    while stack:
+        item = stack.pop()
+        if type(item) is str:
+            if any(0xD800 <= ord(char) <= 0xDFFF for char in item):
+                raise ValueError("invalid_safetensors_header")
+        elif type(item) is dict:
+            stack.extend(item.keys())
+            stack.extend(item.values())
+        elif type(item) is list:
+            stack.extend(item)
+
+
 def _check_weight_headers(root: Path, names: tuple[str, ...]) -> dict[str, str]:
     r"""Byte-level validation of safetensors weight files; never loads weights.
 
@@ -155,7 +203,13 @@ def _check_weight_headers(root: Path, names: tuple[str, ...]) -> dict[str, str]:
             if fd != -1:
                 os.close(fd)
         try:
-            header = json.loads(header_bytes.decode("utf-8"))
+            header = json.loads(
+                header_bytes.decode("utf-8"),
+                object_pairs_hook=_unique_header_object,
+                parse_constant=_reject_header_constant,
+                parse_float=_reject_header_nonfinite_float,
+            )
+            _reject_header_lone_surrogates(header)
         except (RecursionError, ValueError):
             # RecursionError: a deeply-nested header ([[[...]]]) exhausts the
             # parser stack -- a hostile but small file; fail closed like

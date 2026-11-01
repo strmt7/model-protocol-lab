@@ -160,7 +160,7 @@ class DocsCurrencyTests(unittest.TestCase):
         # 217 -> 218 in cycle 218; 225 -> 226 in cycle 226).
         """Validation header covers latest cycle."""
         top = VALIDATION.split("\n## ")[1]
-        self.assertIn("cycles 10–226", top)
+        self.assertIn("cycles 10–227", top)
 
 
 class ValidationRuffCountPinTests(unittest.TestCase):

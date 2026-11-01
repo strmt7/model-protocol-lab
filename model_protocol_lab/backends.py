@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import re
 import stat
@@ -74,6 +75,57 @@ def _open_regular_read(path: Path) -> int:
     return fd
 
 
+def _reject_asset_constant(_value: str) -> Any:
+    """``parse_constant`` hook: NaN/Infinity are not asset JSON."""
+    raise ValueError("invalid_asset_json")
+
+
+def _reject_asset_nonfinite_float(text: str) -> float:
+    """``parse_float`` hook: reject literals that overflow to
+    infinity (``1e999``); ``parse_constant`` never sees them because
+    ``float()`` conversion reaches ``inf`` directly.
+    """
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError("invalid_asset_json")
+    return value
+
+
+def _unique_asset_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """``object_pairs_hook``: duplicate keys are invalid asset JSON
+    (last-wins would let a duplicated ``model_type`` be decided by
+    position; security audit 2, C-03).
+    """
+    obj: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in obj:
+            raise ValueError("invalid_asset_json")
+        obj[key] = value
+    return obj
+
+
+def _reject_asset_lone_surrogates(value: Any) -> None:
+    """Refuse lone surrogates anywhere in a decoded asset document.
+
+    A ``\\ud800`` escape decodes to a lone surrogate that no UTF-8
+    consumer downstream can encode; the sibling loaders refuse the
+    class structurally (surfacenoise's probe loader, cycle 226).
+    The walk is iterative, so the check itself cannot exhaust the
+    stack on a nested payload.
+    """
+    stack: list[Any] = [value]
+    while stack:
+        item = stack.pop()
+        if type(item) is str:
+            if any(0xD800 <= ord(char) <= 0xDFFF for char in item):
+                raise ValueError("invalid_asset_json")
+        elif type(item) is dict:
+            stack.extend(item.keys())
+            stack.extend(item.values())
+        elif type(item) is list:
+            stack.extend(item)
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     """Read json."""
     fd = _open_regular_read(path)
@@ -87,7 +139,13 @@ def _read_json(path: Path) -> dict[str, Any]:
     if len(content) > 128 * 1024 * 1024:
         raise ValueError("oversized_asset_json")
     try:
-        value = json.loads(content.decode("utf-8"))
+        value = json.loads(
+            content.decode("utf-8"),
+            object_pairs_hook=_unique_asset_object,
+            parse_constant=_reject_asset_constant,
+            parse_float=_reject_asset_nonfinite_float,
+        )
+        _reject_asset_lone_surrogates(value)
     except (RecursionError, ValueError):
         # Keep the fixed error vocabulary: raw codec/parser text (which
         # reflects the inspected file's bytes) must not reach doctor check

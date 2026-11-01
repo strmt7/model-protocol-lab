@@ -521,6 +521,8 @@ def check_schema(document: object, schema: object) -> str:
         if field is None:
             if normalized["additionalProperties"] is False:
                 return "schema_failed"
+            if not _finite_extra_subtree(value):
+                return "schema_failed"
             continue
         if not _field_value_ok(value, field):
             return "schema_failed"
@@ -566,6 +568,48 @@ def _field_value_ok(value: object, field: dict[str, Any]) -> bool:
     return True
 
 
+def _finite_extra_subtree(value: object) -> bool:
+    """Return whether an undeclared field's value is finite throughout.
+
+    The schema stage owns number finiteness in this module (cycle
+    158: a checked ``number`` field rejects NaN/Infinity as
+    ``schema_failed``, never ``parse_failed``). A field the schema
+    permits but does not declare would otherwise smuggle a
+    non-finite number past that ownership -- ``NaN`` or ``1e999``
+    in an extra field earned ``adherent`` (security audit 2, C-02)
+    -- so an undeclared field's subtree must be finite throughout
+    for the document to satisfy the schema. The walk is iterative,
+    so the check itself cannot exhaust the stack.
+    """
+    stack: list[object] = [value]
+    while stack:
+        item = stack.pop()
+        if type(item) is float:
+            if not _is_finite_number(item):
+                return False
+        elif type(item) is dict:
+            stack.extend(item.values())
+        elif type(item) is list:
+            stack.extend(item)
+    return True
+
+
+def _unique_response_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """``object_pairs_hook``: duplicate keys are a parse failure.
+
+    Last-wins silently lets a duplicated field's second value earn
+    credit the first value's author never produced; every other
+    loader in the tree rejects duplicates, and the classifier now
+    applies the same discipline (security audit 2, C-02).
+    """
+    obj: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in obj:
+            raise ValueError("response_duplicate_field")
+        obj[key] = value
+    return obj
+
+
 def classify_response(text: object, schema: object) -> dict[str, str]:
     """Classify one decoded response against a schema definition.
 
@@ -579,7 +623,10 @@ def classify_response(text: object, schema: object) -> dict[str, str]:
     if type(text) is not str:
         return {"parse": "not_text", "schema": "not_evaluated", "outcome": "not_text"}
     try:
-        document = json.loads(text)
+        document = json.loads(
+            text,
+            object_pairs_hook=_unique_response_object,
+        )
     except (ValueError, TypeError, RecursionError):
         return {"parse": "parse_failed", "schema": "not_evaluated", "outcome": "parse_failed"}
     schema_verdict = check_schema(document, schema)
