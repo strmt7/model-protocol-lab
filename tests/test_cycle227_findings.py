@@ -35,6 +35,13 @@ fix batch:
 - F6 -- lone-surrogate fixture ids escaped five diff sections as
   raw ``UnicodeEncodeError`` at their join-encode digest sites;
   each site now fails closed like the cycle-190 site.
+- BH2B-03/06/07 -- verify accepted summary-only forgeries, a vacuous
+  planned == 0 winner, and a truthy-string aggregate_eligible: the
+  summaries are now bound to their observations, planned must be
+  >= 1, and eligibility is read as a strict bool.
+- BH2B-04 -- the built-in surface-noise backends produced over-cap
+  "limit" generations below max_new_tokens == 5, and the probe
+  scored generations without the core contract check.
 - BH2B-05 -- the cycle-67 oracle's ``identical`` conjunction (and
   the cycle-27 oracle's) omitted five sections, so the oracles
   called one-sided pairs identical while their own summaries
@@ -59,7 +66,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from model_protocol_lab import backends, diffreports, doctor, pack, structured
+from model_protocol_lab import backends, diffreports, doctor, pack, structured, surfacenoise, verify
 
 _SCHEMA = {
     "type": "object",
@@ -584,6 +591,192 @@ class SurrogateFixtureIdTests(unittest.TestCase):
         self.assertTrue(diffreports._valid_placement(copy.deepcopy(payload)))
         self._surrogate_fixture_ids(payload)
         self.assertFalse(diffreports._valid_placement(payload))
+
+
+def _verify_artifact() -> dict:
+    """A genuine two-candidate artifact: A passes all, B passes s1."""
+    from model_protocol_lab.core import Fixture, Format, Generation, Message, Split
+    from model_protocol_lab.experiments import run_experiment
+
+    boundary = (999999,)
+    expected = {"s1": "one", "s2": "two", "h1": "three"}
+    plan = {(name, fid): False for name in "AB" for fid in expected}
+    plan[("A", "s1")] = plan[("A", "s2")] = plan[("A", "h1")] = True
+    plan[("B", "s1")] = True
+
+    class _Backend:
+        """Scripted backend answering per the plan."""
+
+        fingerprint = "cycle227-scripted"
+
+        def encode(self, text: str) -> tuple[int, ...]:
+            """Encode."""
+            return tuple(ord(c) for c in text)
+
+        def decode(self, ids) -> str:  # noqa: ANN001
+            """Decode."""
+            return "".join(chr(i) for i in ids if i < 0x110000)
+
+        def generate(self, input_ids, max_new_tokens=64, seed=0, cancel=None):  # noqa: ANN001, ANN202
+            """Generate."""
+            prompt = self.decode(input_ids)
+            cand = prompt[1 : prompt.index(">")]
+            fid = prompt.split("U:")[1].split("\n")[0]
+            ans = expected[fid] if plan.get((cand, fid)) else "WRONG"
+            ids = self.encode(ans) + boundary
+            ids = ids + (32,) * (max_new_tokens - len(ids))
+            return Generation(token_ids=ids, reason="limit")
+
+    def _fmt(name: str) -> Format:
+        return Format(
+            name=name, bos=f"<{name}>", user_prefix="U:", assistant_prefix="A:", turn_end="\n"
+        )
+
+    def _fx(fid: str, grp: str) -> Fixture:
+        return Fixture(id=fid, messages=(Message("user", fid),), expected=expected[fid], group=grp)
+
+    split = Split(search=(_fx("s1", "g1"), _fx("s2", "g2")), held_out=(_fx("h1", "g3"),))
+    return run_experiment(
+        _Backend(), (_fmt("A"), _fmt("B")), split, boundary=boundary, max_new_tokens=32
+    )
+
+
+def _summaries_detail(data: dict) -> str:
+    """Return the summaries_consistent check detail of a verify run."""
+    report = verify.verify_results(data)
+    for check in report["checks"]:
+        if check["id"] == "summaries_consistent":
+            return check["status"] + ": " + check["detail"]
+    raise AssertionError("summaries_consistent check missing")
+
+
+class VerifySummaryBindingTests(unittest.TestCase):
+    """BH2B-03/06/07: verify binds summaries to their observations."""
+
+    def test_genuine_artifact_verifies_ok(self):
+        """Test genuine artifact verifies ok."""
+        report = verify.verify_results(_verify_artifact())
+        self.assertEqual(report["verdict"], "ok")
+        self.assertTrue(_summaries_detail(_verify_artifact()).startswith("passed"))
+
+    def test_summary_only_forge_fails(self):
+        """Test summary only forge fails."""
+        data = _verify_artifact()
+        for entry in data["search"]:
+            if entry["format"]["name"] == "B":
+                entry["summary"]["exact_and_boundary_passes"] = entry["summary"]["planned"]
+        data["held_out"]["summary"]["exact_and_boundary_passes"] = data["held_out"]["summary"][
+            "planned"
+        ]
+        self.assertIn("do not match the observations", _summaries_detail(data))
+        self.assertNotEqual(verify.verify_results(data)["verdict"], "ok")
+
+    def test_observation_flip_fails(self):
+        """Test observation flip fails."""
+        data = _verify_artifact()
+        data["search"][0]["observations"][0]["exact_match"] = False
+        self.assertIn("do not match the observations", _summaries_detail(data))
+
+    def test_held_out_observation_flip_fails(self):
+        """Test held out observation flip fails."""
+        data = _verify_artifact()
+        data["held_out"]["observations"][0]["exact_match"] = False
+        detail = _summaries_detail(data)
+        self.assertIn("held_out", detail)
+        self.assertIn("do not match the observations", detail)
+
+    def test_vacuous_planned_zero_fails(self):
+        """Test vacuous planned zero fails."""
+        data = _verify_artifact()
+        for entry in data["search"]:
+            entry.pop("observations", None)
+            if entry["format"]["name"] == "B":
+                entry["summary"]["planned"] = 0
+                entry["summary"]["exact_and_boundary_passes"] = 0
+                entry["summary"]["attempted"] = 0
+        self.assertIn("positive integer", _summaries_detail(data))
+        self.assertNotEqual(verify.verify_results(data)["verdict"], "ok")
+
+    def test_attempted_mismatch_fails(self):
+        """Test attempted mismatch fails."""
+        data = _verify_artifact()
+        data["search"][0]["summary"]["attempted"] = 99
+        self.assertIn("observation count", _summaries_detail(data))
+
+    def test_string_aggregate_eligible_fails(self):
+        """Test string aggregate eligible fails."""
+        data = _verify_artifact()
+        for entry in data["search"]:
+            if entry["format"]["name"] == "B":
+                entry["summary"]["aggregate_eligible"] = "false"
+        self.assertIn("aggregate_eligible is not a boolean", _summaries_detail(data))
+        self.assertNotEqual(verify.verify_results(data)["verdict"], "ok")
+
+
+class SurfaceNoiseCapContractTests(unittest.TestCase):
+    """BH2B-04: built-in backends and the probe honor the cap contract."""
+
+    def test_builtin_backends_respect_small_caps(self):
+        """Test builtin backends respect small caps."""
+        from model_protocol_lab.core import _valid_generation
+
+        for backend in (surfacenoise.SelfTestBackend(), surfacenoise._ControlCalibrationBackend()):
+            for cap in (1, 2, 3, 4, 5):
+                gen = backend.generate((7, 7, 7), max_new_tokens=cap, seed=0, cancel=None)
+                self.assertLessEqual(len(gen.token_ids), cap)
+                self.assertTrue(_valid_generation(gen, cap))
+
+    def test_probe_abstains_on_over_cap_generation(self):
+        """Test probe abstains on over cap generation."""
+        import threading
+
+        from model_protocol_lab.core import Fixture, Generation, Message
+
+        case = Fixture(
+            id="f1",
+            group="g",
+            messages=(Message(role="user", content="q"),),
+            expected="ok",
+        )
+
+        class _OverCapBackend:
+            """Backend returning the right text far over the cap."""
+
+            fingerprint = "cycle227-overcap"
+
+            @staticmethod
+            def encode(text: str) -> tuple[int, ...]:
+                """Encode."""
+                return (1, 2)
+
+            @staticmethod
+            def decode(ids) -> str:  # noqa: ANN001
+                """Decode."""
+                return "ok" if tuple(ids)[:2] == (7, 8) else "no"
+
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):  # noqa: ANN001, ANN202
+                """Generate."""
+                return Generation((7, 8) + (9,) * 10, "limit")
+
+        class _CompliantBackend(_OverCapBackend):
+            """Backend returning the same text within the cap."""
+
+            fingerprint = "cycle227-compliant"
+
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):  # noqa: ANN001, ANN202
+                """Generate."""
+                return Generation((7, 8, 9, 9), "limit")
+
+        hostile = surfacenoise._evaluate_one(
+            "prompt", case, _OverCapBackend(), (999,), 4, 0, threading.Event()
+        )
+        compliant = surfacenoise._evaluate_one(
+            "prompt", case, _CompliantBackend(), (999,), 4, 0, threading.Event()
+        )
+        self.assertEqual(hostile, "abstain")
+        self.assertEqual(compliant, "pass")
 
 
 if __name__ == "__main__":

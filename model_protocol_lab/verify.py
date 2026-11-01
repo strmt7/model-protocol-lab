@@ -212,35 +212,61 @@ def _check_candidates_unique(data: dict[str, Any], checks: list[dict[str, str]])
     _record(checks, "candidates_unique", _PASSED)
 
 
+def _summary_inconsistency(entry: Any) -> str | None:
+    """Return why one entry's summary is inconsistent, or None.
+
+    A summary is bound to its ground records: the producing
+    pipeline (experiments._summary over a core EvaluationReport)
+    derives planned from planned_count, which construction pins
+    at >= 1, attempted as len(observations), the pass counter as
+    the count of observations passing exactly with a boundary,
+    and aggregate_eligible as a genuine bool. A summary that
+    disagrees with its own observations -- or claims a vacuous
+    planned == 0 win -- is inconsistent on its face, whatever the
+    selection replay would make of it (BH2B-03/06/07). When the
+    observations were stripped there is nothing to bind against
+    and only the intrinsic checks apply.
+    """
+    summary = entry.get("summary") if type(entry) is dict else None
+    if type(summary) is not dict:
+        return "an entry has no summary dict"
+    planned = summary.get("planned")
+    passes = summary.get("exact_and_boundary_passes")
+    if type(planned) is not int or planned < 1:
+        return "summary.planned is not a positive integer"
+    if type(passes) is not int or not 0 <= passes <= planned:
+        return "summary passes not in 0..planned"
+    if "aggregate_eligible" in summary and type(summary["aggregate_eligible"]) is not bool:
+        return "summary.aggregate_eligible is not a boolean"
+    observations = entry.get("observations")
+    if type(observations) is list:
+        if any(type(observation) is not dict for observation in observations):
+            return "an observation is not a dict"
+        attempted = summary.get("attempted")
+        if type(attempted) is not int or attempted != len(observations):
+            return "summary.attempted does not equal the observation count"
+        counted = sum(
+            1
+            for observation in observations
+            if observation.get("exact_match") is True and observation.get("boundary_found") is True
+        )
+        if passes != counted:
+            return "summary passes do not match the observations"
+    return None
+
+
 def _check_summaries_consistent(data: dict[str, Any], checks: list[dict[str, str]]) -> None:
     """Check summaries consistent."""
     for entry in data["search"]:
-        summary = entry.get("summary") if type(entry) is dict else None
-        if type(summary) is not dict:
-            _record(
-                checks,
-                "summaries_consistent",
-                _FAILED,
-                "a search entry has no summary dict",
-            )
+        problem = _summary_inconsistency(entry)
+        if problem is not None:
+            _record(checks, "summaries_consistent", _FAILED, problem)
             return
-        planned = summary.get("planned")
-        passes = summary.get("exact_and_boundary_passes")
-        if type(planned) is not int or planned < 0:
-            _record(
-                checks,
-                "summaries_consistent",
-                _FAILED,
-                "summary.planned is not a non-negative integer",
-            )
-            return
-        if type(passes) is not int or not 0 <= passes <= planned:
-            _record(
-                checks,
-                "summaries_consistent",
-                _FAILED,
-                "summary passes not in 0..planned",
-            )
+    held = data.get("held_out")
+    if type(held) is dict and "summary" in held:
+        problem = _summary_inconsistency(held)
+        if problem is not None:
+            _record(checks, "summaries_consistent", _FAILED, "held_out: " + problem)
             return
     _record(checks, "summaries_consistent", _PASSED)
 
@@ -261,7 +287,7 @@ def _replay_selection(data: dict[str, Any]) -> tuple[str, str | None, str]:
         if type(entry) is not dict or type(entry.get("summary")) is not dict:
             return "malformed", None, "search entry malformed"
         summary = entry["summary"]
-        if not summary.get("aggregate_eligible"):
+        if summary.get("aggregate_eligible") is not True:
             status = summary.get("status")
             expected = status if type(status) is str else "failed"
             return expected, None, "search aborted at " + str(_entry_name(entry))
@@ -269,7 +295,9 @@ def _replay_selection(data: dict[str, Any]) -> tuple[str, str | None, str]:
         name
         for entry in data["search"]
         if (name := _entry_name(entry)) is not None
-        and entry["summary"].get("aggregate_eligible")
+        and entry["summary"].get("aggregate_eligible") is True
+        and type(entry["summary"].get("planned")) is int
+        and entry["summary"]["planned"] >= 1
         and entry["summary"].get("exact_and_boundary_passes") == entry["summary"].get("planned")
     ]
     if data.get("decision") == "cancelled":
@@ -285,13 +313,13 @@ def _replay_selection(data: dict[str, Any]) -> tuple[str, str | None, str]:
     held_summary = held.get("summary")
     if type(held_summary) is not dict:
         return "incomplete", winner, "held_out summary missing"
-    if not held_summary.get("aggregate_eligible"):
+    if held_summary.get("aggregate_eligible") is not True:
         status = held_summary.get("status")
         expected = status if type(status) is str else "failed"
         return expected, winner, "held-out aborted"
     passes = held_summary.get("exact_and_boundary_passes")
     planned = held_summary.get("planned")
-    if type(passes) is int and type(planned) is int and planned >= 0 and passes == planned:
+    if type(passes) is int and type(planned) is int and planned >= 1 and passes == planned:
         return "compatible_on_fixture_set", winner, "held-out passed"
     return "held_out_failed", winner, "held-out verdict replayed"
 
