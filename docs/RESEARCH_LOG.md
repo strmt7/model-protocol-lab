@@ -11123,3 +11123,51 @@ API) is re-run after this push lands, per the claims
 skill's rule that corrections written from memory
 reintroduce the class they fix; its result is recorded in
 the cycle's final report.
+
+## Cycle 226 (continuation) — JSON discipline, pack vocabulary, version story, operability (2026-11-01)
+
+The remaining pushes of cycle 226, in the readiness audit's
+adopted order. Every item was re-reproduced by the coordinator
+before its fix; a fix counts only where the reproducer went
+red-then-green.
+
+- **JSON-discipline class (B-05, B-07, B-14, B-16).** The three
+  lagging parsers now run the tree's shared discipline — unique
+  keys, strict constants, non-finite rejection, the nesting
+  conversion and the lone-surrogate walk their hardened siblings
+  already applied: `surfacenoise._load_probe_json`,
+  `recordnotation._parsed_hit` with its diff-reports mirror, and
+  `tools/agent_context.load_state`. B-14 closed as a consequence
+  at the loader: `_load_probe_json` also requires the
+  probe-report skeleton every real report carries, so
+  `surface-noise diff` no longer certifies two garbage files as
+  identical.
+- **B-06.** `pack.verify_bundle_bytes` catches
+  `NotImplementedError` at zip construction, so the zip-version
+  container class joins the `bundle_container_invalid`
+  vocabulary instead of escaping as a raw traceback.
+- **B-03 / B-24 / B-25.** Version 0.2.0 in pyproject,
+  `__version__` and CITATION.cff; the accumulated [Unreleased]
+  changelog mass rolled under `## [0.2.0] — 2026-10-31`, so a
+  future tag cannot mislabel it (the tag act itself remains the
+  owner's); draft release notes for 0.2.0 with the attestation
+  verification line; the cycle-115 `Performance` heading renamed
+  to the Keep a Changelog category `Changed`.
+- **Operability batch (B-10..B-13, B-15, B-17..B-20, B-26,
+  B-27).** SIGPIPE restored to its default disposition (piped
+  commands die at 141, no dump); the protocols' wall-clock
+  `frozen_at` removed, making probe output a pure function of
+  its inputs; one exit-code table (USAGE section 15 and every
+  `--help` epilog) with doctor's failed verdict and a failed
+  `run` decision reconciled to 2 and probe cancellation to 130;
+  MCP client-input defects (nonblank id, 21-message cap,
+  per-message cap, lone surrogates) mapped to -32602; record
+  notation seeds validated like canonical form's; `debug
+  --script` exits 1 when any scripted command fails; the MCP
+  entry point parses argv and the CLI gains `--version`; the
+  PEP 751 lock's uninstallable self entry removed and verified
+  by a clean-room install; a dependency license inventory
+  recorded under `docs/licenses/`. Deliberate pin moves are
+  listed in the cycle's final report (cycle-31/46/64/83/165/196
+  exit-code and no-version pins, each reversed with its reason
+  recorded at the pin).

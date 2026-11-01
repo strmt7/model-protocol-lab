@@ -214,10 +214,9 @@ class ProtocolFreezeTests(unittest.TestCase):
         """Test freeze is deterministic."""
         p1, _, _ = _protocol()
         p2, _, _ = _protocol()
-        # frozen_at is a wall-clock timestamp; everything else must be stable.
-        self.assertNotEqual(p1["frozen_at"], p2["frozen_at"])
-        p1 = {k: v for k, v in p1.items() if k != "frozen_at"}
-        p2 = {k: v for k, v in p2.items() if k != "frozen_at"}
+        # Cycle 226 (B-11): the wall-clock frozen_at key is gone, so two
+        # freezes of the same inputs must be fully identical.
+        self.assertNotIn("frozen_at", p1)
         self.assertEqual(p1, p2)
 
     def test_verify_accepts_fresh_protocol(self):
@@ -442,10 +441,8 @@ class ProbeEndToEndTests(unittest.TestCase):
         """Test report deterministic."""
         r1, _ = self._report()
         r2, _ = self._report()
-        # The embedded protocol carries a wall-clock frozen_at timestamp;
-        # everything else must be bit-stable.
-        r1 = {k: v for k, v in r1.items() if k != "protocol"}
-        r2 = {k: v for k, v in r2.items() if k != "protocol"}
+        # Cycle 226 (B-11): with the wall-clock frozen_at key removed,
+        # the whole report — embedded protocol included — is bit-stable.
         self.assertEqual(r1, r2)
 
     def test_empty_prompt_variant_skipped_not_counted(self):
@@ -1499,14 +1496,14 @@ class CoverageGapTests(unittest.TestCase):
                 )
             self.assertEqual(code, 1)
 
-    def test_cli_probe_cancelled_exit_2(self):
-        """Test cli probe cancelled exit 2."""
+    def test_cli_probe_cancelled_status(self):
+        """Test cli probe cancelled status."""
         # Exercise the cancelled path through the CLI runner directly.
 
         protocol, backend, fixtures = _protocol()
         cancel = threading.Event()
         cancel.set()
-        # Pre-cancelled -> cancelled (Finding 9 fix); the exit-2 path is the
+        # Pre-cancelled -> cancelled (Finding 9 fix); the exit-130 path is the
         # mid-sweep cancel, covered in CancellationTests.
         report = sn.probe_surface_noise(
             "MAGICWORD", fixtures, backend, protocol, boundary=(7,), cancel=cancel
@@ -1863,7 +1860,7 @@ class CoverageGapTests2(unittest.TestCase):
     def test_cli_probe_cancelled_exit_code(self):
         """Test cli probe cancelled exit code."""
         # Drive run_surface_noise with a mocked cancelled probe to hit the
-        # exit-2 path.
+        # exit-130 path (cycle 226, B-12: cancelled is 130 everywhere).
         import io
         from contextlib import redirect_stdout
         from unittest import mock
@@ -1916,7 +1913,7 @@ class CoverageGapTests2(unittest.TestCase):
                             str(out_dir),
                         ]
                     )
-            self.assertEqual(code, 2)
+            self.assertEqual(code, 130)
 
 
 class FailClosedCoverageWave6Tests(unittest.TestCase):

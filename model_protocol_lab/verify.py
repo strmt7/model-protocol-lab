@@ -752,6 +752,11 @@ def build_verify_parser(sub: Any) -> None:
         "it edited since packing' — verify answers the first, and "
         "--bundle answers the second",
         allow_abbrev=False,
+        epilog=(
+            "Exit codes: 0 when the report (or bundle, with --bundle) "
+            "verifies; 2 when it does not; 1 on input failure. Output: "
+            "the verdict as JSON on stdout."
+        ),
     )
     verify_cmd.add_argument(
         "results",

@@ -34,7 +34,6 @@ import re
 import stat
 import sys
 import threading
-from datetime import UTC, datetime
 from html import escape
 from pathlib import Path
 from typing import Any, Literal
@@ -234,7 +233,6 @@ def freeze_surface_noise_protocol(
         "fixture_ids": [case.id for case in fixtures],
         "fixture_sha256": _fixture_hash(fixtures),
         "surfacenoise_code_sha256": surfacenoise_code_hash(),
-        "frozen_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -573,8 +571,8 @@ def probe_surface_noise(
     n_base_abstain = sum(1 for v in baseline if v == "abstain")
     if event.is_set():
         # Cancel landed mid-baseline: evaluate_prompt maps a set event to
-        # per-fixture abstains, but the truth is "cancelled" (exit 2), not a
-        # measurement failure (exit 3).
+        # per-fixture abstains, but the truth is "cancelled" (exit 130),
+        # not a measurement failure (exit 3).
         return {
             "instrument": PROBE_NAME,
             "protocol_version": PROBE_VERSION,
@@ -1438,6 +1436,7 @@ def build_surface_noise_parser(sub: Any) -> None:
         "surface-noise",
         help="Surface-noise self-consistency probe: " + MONDAY_MORNING_USE,
         allow_abbrev=False,
+        epilog="Exit codes and output are stated in each subcommand's --help.",
     )
     sn_sub = sn_cmd.add_subparsers(dest="surface_noise_command", required=True)
 
@@ -1445,6 +1444,12 @@ def build_surface_noise_parser(sub: Any) -> None:
         "probe",
         help="Probe one prompt's verdict stability under frozen surface noise",
         allow_abbrev=False,
+        epilog=(
+            "Exit codes: 0 when the sweep completes; 130 when "
+            "cancelled; 3 when the baseline is unavailable; 1 for "
+            "invalid input. Output: the probe report as JSON on "
+            "stdout and in the output directory."
+        ),
     )
     probe_cmd.add_argument(
         "--prompt", required=True, type=Path, help="Text file with the prompt to probe"
@@ -1485,6 +1490,11 @@ def build_surface_noise_parser(sub: Any) -> None:
         "diff",
         help="Compare two probe.json files (before/after a prompt edit)",
         allow_abbrev=False,
+        epilog=(
+            "Exit codes: 0 on success (the diff is the output, "
+            "whatever it finds); 1 on failure. Output: the diff as "
+            "JSON on stdout."
+        ),
     )
     diff_cmd.add_argument("old_probe", type=Path, help="Older probe.json")
     diff_cmd.add_argument("new_probe", type=Path, help="Newer probe.json")
@@ -1493,6 +1503,7 @@ def build_surface_noise_parser(sub: Any) -> None:
         "protocol",
         help="Print the frozen instrument descriptor (no scoring)",
         allow_abbrev=False,
+        epilog=("Exit codes: 0 on success. Output: the instrument descriptor as JSON on stdout."),
     )
 
 
@@ -1629,7 +1640,7 @@ def run_surface_noise(args: Any, _parser: Any) -> int:
 
     probe: JSON goes to stdout and to <output>/probe.json, the human
     summary to stderr, dashboard.html alongside. Exit 0 when the sweep
-    completed, 2 when it was cancelled, 3 when the baseline was
+    completed, 130 when it was cancelled, 3 when the baseline was
     unavailable (no score produced), 1 for invalid input.
     diff: JSON to stdout, summary to stderr, exit 0/1.
     protocol: descriptor JSON to stdout, exit 0.
@@ -1739,7 +1750,7 @@ def run_surface_noise(args: Any, _parser: Any) -> int:
         file=sys.stderr,
     )
     if status == "cancelled":
-        return 2
+        return 130
     if status == "unavailable":
         return 3
     return 0
@@ -1877,7 +1888,6 @@ def freeze_template_robustness_protocol(
         "fixture_ids": [case.id for case in fixtures],
         "fixture_sha256": _fixture_hash(fixtures),
         "template_robustness_code_sha256": _template_robustness_code_hash(),
-        "frozen_at": datetime.now(UTC).isoformat(),
     }
 
 

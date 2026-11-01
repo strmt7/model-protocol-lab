@@ -62,7 +62,9 @@ N2. docs/USAGE.md section 10 shows the `.step 1,2,8,3` output elided as
 - USAGE section 2 doctor: exit 0/verdict ok on healthy inputs with a
   `suggestion` carrying the exact next `run` invocation (shell-quoted
   paths, FAMILY placeholder, --max-context from the declared window,
-  --max-new-tokens 64); exit 1/verdict failed listing failing checks;
+  --max-new-tokens 64); exit 2/verdict failed listing failing checks
+  (cycle 226, B-12: verdict-bearing exits are 2; 1 is reserved for
+  failures where no report could be produced);
   --boundary-ids verified against the tokenizer vocabulary;
   --boundary-map checked per mapping; --reference-model reports
   `mismatch`; --portability-matrix JSON stays on stdout while the
@@ -756,12 +758,13 @@ class DoctorTest(unittest.TestCase):
         self.assertEqual(report["verdict"], "ok")
         self.assertIsNone(report["suggestion"])
 
-    def test_failing_checks_exit_1(self):
-        """Test failing checks exit 1."""
-        # USAGE sec 2: "Exit 0 means the run inputs look sane; exit 1
-        # lists the failing checks."
+    def test_failing_checks_exit_2(self):
+        """Test failing checks exit 2."""
+        # USAGE sec 2: "Exit 0 means the run inputs look sane; exit 2
+        # lists the failing checks" (cycle 226, B-12: a produced report
+        # with a negative verdict exits 2, as in verify).
         code, report, _ = self._doctor("--model", str(Path(self._tmp.name) / "missing"))
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 2)
         self.assertEqual(report["verdict"], "failed")
         failed = [
             name for name, check in report["model"]["checks"].items() if check["status"] == "failed"
@@ -772,7 +775,7 @@ class DoctorTest(unittest.TestCase):
         """Test boundary ids checked against vocabulary."""
         # USAGE sec 2: "verifies each ID against the tokenizer vocabulary".
         code, report, _ = self._doctor("--model", str(self.ckpt), "--boundary-ids", "1,999999")
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 2)
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(report["model"]["checks"]["boundary_ids"]["status"], "failed")
 

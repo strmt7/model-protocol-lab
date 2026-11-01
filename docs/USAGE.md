@@ -33,7 +33,8 @@ the model config (supported GPT-2/Llama causal-LM settings only), the
 tokenizer document structure, and the fixture schema. With `--boundary-ids` it
 additionally verifies each ID against the tokenizer vocabulary (loading the
 tokenizer only, never the weights). Exit 0 means the run inputs look sane;
-exit 1 lists the failing checks. It reports the tokenizer's declared
+exit 2 lists the failing checks (a verdict, like `verify`; exit 1 is
+reserved for failures where no report could be produced). It reports the tokenizer's declared
 `added_tokens` with their IDs to help choose `--boundary-ids`.
 
 When every check passes and both `--dataset` and `--boundary-ids` were
@@ -3976,3 +3977,38 @@ no model by itself (`--backend selftest` in `probe` exercises the
 loop without a checkpoint), and caps prompts at 1 MiB and any single
 content block at 64 KiB. Run `model-protocol-lab-mcp --self-test`
 to verify it before wiring it up.
+
+## 15. Exit codes and output formats
+
+One table governs every command (each subcommand's `--help` restates
+its own row). The split that matters: a command that produced a
+report answers with the report's verdict (0 or 2); a command that
+could not produce one fails operationally (1); cancellation is
+always 130.
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Success, or a report whose verdict/decision is positive |
+| 1 | Operational failure: the command could not complete and no report was produced |
+| 2 | Negative verdict: a report was produced and its verdict/decision is negative; also argparse usage errors |
+| 3 | `surface-noise probe` only: the baseline was unavailable, so no score was produced |
+| 130 | Cancelled or interrupted (128 + SIGINT), including a cancelled `surface-noise probe` |
+
+Per command: `catalog` 0/1; `inspect` 0/1; `doctor` 0 (verdict ok) /
+2 (verdict not ok) / 1 (no report); `run` 0 (compatible) / 2
+(abstain or failed) / 130 (cancelled) / 1 (no report); `fixtures
+build` 0/1; `fixtures fuzz` 0 (all cases conform) / 1 (a finding);
+`diff-reports` 0/1; `diff-backends` 0/2 (invalid input)/1;
+`debug` 0/1 (a `--script` run exits 1 when any command in the file
+failed); `surface-noise probe` 0/130/3/1; `surface-noise diff` 0/1;
+`surface-noise protocol` 0; `verify` 0/2/1 (with and without
+`--bundle`); `pack` 0/1. The MCP server is not a shell command, but
+its own arguments follow the same discipline: `--help` and
+`--version` exit 0, an unknown argument exits 2.
+
+Output contract: machine-readable output (JSON reports, verdicts,
+diffs, descriptors) goes to stdout; human summaries, progress and
+error lines go to stderr. A command's JSON on stdout stays
+parseable in both success and verdict-failure cases — scripts
+should branch on the exit code and the report's verdict field, not
+on stderr text.

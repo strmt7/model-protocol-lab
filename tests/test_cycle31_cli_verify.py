@@ -502,11 +502,12 @@ class TestHandlerDispatch(unittest.TestCase):
             self.assertIs(seen["template_probe"], False)
             self.assertEqual(json.loads(out)["verdict"], "ok")
 
-    def test_doctor_verdict_not_ok_returns_one(self):
-        """Test doctor verdict not ok returns one."""
+    def test_doctor_verdict_not_ok_returns_two(self):
+        """Test doctor verdict not ok returns two."""
+        # Cycle 226 (B-12 unified verdict table; was 1 through cycle 225).
         with mock.patch.object(doctor_mod, "doctor", return_value={"verdict": "bad"}):
             kind, code, _out, _err = run_cli(["doctor", "--model", "m"])
-        self.assertEqual((kind, code), ("return", 1))
+        self.assertEqual((kind, code), ("return", 2))
 
     def test_doctor_portability_matrix_renders_to_stderr(self):
         """Test doctor portability matrix renders to stderr."""
@@ -1028,7 +1029,7 @@ class TestRunDispatch(unittest.TestCase):
         """Test decision to exit code."""
         mapping = {
             "compatible_on_fixture_set": 0,
-            "failed": 1,
+            "failed": 2,
             "held_out_failed": 2,
             "ambiguous": 2,
             "no_candidate": 2,

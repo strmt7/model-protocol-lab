@@ -619,7 +619,7 @@ class RunDecisionExitTests(unittest.TestCase):
 
         for decision, code in (
             ("cancelled", 130),
-            ("failed", 1),
+            ("failed", 2),  # was 1 until cycle 226 (B-12 verdict table)
             ("compatible_on_fixture_set", 0),
             ("ambiguous", 2),
             ("no_candidate", 2),

@@ -221,7 +221,9 @@ class TopLevelSurfaceTests(unittest.TestCase):
         # stdlib argparse quirk with required subparsers: an unrecognized
         # top-level flag is swallowed and the missing-subcommand error fires
         # instead of "unrecognized arguments". Exit code is still 2.
-        proc = run_cli("--version")
+        # (The specimen was --version until cycle 226, B-19, made it a
+        # real flag; a genuinely undefined flag exercises the same path.)
+        proc = run_cli("--bogus-undefined-flag")
         self.assertEqual(proc.returncode, 2)
         self.assertIn("usage:", proc.stderr)
         self.assertIn("the following arguments are required: command", proc.stderr)
@@ -452,11 +454,12 @@ class DoctorValidationTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertIn("Duplicate --boundary-map candidate", proc.stderr)
 
-    def test_bad_checkpoint_dir_reports_json_verdict_and_exits_1(self):
-        """Test bad checkpoint dir reports json verdict and exits 1."""
+    def test_bad_checkpoint_dir_reports_json_verdict_and_exits_2(self):
+        """Test bad checkpoint dir reports json verdict and exits 2."""
+        # Exit 2 since cycle 226 (B-12 unified verdict table; was 1).
         with TemporaryDirectory() as tmp:
             proc = run_cli("doctor", "--model", tmp, "--dataset", str(EXAMPLE_FIXTURES))
-        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(proc.returncode, 2)
         payload = json.loads(proc.stdout)
         self.assertIn(payload["verdict"], ("failed", "error"))
         self.assertNotIn("Traceback", proc.stderr)
@@ -1245,13 +1248,17 @@ class DebugValidationTests(unittest.TestCase):
 
     def test_script_error_does_not_kill_session(self):
         """Test script error does not kill session."""
-        # The REPL converts command failures to "error: ..." and continues.
+        # The REPL converts command failures to "error: ..." and continues
+        # (the .families output below proves the session survived). Since
+        # cycle 226 (B-17) the scripted run also reports the failure in
+        # its exit code and on stderr, instead of exiting 0.
         with TemporaryDirectory() as tmp:
             script = Path(tmp) / "s.txt"
             script.write_text(".bogus-command\n.families\n.quit\n", encoding="utf-8")
             proc = run_cli("debug", "--dataset", str(EXAMPLE_FIXTURES), "--script", str(script))
-        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.returncode, 1, proc.stderr)
         self.assertIn("error:", proc.stdout)
+        self.assertIn("error:", proc.stderr)
         self.assertIn("chatml", proc.stdout)
 
     def test_bad_model_dir_exits_1_with_sanitized_code(self):

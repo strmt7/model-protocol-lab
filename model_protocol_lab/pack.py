@@ -717,6 +717,11 @@ def build_pack_parser(sub: Any) -> None:
         "pack",
         help="Seal a report directory into a hash-bound bundle: " + MONDAY_MORNING_USE,
         allow_abbrev=False,
+        epilog=(
+            "Exit codes: 0 on success; 1 for any input, usage or output "
+            "failure. Output: a JSON summary on stdout; the bundle "
+            "digest on stderr."
+        ),
     )
     pack_cmd.add_argument(
         "report_dir",

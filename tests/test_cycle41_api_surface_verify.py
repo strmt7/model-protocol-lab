@@ -468,7 +468,10 @@ class TestDebugRepl(unittest.TestCase):
     def test_unknown_family_error(self) -> None:
         """Test unknown family error."""
         proc = self._script(".use notafamily\n.quit\n")
-        self.assertEqual(proc.returncode, 0, proc.stderr)
+        # The error is in the transcript as before, but a scripted run
+        # now exits 1 when any command failed (cycle 226, B-17).
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn("error:", proc.stderr)
         self.assertIn("error: unknown family 'notafamily'", proc.stdout)
 
     def test_boundary_grammar(self) -> None:
@@ -493,13 +496,19 @@ class TestDebugRepl(unittest.TestCase):
     def test_step_without_boundary_errors(self) -> None:
         """Test step without boundary errors."""
         proc = self._script(".step 1,2\n.quit\n")
-        self.assertEqual(proc.returncode, 0, proc.stderr)
+        # The error is in the transcript as before, but a scripted run
+        # now exits 1 when any command failed (cycle 226, B-17).
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn("error:", proc.stderr)
         self.assertIn("error: no boundary set", proc.stdout)
 
     def test_unknown_dot_command_errors(self) -> None:
         """Test unknown dot command errors."""
         proc = self._script(".bogus\n.quit\n")
-        self.assertEqual(proc.returncode, 0, proc.stderr)
+        # The error is in the transcript as before, but a scripted run
+        # now exits 1 when any command failed (cycle 226, B-17).
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn("error:", proc.stderr)
         self.assertIn("error: unknown dot-command '.bogus'", proc.stdout)
 
     def test_tokens_without_model_prints_reminder(self) -> None:
@@ -715,7 +724,7 @@ class TestDoctor(unittest.TestCase, SyntheticCheckpointMixin):
     def test_missing_model_dir_fails(self) -> None:
         """Test missing model dir fails."""
         proc = run_mpl("doctor", "--model", str(MISSING_MODEL), "--dataset", str(EXAMPLE_FIXTURES))
-        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(proc.returncode, 2)
         report = json.loads(proc.stdout)
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(report["model"]["checks"]["directory"]["status"], "failed")
@@ -729,7 +738,7 @@ class TestDoctor(unittest.TestCase, SyntheticCheckpointMixin):
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "config.json").write_text("{}")
             proc = run_mpl("doctor", "--model", tmp, "--dataset", str(EXAMPLE_FIXTURES))
-        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(proc.returncode, 2)
         report = json.loads(proc.stdout)
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(

@@ -48,20 +48,25 @@ usage prog is hard-coded to ``model-protocol-lab``).
 
 PRECISION NOTES (mandate assumptions checked against reality -- not bugs):
 1. Mandate item 3 assumes a ``--version`` flag whose output must match the
-   package ``__version__``. No such flag exists: the parser defines no
-   ``--version`` option, and cycle 64 explicitly pins
+   package ``__version__``. At cycle 83 no such flag existed: the parser
+   defined no ``--version`` option, and cycle 64 pinned
    ``model-protocol-lab --version`` -> exit 2 (unrecognized top-level flag)
-   in ``test_undefined_top_level_flag_exits_2``. Adding the flag now would
-   break that pinned contract, so it is deliberately NOT added here; the
-   version lives only in ``model_protocol_lab.__version__``. Pinned below
-   by ``test_no_version_flag_top_level_help``.
+   in ``test_undefined_top_level_flag_exits_2``, so it was deliberately NOT
+   added there. Cycle 226 (readiness-audit item B-19) reversed that
+   decision: ``--version`` now prints ``model-protocol-lab <__version__>``
+   and exits 0; cycle 64's undefined-flag test uses a genuinely undefined
+   flag as its specimen instead, and ``test_version_flag_top_level_help``
+   below pins the new contract.
 2. No ``MPL_*`` environment variable is read anywhere in the package
    (verified by source scan and by behavioral test): a polluted environment
    cannot change any CLI behavior.
-3. ``doctor --model <nonexistent>`` exits 1 with the verdict JSON on
-   *stdout* and empty stderr. This is the deliberate ``doctor`` contract
-   (stdout stays machine-parseable JSON; the exit code carries the
-   verdict), not a missing-error-message bug.
+3. ``doctor --model <nonexistent>`` exits 2 with the verdict JSON on
+   *stdout* and empty stderr (cycle 83 observed exit 1; cycle 226's
+   unified exit-code table, readiness-audit item B-12, moved every
+   verdict-bearing exit to 2, reserving 1 for failures where no report
+   could be produced). The ``doctor`` contract itself is unchanged:
+   stdout stays machine-parseable JSON and the exit code carries the
+   verdict.
 4. ``debug --script <directory>`` echoes the operator-supplied path in its
    fixed ``debug: unreadable script file:`` stderr line. The path is
    operator input, not leaked file content; the prefix is fixed and the
@@ -628,12 +633,13 @@ class ExitCodeContractTests(unittest.TestCase):
             )
         self._assert_failure(proc, 2, "--max-new-tokens 1-4096")
 
-    def test_nonexistent_checkpoint_doctor_exits_1_with_json_verdict(self):
-        """Test nonexistent checkpoint doctor exits 1 with json verdict."""
+    def test_nonexistent_checkpoint_doctor_exits_2_with_json_verdict(self):
+        """Test nonexistent checkpoint doctor exits 2 with json verdict."""
         # Deliberate doctor contract: machine-parseable JSON on stdout, the
-        # exit code carries the verdict; stderr stays empty.
+        # exit code carries the verdict; stderr stays empty. The code is 2
+        # since cycle 226 (B-12 unified verdict table).
         proc = run_cli("doctor", "--model", "/nonexistent-ckpt-xyz")
-        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(proc.returncode, 2)
         self.assertEqual(proc.stderr, "")
         payload = json.loads(proc.stdout)
         self.assertEqual(payload["verdict"], "failed")
@@ -775,10 +781,13 @@ class RunDecisionExitCodeTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(payload["decision"], "compatible_on_fixture_set")
 
-    def test_failed_exits_1(self):
-        """Test failed exits 1."""
+    def test_failed_exits_2(self):
+        """Test failed exits 2."""
+        # Cycle 226 (B-12): a completed run whose decision is "failed"
+        # produced a report, so it exits 2 like every negative verdict;
+        # 1 is reserved for failures before a report exists.
         code, payload = self._run_with_decision("failed")
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 2)
         self.assertEqual(payload["decision"], "failed")
 
     def test_cancelled_exits_130(self):
@@ -853,15 +862,18 @@ class HelpStabilityTests(unittest.TestCase):
         self.assertEqual(second.stdout, first.stdout)
         self.assertEqual(second.stderr, "")
 
-    def test_no_version_flag_top_level_help(self):
-        """Test no version flag top level help."""
-        # Mandate item 3 assumed a --version flag; none exists and cycle 64
-        # pins `--version` -> exit 2 as an unrecognized flag, so it is NOT
-        # added here. The version lives only in model_protocol_lab.__version__.
+    def test_version_flag_top_level_help(self):
+        """Test version flag top level help."""
+        # Cycle 226 (B-19) added the --version flag cycle 83 had recorded
+        # as absent: it prints the package version and exits 0, and the
+        # top-level help lists it.
+        proc = run_cli("--version")
+        self.assertEqual(proc.returncode, 0)
+        expected = f"model-protocol-lab {model_protocol_lab.__version__}"
+        self.assertEqual(proc.stdout.strip(), expected)
         text = run_cli("--help").stdout
-        self.assertNotIn("--version", text)
-        self.assertTrue(model_protocol_lab.__version__)
-        self.assertNotIn("--version", build_parser().format_help())
+        self.assertIn("--version", text)
+        self.assertIn("--version", build_parser().format_help())
 
 
 class ConsoleScriptEquivalenceTests(unittest.TestCase):

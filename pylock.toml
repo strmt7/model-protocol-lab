@@ -7,7 +7,14 @@
 # (see the project's verification protocol). The [hf] extra is not
 # locked here: hashing its wheels requires downloading the multi-GB
 # CUDA stack (docs/SECURITY.md, residual risk 2).
-# Refresh: pip lock -e ".[dev]" --output pylock.toml
+# Consumption (requires a pip with PEP 751 support, 25.1 or later):
+# the project itself is NOT a locked package (a PEP 751
+# directory entry cannot be installed with hash verification), so a
+# locked dev environment is a two-step install:
+#   python -m pip install -r pylock.toml
+#   python -m pip install -e . --no-deps
+# Refresh: pip lock -e ".[dev]" --output pylock.toml, then remove the
+# self entry the resolver emits for the project itself.
 lock-version = "1.0"
 created-by = "pip"
 
@@ -65,13 +72,6 @@ url = "https://files.pythonhosted.org/packages/ad/f7/7ce72cbf19d0addd05090b33915
 
 [packages.wheels.hashes]
 sha256 = "36e53948e99bbe3ffea257124cfcae1cfb01831555c9a9c903c9f9a72db7fd07"
-
-[[packages]]
-name = "model-protocol-lab"
-
-[packages.directory]
-path = "."
-editable = true
 
 [[packages]]
 name = "mypy"

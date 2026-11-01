@@ -12,6 +12,7 @@ from pathlib import Path
 from threading import Event
 from typing import Any
 
+from . import __version__
 from .catalog import CATALOG, candidates
 from .datasets import load_dataset
 from .experiments import run_experiment
@@ -115,17 +116,43 @@ def build_parser() -> argparse.ArgumentParser:
     silently resolve to the wrong flag. New top-level commands are dispatched
     in main() at the ANCHOR comment.
     """
-    parser = argparse.ArgumentParser(prog="model-protocol-lab", allow_abbrev=False)
+    parser = argparse.ArgumentParser(
+        prog="model-protocol-lab",
+        allow_abbrev=False,
+        epilog=(
+            "Exit codes: 0 success or positive verdict; 2 negative verdict "
+            "or usage error; 1 failure before a report could be produced; "
+            "130 cancelled. Each subcommand's --help states its own codes "
+            "and output; the full table is in docs/USAGE.md."
+        ),
+    )
+    parser.add_argument("--version", action="version", version=f"model-protocol-lab {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("catalog", help="List bounded text-only protocol hypotheses", allow_abbrev=False)
+    sub.add_parser(
+        "catalog",
+        help="List bounded text-only protocol hypotheses",
+        allow_abbrev=False,
+        epilog="Exit codes: 0 on success; 1 on failure. Output: the catalog as JSON on stdout.",
+    )
     inspect = sub.add_parser(
-        "inspect", help="Validate a fixture file without loading a model", allow_abbrev=False
+        "inspect",
+        help="Validate a fixture file without loading a model",
+        allow_abbrev=False,
+        epilog=(
+            "Exit codes: 0 when the fixture file is valid; 1 when it is "
+            "invalid or cannot be read. Output: a JSON report on stdout."
+        ),
     )
     inspect.add_argument("dataset", type=Path)
     doctor_cmd = sub.add_parser(
         "doctor",
         help="Pre-flight check of a local checkpoint (never loads weights)",
         allow_abbrev=False,
+        epilog=(
+            "Exit codes: 0 when the verdict is ok; 2 when the report's "
+            "verdict is not ok; 1 when no report could be produced. "
+            "Output: the verdict report as JSON on stdout."
+        ),
     )
     doctor_cmd.add_argument("--model", required=True, type=Path)
     doctor_cmd.add_argument("--dataset", type=Path, default=None)
@@ -171,7 +198,15 @@ def build_parser() -> argparse.ArgumentParser:
         "section 2).",
     )
     run = sub.add_parser(
-        "run", help="Evaluate a local checkpoint and save a report", allow_abbrev=False
+        "run",
+        help="Evaluate a local checkpoint and save a report",
+        allow_abbrev=False,
+        epilog=(
+            "Exit codes: 0 when the decision is compatible; 2 for a "
+            "negative decision (abstain or failed); 130 when cancelled; "
+            "1 when no report could be produced. Output: the decision as "
+            "JSON on stdout; the full report is written to --output."
+        ),
     )
     run.add_argument("--model", required=True, type=Path)
     run.add_argument("--dataset", required=True, type=Path)
@@ -1296,12 +1331,17 @@ def build_parser() -> argparse.ArgumentParser:
         "fixtures",
         help="Authoring tools for fixture files (never loads a model)",
         allow_abbrev=False,
+        epilog="Exit codes and output are stated in each subcommand's --help.",
     )
     fixtures_sub = fixtures_cmd.add_subparsers(dest="fixtures_command", required=True)
     fixtures_build = fixtures_sub.add_parser(
         "build",
         help="Build a strict fixture JSON file from a compact authoring CSV",
         allow_abbrev=False,
+        epilog=(
+            "Exit codes: 0 on success; 1 on failure. Output: the fixture "
+            "JSON written to --output; a summary on stderr."
+        ),
     )
     fixtures_build.add_argument("source", type=Path, help="Authoring CSV file")
     fixtures_build.add_argument(
@@ -1316,6 +1356,11 @@ def build_parser() -> argparse.ArgumentParser:
         + "mutate known-good JSON and CSV fixtures from a fixed table and "
         "check every outcome (never loads a model)",
         allow_abbrev=False,
+        epilog=(
+            "Exit codes: 0 when every generated case conforms; 1 when a "
+            "finding is reported or the run fails. Output: a one-line "
+            "summary on stderr."
+        ),
     )
     fixtures_fuzz.add_argument(
         "--seed",
@@ -1338,6 +1383,10 @@ def build_parser() -> argparse.ArgumentParser:
         "diff-reports",
         help="Compare two experiment result directories (or results.json files)",
         allow_abbrev=False,
+        epilog=(
+            "Exit codes: 0 on success (the diff is the output, whatever "
+            "it finds); 1 on failure. Output: the diff as JSON on stdout."
+        ),
     )
     diff_reports_cmd.add_argument(
         "old_results",
@@ -1359,6 +1408,11 @@ def build_parser() -> argparse.ArgumentParser:
         "diff-backends",
         help="Differential-test emulated backend stop semantics on one token sequence",
         allow_abbrev=False,
+        epilog=(
+            "Exit codes: 0 on success; 2 for invalid input; 1 for "
+            "checkpoint or tokenizer problems. Output: the differential "
+            "report as JSON on stdout."
+        ),
     )
     diff_cmd.add_argument(
         "--model",
@@ -1397,6 +1451,11 @@ def build_parser() -> argparse.ArgumentParser:
         "debug",
         help="Interactive protocol debugger REPL (offline; tokenizer-only)",
         allow_abbrev=False,
+        epilog=(
+            "Exit codes: 0 on success; 1 on failure, including any "
+            "failed command in a --script file. Output: the session "
+            "transcript on stdout."
+        ),
     )
     debug_cmd.add_argument(
         "--dataset",
@@ -3537,6 +3596,14 @@ def main(argv: list[str] | None = None) -> int:
     Returns the process exit code (0 on success). Accepts an optional argv
     list for programmatic/testing use; defaults to sys.argv.
     """
+    # Unix pipeline convention: die quietly on SIGPIPE. Python sets
+    # SIGPIPE to SIG_IGN at startup, which turns a closed downstream
+    # pipe (``| head``) into a BrokenPipeError dump at interpreter
+    # shutdown and exit code 120; restoring SIG_DFL makes the process
+    # end by the signal itself (shell status 141), like every other
+    # command-line tool. Platforms without SIGPIPE skip this.
+    if hasattr(signal, "SIGPIPE"):
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
@@ -3623,7 +3690,7 @@ def main(argv: list[str] | None = None) -> int:
                 section = result.get("portability_matrix")
                 if type(section) is dict:
                     print(render_portability_table(section), file=sys.stderr)
-            return 0 if result["verdict"] == "ok" else 1
+            return 0 if result["verdict"] == "ok" else 2
         if args.command == "fixtures":
             if args.fixtures_command == "fuzz":
                 from .fixturefuzz import run_fixtures_fuzz
@@ -5086,7 +5153,7 @@ def main(argv: list[str] | None = None) -> int:
         if result["decision"] == "cancelled":
             return 130
         if result["decision"] == "failed":
-            return 1
+            return 2
         return 0 if result["decision"] == "compatible_on_fixture_set" else 2
     except KeyboardInterrupt:
         print("Interrupted before a complete report was saved.", file=sys.stderr)

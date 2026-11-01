@@ -332,8 +332,23 @@ class MCPFrameHardeningTests(unittest.TestCase):
 
     def test_tool_failure_is_fixed_internal_error(self):
         """Test tool failure is fixed internal error."""
-        frame = _tool_call({"prompt": "x\udcff", "fixtures": _FIXTURES, "boundary": [7]})
-        _rc, out = _run_server((frame + "\n").encode())
+        # Specimen: a local_hf backend pointed at an existing but empty
+        # directory passes params validation, then fails inside the tool;
+        # the client must see the fixed -32603, never the exception. (The
+        # cycle-196 specimen — a lone-surrogate prompt — is a client
+        # error, -32602, since cycle 226's B-13 fix.)
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as empty_dir:
+            frame = _tool_call(
+                {
+                    "prompt": "x",
+                    "fixtures": _FIXTURES,
+                    "boundary": [7],
+                    "backend": {"kind": "local_hf", "checkpoint": empty_dir},
+                }
+            )
+            _rc, out = _run_server((frame + "\n").encode())
         self.assertEqual(out[0]["error"]["code"], -32603)
         self.assertEqual(out[0]["error"]["message"], "internal error")
 

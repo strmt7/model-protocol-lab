@@ -207,7 +207,8 @@ class DoctorTests(unittest.TestCase):
 
             output = io.StringIO()
             with redirect_stdout(output):
-                self.assertEqual(main(["doctor", "--model", str(root / "missing")]), 1)
+                # Verdict-bearing exit: 2 since cycle 226 (B-12).
+                self.assertEqual(main(["doctor", "--model", str(root / "missing")]), 2)
 
     def test_doctor_cli_checks_dataset(self):
         """Test doctor cli checks dataset."""
@@ -230,7 +231,9 @@ class DoctorTests(unittest.TestCase):
             output = io.StringIO()
             with redirect_stdout(output):
                 code = main(["doctor", "--model", str(root), "--dataset", str(bad)])
-            self.assertEqual(code, 1)
+            # The bad dataset yields a failed verdict report: exit 2
+            # since cycle 226 (B-12 unified verdict table).
+            self.assertEqual(code, 2)
 
 
 class FingerprintTests(unittest.TestCase):

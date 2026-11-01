@@ -6,6 +6,48 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 226 — operability batch, 2026-11-01)
+
+- Piping a command's output into a closing consumer (for example
+  `| head`) no longer kills the process with exit 120 and a
+  `BrokenPipeError` dump: the CLI restores the default SIGPIPE
+  disposition and dies quietly by the signal (status 141).
+- Two identical surface-noise probe runs are now byte-identical:
+  the protocol's wall-clock `frozen_at` field is removed from both
+  freeze functions.
+- One exit-code table governs every command (docs/USAGE.md
+  section 15, restated in each subcommand's `--help`): 0 success
+  or positive verdict, 1 operational failure (no report
+  produced), 2 negative verdict and usage errors, 3 probe
+  baseline unavailable, 130 cancelled. Doctor's failed verdict
+  moves 1 → 2 (matching `verify`), a completed `run` with a
+  failed decision moves 1 → 2, and a cancelled surface-noise
+  probe moves 2 → 130 (matching `run`).
+- The MCP probe tool maps client-caused fixture defects to
+  `-32602` instead of `-32603`: whitespace-only fixture ids,
+  more than 21 messages in one fixture, a message over the
+  per-message character cap, and lone surrogates in the prompt,
+  fixture text fields or the backend marker.
+- `recordnotation`'s generators (and their diff-reports mirror)
+  validate the seed exactly like `canonicalform`'s: a non-integer
+  seed is a `ValueError`, never silent `random.Random` coercion.
+- `debug --script` exits 1 when any command in the script failed
+  (failures are also written to stderr); it previously exited 0
+  with the errors only in the transcript. Interactive behavior is
+  unchanged.
+- The MCP server parses its arguments: `--help` prints usage,
+  `--version` prints the version, and an unknown argument exits
+  2 instead of being silently ignored while the server blocked
+  on stdin. The main CLI gains the `--version` flag it lacked.
+- Every subcommand's `--help` now ends with its exit codes and
+  output contract.
+- `pip install -r pylock.toml` works again: the lock's editable
+  self entry (which pip refuses under hash verification) is
+  removed, and the header documents the two-step consumption.
+- A dependency license inventory is added at
+  `docs/licenses/DEPENDENCIES.md` (the locked development set
+  from the PyPI JSON API, plus the unlocked `[hf]` set).
+
 ### Changed (cycle 226 — version story, 2026-10-31)
 
 - Package version is now 0.2.0, stated identically in

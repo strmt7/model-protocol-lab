@@ -41,6 +41,7 @@ keeps working from a repository root.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import signal
@@ -48,6 +49,7 @@ import sys
 import threading
 from typing import Any, Literal, NoReturn, cast
 
+from model_protocol_lab import __version__, datasets
 from model_protocol_lab import surfacenoise as sn
 from model_protocol_lab.core import Fixture, Message
 
@@ -75,6 +77,20 @@ class MCPError(Exception):
         super().__init__(message)
 
 
+def _reject_surrogates(value: str, field: str) -> None:
+    """Refuse lone surrogates as a client error (-32602).
+
+    A lone surrogate cannot be encoded as UTF-8, so letting one reach
+    the probe turns a client input defect into a server-side
+    UnicodeEncodeError, which the generic handler maps to -32603
+    (internal error) — the misclassification cycle 202 fixed for the
+    backend spec and cycle 226 (B-13) closes for the remaining text
+    fields.
+    """
+    if any(0xD800 <= ord(ch) <= 0xDFFF for ch in value):
+        raise MCPError(-32602, f"{field} contains a lone surrogate")
+
+
 # ---------------------------------------------------------------------------
 # Backend construction (fail-closed; no network anywhere in this file)
 # ---------------------------------------------------------------------------
@@ -89,6 +105,7 @@ def _build_backend(spec: dict[str, Any]) -> object:
         marker = spec.get("marker", "MAGICWORD")
         if type(marker) is not str or not marker:
             raise MCPError(-32602, "backend.marker must be a nonempty string")
+        _reject_surrogates(marker, "backend.marker")
         # Defined once in the measured module (model_protocol_lab.surfacenoise).
         return sn.SelfTestBackend(marker)
     if kind == "local_hf":
@@ -120,13 +137,19 @@ def _parse_fixtures(raw: object) -> tuple[Fixture, ...]:
         fid = item.get("id")
         messages = item.get("messages")
         expected = item.get("expected")
-        if type(fid) is not str or not fid:
-            raise MCPError(-32602, f"fixtures[{i}].id must be a nonempty string")
+        if type(fid) is not str or not fid.strip():
+            raise MCPError(-32602, f"fixtures[{i}].id must be a nonblank string")
+        _reject_surrogates(fid, f"fixtures[{i}].id")
         if fid in seen:
             raise MCPError(-32602, f"duplicate fixture id: {fid!r}")
         seen.add(fid)
         if type(messages) is not list or not messages:
             raise MCPError(-32602, f"fixtures[{i}].messages must be a nonempty list")
+        if len(messages) > datasets.MAX_MESSAGES:
+            raise MCPError(
+                -32602,
+                f"fixtures[{i}].messages exceeds {datasets.MAX_MESSAGES} messages per fixture",
+            )
         parsed_messages = []
         for j, msg in enumerate(messages):
             if type(msg) is not dict:
@@ -144,14 +167,23 @@ def _parse_fixtures(raw: object) -> tuple[Fixture, ...]:
                 )
             # The membership check above guarantees the role; the cast
             # tells the checker what the check established.
+            if len(content) > sn.MAX_FIXTURE_MESSAGE_CHARS:
+                raise MCPError(
+                    -32602,
+                    f"fixtures[{i}].messages[{j}] content exceeds "
+                    f"{sn.MAX_FIXTURE_MESSAGE_CHARS} characters",
+                )
+            _reject_surrogates(content, f"fixtures[{i}].messages[{j}].content")
             parsed_messages.append(
                 Message(role=cast(Literal["user", "assistant"], role), content=content)
             )
         if type(expected) is not str:
             raise MCPError(-32602, f"fixtures[{i}].expected must be a string")
+        _reject_surrogates(expected, f"fixtures[{i}].expected")
         group = item.get("group", "probe")
         if type(group) is not str or not group.strip():
             raise MCPError(-32602, f"fixtures[{i}].group must be a nonblank string")
+        _reject_surrogates(group, f"fixtures[{i}].group")
         fixtures.append(
             Fixture(
                 id=fid,
@@ -185,6 +217,7 @@ def _parse_prompt(raw: object) -> str:
         raise MCPError(-32602, "params.prompt must be a nonempty string")
     if len(raw) > MAX_REQUEST_CHARS:
         raise MCPError(-32602, f"prompt exceeds {MAX_REQUEST_CHARS} characters")
+    _reject_surrogates(raw, "params.prompt")
     return raw
 
 
@@ -613,9 +646,32 @@ def _write_response(response: dict[str, Any]) -> None:
     sys.stdout.flush()
 
 
-def serve() -> int:
-    """Serve newline-delimited JSON-RPC on stdio until EOF, or self-test."""
-    if "--self-test" in sys.argv[1:]:
+def serve(argv: list[str] | None = None) -> int:
+    """Serve newline-delimited JSON-RPC on stdio until EOF, or self-test.
+
+    Arguments are parsed, never silently ignored (cycle 226, B-18):
+    ``--help`` prints usage and exits 0, ``--version`` prints the
+    server version and exits 0, and an unknown argument exits 2 —
+    previously any argument other than ``--self-test`` was dropped
+    and the server blocked on stdin as if serving.
+    """
+    parser = argparse.ArgumentParser(
+        prog="model-protocol-lab-mcp",
+        description=(
+            "Stdio MCP server for the surface-noise self-consistency probe. "
+            "Speaks newline-delimited JSON-RPC 2.0 on stdin/stdout until EOF."
+        ),
+    )
+    parser.add_argument(
+        "--self-test", action="store_true", help="run the built-in self-test and exit"
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"model-protocol-lab-mcp {__version__}",
+    )
+    args = parser.parse_args(argv)
+    if args.self_test:
         return self_test()
     stdin = sys.stdin.buffer
     while True:
