@@ -6,6 +6,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 227 — JSON discipline completed at the remaining parsers, 2026-11-01)
+
+- The sealed-bundle manifest parser accepted an overflowing float
+  literal (`1e999` became `inf`): the verify verdict stayed `ok`
+  and the report re-emitted the value as the bare token
+  `Infinity`, which is not valid JSON. The manifest parse now
+  carries the same `parse_float` hook the results parser has
+  carried since cycle 202, so the literal fails as
+  `manifest_unparseable` like its `Infinity` spelling already did
+  (bug-hunt wave 2, F2).
+- `structured.classify_response` parsed model output with a plain
+  `json.loads`, so `NaN`, `1e999`, or duplicate keys in an
+  unchecked field earned `adherent`. Duplicate keys are now a
+  parse failure, and an undeclared field's subtree must be finite
+  throughout — the schema stage owns number finiteness in this
+  module, so a non-finite number in an extra field earns
+  `schema_failed`, the verdict a checked field already earned
+  (cybersecurity audit 2, C-02).
+- The checkpoint JSON readers (`backends` asset reader and the
+  doctor safetensors header check) accepted duplicate keys,
+  non-finite numbers, and lone surrogates; both now apply the
+  same discipline and fail in their existing fixed vocabularies
+  (cybersecurity audit 2, C-03). Well-formed checkpoints are
+  unaffected.
+
 ### Fixed (cycle 226 — DeepSource fix-down for cycle files, 2026-11-01)
 
 - The fresh DeepSource capture at the cycle-226 head was audited

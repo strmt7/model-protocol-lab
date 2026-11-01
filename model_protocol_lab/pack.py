@@ -26,6 +26,7 @@ import hashlib
 import io
 import json
 import lzma
+import math
 import os
 import re
 import stat
@@ -175,6 +176,28 @@ def _reject_manifest_constant(_value: str) -> Any:
     caller's widened catch.
     """
     raise ValueError("manifest_nonfinite_constant")
+
+
+def _reject_manifest_nonfinite_float(text: str) -> float:
+    """``parse_float`` hook: reject float literals that overflow to
+    infinity (``1e999``).
+
+    ``parse_constant`` only fires for the ``NaN``/``Infinity``
+    literals; ``float()`` conversion of a huge exponent reaches
+    ``inf`` without ever calling it. Before cycle 227 the manifest
+    parse had no ``parse_float`` hook (bug-hunt wave 2, F2), so a
+    bundle-supplied ``1e999`` in the manifest ``context`` passed the
+    seal schema, the verdict stayed ``ok``, and the verify report
+    re-emitted the value as the bare token ``Infinity`` -- output
+    that is not valid JSON. The results parser closed the same hole
+    in cycle 202; the manifest now carries the same pair of hooks.
+    The ValueError is normalised to ``manifest_unparseable`` by the
+    caller's widened catch.
+    """
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError("manifest_nonfinite_float")
+    return value
 
 
 def build_manifest(files: list[dict[str, Any]], context: dict[str, str]) -> dict[str, Any]:
@@ -600,6 +623,7 @@ def verify_bundle_bytes(data: bytes, expect_digest: str | None = None) -> dict[s
                 manifest_raw.decode("utf-8"),
                 object_pairs_hook=_unique_manifest_object,
                 parse_constant=_reject_manifest_constant,
+                parse_float=_reject_manifest_nonfinite_float,
             )
             schema_detail = _valid_manifest(parsed) or ""
         except (RecursionError, ValueError):
