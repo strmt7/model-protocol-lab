@@ -111,7 +111,8 @@ class SigpipeTests(unittest.TestCase):
 class SurfaceNoiseDeterminismTests(unittest.TestCase):
     """B-11: probe output is a pure function of its inputs."""
 
-    def _report(self) -> dict:
+    @staticmethod
+    def _report() -> dict:
         """One selftest probe report."""
         backend = sn.SelfTestBackend()
         fixtures = (
@@ -188,7 +189,8 @@ class ExitCodeTableTests(unittest.TestCase):
 class McpFixtureGrammarTests(unittest.TestCase):
     """B-13: client-caused fixture defects are -32602, never -32603."""
 
-    def _call(self, fixtures) -> dict:
+    @staticmethod
+    def _call(fixtures) -> dict:
         """Call the probe tool with the given fixtures payload."""
         return _probe_call(
             {
@@ -294,7 +296,8 @@ class EntryPointArgumentTests(unittest.TestCase):
 class DebugScriptExitTests(unittest.TestCase):
     """B-17: a scripted debug run reports command failures in its exit."""
 
-    def _shell(self):
+    @staticmethod
+    def _shell():
         """A debug shell over the example fixtures."""
         from model_protocol_lab.datasets import load_dataset
         from model_protocol_lab.debug import DebugShell

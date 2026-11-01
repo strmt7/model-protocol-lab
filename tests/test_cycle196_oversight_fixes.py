@@ -337,8 +337,6 @@ class MCPFrameHardeningTests(unittest.TestCase):
         # the client must see the fixed -32603, never the exception. (The
         # cycle-196 specimen — a lone-surrogate prompt — is a client
         # error, -32602, since cycle 226's B-13 fix.)
-        import tempfile
-
         with tempfile.TemporaryDirectory() as empty_dir:
             frame = _tool_call(
                 {

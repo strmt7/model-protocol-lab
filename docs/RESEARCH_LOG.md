@@ -11171,3 +11171,19 @@ red-then-green.
   listed in the cycle's final report (cycle-31/46/64/83/165/196
   exit-code and no-version pins, each reversed with its reason
   recorded at the pin).
+- **DeepSource fix-down for the cycle's own files.** The complete
+  capture at the operability head (921 occurrences, up from 910)
+  was diffed occurrence by occurrence against the cycle-225
+  capture. The occurrences the cycle's own code introduced are
+  fixed in code: the debug shell's script-mode state is reached
+  through a `script_mode` context manager and a
+  `script_error_count` property rather than protected-member
+  access from `run_script`; three helpers in the operability
+  tests are static methods; a redundant function-level import in
+  the cycle-196 tests is gone; a surfacenoise docstring holding
+  a `\\ud800` escape is raw. Two deltas are not new findings: the
+  `main` and `_parse_fixtures` complexity findings changed title
+  only (159→160, 19→21 — the cycle's required branches), and the
+  pre-existing pack/verify cyclic-import finding was attached by
+  the analyzer to one additional importing file. The standing
+  backlog itself remains the later fix-down program's work.
