@@ -6449,6 +6449,10 @@ def oracle_diff_reports(
                     return False
                 if any(not _digest_ok(digest) for digest in record["content_digests"].values()):
                     return False
+                for arm in _icm.ARM_KEYS:
+                    tokens = arm_tokens[arm]
+                    if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                        return False
                 for arm in _icm.TREATED_ARMS:
                     if record["ids_identical"][arm] is not (
                         record["id_digests"][arm] == record["id_digests"]["control"]
@@ -6686,6 +6690,10 @@ def oracle_diff_reports(
                     return False
                 if any(not _digest_ok(digest) for digest in record["content_digests"].values()):
                     return False
+                for arm in _csm.ARM_KEYS:
+                    tokens = arm_tokens[arm]
+                    if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                        return False
                 for arm in _csm.TREATED_ARMS:
                     if record["ids_identical"][arm] is not (
                         record["id_digests"][arm] == record["id_digests"]["control"]
@@ -8664,6 +8672,11 @@ def oracle_diff_reports(
         and not _o_pl_asymmetric
         and not _o_cform_asymmetric
         and not _o_idist_asymmetric
+        and not _o_hf_asymmetric
+        and not _o_ps_asymmetric
+        and not _o_rnot_asymmetric
+        and not _o_ic_asymmetric
+        and not _o_cs_asymmetric
         and not _o_rt_asymmetric
         and not _o_de_asymmetric
         and not _o_fo_asymmetric

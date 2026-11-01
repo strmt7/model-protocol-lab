@@ -10519,6 +10519,39 @@ def _o_ic_cell_ok(cell: Any, expected_digest: str) -> bool:
     return bool(cell["verdict"] == verdict)
 
 
+def _o_recomputed_equal(stored: Any, expected: Any) -> bool:
+    """Oracle type-strict equality: mirrors
+    diffreports._recomputed_equal.
+
+    Bare ``==`` lets a JSON ``true`` validate as the integer 1 and
+    a float ``0.0`` as the integer ``0``; the producer's validators
+    compare recomputed values type-strictly, so the oracle must
+    too, or it certifies payloads the producer rejects (bug-hunt
+    wave 2, BH2B-08). Written independently here -- the oracle
+    never imports the producer's helpers.
+    """
+    if type(expected) is bool:
+        return type(stored) is bool and stored == expected
+    if type(expected) is int:
+        return type(stored) is int and stored == expected
+    if type(expected) is dict:
+        return (
+            type(stored) is dict
+            and stored.keys() == expected.keys()
+            and all(_o_recomputed_equal(stored[key], value) for key, value in expected.items())
+        )
+    if type(expected) is list:
+        return (
+            type(stored) is list
+            and len(stored) == len(expected)
+            and all(
+                _o_recomputed_equal(item, value)
+                for item, value in zip(stored, expected, strict=True)
+            )
+        )
+    return bool(stored == expected)
+
+
 def _o_ic_recompute(payload: Any):
     """O ic recompute."""
     if type(payload) is not dict:
@@ -10531,7 +10564,7 @@ def _o_ic_recompute(payload: Any):
     if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
         return None
     expected_protocol = _o_ic_protocol(seed, backend_fingerprint)
-    if expected_protocol is None or protocol != expected_protocol:
+    if expected_protocol is None or not _o_recomputed_equal(protocol, expected_protocol):
         return None
     candidates = payload.get("candidates")
     if type(candidates) is not dict or not candidates:
@@ -10598,6 +10631,10 @@ def _o_ic_recompute(payload: Any):
                     return None
             for mapping in (ids_identical, id_length_delta):
                 if type(mapping) is not dict or set(mapping) != set(_O_IC_TREATED_ARMS):
+                    return None
+            for arm in _O_IC_ARM_KEYS:
+                tokens = arm_tokens[arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
                     return None
             for arm in _O_IC_TREATED_ARMS:
                 if ids_identical[arm] is not (id_digests[arm] == id_digests["control"]):
@@ -10680,11 +10717,11 @@ def _o_invisiblechars_valid(value: Any) -> bool:
     for name, expected in recomputed["aggregates"].items():
         entry = candidates[name]
         for key, val in expected.items():
-            if entry.get(key) != val:
+            if not _o_recomputed_equal(entry.get(key), val):
                 return False
-    if value.get("n_candidates") != recomputed["n_candidates"]:
+    if not _o_recomputed_equal(value.get("n_candidates"), recomputed["n_candidates"]):
         return False
-    return bool(value.get("n_cases") == recomputed["n_cases"])
+    return _o_recomputed_equal(value.get("n_cases"), recomputed["n_cases"])
 
 
 def _o_invisiblechars(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
@@ -11666,7 +11703,7 @@ def _o_cs_recompute(payload: Any):
     if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
         return None
     expected_protocol = _o_cs_protocol(seed, backend_fingerprint)
-    if expected_protocol is None or protocol != expected_protocol:
+    if expected_protocol is None or not _o_recomputed_equal(protocol, expected_protocol):
         return None
     candidates = payload.get("candidates")
     if type(candidates) is not dict or not candidates:
@@ -11741,6 +11778,10 @@ def _o_cs_recompute(payload: Any):
                     return None
             for mapping in (ids_identical, id_length_delta):
                 if type(mapping) is not dict or set(mapping) != set(_O_CS_TREATED_ARMS):
+                    return None
+            for arm in _O_CS_ARM_KEYS:
+                tokens = arm_tokens[arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
                     return None
             for arm in _O_CS_TREATED_ARMS:
                 if ids_identical[arm] is not (id_digests[arm] == id_digests["control"]):
@@ -11823,11 +11864,11 @@ def _o_confusableskeleton_valid(value: Any) -> bool:
     for name, expected in recomputed["aggregates"].items():
         entry = candidates[name]
         for key, val in expected.items():
-            if entry.get(key) != val:
+            if not _o_recomputed_equal(entry.get(key), val):
                 return False
-    if value.get("n_candidates") != recomputed["n_candidates"]:
+    if not _o_recomputed_equal(value.get("n_candidates"), recomputed["n_candidates"]):
         return False
-    return bool(value.get("n_cases") == recomputed["n_cases"])
+    return _o_recomputed_equal(value.get("n_cases"), recomputed["n_cases"])
 
 
 def _o_confusableskeleton(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
@@ -16562,6 +16603,16 @@ def _oracle_diff(
         and not o_cform_asymmetric
         and not o_idist_changed
         and not o_idist_asymmetric
+        and not o_hf_changed
+        and not o_hf_asymmetric
+        and not o_ps_changed
+        and not o_ps_asymmetric
+        and not o_rn_changed
+        and not o_rn_asymmetric
+        and not o_ic_changed
+        and not o_ic_asymmetric
+        and not o_cs_changed
+        and not o_cs_asymmetric
         and not o_ca_changed
         and not o_ca_asymmetric
         and not o_pr_changed

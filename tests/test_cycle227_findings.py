@@ -24,12 +24,33 @@ fix batch:
   ``doctor._check_weight_headers``) accepted duplicate keys,
   non-finite numbers, and lone surrogates; both now apply the same
   discipline and fail in their existing fixed vocabularies.
+- BH2B-01/02 -- the invisible-chars and confusable-skeleton
+  recompute mirrors (producer and both test oracles) subtracted
+  ``arm_tokens`` before type-checking them, so a type-confused
+  token count escaped ``diff_reports`` as a raw ``TypeError``.
+  All four now validate first, like the older sections.
+- F1 -- a truthy non-dict surface-noise ``baseline`` escaped the
+  diff as a raw ``AttributeError``; the payload validator now
+  checks the field like its siblings.
+- F6 -- lone-surrogate fixture ids escaped five diff sections as
+  raw ``UnicodeEncodeError`` at their join-encode digest sites;
+  each site now fails closed like the cycle-190 site.
+- BH2B-05 -- the cycle-67 oracle's ``identical`` conjunction (and
+  the cycle-27 oracle's) omitted five sections, so the oracles
+  called one-sided pairs identical while their own summaries
+  reported the asymmetry; both conjunctions are complete now.
+- BH2B-08 -- the cycle-67 oracle compared recomputed values with
+  plain ``==`` where the producer compares type-strictly, so a
+  bool-as-int or float-as-int forgery passed the oracle; the
+  oracle's newest-section validators now use a type-strict
+  equality with the producer's semantics.
 
 Each test below is red on the pre-fix tree for the class it names.
 """
 
 from __future__ import annotations
 
+import copy
 import io
 import json
 import struct
@@ -38,7 +59,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from model_protocol_lab import backends, doctor, pack, structured
+from model_protocol_lab import backends, diffreports, doctor, pack, structured
 
 _SCHEMA = {
     "type": "object",
@@ -238,6 +259,331 @@ class CheckpointJsonDisciplineTests(unittest.TestCase):
         """Test weight headers wellformed unchanged."""
         result = self._header_check('{"__metadata__": {"format": "pt"}}')
         self.assertEqual(result["status"], "ok")
+
+
+def _t67():
+    """Import the cycle-67 oracle module (builders + mirrors)."""
+    from tests import test_cycle67_diffreports_audit as t67
+
+    return t67
+
+
+class ArmTokensTypeConfusionTests(unittest.TestCase):
+    """BH2B-01/02: arm_tokens arithmetic happens after validation."""
+
+    def test_invisible_chars_string_arm_tokens_invalid_not_raised(self):
+        """Test invisible chars string arm tokens invalid not raised."""
+        t67 = _t67()
+        payload = t67.InvisibleCharsOracleAgreementTests._payload("perfect")
+        cand = sorted(payload["candidates"])[0]
+        record = payload["candidates"][cand]["records"][0]
+        arm = sorted(k for k in record["arm_tokens"] if k != "control")[0]
+        record["arm_tokens"][arm] = "x"
+        self.assertFalse(diffreports._valid_invisible_chars(copy.deepcopy(payload)))
+        self.assertFalse(t67._o_invisiblechars_valid(copy.deepcopy(payload)))
+
+    def test_confusable_control_arm_tokens_list_invalid_not_raised(self):
+        """Test confusable control arm tokens list invalid not raised."""
+        t67 = _t67()
+        from tests import test_cycle224_confusableskeleton as t224
+
+        payload = t224._payload("perfect")[0]
+        cand = sorted(payload["candidates"])[0]
+        record = payload["candidates"][cand]["records"][0]
+        record["arm_tokens"]["control"] = [1]
+        self.assertFalse(diffreports._valid_confusable_skeleton(copy.deepcopy(payload)))
+        self.assertFalse(t67._o_confusableskeleton_valid(copy.deepcopy(payload)))
+
+    def test_diff_reports_survives_type_confused_arm_tokens(self):
+        """Test diff reports survives type confused arm tokens."""
+        t67 = _t67()
+        payload = t67.InvisibleCharsOracleAgreementTests._payload("perfect")
+        cand = sorted(payload["candidates"])[0]
+        payload["candidates"][cand]["records"][0]["arm_tokens"]["control"] = "x"
+        old = t67._base_report()
+        new = t67._base_report()
+        old["invisible_chars"] = t67.InvisibleCharsOracleAgreementTests._payload("perfect")
+        new["invisible_chars"] = payload
+        out = diffreports.diff_reports(old, new)
+        self.assertEqual(out["invisible_chars"]["available"], "old")
+
+
+class OracleIdenticalCompletenessTests(unittest.TestCase):
+    """BH2B-05: the oracle identical conjunction covers all sections."""
+
+    def test_one_sided_history_frame_not_identical_in_oracle(self):
+        """Test one sided history frame not identical in oracle."""
+        t67 = _t67()
+        old = t67._base_report()
+        new = t67._base_report()
+        old["history_frame"] = t67.HistoryFrameOracleAgreementTests._payload("perfect")
+        want = t67._oracle_diff(copy.deepcopy(old), copy.deepcopy(new))
+        self.assertTrue(want["summary"]["history_frame_asymmetric"])
+        self.assertFalse(want["summary"]["identical"])
+
+    def test_one_sided_invisible_chars_not_identical_in_oracle(self):
+        """Test one sided invisible chars not identical in oracle."""
+        t67 = _t67()
+        old = t67._base_report()
+        new = t67._base_report()
+        old["invisible_chars"] = t67.InvisibleCharsOracleAgreementTests._payload("perfect")
+        want = t67._oracle_diff(copy.deepcopy(old), copy.deepcopy(new))
+        self.assertTrue(want["summary"]["invisible_chars_asymmetric"])
+        self.assertFalse(want["summary"]["identical"])
+
+
+class OracleTypeStrictEqualityTests(unittest.TestCase):
+    """BH2B-08: the oracle compares recomputed values type-strictly."""
+
+    def test_confusable_float_delta_rejected_by_oracle(self):
+        """Test confusable float delta rejected by oracle."""
+        t67 = _t67()
+        from tests import test_cycle224_confusableskeleton as t224
+
+        payload = t224._payload("perfect", fold=True)[0]
+        deltas = payload["candidates"]["chatml"]["ids"]["whole_word"]["id_length_delta"]
+        deltas[deltas.index(0)] = 0.0
+        self.assertFalse(diffreports._valid_confusable_skeleton(copy.deepcopy(payload)))
+        self.assertFalse(t67._o_confusableskeleton_valid(copy.deepcopy(payload)))
+
+    def test_invisible_bool_version_rejected_by_oracle(self):
+        """Test invisible bool version rejected by oracle."""
+        t67 = _t67()
+        payload = t67.InvisibleCharsOracleAgreementTests._payload("perfect")
+        payload["protocol"]["version"] = True
+        self.assertFalse(diffreports._valid_invisible_chars(copy.deepcopy(payload)))
+        self.assertFalse(t67._o_invisiblechars_valid(copy.deepcopy(payload)))
+
+    def test_invisible_bool_n_candidates_rejected_by_oracle(self):
+        """Test invisible bool n candidates rejected by oracle."""
+        t67 = _t67()
+        payload = t67.InvisibleCharsOracleAgreementTests._payload("perfect")
+        payload["n_candidates"] = True
+        self.assertFalse(diffreports._valid_invisible_chars(copy.deepcopy(payload)))
+        self.assertFalse(t67._o_invisiblechars_valid(copy.deepcopy(payload)))
+
+
+def _probe_payload(baseline: object) -> dict:
+    """Build a minimal valid surface-noise probe payload."""
+    return {
+        "instrument": "surface-noise-probe",
+        "status": "ok",
+        "protocol": {"backend_fingerprint": "fp", "search_plan": [], "fixture_sha256": "x"},
+        "prompt_sha256": "abc",
+        "operators": {
+            "op": {
+                "stability": 1.0,
+                "n_effective": 1,
+                "n_total": 1,
+                "nearest_observed_flip": {"distance": 1, "variant_id": "v"},
+            }
+        },
+        "baseline": baseline,
+    }
+
+
+class SurfaceNoiseBaselineTests(unittest.TestCase):
+    """F1: a type-confused baseline is invalid, never an exception."""
+
+    def test_truthy_non_dict_baselines_are_invalid(self):
+        """Test truthy non dict baselines are invalid."""
+        for baseline in ("hello", 7, 1.5, True, [1, 2]):
+            with self.subTest(baseline=baseline):
+                out = diffreports.diff_surface_noise(
+                    _probe_payload(baseline), _probe_payload(baseline)
+                )
+                self.assertEqual(out["available"], "neither")
+
+    def test_dict_baseline_control_still_identical(self):
+        """Test dict baseline control still identical."""
+        baseline = {"n_pass": 3, "n_fail": 0, "n_abstain": 0}
+        out = diffreports.diff_surface_noise(
+            _probe_payload(baseline), _probe_payload(dict(baseline))
+        )
+        self.assertTrue(out["identical"])
+
+
+class SurrogateFixtureIdTests(unittest.TestCase):
+    """F6: lone-surrogate fixture ids fail closed in diff sections."""
+
+    def _repetition_payload(self, fixture_id: str) -> dict:
+        """Build a results payload whose repetition record uses the id."""
+        base = json.loads(
+            (Path(__file__).resolve().parent.parent / "examples" / "sample-report" / "results.json")
+            .read_bytes()
+            .decode()
+        )
+        cell = {
+            "verdict": True,
+            "boundary_found": True,
+            "boundary_text_match": True,
+            "input_tokens": 5,
+        }
+        record = {
+            "fixture": fixture_id,
+            "vacuous": False,
+            "pre_repeated": False,
+            "echo_fixture": False,
+            "pad_evaluable": True,
+            "construction": "id_exact",
+            "seam_ids": [1],
+            "delta_tokens": 3,
+            "filler_tokens": 4,
+            "arms": {"x1": dict(cell), "x2": dict(cell), "pad": dict(cell)},
+            "arm_details": {"x2": "", "pad": ""},
+        }
+        base["repetition"] = {
+            "available": True,
+            "primary_decision": "no_candidate",
+            "primary_winner": None,
+            "protocol": {
+                "joiner": " ",
+                "filler_unit_sha256": "a" * 64,
+                "sizing_rule": "x",
+                "fixture_set_sha256": "b" * 64,
+                "backend_fingerprint": "fp",
+                "fingerprint": "c" * 64,
+                "version": 1,
+                "detector_version": 1,
+            },
+            "candidates": {
+                "cand": {
+                    "status": "available",
+                    "think_channel": False,
+                    "render_signature": None,
+                    "records": [record],
+                }
+            },
+        }
+        return base
+
+    def test_surrogate_fixture_id_repetition_neither_not_raised(self):
+        """Test surrogate fixture id repetition neither not raised."""
+        hostile = self._repetition_payload("\ud800")
+        control = self._repetition_payload("f1")
+        out = diffreports.diff_reports(hostile, control)
+        self.assertEqual(out["repetition"]["available"], "neither")
+
+    @staticmethod
+    def _surrogate_fixture_ids(payload: object) -> None:
+        """Append a lone surrogate to every fixture id in a payload.
+
+        The mapping is consistent (the same id maps the same way
+        everywhere, donor references included), so the payload
+        stays self-consistent right up to the fixture-set digest,
+        whose join-encode is the site under test.
+        """
+        stack: list[object] = [payload]
+        while stack:
+            item = stack.pop()
+            if type(item) is dict:
+                for key in ("fixture", "donor_fixture"):
+                    value = item.get(key)
+                    if type(value) is str and "\ud800" not in value:
+                        item[key] = value + "\ud800"
+                stack.extend(item.values())
+            elif type(item) is list:
+                stack.extend(item)
+
+    def test_surrogate_fixture_id_aliasing_invalid_not_raised(self):
+        """Test surrogate fixture id aliasing invalid not raised."""
+        from model_protocol_lab.core import Fixture, Generation, Message, Split
+        from model_protocol_lab.experiments import aliasing_profile, run_experiment
+
+        class _StubBackend:
+            """Stub backend: every prompt encodes to the same ids."""
+
+            fingerprint = "sha256:stub"
+            eos_token_id = None
+
+            @staticmethod
+            def encode(text: str) -> tuple[int, ...]:
+                """Encode."""
+                return (1, 2, 3)
+
+            @staticmethod
+            def generate(input_ids, *, max_new_tokens, seed, cancel):  # noqa: ANN001, ANN202
+                """Generate."""
+                return Generation((5, 99, 5, 99)[:max_new_tokens], "limit")
+
+            @staticmethod
+            def decode(ids) -> str:  # noqa: ANN001
+                """Decode."""
+                return "yo"
+
+        from model_protocol_lab.core import Format
+
+        fmt_a = Format(name="alpha", bos="", user_prefix="U:", assistant_prefix="A:", turn_end="\n")
+        fmt_b = Format(
+            name="beta",
+            bos="",
+            user_prefix="U:",
+            assistant_prefix="A:",
+            turn_end="\n",
+            repeat_bos=True,
+        )
+        case = Fixture(
+            id="s1",
+            group="g1",
+            messages=(Message(role="user", content="hi"),),
+            expected="yo",
+        )
+        held = Fixture(
+            id="h1",
+            group="g2",
+            messages=(Message(role="user", content="hey"),),
+            expected="yo",
+        )
+        result = run_experiment(
+            _StubBackend(),
+            (fmt_a, fmt_b),
+            Split(search=(case,), held_out=(held,)),
+            boundary=(99,),
+            max_new_tokens=4,
+            seed=3,
+        )
+        payload = aliasing_profile(result)
+        self.assertTrue(diffreports._valid_aliasing(copy.deepcopy(payload)))
+        self._surrogate_fixture_ids(payload)
+        self.assertFalse(diffreports._valid_aliasing(payload))
+
+    def test_surrogate_fixture_id_dateline_invalid_not_raised(self):
+        """Test surrogate fixture id dateline invalid not raised."""
+        from tests import test_cycle188_dateline as t188
+
+        payload = t188._base_payload()
+        self.assertTrue(diffreports._valid_dateline(copy.deepcopy(payload)))
+        self._surrogate_fixture_ids(payload)
+        self.assertFalse(diffreports._valid_dateline(payload))
+
+    def test_surrogate_fixture_id_leading_invalid_not_raised(self):
+        """Test surrogate fixture id leading invalid not raised."""
+        from tests import test_cycle185_leading as t185
+
+        backend = t185._ClaimBackend(expected_by_marker=t185.EXPECTED_BY_MARKER)
+        payload = t185._payload(backend, t185._run_stage(backend))
+        self.assertTrue(diffreports._valid_leading(copy.deepcopy(payload)))
+        self._surrogate_fixture_ids(payload)
+        self.assertFalse(diffreports._valid_leading(payload))
+
+    def test_surrogate_fixture_id_distraction_invalid_not_raised(self):
+        """Test surrogate fixture id distraction invalid not raised."""
+        from tests import test_cycle184_distraction as t184
+
+        backend = t184._WordBackend(t184.RULES, t184.EXPECTED_BY_MARKER)
+        payload = t184._payload(backend, t184._run_stage(backend))
+        self.assertTrue(diffreports._valid_distraction(copy.deepcopy(payload)))
+        self._surrogate_fixture_ids(payload)
+        self.assertFalse(diffreports._valid_distraction(payload))
+
+    def test_surrogate_fixture_id_placement_invalid_not_raised(self):
+        """Test surrogate fixture id placement invalid not raised."""
+        from tests import test_cycle193_placement as t193
+
+        payload = t193._payload()
+        self.assertTrue(diffreports._valid_placement(copy.deepcopy(payload)))
+        self._surrogate_fixture_ids(payload)
+        self.assertFalse(diffreports._valid_placement(payload))
 
 
 if __name__ == "__main__":
