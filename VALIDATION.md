@@ -57,13 +57,13 @@ doctor's resource fallbacks degrade there.
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  94.9712% (cycle 226, 2026-11-01)**. The gate compares the
+  94.9719% (cycle 226, 2026-11-01)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+0.471) is auditable rather than inferred from the display.
+  (+0.472) is auditable rather than inferred from the display.
   Cycle 226 moves both figures slightly: the readiness fixes
-  added 80 statements net (39,011 → 39,091) and 86 covered
-  statements (37,501 → 37,587) — the strict loader discipline in
+  added 88 statements net (39,011 → 39,099) and 94 covered
+  statements (37,501 → 37,595) — the strict loader discipline in
   surfacenoise, recordnotation and its diffreports mirror
   carries its own tests in
   `tests/test_cycle226_json_discipline.py`, and the operability

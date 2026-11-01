@@ -26,8 +26,8 @@ import cmd
 import io
 import re
 import sys
-from collections.abc import Callable
-from contextlib import redirect_stdout
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 from typing import Any, Literal
 
@@ -240,6 +240,25 @@ class DebugShell(cmd.Cmd):
             "Enter .help for usage hints."
         )
         self._refresh_prompt()
+
+    @property
+    def script_error_count(self) -> int:
+        """Command failures counted in script mode so far."""
+        return self._script_errors
+
+    @contextmanager
+    def script_mode(self) -> Iterator[None]:
+        """Enable script-mode error reporting for the block's duration.
+
+        The previous mode is restored on exit, so a script run from
+        inside another script (``.read``) keeps the outer mode.
+        """
+        previous = self._script_mode
+        self._script_mode = True
+        try:
+            yield
+        finally:
+            self._script_mode = previous
 
     @property
     def _fmt(self) -> Format:
@@ -758,17 +777,14 @@ def run_script(shell: DebugShell, path: str | Path) -> int:
     longer exit 0 over a transcript full of errors (cycle 226, B-17).
     The interactive REPL keeps its never-die behavior unchanged.
     """
-    errors_before = shell._script_errors
-    previous_mode = shell._script_mode
-    shell._script_mode = True
+    errors_before = shell.script_error_count
     try:
-        shell.read_commands(path)
+        with shell.script_mode():
+            shell.read_commands(path)
     except ValueError as exc:
         print(f"debug: {exc}", file=sys.stderr)
         return 1
-    finally:
-        shell._script_mode = previous_mode
-    return 1 if shell._script_errors > errors_before else 0
+    return 1 if shell.script_error_count > errors_before else 0
 
 
 def run_debug(args: argparse.Namespace) -> int:

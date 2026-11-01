@@ -1548,7 +1548,7 @@ def _reject_probe_nonfinite_float(text: str) -> float:
 
 
 def _reject_lone_surrogates(value: Any) -> None:
-    """Refuse lone surrogates anywhere in a decoded probe report.
+    r"""Refuse lone surrogates anywhere in a decoded probe report.
 
     A ``\\ud800`` escape decodes to a lone surrogate that no UTF-8
     consumer downstream can encode; the sibling loaders refuse the

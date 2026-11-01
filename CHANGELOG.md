@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 226 — DeepSource fix-down for cycle files, 2026-11-01)
+
+- The fresh DeepSource capture at the cycle-226 head was audited
+  occurrence by occurrence: the findings the cycle's own code
+  introduced are fixed in code, not annotated — the debug shell's
+  script-mode state is now reached through a `script_mode`
+  context manager and a `script_error_count` property instead of
+  protected-member access from `run_script`; three helper methods
+  in the operability tests are static methods; a redundant
+  function-level `tempfile` import in the cycle-196 tests is
+  removed; a surfacenoise docstring containing a `\\ud800` escape
+  is a raw docstring. Two standing findings grew by title only
+  (the `main` and `_parse_fixtures` complexity figures, +1/+2
+  from the cycle's required branches); the pack/verify cyclic
+  import is a pre-existing finding the analyzer attached to one
+  additional importing file in this run.
+
 ### Fixed (cycle 226 — operability batch, 2026-11-01)
 
 - Piping a command's output into a closing consumer (for example
