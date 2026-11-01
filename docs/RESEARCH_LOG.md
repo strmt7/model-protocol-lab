@@ -11174,8 +11174,8 @@ red-then-green.
 - **DeepSource fix-down for the cycle's own files.** The complete
   capture at the operability head (921 occurrences, up from 910)
   was diffed occurrence by occurrence against the cycle-225
-  capture. The occurrences the cycle's own code introduced are
-  fixed in code: the debug shell's script-mode state is reached
+  capture. The ten occurrences the cycle's own code introduced
+  are fixed in code: the debug shell's script-mode state is reached
   through a `script_mode` context manager and a
   `script_error_count` property rather than protected-member
   access from `run_script`; three helpers in the operability
