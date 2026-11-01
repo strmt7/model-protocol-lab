@@ -427,7 +427,7 @@ class TestReleaseBuildRefusals(unittest.TestCase):
         """Test expect version mismatch is refused before building."""
         from tools import release_build
 
-        self.assertEqual(release_build._package_version(REPO_ROOT), "0.1.0")
+        self.assertEqual(release_build._package_version(REPO_ROOT), "0.2.0")
         with tempfile.TemporaryDirectory() as tmp:
             code = release_build.main(
                 [

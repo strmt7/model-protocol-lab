@@ -184,8 +184,8 @@ class TestReleaseSurface(unittest.TestCase):
         self.assertNotIn("Pre-Alpha", pyproject)
         self.assertIn("torch>=2.6,<3", pyproject)
         init = (REPO_ROOT / "model_protocol_lab" / "__init__.py").read_text(encoding="utf-8")
-        self.assertIn('__version__ = "0.1.0"', init)
-        self.assertIn('version = "0.1.0"', pyproject)
+        self.assertIn('__version__ = "0.2.0"', init)
+        self.assertIn('version = "0.2.0"', pyproject)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (cycle 226 — version story, 2026-10-31)
+
+- Package version is now 0.2.0, stated identically in
+  `pyproject.toml`, `model_protocol_lab.__version__` and
+  `CITATION.cff`. The accumulated entries below the cycle-226
+  fixes (cycles 115–225, all post-dating the 0.1.0 story of
+  2026-10-16) are rolled into the [0.2.0] section, so a future
+  tag cannot mislabel them as 0.1.0. No tag has been created;
+  tagging remains the owner's act, and 0.2.0 names the current
+  tree, not a published release.
+- `docs/RELEASE_NOTES_0.2.0.md` added (draft) with the
+  attestation verification command; the 0.1.0 notes remain as
+  the historical draft for the untagged 0.1.0 line.
+- The cycle-115 heading `Performance` — not a Keep a Changelog
+  category — is renamed to `Changed`.
+
 ### Fixed (cycle 226 — pack container vocabulary, 2026-10-31)
 
 - `verify --bundle` no longer dies with a raw
@@ -79,6 +95,8 @@ All notable changes to this project are documented here. The format follows
   author); the control-tokens survey now reports the redacted CVE
   assignment (CVE-2025-6***4) its source states, not "a CVE-assigned
   attack class".
+
+## [0.2.0] — 2026-10-31
 
 ### Changed (cycle 225 — findings integrity, 2026-10-30)
 
@@ -3172,7 +3190,7 @@ All notable changes to this project are documented here. The format follows
   CPU-burn loop: aborts at the budget. New
   `tests/test_cycle116_render_cpu_budget_audit.py` (8 tests).
 
-### Performance (cycle 115 — single-pass weight manifesting, 2026-10-17)
+### Changed (cycle 115 — single-pass weight manifesting, 2026-10-17)
 
 - `LocalHFBackend` no longer sha256-hashes every weight file twice per run.
   It hashes once (the sha256 record kept in `identity["assets"]`) and then
