@@ -6,6 +6,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 227 — diff-reports crash escapes and oracle integrity, 2026-11-01)
+
+- The invisible-chars and confusable-skeleton diff sections
+  subtracted per-arm token counts before type-checking them, so a
+  type-confused count (a string, a list) escaped `diff_reports`
+  as a raw `TypeError`; both sections now validate first, like
+  the older sections, and judge the payload invalid (bug-hunt
+  wave 2, BH2B-01/02). The test oracles carried the same flaw and
+  are reordered with them.
+- A truthy non-dict surface-noise `baseline` escaped the
+  surface-noise diff as a raw `AttributeError`; the payload
+  validator now checks the field like its siblings (F1).
+- Lone-surrogate fixture ids escaped five diff sections as raw
+  `UnicodeEncodeError` at their fixture-set digest sites; each
+  site now fails closed, as the cycle-190 site already did (F6).
+- The diff test oracles' `identical` conjunctions omitted five
+  sections (history-frame, prune-sweep, record-notation,
+  invisible-chars, confusable-skeleton), so a one-sided pair was
+  certified identical while the oracles' own summaries reported
+  the asymmetry; the cycle-67 and cycle-27 conjunctions are
+  complete now (BH2B-05).
+- The cycle-67 oracle compared recomputed values with plain
+  equality where the producer compares type-strictly, so a
+  bool-as-int or float-as-int forgery passed the oracle while
+  the producer rejected it; the oracle's newest-section
+  validators now share the producer's type-strict semantics
+  (BH2B-08).
+
 ### Fixed (cycle 227 — JSON discipline completed at the remaining parsers, 2026-11-01)
 
 - The sealed-bundle manifest parser accepted an overflowing float

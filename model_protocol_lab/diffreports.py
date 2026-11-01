@@ -4398,6 +4398,14 @@ def _aliasing_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             flag_detail = "passing_spans_classes"
         else:
             flag_detail = "boundaries_differ_within_passing_set"
+    # A lone-surrogate fixture id cannot be UTF-8 encoded; the
+    # recompute fails closed instead of raising (bug-hunt wave 2,
+    # F6; the cycle-190 discipline, applied at every join-encode
+    # digest site).
+    try:
+        fixture_set_sha256 = hashlib.sha256("\n".join(fixtures_sorted).encode("utf-8")).hexdigest()
+    except UnicodeEncodeError:
+        return None
     return {
         "evaluable_mismatch": mismatch,
         "primary_names": primary_names,
@@ -4411,9 +4419,7 @@ def _aliasing_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         "alias_suspect_abstention": flag,
         "alias_suspect_detail": flag_detail,
         "alias_suspect_class_members": flag_members,
-        "fixture_set_sha256": hashlib.sha256(
-            "\n".join(fixtures_sorted).encode("utf-8")
-        ).hexdigest(),
+        "fixture_set_sha256": fixture_set_sha256,
         "excluded_candidates": sorted(
             str(e.get("candidate"))
             for e in available
@@ -4803,7 +4809,10 @@ def _repetition_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         per_candidate[name] = records
     if total_records > 2400 or fixture_ids is None:
         return None
-    fixture_hash = _hashlib.sha256("\n".join(fixture_ids).encode("utf-8")).hexdigest()
+    try:
+        fixture_hash = _hashlib.sha256("\n".join(fixture_ids).encode("utf-8")).hexdigest()
+    except UnicodeEncodeError:
+        return None  # lone-surrogate fixture id: fail closed (F6)
     if protocol["fixture_set_sha256"] != fixture_hash:
         return None
     table = {
@@ -5437,9 +5446,12 @@ def _distraction_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         }
     if fixture_ids is None:
         return None
-    expected_fixture_sha = _hashlib.sha256(
-        "\n".join(sorted(fixture_ids)).encode("utf-8")
-    ).hexdigest()
+    try:
+        expected_fixture_sha = _hashlib.sha256(
+            "\n".join(sorted(fixture_ids)).encode("utf-8")
+        ).hexdigest()
+    except UnicodeEncodeError:
+        return None  # lone-surrogate fixture id: fail closed (F6)
     if protocol.get("fixture_set_sha256") != expected_fixture_sha:
         return None
     protocol_rebuilt = {
@@ -6087,9 +6099,12 @@ def _leading_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         if fields["planted_digest"] != reference[donor]["expected_digest"]:
             return None
-    expected_fixture_sha = _hashlib.sha256(
-        "\n".join(sorted(fixture_ids)).encode("utf-8")
-    ).hexdigest()
+    try:
+        expected_fixture_sha = _hashlib.sha256(
+            "\n".join(sorted(fixture_ids)).encode("utf-8")
+        ).hexdigest()
+    except UnicodeEncodeError:
+        return None  # lone-surrogate fixture id: fail closed (F6)
     if protocol.get("fixture_set_sha256") != expected_fixture_sha:
         return None
     rows = sorted(
@@ -8073,9 +8088,12 @@ def _dateline_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         aggregates[name] = _dateline_aggregate(records)
     if fixture_ids is None:
         return None
-    expected_fixture_sha = _hashlib.sha256(
-        "\n".join(sorted(fixture_ids)).encode("utf-8")
-    ).hexdigest()
+    try:
+        expected_fixture_sha = _hashlib.sha256(
+            "\n".join(sorted(fixture_ids)).encode("utf-8")
+        ).hexdigest()
+    except UnicodeEncodeError:
+        return None  # lone-surrogate fixture id: fail closed (F6)
     if protocol.get("fixture_set_sha256") != expected_fixture_sha:
         return None
     protocol_rebuilt = {
@@ -16269,6 +16287,16 @@ def _invisiblechars_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             for mapping in (ids_identical, id_length_delta):
                 if type(mapping) is not dict or set(mapping) != set(_INVISIBLECHARS_TREATED_ARMS):
                     return None
+            # Validate every arm_tokens value BEFORE any arithmetic on
+            # them: the treated-arms loop below subtracts, and a
+            # type-confused value (a string, a list) escaped as a raw
+            # TypeError while the type check sat in the later per-arm
+            # loop (bug-hunt wave 2, BH2B-01; the older sections
+            # validate first, history_frame pattern).
+            for arm in _INVISIBLECHARS_ARM_KEYS:
+                tokens = arm_tokens[arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                    return None
             for arm in _INVISIBLECHARS_TREATED_ARMS:
                 if ids_identical[arm] is not (id_digests[arm] == id_digests["control"]):
                     return None
@@ -17550,6 +17578,15 @@ def _confusableskeleton_recompute(payload: dict[str, Any]) -> dict[str, Any] | N
                 if type(mapping) is not dict or set(mapping) != set(
                     _CONFUSABLESKELETON_TREATED_ARMS
                 ):
+                    return None
+            # Validate every arm_tokens value BEFORE any arithmetic on
+            # them, exactly as in _invisiblechars_recompute: a
+            # type-confused value escaped as a raw TypeError while the
+            # type check sat in the later per-arm loop (bug-hunt
+            # wave 2, BH2B-02).
+            for arm in _CONFUSABLESKELETON_ARM_KEYS:
+                tokens = arm_tokens[arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
                     return None
             for arm in _CONFUSABLESKELETON_TREATED_ARMS:
                 if ids_identical[arm] is not (id_digests[arm] == id_digests["control"]):
@@ -26405,7 +26442,21 @@ def _valid_surface_noise(payload: Any) -> bool:
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
         return False
-    return type(protocol.get("backend_fingerprint")) is str
+    if type(protocol.get("backend_fingerprint")) is not str:
+        return False
+    # The diff reads baseline.n_pass through a truthiness fallback
+    # (``(payload.get("baseline") or {}).get("n_pass")``), so a truthy
+    # non-dict baseline (a string, a list, a number) escaped as a raw
+    # AttributeError (bug-hunt wave 2, F1). The producer's baseline is
+    # a counts dict; validate the field like its siblings.
+    baseline = payload.get("baseline")
+    if baseline is not None:
+        if type(baseline) is not dict:
+            return False
+        n_pass = baseline.get("n_pass")
+        if n_pass is not None and (type(n_pass) is not int or n_pass < 0):
+            return False
+    return True
 
 
 def _operator_view(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
