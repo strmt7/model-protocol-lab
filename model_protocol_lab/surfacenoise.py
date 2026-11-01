@@ -38,7 +38,7 @@ from html import escape
 from pathlib import Path
 from typing import Any, Literal
 
-from .core import Backend, Fixture, Generation, Message, first_boundary
+from .core import Backend, Fixture, Generation, Message, _valid_generation, first_boundary
 from .perturbation import PERTURBATION_OPERATORS, perturb_text
 
 PROBE_NAME = "surface-noise-probe"
@@ -399,6 +399,11 @@ def _evaluate_one(
     except (KeyboardInterrupt, SystemExit):
         raise
     except BaseException:  # noqa: BLE001 -- backend boundary; abstain, never crash
+        return "abstain"
+    if not _valid_generation(gen, max_new_tokens):
+        # A generation outside the core contract (not a Generation,
+        # over the token cap, an unknown reason) proves nothing
+        # about the prompt: abstain rather than score it (BH2B-04).
         return "abstain"
     if gen.reason == "cancelled" or event.is_set() or gen.reason == "error":
         return "abstain"
@@ -964,7 +969,8 @@ class _ControlCalibrationBackend:
         else:
             text = "WRONG"
         ids = self.encode(text + chr(7))
-        return Generation(ids + (1,) * (max_new_tokens - len(ids)), "limit")
+        capped = (ids + (1,) * max(0, max_new_tokens - len(ids)))[:max_new_tokens]
+        return Generation(capped, "limit")
 
 
 class SelfTestBackend:
@@ -1012,7 +1018,8 @@ class SelfTestBackend:
         prompt = self.decode(input_ids)
         text = ("BLUE" + chr(7)) if self._marker in prompt else ("WRONG" + chr(7))
         ids = self.encode(text)
-        return Generation(ids + (1,) * (max_new_tokens - len(ids)), "limit")
+        capped = (ids + (1,) * max(0, max_new_tokens - len(ids)))[:max_new_tokens]
+        return Generation(capped, "limit")
 
 
 def _mean_stability(operators: dict[str, Any]) -> float | None:

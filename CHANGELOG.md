@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 227 — verify binding and surface-noise cap contract, 2026-11-01)
+
+- `verify_results` summaries are now bound to their ground records:
+  `attempted` must equal the observation count and
+  `exact_and_boundary_passes` must equal the observations passing
+  exactly with a boundary, for search entries and the held-out entry
+  alike — a summary-only forgery no longer verifies. `planned` must
+  be a positive integer (the producing pipeline's construction
+  contract), closing the vacuous planned == 0 winner in both the
+  consistency check and the selection replay, and
+  `aggregate_eligible` is read as a strict bool everywhere, never by
+  truthiness. (The cycle-173 determinism fixtures shipped summaries
+  that contradicted their own observations; the fixture builder now
+  derives its counters from the observations it ships.)
+- The surface-noise SelfTest and control-calibration backends now
+  truncate to the generation cap instead of emitting over-cap
+  "limit" generations below max_new_tokens == 5, and the probe
+  scoring path abstains on any generation outside the core contract
+  instead of scoring it. (The template-robustness stage's scorer was
+  examined as a sibling and deliberately not aligned: its backends
+  speak a wider reason vocabulary than the core contract's closed
+  set, as its pinned suite attests.)
+
 ### Fixed (cycle 227 — diff-reports crash escapes and oracle integrity, 2026-11-01)
 
 - The invisible-chars and confusable-skeleton diff sections

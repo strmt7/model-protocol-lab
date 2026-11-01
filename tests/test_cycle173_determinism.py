@@ -218,12 +218,22 @@ def _entry(
     planned: int = 2,
 ) -> dict:
     """Entry."""
+    # The summary is derived from the observations it ships with:
+    # since cycle 227 verify binds the counters to the ground
+    # records (BH2B-06), a fixture whose summary contradicts its
+    # own observations no longer verifies -- so count honestly.
+    counted = sum(
+        1
+        for observation in observations or []
+        if observation.get("exact_match") is True and observation.get("boundary_found") is True
+    )
     entry: dict = {
         "format": {"name": name},
         "summary": {
             "aggregate_eligible": eligible,
             "planned": planned,
-            "exact_and_boundary_passes": 1,
+            "attempted": len(observations or []),
+            "exact_and_boundary_passes": counted,
             "status": "completed",
         },
     }
