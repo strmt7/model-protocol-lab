@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9075 tests collected**
-  (cycle 226, 2026-10-31). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9098 tests collected**
+  (cycle 226, 2026-11-01). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -57,17 +57,18 @@ doctor's resource fallbacks degrade there.
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  94.9515% (cycle 226, 2026-10-31)**. The gate compares the
+  94.9712% (cycle 226, 2026-11-01)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+0.451) is auditable rather than inferred from the display.
-  Cycle 226 moves both figures slightly: the JSON-discipline
-  work added 45 statements net (39,011 → 39,056) and 46 covered
-  statements (37,501 → 37,547) — the strict loader discipline in
+  (+0.471) is auditable rather than inferred from the display.
+  Cycle 226 moves both figures slightly: the readiness fixes
+  added 80 statements net (39,011 → 39,091) and 86 covered
+  statements (37,501 → 37,587) — the strict loader discipline in
   surfacenoise, recordnotation and its diffreports mirror
   carries its own tests in
-  `tests/test_cycle226_json_discipline.py`; no feature surface
-  was added. Cycle 225 moves both figures slightly: the findings-integrity
+  `tests/test_cycle226_json_discipline.py`, and the operability
+  batch carries its own in `tests/test_cycle226_operability.py`;
+  no feature surface was added. Cycle 225 moves both figures slightly: the findings-integrity
   work added 22 statements net (38,989 → 39,011) and 26 covered
   statements (37,475 → 37,501) — the diff-reports restructure
   and the diff-backends loader split carry their own tests in
@@ -136,7 +137,7 @@ doctor's resource fallbacks degrade there.
   negation feature added 393 statements, 32,655 → 33,048.)
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (315 files in that CI scope; the repo-root scope counts more.
+  (316 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (71 source files).

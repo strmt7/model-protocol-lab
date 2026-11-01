@@ -384,6 +384,8 @@ def generate_case(seed: int, index: int) -> dict[str, Any]:
     alphabetical fields; the queried record index is the next
     draw after the table is complete.
     """
+    if type(seed) is not int:
+        raise ValueError("record-notation seed must be an int")
     n_records, fields = table_shape(index)
     rng = random.Random(seed * 1000 + index)  # noqa: S311 # nosec B311
     values: list[str] = []

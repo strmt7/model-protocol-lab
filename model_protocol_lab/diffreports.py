@@ -14640,6 +14640,8 @@ def _recordnotation_generate(seed: int) -> list[dict[str, Any]]:
     """
     import random as _random
 
+    if type(seed) is not int:
+        raise ValueError("record-notation seed must be an int")
     cases: list[dict[str, Any]] = []
     for index in range(_RECORDNOTATION_CASE_COUNT):
         n_records, fields = _recordnotation_table_shape(index)

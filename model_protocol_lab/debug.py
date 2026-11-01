@@ -207,6 +207,11 @@ class DebugShell(cmd.Cmd):
         # O(commands x transcript); the counter keeps .read scripts cheap.
         self._transcript_chars = 0
         self._read_depth = 0
+        # Script mode (set by run_script): command failures are also
+        # written to stderr and counted, so a scripted run's exit code
+        # can report them; interactive use never sets this.
+        self._script_mode = False
+        self._script_errors = 0
         entries: tuple[tuple[str, str, Callable[[str], bool]], ...] = (
             (".help", "Show help for dot-commands", self._cmd_help),
             (".use", "Switch the format hypothesis family", self._cmd_use),
@@ -269,6 +274,9 @@ class DebugShell(cmd.Cmd):
                 # characters from fixture/dataset errors); strip them so
                 # the terminal never sees raw escapes.
                 print(f"error: {_sanitize_display(str(exc))}")
+                if self._script_mode:
+                    self._script_errors += 1
+                    print(f"error: {_sanitize_display(str(exc))}", file=sys.stderr)
                 stop = False
         text = buffer.getvalue()
         echo_chunk = f"{echo_prompt}{line}\n"
@@ -742,13 +750,25 @@ class DebugShell(cmd.Cmd):
 
 
 def run_script(shell: DebugShell, path: str | Path) -> int:
-    """Run a .read script non-interactively; deterministic output."""
+    """Run a .read script non-interactively; deterministic output.
+
+    Returns 1 when the script file itself is unreadable and when any
+    command in it failed: in script mode command failures are written
+    to stderr as they happen and counted, so a scripted run can no
+    longer exit 0 over a transcript full of errors (cycle 226, B-17).
+    The interactive REPL keeps its never-die behavior unchanged.
+    """
+    errors_before = shell._script_errors
+    previous_mode = shell._script_mode
+    shell._script_mode = True
     try:
         shell.read_commands(path)
     except ValueError as exc:
         print(f"debug: {exc}", file=sys.stderr)
         return 1
-    return 0
+    finally:
+        shell._script_mode = previous_mode
+    return 1 if shell._script_errors > errors_before else 0
 
 
 def run_debug(args: argparse.Namespace) -> int:
