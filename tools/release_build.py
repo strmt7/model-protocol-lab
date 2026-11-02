@@ -12,11 +12,32 @@ build user's name). The procedure here removes both leaks:
 2. Normalize every file and directory mtime to the epoch.
 3. Build the sdist with SOURCE_DATE_EPOCH set, then rewrite the tar
    deterministically (member mtime = epoch, uid/gid = 0, empty
-   uname/gname, gzip header mtime = 0).
+   uname/gname, member modes canonicalized — 0o644 for plain files,
+   0o755 for directories and executables — gzip header mtime = 0).
+   The mode step matters: tar member modes are a fingerprint of the
+   checkout's umask, so without it two checkouts of identical content
+   under different umasks produce different sdist hashes (cycle 228,
+   finding F-A2 of the deployment-preparation audit).
 4. Build the wheel from the normalized sdist, so one canonical input
-   produces the wheel.
+   produces the wheel. Extraction of the sdist for this step — and
+   for any from-sdist rebuild or verification — uses Python's
+   ``tarfile`` with ``filter="data"`` (see ``_build_once``); that is
+   the pinned extraction method (finding F-A1): GNU tar preserves
+   permission bits the data filter normalizes, which silently
+   changed the resulting wheel hash before modes were canonicalized.
 5. Repeat from a second copy; compare hashes. On a mismatch, name the
    members that differ instead of rebuilding until it happens to match.
+
+Builds run with ``--no-isolation``: the PEP 517 backend is the
+setuptools version pinned exactly in pyproject.toml's
+``[build-system] requires``, and ``python -m build`` refuses to run
+when the ambient environment carries a different one. The invoking
+environment must therefore first install the hash-pinned requirements
+(tools/requirements/pip.txt, pip-setuptools.txt and build.txt) —
+the release workflow does exactly that; a bare environment fails
+closed with "Unmet dependencies" instead of silently building with
+whatever backend version happens to be current (cycle 228, audit
+finding B-02).
 
 Usage: python tools/release_build.py --source . --output dist \
     --epoch 1700000000
@@ -120,12 +141,26 @@ def _normalize_mtimes(root: Path, epoch: int) -> None:
     os.utime(root, (epoch, epoch))
 
 
+def _canonical_mode(member: tarfile.TarInfo) -> int:
+    """Canonical tar member mode: 0o755 for dirs/executables, else 0o644.
+
+    Executability is the only mode bit with semantic content in an
+    sdist (a script must stay a script); every other bit — group/other
+    write above all — is a fingerprint of the umask the checkout or
+    build happened to run under, so it is erased.
+    """
+    if member.isdir() or member.mode & 0o111:
+        return 0o755
+    return 0o644
+
+
 def normalize_sdist_bytes(data: bytes, epoch: int) -> bytes:
     """Rewrite a .tar.gz sdist deterministically; pure function of the input.
 
-    Every member gets mtime=epoch, uid=gid=0 and empty uname/gname; the
-    gzip wrapper gets mtime=0. Member order and contents are preserved.
-    Applying it twice yields the same bytes as applying it once.
+    Every member gets mtime=epoch, uid=gid=0, empty uname/gname and a
+    canonical mode (see ``_canonical_mode``); the gzip wrapper gets
+    mtime=0. Member order and contents are preserved. Applying it
+    twice yields the same bytes as applying it once.
     """
     raw = gzip.decompress(data)
     out_buffer = io.BytesIO()
@@ -139,6 +174,7 @@ def normalize_sdist_bytes(data: bytes, epoch: int) -> bytes:
             member.gid = 0
             member.uname = ""
             member.gname = ""
+            member.mode = _canonical_mode(member)
             # Files setuptools generates during the build carry a PAX
             # extended header with the build-time float mtime, which
             # addfile would re-emit over the normalized header field —
@@ -204,7 +240,16 @@ def _build_once(source: Path, work: Path, epoch: int) -> tuple[Path, Path]:
     env = dict(os.environ)
     env["SOURCE_DATE_EPOCH"] = str(epoch)
     subprocess.run(
-        [sys.executable, "-m", "build", "--sdist", "--outdir", str(dist), str(tree)],
+        [
+            sys.executable,
+            "-m",
+            "build",
+            "--no-isolation",
+            "--sdist",
+            "--outdir",
+            str(dist),
+            str(tree),
+        ],
         check=True,
         env=env,
     )
@@ -216,7 +261,16 @@ def _build_once(source: Path, work: Path, epoch: int) -> tuple[Path, Path]:
         archive.extractall(unpacked, filter="data")
     package_dir = _first(unpacked.iterdir(), "unpacked package directory")
     subprocess.run(
-        [sys.executable, "-m", "build", "--wheel", "--outdir", str(dist), str(package_dir)],
+        [
+            sys.executable,
+            "-m",
+            "build",
+            "--no-isolation",
+            "--wheel",
+            "--outdir",
+            str(dist),
+            str(package_dir),
+        ],
         check=True,
         env=env,
     )

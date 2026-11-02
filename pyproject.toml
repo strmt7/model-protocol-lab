@@ -1,5 +1,10 @@
 [build-system]
-requires = ["setuptools>=77"]
+# Exact backend pin (cycle 228, audit B-02): every in-repo build path
+# installs the hash-pinned tools/requirements/pip-setuptools.txt and
+# builds with --no-isolation, which fails unless the ambient backend
+# is exactly this version — a floating floor let the then-latest
+# setuptools build release artifacts with the version recorded nowhere.
+requires = ["setuptools==84.2.1"]
 build-backend = "setuptools.build_meta"
 
 [project]

@@ -41,6 +41,15 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
+      # Cycle 228 (audit B-05): this job was the one workflow not
+      # bootstrapping the pinned pip first — the installer's own
+      # version stayed unpinned in the highest-value job.
+      - run: python -m pip install --require-hashes -r tools/requirements/pip.txt
+      # Cycle 228 (audit B-02): the pinned PEP 517 backend. The build
+      # runs --no-isolation (tools/release_build.py), which fails
+      # unless the ambient setuptools is exactly the version
+      # pyproject.toml's [build-system] requires.
+      - run: python -m pip install --require-hashes -r tools/requirements/pip-setuptools.txt
       - name: Install the builder
         run: python -m pip install --require-hashes -r tools/requirements/build.txt
       - name: Derive the release epoch from the tagged commit

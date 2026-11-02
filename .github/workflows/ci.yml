@@ -16,7 +16,7 @@ concurrency:
 
 # Cycle 210: least-privilege default for every job. Jobs that need more
 # declare their own permissions block, which replaces (never extends)
-# this one — the test job keeps its actions/id-token grants, and the
+# this one — the test job keeps its id-token grant, and the
 # other jobs get nothing beyond contents:read.
 permissions:
   contents: read
@@ -51,12 +51,15 @@ jobs:
     name: tests (Python ${{ matrix.python-version }}, with hf extra)
     runs-on: ubuntu-latest
     timeout-minutes: 180
-    # Least privilege: checkout needs contents:read; the pip cache and the
-    # failure-artifact upload need actions read/write; the Codecov OIDC
-    # upload needs id-token:write.
+    # Least privilege: checkout needs contents:read; the Codecov OIDC
+    # upload needs id-token:write. Nothing else: the pip cache and the
+    # failure-artifact upload run on the Actions runtime token, not on
+    # this token's scopes — the docs build job performs both under
+    # contents:read alone (cycle 228, audit A-L1: the earlier
+    # actions:write grant rested on a justification the tree itself
+    # disproves, so it is removed).
     permissions:
       contents: read # checkout
-      actions: write # pip cache + failure-artifact upload
       id-token: write # Codecov OIDC upload
     strategy:
       fail-fast: false
@@ -152,6 +155,10 @@ jobs:
           cache: pip
           cache-dependency-path: "pyproject.toml"
       - run: python -m pip install --require-hashes -r tools/requirements/pip.txt
+      # Cycle 228 (audit B-02): build against the pinned backend
+      # (--no-isolation fails unless the ambient setuptools is exactly
+      # the version pyproject.toml's [build-system] requires).
+      - run: python -m pip install --require-hashes -r tools/requirements/pip-setuptools.txt
       - run: pip install --require-hashes -r tools/requirements/build.txt
-      - run: python -m build
+      - run: python -m build --no-isolation
       - run: twine check dist/*

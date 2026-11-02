@@ -46,8 +46,12 @@ jobs:
           cache: pip
           cache-dependency-path: "pyproject.toml"
       - run: python -m pip install --require-hashes -r tools/requirements/pip.txt
+      # Cycle 228 (audit B-02): same pinned-backend discipline as the
+      # CI package job — --no-isolation against the hashed setuptools
+      # pin pyproject.toml's [build-system] requires.
+      - run: python -m pip install --require-hashes -r tools/requirements/pip-setuptools.txt
       - run: python -m pip install --require-hashes -r tools/requirements/build.txt
-      - run: python -m build --wheel --outdir dist
+      - run: python -m build --no-isolation --wheel --outdir dist
       # Install the built wheel (not an editable checkout) through a
       # Python glob so the step is identical on pwsh, bash and sh.
       - run: python -c "import glob, subprocess, sys; subprocess.check_call([sys.executable, '-m', 'pip', 'install', sorted(glob.glob('dist/*.whl'))[0]])"
