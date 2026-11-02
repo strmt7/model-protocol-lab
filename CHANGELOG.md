@@ -85,6 +85,38 @@ All notable changes to this project are documented here. The format follows
   tools/requirements files since cycle 217), and the repo's agent
   instructions carry the same correction.
 
+### Fixed (cycle 228 — CLI test-hook hardening, 2026-11-02)
+
+- The shipped CLI's signal-ready test hook
+  (`MODEL_PROTOCOL_LAB_TEST_SIGNAL_READY_FILE`) opened its marker
+  path with a plain truncating `open(path, "w")` (security audit 2,
+  finding C-05): any pre-existing file at an env-var-supplied path
+  lost its content when the `run` command started. The marker is
+  now written with `O_CREAT | O_EXCL`, so a pre-existing file is
+  never truncated — the hook silently writes nothing instead —
+  while a fresh marker path still receives the readiness marker
+  the signal-handling tests observe.
+
+### Fixed (cycle 228 — contamination sweep budget, 2026-11-02)
+
+- `contamination_report`'s all-pairs difflib sweep was unbounded
+  (bug-hunt finding F5): its module docstring claimed the quadratic
+  cost was bounded because "fixtures are small", but the dataset
+  loader's own caps (100 fixtures per split, 16,384-char fields)
+  admit inputs whose sweep takes minutes — a legal 20+20-fixture
+  dataset did not finish in 25 s. The sweep now runs under a
+  wall-clock budget (default 10 s) in the established
+  `core.template_diff` style: the ratio is computed by a
+  deadline-checked replication of difflib's matching-blocks queue
+  (byte-identical results whenever a sweep completes), trigram sets
+  are computed once per fixture, and when the budget is exhausted
+  the report covers only completely evaluated held-out fixtures
+  and carries `budget_exhausted: true` (absent on completed
+  sweeps, so the long-standing report shape is unchanged). The
+  CLI warning and the HTML hygiene line both surface the
+  truncation: an exhausted sweep never reads as a completed clean
+  sweep. The docstring now states the true mechanism.
+
 ### Fixed (cycle 227 — MCP session robustness, 2026-11-01)
 
 - A routine client disconnect no longer kills the MCP server: a

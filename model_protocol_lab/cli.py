@@ -55,6 +55,13 @@ def _warn_contamination(command: str, contamination: dict[str, Any]) -> None:
     """
     pairs = contamination.get("pairs")
     if type(pairs) is not list or not pairs:
+        if contamination.get("budget_exhausted") is True:
+            print(
+                f"{command}: warning: contamination sweep stopped at its "
+                "time budget before every held-out fixture was evaluated; "
+                "the report is a partial prefix, not a completed clean sweep",
+                file=sys.stderr,
+            )
         return
     lines = [
         f"{command}: warning: search/held-out contamination: "
@@ -70,6 +77,11 @@ def _warn_contamination(command: str, contamination: dict[str, Any]) -> None:
         )
     if len(pairs) > 10:
         lines.append(f"  ... and {len(pairs) - 10} more (see JSON)")
+    if contamination.get("budget_exhausted") is True:
+        lines.append(
+            "  (sweep stopped at its time budget; held-out fixtures not "
+            "yet evaluated are not cleared by this report)"
+        )
     print("\n".join(lines), file=sys.stderr)
 
 
@@ -3850,7 +3862,15 @@ def main(argv: list[str] | None = None) -> int:
             _ready_marker = os.environ.get("MODEL_PROTOCOL_LAB_TEST_SIGNAL_READY_FILE")
             if _ready_marker:
                 try:
-                    with open(_ready_marker, "w", encoding="utf-8") as _rf:
+                    # O_EXCL (cycle 228, audit finding C-05): the marker
+                    # must never truncate a pre-existing file -- the path
+                    # comes from the environment, so a plain "w" open
+                    # would let this test hook destroy arbitrary file
+                    # content. FileExistsError is an OSError and is
+                    # swallowed below, so an existing file simply means
+                    # no marker is written.
+                    _rfd = os.open(_ready_marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+                    with os.fdopen(_rfd, "w", encoding="utf-8") as _rf:
                         _rf.write("ready")
                 except OSError:
                     pass

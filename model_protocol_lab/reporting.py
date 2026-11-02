@@ -2004,6 +2004,11 @@ def _contamination_line(contamination: Any) -> str:
     worst = contamination.get("worst_tier")
     pairs = contamination.get("pairs")
     count = len(pairs) if type(pairs) is list else 0
+    if contamination.get("budget_exhausted") is True:
+        return (
+            "partial: sweep stopped at its time budget -- "
+            "unevaluated held-out fixtures are not cleared (advisory)"
+        )
     if worst == "clean":
         return "clean: no search/held-out near-duplicate pairs"
     if type(worst) is str and count:
