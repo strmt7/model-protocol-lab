@@ -6,6 +6,41 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (cycle 228 — pinned build backend, 2026-11-02)
+
+- The PEP 517 build backend is pinned exactly: pyproject.toml's
+  `[build-system]` now requires `setuptools==84.2.1` (the version the
+  hash-pinned `tools/requirements/pip-setuptools.txt` installs), and
+  every in-repo build path — `tools/release_build.py`, the CI package
+  job, the cross-OS smoke job — builds with `--no-isolation`, which
+  fails unless the ambient backend is exactly that version. A
+  floating `setuptools>=77` floor previously let the then-latest
+  backend build release artifacts with its version recorded nowhere
+  (security audit 2, finding B-02). The release workflow's build job
+  also bootstraps the pinned pip (`tools/requirements/pip.txt`)
+  before installing anything, like every other workflow (B-05).
+
+### Fixed (cycle 228 — sdist mode normalization, 2026-11-02)
+
+- `tools/release_build.py`'s sdist normalization now canonicalizes
+  tar member modes (0o644 for plain files, 0o755 for directories and
+  executables) alongside mtime/uid/gid. Member modes were a
+  fingerprint of the checkout's umask, so identical content under a
+  different umask produced a different sdist hash; reproducibility
+  held only because every build copy shared one umask
+  (deployment-preparation finding F-A2). The from-sdist procedure
+  now also pins its extraction method — Python `tarfile` with
+  `filter="data"` (F-A1).
+
+### Security (cycle 228 — CI least privilege, 2026-11-02)
+
+- The CI test job no longer holds `actions: write`. Its stated
+  justification (pip cache and failure-artifact upload) is disproven
+  in-repo: the docs build job performs both under `contents: read`
+  alone, since both services run on the Actions runtime token
+  (security audit 2, finding A-L1). The job keeps `contents: read`
+  and the `id-token: write` the Codecov OIDC upload needs.
+
 ### Fixed (cycle 227 — MCP session robustness, 2026-11-01)
 
 - A routine client disconnect no longer kills the MCP server: a

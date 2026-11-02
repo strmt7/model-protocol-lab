@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–227 (executed 2026-10-14 → 2026-11-01, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–228 (executed 2026-10-14 → 2026-11-02, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9150 tests collected**
-  (cycle 227, 2026-11-01). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9158 tests collected**
+  (cycle 228, 2026-11-02). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -57,10 +57,13 @@ doctor's resource fallbacks degrade there.
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  94.9836% (cycle 227, 2026-11-02)**. The gate compares the
+  94.9836% (cycle 228, 2026-11-02)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
   (+0.484) is auditable rather than inferred from the display.
+  Cycle 228's release-machinery work leaves both totals unchanged
+  (39,260 statements, 37,755 covered): its code changes live in
+  tools/, the workflows and tests, not in the measured package.
   Cycle 227 moves both figures slightly: the deferred-findings
   fixes added 161 statements net (39,099 → 39,260) and 160
   covered statements (37,595 → 37,755) — the wave-2 correctness
@@ -141,7 +144,7 @@ doctor's resource fallbacks degrade there.
   negation feature added 393 statements, 32,655 → 33,048.)
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (317 files in that CI scope; the repo-root scope counts more.
+  (318 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (71 source files).
