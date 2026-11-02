@@ -57,11 +57,15 @@ doctor's resource fallbacks degrade there.
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  94.9719% (cycle 226, 2026-11-01)**. The gate compares the
+  94.9836% (cycle 227, 2026-11-02)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+0.472) is auditable rather than inferred from the display.
-  Cycle 226 moves both figures slightly: the readiness fixes
+  (+0.484) is auditable rather than inferred from the display.
+  Cycle 227 moves both figures slightly: the deferred-findings
+  fixes added 161 statements net (39,099 → 39,260) and 160
+  covered statements (37,595 → 37,755) — the wave-2 correctness
+  fixes carry their tests in `tests/test_cycle227_findings.py`;
+  no feature surface was added. Cycle 226 moves both figures slightly: the readiness fixes
   added 88 statements net (39,011 → 39,099) and 94 covered
   statements (37,501 → 37,595) — the strict loader discipline in
   surfacenoise, recordnotation and its diffreports mirror
