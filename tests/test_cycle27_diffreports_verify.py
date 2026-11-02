@@ -7531,6 +7531,7 @@ def oracle_diff_reports(
         # constants breaks the agreement.
         """Or precision valid."""
         import json as _json
+        import math as _math
 
         from model_protocol_lab import precision as _pr
 
@@ -7683,7 +7684,9 @@ def oracle_diff_reports(
                     return False
                 lp = cell["logprob"]
                 if lp is not None and (
-                    type(lp) not in (int, float) or lp != lp or lp in (float("inf"), float("-inf"))
+                    type(lp) not in (int, float)
+                    or _math.isnan(lp)
+                    or lp in (float("inf"), float("-inf"))
                 ):
                     return False
                 if cell["verdict"] != _pr.cell_verdict(cell, record["expected_digest"]):

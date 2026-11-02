@@ -209,7 +209,9 @@ def _candidate_block(
     """Every per-candidate derived value, from the records alone."""
     own = [r for r in records if r["candidate"] == candidate]
     paired = [r for r in own if type(r["fp32"]) is dict and type(r["bf16"]) is dict]
-    cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
+    # bandit B105: the 'pass' keys are verdict counts in the frozen
+    # payload schema, not credentials.
+    cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}  # nosec B105
     flips: list[dict[str, Any]] = []
     n_diverged = 0
     deltas: list[float] = []
@@ -295,7 +297,9 @@ def compute_derived(
             )
     flips_all.sort(key=lambda f: (str(f["candidate"]), str(f["fixture"])))
     total_paired = sum(blocks[name]["n_paired"] for name in candidates)
-    total_cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
+    # bandit B105: the 'pass' keys are verdict counts in the frozen
+    # payload schema, not credentials.
+    total_cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}  # nosec B105
     for name in candidates:
         for key in total_cells:
             total_cells[key] += blocks[name]["cells"][key]

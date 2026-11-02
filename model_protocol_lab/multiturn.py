@@ -326,7 +326,15 @@ def _pair_counts(records: list[dict[str, Any]], arm_a: str, arm_b: str) -> dict[
     """Discordant counts for one arm pair over the records
     where both arms completed (a = reference arm).
     """
-    counts = {"n_paired": 0, "a_only": 0, "b_only": 0, "both_pass": 0, "both_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
+    # bandit B105: the 'pass' keys are verdict counts in the frozen
+    # payload schema, not credentials.
+    counts = {
+        "n_paired": 0,
+        "a_only": 0,
+        "b_only": 0,
+        "both_pass": 0,
+        "both_fail": 0,
+    }  # nosec B105
     for record in records:
         cell_a = _cell(record, arm_a)
         cell_b = _cell(record, arm_b)
@@ -387,11 +395,13 @@ def aggregate_candidate(records: list[dict[str, Any]]) -> dict[str, Any]:
         # The self-history pair, over the paired full-passers:
         # sharded and scripted disagree about a fixture the
         # single-turn arm passed.
+        # bandit B105: the 'pass' keys are verdict counts in the
+        # frozen payload schema, not credentials.
         self_history = {
-            "n_full_pass": 0,  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
+            "n_full_pass": 0,  # nosec B105
             "sh_only": 0,
             "sc_only": 0,
-            "both_pass": 0,  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
+            "both_pass": 0,  # nosec B105
             "both_fail": 0,
         }
         for record in paired_records:

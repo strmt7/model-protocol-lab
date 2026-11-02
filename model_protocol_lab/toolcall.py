@@ -301,7 +301,7 @@ def _check_arg_value(value: object, param: dict[str, Any], *, where: str) -> Non
     elif ptype == "number":
         ok = (
             (type(value) is int or type(value) is float)
-            and value == value
+            and not math.isnan(value)
             and value not in (float("inf"), float("-inf"))
         )
     else:  # boolean

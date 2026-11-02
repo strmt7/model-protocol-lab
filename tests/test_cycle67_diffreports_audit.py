@@ -13431,7 +13431,7 @@ def _o_precision_recompute(value: Any) -> dict[str, Any] | None:
         if lp is not None and (
             type(lp) not in (int, float)
             or isinstance(lp, bool)
-            or (type(lp) is float and (lp != lp or lp in (float("inf"), float("-inf"))))
+            or (type(lp) is float and (math.isnan(lp) or lp in (float("inf"), float("-inf"))))
         ):
             return False
         return cell["verdict"] == (

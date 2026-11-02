@@ -14749,7 +14749,7 @@ def _precision_logprob(backend: Any, prompt_ids: tuple[int, ...], expected: str)
     if getattr(score, "status", None) != "ok":
         return None
     total = getattr(score, "total_logprob", None)
-    if isinstance(total, (int, float)) and not isinstance(total, bool) and total == total:
+    if isinstance(total, (int, float)) and not isinstance(total, bool) and not math.isnan(total):
         return float(total)
     return None
 

@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import signal
 import sys
@@ -667,7 +668,7 @@ def _reject_frame_float(text: str) -> float:
     (the same pair of hooks toolcall.py carries).
     """
     value = float(text)
-    if value != value or value in (float("inf"), float("-inf")):
+    if math.isnan(value) or value in (float("inf"), float("-inf")):
         raise ValueError(f"non-finite float literal {text!r}")
     return value
 

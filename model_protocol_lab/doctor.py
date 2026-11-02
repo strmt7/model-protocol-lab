@@ -472,7 +472,8 @@ def portability_matrix(second_checkpoint: str | Path) -> dict[str, Any]:
 # deliberately preserved for diagnostic fidelity, mirroring debug.py and
 # cli.py (kept local so doctor.py stays importable without cli).
 _CONTROL_CHARS = re.compile(
-    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]"
+    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff\u200e\u200f"
+    r"\u2028\u2029\u202a-\u202e\u2066-\u2069]"
 )
 
 
@@ -1476,7 +1477,9 @@ def _longest_prompt_tokens(tokenizer: Any, dataset_path: str | Path) -> int | No
         from .catalog import CATALOG, candidates
         from .datasets import load_dataset
 
-        split = load_dataset(Path(dataset_path))  # nosec B615 -- own bounded JSON reader, not HF datasets
+        # bandit B615: load_dataset is this repo's own bounded JSON
+        # reader, not the Hugging Face datasets library.
+        split = load_dataset(Path(dataset_path))  # nosec B615
         fixtures = (*split.search, *split.held_out)
         longest = 0
         for family in CATALOG:

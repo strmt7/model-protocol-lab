@@ -16,6 +16,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import json
+import math
 import os
 import random
 import tempfile
@@ -358,7 +359,7 @@ def _oracle_field_def_ok(field):
         if value is not None:
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 return False
-            if value != value or abs(value) == float("inf"):
+            if math.isnan(value) or abs(value) == float("inf"):
                 return False
             if field_type == "integer" and int(value) != value:
                 return False
@@ -410,7 +411,7 @@ def _oracle_field_ok(value, field):
             # Non-finite floats are not JSON numbers (RFC 8259 §6); the
             # oracle must share the implementation's rejection, not the
             # shared blind spot that let F1 through.
-            if value != value or abs(value) == float("inf"):
+            if math.isnan(value) or abs(value) == float("inf"):
                 return False
         case "boolean":
             if type(value) is not bool:

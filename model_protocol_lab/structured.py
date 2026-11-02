@@ -49,6 +49,7 @@ classification, and rate aggregation need no model.
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 from .core import Fixture, Message
@@ -229,7 +230,7 @@ def _is_finite_number(value: object) -> bool:
     """Return whether finite number."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
-    return value == value and abs(value) != float("inf")
+    return not math.isnan(value) and abs(value) != float("inf")
 
 
 def validate_field_def(field: object, *, where: str) -> dict[str, Any]:

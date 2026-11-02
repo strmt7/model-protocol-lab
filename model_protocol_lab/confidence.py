@@ -482,7 +482,9 @@ def _candidate_block(
     own = [r for r in records if r["candidate"] == candidate]
     elicited = [r["elicited"] for r in own if type(r["elicited"]) is dict]
     operator = _population_block(elicited, n_operator_population)
-    flips = {"n_compared": 0, "pass_to_fail": 0, "fail_to_pass": 0}  # nosec B105 -- 'pass' keys are verdict-flip counts in the frozen payload schema, not credentials
+    # bandit B105: the 'pass' keys are verdict-flip counts in the
+    # frozen payload schema, not credentials.
+    flips = {"n_compared": 0, "pass_to_fail": 0, "fail_to_pass": 0}  # nosec B105
     for record in own:
         cell = record["elicited"]
         native = record["native_verdict"]
