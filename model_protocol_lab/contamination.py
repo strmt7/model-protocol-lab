@@ -12,8 +12,11 @@ NFKC-normalized concatenation of user message contents plus the expected
 answer):
 
 * character-level normalized similarity via
-  :class:`difflib.SequenceMatcher` with ``autojunk=False`` (deterministic;
-  fixtures are small so the quadratic cost is bounded),
+  :class:`difflib.SequenceMatcher` with ``autojunk=False`` (deterministic),
+  computed under a wall-clock budget -- the loader's caps (100 fixtures
+  per split, 16,384-char fields) admit inputs whose all-pairs cost is
+  minutes, so the sweep is deadline-bound rather than assumed small
+  (see :func:`contamination_report`),
 * token-3-gram Jaccard over the same normalized text.
 
 Tiers are advisory -- they warn, never fail a run:
@@ -32,6 +35,7 @@ paraphrases will still evade; the report is a hygiene gate, not a proof.
 
 from __future__ import annotations
 
+import time
 import unicodedata
 from difflib import SequenceMatcher
 from typing import Any
@@ -92,6 +96,37 @@ def similarity_scores(left: str, right: str) -> tuple[float, float]:
     return ratio, jaccard
 
 
+def _bounded_ratio(left: str, right: str, deadline: float) -> float | None:
+    """SequenceMatcher ratio under a wall-clock deadline, or None.
+
+    Replicates difflib's matching-blocks queue with the clock checked
+    between ``find_longest_match`` calls -- the construction
+    ``core.template_diff`` established -- so a completed result is
+    exactly ``SequenceMatcher(None, left, right, autojunk=False).ratio()``.
+    Returns None when the deadline passes mid-computation; the caller
+    treats the pair, and the sweep, as unevaluated rather than guessing
+    a score from a partial match count.
+    """
+    total = len(left) + len(right)
+    if total == 0:
+        return 1.0
+    matcher = SequenceMatcher(None, left, right, autojunk=False)
+    queue: list[tuple[int, int, int, int]] = [(0, len(left), 0, len(right))]
+    matches = 0
+    while queue:
+        if time.monotonic() > deadline:
+            return None
+        alo, ahi, blo, bhi = queue.pop()
+        i, j, size = matcher.find_longest_match(alo, ahi, blo, bhi)
+        if size:
+            matches += size
+            if alo < i and blo < j:
+                queue.append((alo, i, blo, j))
+            if i + size < ahi and j + size < bhi:
+                queue.append((i + size, ahi, j + size, bhi))
+    return 2.0 * matches / total
+
+
 def classify_pair(ratio: float, jaccard: float) -> str:
     """Tier for one fixture pair; thresholds are advisory, see module docs."""
     if ratio >= DUPLICATE_RATIO:
@@ -103,7 +138,9 @@ def classify_pair(ratio: float, jaccard: float) -> str:
     return "clean"
 
 
-def contamination_report(search: Any, held_out: Any) -> dict[str, Any]:
+def contamination_report(
+    search: Any, held_out: Any, *, _deadline_s: float = 10.0
+) -> dict[str, Any]:
     """Search/held-out contamination report; pure, never raises.
 
     For every held-out fixture, the maximum similarity to any search
@@ -118,23 +155,50 @@ def contamination_report(search: Any, held_out: Any) -> dict[str, Any]:
     Pairs sort by tier severity (worst first), then ratio descending, then
     ids -- deterministic across processes and hash seeds. Empty or
     malformed inputs yield a clean empty report (fail-closed, advisory).
+
+    The sweep runs under a wall-clock budget (default 10 s, the
+    ``core.template_diff`` precedent): the ratio is superlinear in
+    fixture-text length and multiplies over all search x held-out
+    pairs, and the dataset loader's caps admit inputs whose unbounded
+    sweep takes minutes, which would hang the CLI commands embedding
+    this report. The clock is checked between ``find_longest_match``
+    calls and between pairs. When the budget is exhausted, the report
+    covers only the held-out fixtures evaluated completely before the
+    deadline -- the fixture in progress contributes nothing -- and
+    carries ``"budget_exhausted": True``; the key is absent otherwise.
+    An exhausted sweep's ``worst_tier`` describes the evaluated prefix
+    only: it is never a completed clean sweep.
     """
     try:
         search_sigs = [(str(fixture.id), fixture_signature(fixture)) for fixture in search or ()]
         held_sigs = [(str(fixture.id), fixture_signature(fixture)) for fixture in held_out or ()]
     except (TypeError, AttributeError):
         return {"worst_tier": "clean", "pairs": []}
+    deadline = time.monotonic() + _deadline_s
+    search_grams = [_trigrams(sig) for _sig_id, sig in search_sigs]
     pairs: list[dict[str, Any]] = []
+    exhausted = False
     for held_id, held_sig in held_sigs:
+        held_grams = _trigrams(held_sig)
         best: tuple[float, float, str, str] | None = None
-        for search_id, search_sig in search_sigs:
-            ratio, jaccard = similarity_scores(held_sig, search_sig)
+        for (search_id, search_sig), grams in zip(search_sigs, search_grams, strict=True):
+            if time.monotonic() > deadline:
+                exhausted = True
+                break
+            ratio = _bounded_ratio(held_sig, search_sig, deadline)
+            if ratio is None:
+                exhausted = True
+                break
+            union = held_grams | grams
+            jaccard = len(held_grams & grams) / len(union) if union else 1.0
             tier = classify_pair(ratio, jaccard)
             if best is None or (_TIERS.index(tier), ratio) > (
                 _TIERS.index(best[3]),
                 best[0],
             ):
                 best = (ratio, jaccard, search_id, tier)
+        if exhausted:
+            break
         if best is not None and _TIERS.index(best[3]) >= _TIERS.index("paraphrase_suspect"):
             ratio, jaccard, search_id, tier = best
             pairs.append(
@@ -155,4 +219,7 @@ def contamination_report(search: Any, held_out: Any) -> dict[str, Any]:
         )
     )
     worst = max((_TIERS.index(pair["tier"]) for pair in pairs), default=0)
-    return {"worst_tier": _TIERS[worst], "pairs": pairs}
+    report: dict[str, Any] = {"worst_tier": _TIERS[worst], "pairs": pairs}
+    if exhausted:
+        report["budget_exhausted"] = True
+    return report
