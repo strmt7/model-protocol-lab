@@ -4,8 +4,12 @@ Model Protocol Lab uses [Crawl4AI](https://github.com/unclecode/crawl4ai) as a l
 development tool for reading and crawling web pages. It is separate from the
 lab's measurement runtime and requires no cloud account, API key, paid service or
 public server. The [latest stable release reviewed on 30 October 2026](https://github.com/unclecode/crawl4ai/releases/tag/v0.9.5)
-is 0.9.5. Its base package is pinned in [the installation lock](https://github.com/strmt7/model-protocol-lab/blob/main/tools/requirements/crawl4ai.txt).
-The installed crawler is the explicitly identified upstream `0.9.5` release.
+is 0.9.5. [The installation lock](https://github.com/strmt7/model-protocol-lab/blob/main/tools/requirements/crawl4ai.txt)
+pins the complete dependency closure — every transitive package, with full
+hash sets, enforced at install time with pip's `--require-hashes`, including
+marker-split pins where a dependency's current release line requires
+Python 3.12 or newer (cycle 228). The installed crawler is the explicitly
+identified upstream `0.9.5` release.
 
 Normal research invokes Crawl4AI's own `crawl` command through the portable
 launcher, forwarding its documented options without an alternative URL parser or
@@ -38,6 +42,14 @@ provisions a missing environment automatically; no separate installation step is
 needed for ordinary use. The installer creates a dedicated environment in the
 user's OS cache and installs Chromium through the
 [official Playwright setup path](https://docs.crawl4ai.com/core/installation/).
+The Playwright wheel itself is hash-pinned by the lock, and its bundled
+`browsers.json` pins the exact Chromium revision to install; after the
+browser install, the tool verifies that the installed revision directory
+matches that pin and records the revision in the install receipt. What
+cannot be hash-verified is the browser archive itself: upstream publishes
+no content hash for it, so that one download rests on HTTPS from
+Playwright's CDN and the pinned revision — stated plainly rather than
+papered over.
 No optional Torch, cosine-model or transformer extra is requested. A cache
 override is available through `MPL_CRAWL4AI_HOME` or `--home <absolute-path>`;
 it must stay outside the source checkout. Browser downloads, package files and

@@ -47,7 +47,7 @@ tools/agent_context.py startup           # mandatory skills gate (fail-closed)
 ruff check model_protocol_lab tests examples
 ruff format --check model_protocol_lab tests examples
 mypy model_protocol_lab                  # strict; CI also runs mypy --strict
-bandit -r model_protocol_lab -q          # latest bandit, exit 0 required
+bandit -r model_protocol_lab -q          # hash-pinned in CI (tools/requirements/audit.txt); exit 0 required
 coverage run -m unittest discover -s tests -t .   # the exact CI test command
 coverage report                          # gate: 95% line coverage
 python -m pytest -q                      # same suite, for iteration only
