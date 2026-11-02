@@ -314,7 +314,7 @@ def recall(root: Path, key: str) -> dict[str, Any]:
     }
 
 
-def unique_json_object(pairs: list[tuple[str, object]]) -> dict:
+def unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, Any]:
     """Purpose: Refuse ambiguous evidence.
     Inputs: Decoded JSON members.
     Outputs: Unique-key object or error.
@@ -363,7 +363,7 @@ def json_pointer(value: object, pointer: str) -> object:
     return value
 
 
-def json_shape(value: object) -> dict:
+def json_shape(value: object) -> dict[str, Any]:
     """Purpose: Describe omitted payloads honestly.
     Inputs: JSON value.
     Outputs: Type and exact extent.
@@ -385,7 +385,7 @@ def compact_json(value: object) -> str:
     return json.dumps(value, ensure_ascii=True, separators=(",", ":"), allow_nan=False)
 
 
-def json_member(pointer: str, value: object) -> dict:
+def json_member(pointer: str, value: object) -> dict[str, Any]:
     """Purpose: Bound one displayed value.
     Inputs: Exact pointer/value.
     Outputs: Scalar or explicit omitted shape.
@@ -396,7 +396,7 @@ def json_member(pointer: str, value: object) -> dict:
     return result
 
 
-def json_report(root: Path, args: argparse.Namespace) -> dict:
+def json_report(root: Path, args: argparse.Namespace) -> dict[str, Any]:
     """Purpose: Inspect evidence without flooding context.
     Inputs: Bounded JSON, exact pointer and page/output budgets.
     Outputs: Source-bound page and explicit omissions.

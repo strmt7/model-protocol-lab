@@ -613,6 +613,34 @@ at the cycle's final head enumerates these at line level; the
 findings guard continues to fail on any DeepSource finding, as
 designed, until the inventory is genuinely empty.
 
+### DeepSource fix-down, wave 1 (cycle 229)
+
+Cycle 229 works the standing inventory down in code, class by class,
+under the same rule as cycle 225: a finding is fixed by restructuring
+so it no longer exists by construction, or it stays open and
+enumerated here. Nothing is dismissed, ignored, or annotated.
+
+Item 0 (carried from cycle 227): DeepSource has produced no analysis
+run for any head since cycle 226's final head. Attempts 15 and 16 in
+this cycle (for the cycle-227 head `5ea21b28` and the cycle-228 head
+`6da5979a`) again returned "Run does not exist" from the inventory
+tool, so no count in this section is a fresh capture. Class counts
+below start from the cycle-226 capture (911 standing open) and
+subtract only sites fixed in code and verified locally, class by
+class. A fresh capture remains owed and the item stays open until
+one succeeds.
+
+Fixed in code in this push: FLK-E501 ×23 (overlong lines in shipped
+code — bandit justification comments moved off the flagged lines,
+two dict literals exploded one key per line, four long literals
+split by implicit concatenation with byte-identical values),
+PYL-R0124 ×10 (self-comparison NaN checks rewritten as
+`math.isnan`, preserving each site's exact accept/reject behaviour),
+TYP-022 ×4 (`tools/agent_context.py` return annotations completed to
+`dict[str, Any]`). PY-W2000 ×2 (unused imports in `cli.py`) were
+already eliminated by the cycle 227/228 edits to that file; pyflakes
+over the current tree is clean there.
+
 ### Dependabot: filelock in the cocoindex tool lock (cycle 228)
 
 Cycle 228's hash-pinned cocoindex lock made its full transitive

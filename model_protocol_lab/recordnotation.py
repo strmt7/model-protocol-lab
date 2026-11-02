@@ -342,9 +342,12 @@ OPERATING_CHARACTERISTICS: dict[str, Any] = {
     "panel96_bonferroni_power_gap25_marginals_85_60": 0.7452,
     "panel96_bonferroni_power_gap25_base_90": 0.8329,
     "panel96_generations": 6912,
-    "winner_pass_probability_95": 0.292,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
-    "winner_pass_probability_90": 0.08,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
-    "winner_pass_probability_80": 0.005,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
+    # bandit B105: the three 'pass' keys below are operating-
+    # characteristic probabilities in the frozen payload schema,
+    # not credentials.
+    "winner_pass_probability_95": 0.292,  # nosec B105
+    "winner_pass_probability_90": 0.08,  # nosec B105
+    "winner_pass_probability_80": 0.005,  # nosec B105
     "screen_guess_probability": 1 / 216000,
     "screen_expected_exclusions_per_candidate": 24 / 216000,
     "screen_expected_exclusions_per_panel": 576 / 216000,

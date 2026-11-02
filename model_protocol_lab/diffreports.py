@@ -8594,7 +8594,15 @@ def _multiturn_verdict(record: dict[str, Any], arm: str) -> bool:
 
 def _multiturn_pair(records: list[dict[str, Any]], arm_a: str, arm_b: str) -> dict[str, int]:
     """Return the multiturn pair."""
-    counts = {"n_paired": 0, "a_only": 0, "b_only": 0, "both_pass": 0, "both_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
+    # bandit B105: the 'pass' keys are verdict counts in the frozen
+    # payload schema, not credentials.
+    counts = {
+        "n_paired": 0,
+        "a_only": 0,
+        "b_only": 0,
+        "both_pass": 0,
+        "both_fail": 0,
+    }  # nosec B105
     for record in records:
         cell_a = _multiturn_cell(record, arm_a)
         cell_b = _multiturn_cell(record, arm_b)
@@ -8682,11 +8690,13 @@ def _multiturn_aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
             rates[arm] = (n_pass / n_paired) if n_paired else None
         delivery = _multiturn_pair(paired_records, "full", "sharded")
         scripted_pair = _multiturn_pair(paired_records, "full", "scripted")
+        # bandit B105: the 'pass' keys are verdict counts in the
+        # frozen payload schema, not credentials.
         self_history = {
-            "n_full_pass": 0,  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
+            "n_full_pass": 0,  # nosec B105
             "sh_only": 0,
             "sc_only": 0,
-            "both_pass": 0,  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
+            "both_pass": 0,  # nosec B105
             "both_fail": 0,
         }
         for record in paired_records:
@@ -14607,9 +14617,12 @@ _RECORDNOTATION_OPERATING_CHARACTERISTICS: dict[str, Any] = {
     "panel96_bonferroni_power_gap25_marginals_85_60": 0.7452,
     "panel96_bonferroni_power_gap25_base_90": 0.8329,
     "panel96_generations": 6912,
-    "winner_pass_probability_95": 0.292,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
-    "winner_pass_probability_90": 0.08,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
-    "winner_pass_probability_80": 0.005,  # nosec B105 -- operating-characteristic probability in the frozen payload schema, not a credential
+    # bandit B105: the three 'pass' keys below are operating-
+    # characteristic probabilities in the frozen payload schema,
+    # not credentials.
+    "winner_pass_probability_95": 0.292,  # nosec B105
+    "winner_pass_probability_90": 0.08,  # nosec B105
+    "winner_pass_probability_80": 0.005,  # nosec B105
     "screen_guess_probability": 1 / 216000,
     "screen_expected_exclusions_per_candidate": 24 / 216000,
     "screen_expected_exclusions_per_panel": 576 / 216000,
@@ -20416,7 +20429,7 @@ def _fo_is_finite_number(value: object) -> bool:
     """Return the fo is finite number."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
-    return value == value and abs(value) != float("inf")
+    return not math.isnan(value) and abs(value) != float("inf")
 
 
 def _fo_field_value_ok(value: object, field: dict[str, Any]) -> bool:
@@ -21850,7 +21863,7 @@ def _precision_cell_ok(cell: Any, expected_digest: str) -> bool:
     if logprob is not None and (
         type(logprob) not in (int, float)
         or isinstance(logprob, bool)
-        or (type(logprob) is float and logprob != logprob)
+        or (type(logprob) is float and math.isnan(logprob))
         or (type(logprob) is float and logprob in (float("inf"), float("-inf")))
     ):
         return False
@@ -22004,7 +22017,9 @@ def _precision_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     blocks: dict[str, Any] = {}
     flips_all: list[dict[str, Any]] = []
     total_paired = 0
-    total_cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
+    # bandit B105: the 'pass' keys are verdict counts in the frozen
+    # payload schema, not credentials.
+    total_cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}  # nosec B105
     total_diverged = 0
     for name in candidates:
         stored = blocks_in[name]
@@ -22025,7 +22040,9 @@ def _precision_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             if passed is None and complete:
                 return None
         paired = [r for r in own if type(r["fp32"]) is dict and type(r["bf16"]) is dict]
-        cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}  # nosec B105 -- 'pass' keys are verdict counts in the frozen payload schema, not credentials
+        # bandit B105: the 'pass' keys are verdict counts in the
+        # frozen payload schema, not credentials.
+        cells = {"pass_pass": 0, "pass_fail": 0, "fail_pass": 0, "fail_fail": 0}  # nosec B105
         flips: list[dict[str, Any]] = []
         n_diverged = 0
         deltas: list[float] = []
@@ -22715,7 +22732,9 @@ def _confidence_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         own = [r for r in ordered if r["candidate"] == name]
         elicited = [r["elicited"] for r in own if type(r["elicited"]) is dict]
         operator = _confidence_block_mirror(elicited, n_population)
-        flips = {"n_compared": 0, "pass_to_fail": 0, "fail_to_pass": 0}  # nosec B105 -- 'pass' keys are verdict-flip counts in the frozen payload schema, not credentials
+        # bandit B105: the 'pass' keys are verdict-flip counts in
+        # the frozen payload schema, not credentials.
+        flips = {"n_compared": 0, "pass_to_fail": 0, "fail_to_pass": 0}  # nosec B105
         for record in own:
             cell = record["elicited"]
             native = record["native_verdict"]
