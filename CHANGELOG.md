@@ -41,6 +41,50 @@ All notable changes to this project are documented here. The format follows
   (security audit 2, finding A-L1). The job keeps `contents: read`
   and the `id-token: write` the Codecov OIDC upload needs.
 
+### Changed (cycle 228 — fully hash-pinned tool locks, 2026-11-02)
+
+- The two development-tool locks are now complete hash-pinned
+  closures, installed with `--require-hashes` (security audit 2,
+  findings B-01/B-03). `tools/requirements/crawl4ai.txt` grows from
+  2 unpinned-hashed entries to the full 100-entry closure of
+  Crawl4AI 0.9.5 + Playwright 1.64.1, with Requires-Python
+  marker-split pairs (numpy, networkx, pyee, scipy) and tqdm's
+  Windows colorama line added by hand; installs are proven on
+  CPython 3.11/3.12/3.13. `tools/cocoindex_agent_search.py` now
+  installs from a new `tools/requirements/cocoindex.txt` (the
+  129-entry closure of cocoindex-code[full] 0.2.42, including the
+  win32-only pywin32 and colorama lines) on both its uv and pip
+  paths. For the Chromium browser Playwright downloads: the
+  Playwright wheel is hash-pinned and its bundled browsers.json
+  pins the exact Chromium revision; the installer now verifies the
+  installed revision directory against that pin and records the
+  revision in the install receipt. Upstream publishes no content
+  hash for the browser archives themselves, so that download rests
+  on HTTPS and the pinned revision — documented in
+  docs/crawl4ai.md rather than papered over.
+
+### Fixed (cycle 228 — tooling-lock closure gaps, 2026-11-02)
+
+- The older hashed locks are closed on every target a metadata
+  sweep checked (finding B-04): build.txt gains the Python < 3.12
+  lines a Linux 3.12 resolution never sees (keyring's
+  importlib_metadata, jaraco.context's backports.tarfile, and
+  importlib_metadata's zipp, each with its parent's marker and a
+  complete hash set, verified against a real 3.11 resolution and
+  install); dev.txt, dev-hf.txt and audit.txt gain their missing
+  Windows colorama lines (pytest's, typer's and bandit's markers
+  respectively); audit.txt gains a pip pin identical to
+  tools/requirements/pip.txt, so it installs standalone instead of
+  relying on the security job's install order to satisfy pip_api.
+- `pylock.toml` declares its target honestly (B-06): PEP 751
+  `requires-python = "==3.12.*"` and a single `environments` marker
+  (CPython 3.12 / Linux x86_64) — pip now installs the lock on
+  3.12 and refuses it on 3.11/3.13 instead of failing obscurely
+  on missing wheels. Its header no longer claims CI installs the
+  latest ruff/bandit (B-07; CI has installed the hashed
+  tools/requirements files since cycle 217), and the repo's agent
+  instructions carry the same correction.
+
 ### Fixed (cycle 227 — MCP session robustness, 2026-11-01)
 
 - A routine client disconnect no longer kills the MCP server: a

@@ -2,9 +2,16 @@
 # generated 2026-10-30 with pip 26.2.2 on CPython 3.12 / Linux x86_64.
 # It pins what a contributor's dev venv resolves to, with wheel hashes.
 # It does not constrain library consumers (they get the pyproject
-# ranges), and CI does not install from it: CI deliberately installs the
-# latest ruff/bandit so new lint and security rules surface immediately
-# (see the project's verification protocol). The [hf] extra is not
+# ranges), and CI does not install from it: CI installs the hashed
+# requirement files in tools/requirements/ (dev.txt for the lint job,
+# audit.txt for the security job), so the lint and security tools are
+# pinned and hash-verified like everything else (cycle 228, audit
+# finding B-07 — this header previously claimed CI installs the
+# latest ruff/bandit, which stopped being true in cycle 217). The
+# environments/requires-python fields below state the lock's single
+# target honestly: its wheels are CPython 3.12 / Linux x86_64
+# artifacts, and pip refuses the lock anywhere else (finding B-06).
+# The [hf] extra is not
 # locked here: hashing its wheels requires downloading the multi-GB
 # CUDA stack (docs/SECURITY.md, residual risk 2).
 # Consumption (requires a pip with PEP 751 support, 25.1 or later):
@@ -17,6 +24,10 @@
 # self entry the resolver emits for the project itself.
 lock-version = "1.0"
 created-by = "pip"
+requires-python = "==3.12.*"
+environments = [
+    "implementation_name == \"cpython\" and python_version == \"3.12\" and sys_platform == \"linux\" and platform_machine == \"x86_64\"",
+]
 
 [[packages]]
 name = "ast-serialize"

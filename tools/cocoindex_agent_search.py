@@ -3,6 +3,10 @@
 This tool is never imported by the lab's measurement runtime. Install and index explicitly;
 search refuses stale source bytes. Exact source reads remain authoritative.
 Adapted from strmt7/FlitzZip tools/cocoindex_agent_search.py (MIT).
+
+Installation uses the fully hash-pinned dependency closure in
+tools/requirements/cocoindex.txt, enforced with --require-hashes on both the
+uv and the pip install paths (cycle 228, audit finding B-03).
 """
 
 from __future__ import annotations
@@ -33,6 +37,7 @@ if _GIT is None:
     raise RuntimeError("git executable not found on PATH")
 _GIT_BIN: str = _GIT
 VERSION = "0.2.42"
+LOCK = ROOT / "tools" / "requirements" / "cocoindex.txt"
 MODEL = "Snowflake/snowflake-arctic-embed-xs"
 INDEX_SUFFIXES = (
     ".py",
@@ -142,10 +147,12 @@ def install(base: Path) -> None:
     venv.parent.mkdir(parents=True, exist_ok=True)
     _run([sys.executable, "-m", "venv", str(venv)], timeout=300)
     python = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    requirement = f"cocoindex-code[full]=={VERSION}"
     uv = shutil.which("uv")
     if uv:
-        _run([uv, "pip", "install", "--python", str(python), requirement], timeout=3600)
+        _run(
+            [uv, "pip", "install", "--python", str(python), "--require-hashes", "-r", str(LOCK)],
+            timeout=3600,
+        )
     else:
         _run(
             [
@@ -155,7 +162,9 @@ def install(base: Path) -> None:
                 "install",
                 "--disable-pip-version-check",
                 "--no-input",
-                requirement,
+                "--require-hashes",
+                "-r",
+                str(LOCK),
             ],
             timeout=3600,
         )

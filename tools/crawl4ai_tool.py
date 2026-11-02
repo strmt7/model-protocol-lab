@@ -6,7 +6,13 @@ as part of the Crawl4AI project (https://github.com/unclecode/crawl4ai).
 Adapted from strmt7/FlitzZip tools/crawl4ai_tool.py (MIT). FlitzZip-specific
 machinery (Windows process-ownership contracts, NLTK security source builds,
 repaired-wheel admission) is intentionally not ported: this repo installs the
-upstream release directly with a version-pinned lock.
+upstream release directly with a fully hash-pinned dependency lock
+(tools/requirements/crawl4ai.txt, enforced with --require-hashes). The
+Chromium build Playwright downloads is identified by the revision pinned in
+the hash-verified Playwright wheel's browsers.json; install verifies the
+installed revision directory against it and records the revision in the
+install receipt. Upstream publishes no content hash for the browser archives
+themselves, so that download rests on HTTPS and the pinned revision alone.
 """
 
 from __future__ import annotations
@@ -136,6 +142,45 @@ def verify_versions(python: Path, env: dict[str, str]) -> None:
         )
 
 
+def _chromium_revision(browsers_json: str) -> str:
+    """Purpose: Extract the pinned Chromium revision
+    Inputs: browsers.json text from the installed Playwright wheel
+    Outputs: Revision string or failure.
+    """
+    for browser in json.loads(browsers_json).get("browsers", []):
+        if browser.get("name") == "chromium":
+            revision = str(browser.get("revision", ""))
+            if revision.isdigit():
+                return revision
+    raise RuntimeError("browsers.json does not pin a Chromium revision")
+
+
+def _pinned_chromium_revision(python: Path, env: dict[str, str]) -> str:
+    """Purpose: Read the Chromium revision the installed Playwright pins
+    Inputs: Environment interpreter/environment
+    Outputs: Revision string or failure.
+    """
+    probe = (
+        "import pathlib, playwright;"
+        "print((pathlib.Path(playwright.__file__).parent"
+        " / 'driver' / 'package' / 'browsers.json').read_text(encoding='utf-8'))"
+    )
+    completed = subprocess.run(
+        [str(python), "-c", probe],
+        env=env,
+        timeout=120,
+        check=False,
+        text=True,
+        encoding="utf-8",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        errors="replace",
+    )
+    if completed.returncode != 0 or not completed.stdout:
+        raise RuntimeError("could not read browsers.json from the installed Playwright")
+    return _chromium_revision(completed.stdout)
+
+
 def install(home: Path) -> Path:
     """Purpose: Provision the pinned package/browser once
     Inputs: Portable cache
@@ -164,6 +209,7 @@ def install(home: Path) -> Path:
             "--quiet",
             "--disable-pip-version-check",
             "--no-input",
+            "--require-hashes",
             "-r",
             str(LOCK),
         ],
@@ -173,6 +219,9 @@ def install(home: Path) -> Path:
     _run([str(python), "-m", "pip", "check"], env, timeout=120)
     verify_versions(python, env)
     _run([str(python), "-m", "playwright", "install", "chromium"], env, timeout=1800)
+    revision = _pinned_chromium_revision(python, env)
+    if not (Path(env["PLAYWRIGHT_BROWSERS_PATH"]) / f"chromium-{revision}").is_dir():
+        raise RuntimeError(f"Playwright did not install the pinned Chromium revision {revision}")
     receipt.write_text(
         json.dumps(
             {
@@ -180,6 +229,7 @@ def install(home: Path) -> Path:
                 "version": VERSION,
                 "lock_sha256": identity,
                 "platform": platform.system(),
+                "chromium_revision": revision,
             }
         )
         + "\n",
@@ -236,6 +286,7 @@ def check_lock(home: Path, requirements: Path = LOCK) -> None:
                 "--ignore-installed",
                 "--disable-pip-version-check",
                 "--no-input",
+                "--require-hashes",
                 "-r",
                 str(requirements),
             ],
