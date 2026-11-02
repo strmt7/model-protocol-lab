@@ -330,13 +330,19 @@ class MCPFrameHardeningTests(unittest.TestCase):
             self.assertEqual(out[0]["error"]["code"], -32602, boundary[:2])
             self.assertIn("boundary", out[0]["error"]["message"])
 
-    def test_tool_failure_is_fixed_internal_error(self):
-        """Test tool failure is fixed internal error."""
-        # Specimen: a local_hf backend pointed at an existing but empty
-        # directory passes params validation, then fails inside the tool;
-        # the client must see the fixed -32603, never the exception. (The
-        # cycle-196 specimen — a lone-surrogate prompt — is a client
-        # error, -32602, since cycle 226's B-13 fix.)
+    def test_local_hf_construction_failure_is_invalid_params(self):
+        """Test local hf construction failure is invalid params."""
+        # DELIBERATE PIN MOVE (cycle 227, security-audit item C-04
+        # site 2): this specimen pinned -32603 through cycle 226. The
+        # classification was wrong: a local_hf backend that cannot be
+        # constructed from the client-supplied checkpoint (here: an
+        # existing but empty directory) fails BECAUSE OF THE PARAMS,
+        # before any tool work happens — that is JSON-RPC invalid
+        # params (-32602), the same class as a nonexistent checkpoint
+        # directory, not an internal server fault. _build_backend now
+        # wraps construction and raises the fixed -32602 below; the
+        # genuine -32603 specimen (a tool raising mid-execution) is
+        # pinned by test_genuine_tool_failure_is_fixed_internal_error.
         with tempfile.TemporaryDirectory() as empty_dir:
             frame = _tool_call(
                 {
@@ -347,8 +353,39 @@ class MCPFrameHardeningTests(unittest.TestCase):
                 }
             )
             _rc, out = _run_server((frame + "\n").encode())
-        self.assertEqual(out[0]["error"]["code"], -32603)
-        self.assertEqual(out[0]["error"]["message"], "internal error")
+        self.assertEqual(out[0]["error"]["code"], -32602)
+        self.assertEqual(
+            out[0]["error"]["message"],
+            "local_hf backend could not be constructed from params.backend",
+        )
+
+    def test_genuine_tool_failure_is_fixed_internal_error(self):
+        """Test genuine tool failure is fixed internal error."""
+        # The -32603 specimen after the cycle-227 pin move: a tool
+        # whose handler raises an unexpected exception mid-execution
+        # (monkeypatched in-process) must surface the fixed -32603
+        # "internal error", never the exception text (S-12).
+        from model_protocol_lab import mcp_server
+
+        def _boom(_arguments):
+            """Boom."""
+            raise RuntimeError("specimen failure with sensitive detail")
+
+        original = mcp_server.TOOLS["probe_surface_noise_stability"]["handler"]
+        mcp_server.TOOLS["probe_surface_noise_stability"]["handler"] = _boom
+        try:
+            response = mcp_server.handle_request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "probe_surface_noise_stability", "arguments": {}},
+                }
+            )
+        finally:
+            mcp_server.TOOLS["probe_surface_noise_stability"]["handler"] = original
+        self.assertEqual(response["error"]["code"], -32603)
+        self.assertEqual(response["error"]["message"], "internal error")
 
 
 class ProbeOutputPermissionTests(unittest.TestCase):
