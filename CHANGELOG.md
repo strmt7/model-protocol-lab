@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 227 — MCP session robustness, 2026-11-01)
+
+- A routine client disconnect no longer kills the MCP server: a
+  broken pipe on a response write ends the session cleanly with
+  exit 0 instead of a BrokenPipeError traceback (exit 120).
+- `surface_noise_hardening_notes` maps type-confused report fields
+  (TypeError/AttributeError escapes) to -32602 invalid params, like
+  the ValueError case, instead of -32603.
+- A `local_hf` backend that cannot be constructed from the
+  client-supplied checkpoint now raises -32602 with a fixed message
+  instead of escaping as -32603. This deliberately reclassifies the
+  specimen pinned in cycle 196: construction failure caused by the
+  params is an invalid-params outcome; the -32603 pin now rests on
+  a genuine mid-execution tool failure specimen.
+- The probe restores a pre-existing host SIGALRM timer (not just
+  the handler) after its sweep, and a probe call served from a
+  non-main thread degrades to an unbounded sweep instead of dying
+  as -32603 on the main-thread-only signal calls.
+
 ### Fixed (cycle 227 — verify binding and surface-noise cap contract, 2026-11-01)
 
 - `verify_results` summaries are now bound to their ground records:

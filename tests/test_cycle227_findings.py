@@ -51,6 +51,14 @@ fix batch:
   bool-as-int or float-as-int forgery passed the oracle; the
   oracle's newest-section validators now use a type-strict
   equality with the producer's semantics.
+- F3 -- a routine client disconnect killed the MCP server with a
+  BrokenPipeError traceback (exit 120); it now ends the session
+  cleanly. F4 -- type-confused hardening-notes reports escaped as
+  -32603 instead of -32602. C-04 site 2 -- a local_hf construction
+  failure on client params escaped _build_backend unwrapped;
+  -32602 now, with cycle 196's -32603 pin deliberately moved.
+  BH2B-09 -- the probe ate a pre-existing host SIGALRM timer;
+  BH2B-10 -- a probe call from a non-main thread died as -32603.
 
 Each test below is red on the pre-fix tree for the class it names.
 """
@@ -777,6 +785,144 @@ class SurfaceNoiseCapContractTests(unittest.TestCase):
         )
         self.assertEqual(hostile, "abstain")
         self.assertEqual(compliant, "pass")
+
+
+_PROBE_ARGUMENTS = {
+    "prompt": "MAGICWORD please answer now",
+    "fixtures": [
+        {
+            "id": "f1",
+            "messages": [{"role": "user", "content": "x"}],
+            "expected": "BLUE",
+            "group": "probe",
+        }
+    ],
+    "boundary": [7],
+}
+
+
+class McpRobustnessTests(unittest.TestCase):
+    """F3/F4/C-04/BH2B-09/BH2B-10: the MCP server degrades honestly."""
+
+    @staticmethod
+    def _call(name: str, arguments: dict) -> dict:
+        """Call one tool in-process through handle_request."""
+        from model_protocol_lab import mcp_server
+
+        return mcp_server.handle_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": arguments},
+            }
+        )
+
+    def test_hardening_notes_type_confusion_is_invalid_params(self):
+        """Test hardening notes type confusion is invalid params."""
+        cases = (
+            {"report": {"operators": {"a": {"stability": 0.5, "n_effective": 1, "flips": 5}}}},
+            {"report": {"operators": {}, "static_lint": "x"}},
+            {"report": {"operators": {}, "static_lint": {"checks": 5}}},
+        )
+        for arguments in cases:
+            with self.subTest(arguments=arguments):
+                response = self._call("surface_noise_hardening_notes", arguments)
+                self.assertEqual(response["error"]["code"], -32602)
+
+    def test_local_hf_construction_failure_is_invalid_params(self):
+        """Test local hf construction failure is invalid params."""
+        with tempfile.TemporaryDirectory() as empty_dir:
+            response = self._call(
+                "probe_surface_noise_stability",
+                {
+                    **_PROBE_ARGUMENTS,
+                    "backend": {"kind": "local_hf", "checkpoint": empty_dir},
+                },
+            )
+        self.assertEqual(response["error"]["code"], -32602)
+        self.assertEqual(
+            response["error"]["message"],
+            "local_hf backend could not be constructed from params.backend",
+        )
+
+    def test_probe_restores_preexisting_sigalrm_timer(self):
+        """Test probe restores preexisting sigalrm timer."""
+        import signal
+
+        def _sentinel(_signum, _frame):  # noqa: ANN001, ANN202
+            """Sentinel."""
+
+        old_handler = signal.signal(signal.SIGALRM, _sentinel)
+        signal.setitimer(signal.ITIMER_REAL, 45.0)
+        try:
+            response = self._call("probe_surface_noise_stability", dict(_PROBE_ARGUMENTS))
+            remaining, _interval = signal.getitimer(signal.ITIMER_REAL)
+            handler_now = signal.getsignal(signal.SIGALRM)
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, old_handler)
+        self.assertIn("result", response)
+        self.assertIs(handler_now, _sentinel)
+        self.assertGreater(remaining, 30.0)
+
+    def test_probe_from_worker_thread_is_not_internal_error(self):
+        """Test probe from worker thread is not internal error."""
+        import threading
+
+        outcome: dict = {}
+
+        def _run() -> None:
+            """Run."""
+            outcome["response"] = self._call(
+                "probe_surface_noise_stability", dict(_PROBE_ARGUMENTS)
+            )
+
+        worker = threading.Thread(target=_run)
+        worker.start()
+        worker.join(timeout=180)
+        self.assertFalse(worker.is_alive())
+        self.assertIn("result", outcome["response"])
+
+    def test_client_disconnect_ends_session_cleanly(self):
+        """Test client disconnect ends session cleanly."""
+        import subprocess
+        import sys
+
+        repo_root = Path(__file__).resolve().parent.parent
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "model_protocol_lab.mcp_server"],
+            cwd=repo_root,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            frame = (
+                json.dumps(
+                    {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+                ).encode()
+                + b"\n"
+            )
+            proc.stdin.write(frame)
+            proc.stdin.flush()
+            self.assertIn(b"tools", proc.stdout.readline())
+            # Client vanishes: close our read end, then provoke one
+            # more response write from the server.
+            proc.stdout.close()
+            try:
+                proc.stdin.write(frame)
+                proc.stdin.flush()
+                proc.stdin.close()
+            except (BrokenPipeError, OSError):
+                pass
+            returncode = proc.wait(timeout=60)
+            stderr = proc.stderr.read()
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+        self.assertEqual(returncode, 0)
+        self.assertNotIn(b"Traceback", stderr)
 
 
 if __name__ == "__main__":

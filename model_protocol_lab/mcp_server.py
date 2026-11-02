@@ -24,9 +24,12 @@ dimension is capped in the tool schema, one sweep runs at a time
 (threading lock), cancellation is cooperative between forwards with a
 fail-closed ``status: "cancelled"`` (never a partial score). The 600 s
 wall-clock budget is enforced with ``SIGALRM``/``ITIMER_REAL`` and is
-therefore POSIX-only: on platforms without ``SIGALRM`` the sweep still
-runs, but the budget degrades to best-effort (not enforced) rather than
-failing the call.
+therefore POSIX-only: on platforms without ``SIGALRM`` — and on calls
+served from a non-main thread, where signal calls are unavailable —
+the sweep still runs, but the budget degrades to best-effort (not
+enforced) rather than failing the call. A host timer armed before the
+sweep is saved and re-armed afterwards, so embedding the probe never
+eats the caller's alarm.
 
 Shipped in the wheel with the ``model-protocol-lab-mcp`` console
 script. Run it as:
@@ -119,7 +122,19 @@ def _build_backend(spec: dict[str, Any]) -> object:
             raise MCPError(-32602, 'backend.device must be "cpu" or "cuda"')
         from model_protocol_lab.backends import LocalHFBackend
 
-        return LocalHFBackend(checkpoint, device=device)
+        try:
+            return LocalHFBackend(checkpoint, device=device)
+        except Exception as exc:
+            # Construction failure on client-supplied params (missing
+            # weights, unreadable config) is an invalid-params outcome,
+            # not a server fault: -32602 with a fixed message (the raw
+            # exception text may carry host paths). This deliberately
+            # reclassifies cycle 196's -32603 specimen; the moved pin
+            # and its reasoning live in
+            # tests/test_cycle196_oversight_fixes.py (cycle 227, C-04).
+            raise MCPError(
+                -32602, "local_hf backend could not be constructed from params.backend"
+            ) from exc
     raise MCPError(-32602, 'backend.kind must be "selftest" or "local_hf"')
 
 
@@ -269,9 +284,19 @@ def tool_probe(params: dict[str, Any]) -> dict[str, Any]:
     protocol = sn.freeze_surface_noise_protocol(backend_fingerprint=fingerprint, fixtures=fixtures)
     cancel = threading.Event()
 
-    # SIGALRM/ITIMER_REAL do not exist on Windows: guard the POSIX-only
-    # enforcement and degrade to best-effort there (documented above).
-    _has_alarm = getattr(signal, "SIGALRM", None) is not None and hasattr(signal, "setitimer")
+    # SIGALRM/ITIMER_REAL do not exist on Windows, and signal calls are
+    # main-thread-only: guard the POSIX-only enforcement and degrade to
+    # an unbounded sweep elsewhere (documented above) rather than
+    # letting signal.signal's ValueError escape as -32603 from a worker
+    # thread (BH2B-10). A pre-existing host timer is saved before arming
+    # and re-armed at teardown, like the handler (BH2B-09; the cycle-116
+    # doctor convention) -- the host's alarm is never silently eaten.
+    _has_alarm = (
+        getattr(signal, "SIGALRM", None) is not None
+        and hasattr(signal, "setitimer")
+        and hasattr(signal, "getitimer")
+        and threading.current_thread() is threading.main_thread()
+    )
 
     def _on_alarm(_signum: int, _frame: object) -> None:
         """On alarm."""
@@ -279,6 +304,7 @@ def tool_probe(params: dict[str, Any]) -> dict[str, Any]:
 
     with _sweep_lock:
         previous = signal.signal(signal.SIGALRM, _on_alarm) if _has_alarm else None
+        old_timer = signal.getitimer(signal.ITIMER_REAL) if _has_alarm else (0.0, 0.0)
         try:
             if _has_alarm:
                 signal.setitimer(signal.ITIMER_REAL, SWEEP_TIMEOUT_SECONDS)
@@ -299,6 +325,8 @@ def tool_probe(params: dict[str, Any]) -> dict[str, Any]:
         finally:
             if _has_alarm:
                 signal.signal(signal.SIGALRM, previous)
+                if old_timer[0] > 0:
+                    signal.setitimer(signal.ITIMER_REAL, old_timer[0], old_timer[1])
 
     status = report.get("status")
     if status == "cancelled":
@@ -328,7 +356,11 @@ def tool_hardening_notes(params: dict[str, Any]) -> dict[str, Any]:
         raise MCPError(-32602, "params.report must be a probe result object")
     try:
         notes = sn.hardening_notes(report)
-    except ValueError as exc:
+    except (ValueError, TypeError, AttributeError) as exc:
+        # A type-confused report field escapes hardening_notes as a
+        # TypeError/AttributeError, not a ValueError: it is still a
+        # client-supplied invalid-params problem, never a server
+        # fault, so it maps to -32602 like the ValueError case (F4).
         raise MCPError(-32602, f"invalid probe report: {exc}") from exc
     lines = [
         f"weakest operator: {notes['weakest_operator']} (stability {notes['weakest_stability']})",
@@ -640,10 +672,30 @@ def _reject_frame_float(text: str) -> float:
     return value
 
 
-def _write_response(response: dict[str, Any]) -> None:
-    """Write response."""
-    sys.stdout.write(json.dumps(response, default=str) + "\n")
-    sys.stdout.flush()
+def _write_response(response: dict[str, Any]) -> bool:
+    """Write one response frame; False when the client has gone away.
+
+    A routine client disconnect surfaces as BrokenPipeError on the
+    flush (pre-fix the server died with a traceback, exit 120). The
+    session is over at that point: report False so serve() ends it
+    cleanly with exit 0, and point the stdout fd at devnull so the
+    interpreter's shutdown flush cannot re-raise on the dead pipe
+    (F3).
+    """
+    try:
+        sys.stdout.write(json.dumps(response, default=str) + "\n")
+        sys.stdout.flush()
+    except BrokenPipeError:
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            try:
+                os.dup2(devnull, sys.stdout.fileno())
+            finally:
+                os.close(devnull)
+        except OSError:
+            pass
+        return False
+    return True
 
 
 def serve(argv: list[str] | None = None) -> int:
@@ -685,14 +737,16 @@ def serve(argv: list[str] | None = None) -> int:
             # of its own.
             while raw and not raw.endswith(b"\n"):
                 raw = stdin.readline(MAX_LINE_CHARS + 1)
-            _write_response(_parse_error_response())
+            if not _write_response(_parse_error_response()):
+                break
             if not raw:
                 break
             continue
         try:
             line = raw.decode("utf-8").strip()
         except UnicodeDecodeError:
-            _write_response(_parse_error_response())
+            if not _write_response(_parse_error_response()):
+                break
             continue
         if not line:
             continue
@@ -711,20 +765,22 @@ def serve(argv: list[str] | None = None) -> int:
                 parse_float=_reject_frame_float,
             )
         except (RecursionError, ValueError):
-            _write_response(_parse_error_response())
+            if not _write_response(_parse_error_response()):
+                break
             continue
         if type(request) is not dict:
-            _write_response(
+            if not _write_response(
                 {
                     "jsonrpc": "2.0",
                     "id": None,
                     "error": {"code": -32600, "message": "invalid request"},
                 }
-            )
+            ):
+                break
             continue
         response = handle_request(request)
-        if response is not None:
-            _write_response(response)
+        if response is not None and not _write_response(response):
+            break
     return 0
 
 
