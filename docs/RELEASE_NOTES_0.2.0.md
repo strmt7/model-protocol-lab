@@ -1,11 +1,12 @@
 # Release notes — model-protocol-lab 0.2.0
 
 **Status: DRAFT notes.** Prepared 2026-10-31 (cycle 226) for the
-0.2.0 version story. These notes are pending the owner's release
-tag; no tag has been created and nothing has been published. The
-release workflow uses this file for the release notes when its
-version matches the tag, and falls back to a fixed template when
-no such file exists.
+0.2.0 version story; extended 2026-11-02 (cycles 227–228). These
+notes are pending the owner's release tag; no tag has been
+created and nothing has been published. The release workflow
+uses this file for the release notes when its version matches
+the tag, and falls back to a fixed template when no such file
+exists.
 
 ## What this is
 
@@ -42,6 +43,25 @@ tree that was never tagged. The headline additions:
   strict discipline (depth cap, no NaN/Infinity, no duplicate
   keys, no lone surrogates) as their hardened siblings; and the
   CLI surface gained one documented exit-code table.
+- **The deferred correctness findings closed** (cycle 227): every
+  correctness finding deferred from the readiness pass was fixed
+  in the producer and its test oracle together, each with a
+  reproducer that failed before the fix and passes after —
+  manifest validation of non-finite values, MCP error-code
+  discipline for malformed versus unprocessable input, digest
+  verification failing closed at five sites, and the diff
+  reports' remaining partial-equality seams.
+- **Release machinery and tooling integrity** (cycle 228): the
+  PEP 517 build backend is pinned (`setuptools==84.2.1`) and the
+  canonical sdist normalizes tar member modes, so identical
+  content builds byte-identically under any umask; the crawl4ai
+  and CocoIndex tool lockfiles are now complete hash-pinned
+  closures like the docs and CI locks, each proven by executed
+  `--require-hashes` installs; the contamination sweep
+  runs under a 10-second deadline budget and reports a partial
+  prefix instead of consuming unbounded time on large corpora;
+  and the CLI's test signal hook can no longer truncate an
+  existing file (exclusive-create open).
 
 ## Verifying a release artifact
 

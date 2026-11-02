@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 228 — release-notes story, 2026-11-02)
+
+- The stale 0.1.0 release notes (they described cycles up to 144
+  and 9 subcommands) are no longer linked from the documentation
+  navigation now that the version story is 0.2.0; the 0.2.0 draft
+  notes cover cycles 227–228 as well and keep the honest framing:
+  prepared for the owner's tag, nothing published.
+
 ### Changed (cycle 228 — pinned build backend, 2026-11-02)
 
 - The PEP 517 build backend is pinned exactly: pyproject.toml's
