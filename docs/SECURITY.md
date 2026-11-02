@@ -613,6 +613,29 @@ at the cycle's final head enumerates these at line level; the
 findings guard continues to fail on any DeepSource finding, as
 designed, until the inventory is genuinely empty.
 
+### Dependabot: filelock in the cocoindex tool lock (cycle 228)
+
+Cycle 228's hash-pinned cocoindex lock made its full transitive
+closure visible to Dependabot, which raised 13 alerts against
+`filelock==3.32.7` in `tools/requirements/cocoindex.txt`
+(1 high, 9 medium, 3 low; GHSA-v4x8-3wr5-3wq8 and family). All
+13 are local lock-file attacks — symlink swaps and forged
+markers against shared lock paths — that require a second local
+user on the same machine. filelock reaches this repo only as a
+transitive dependency of the offline, single-user CocoIndex
+code-search tool, installed into its own isolated venv; it is
+not in the shipped package and not in any CI environment, and
+the repo's other locks (crawl4ai, dev-hf, audit) already pin
+filelock 4.2.6/4.2.4. The alerts stand open, undismissed,
+because no honest fix exists today: every advisory is patched
+only in filelock 4.x, and the closure's litellm — 1.106.6, the
+latest release, inside cocoindex's admitted range
+(`litellm>=1.81.0, !=1.107.0`) — requires `filelock<4.0`. The
+pin moves to filelock 4.x in the same cycle that litellm or
+cocoindex admits it; until then the exposure is a multi-user
+attack against a single-user research tool, recorded here
+rather than hidden.
+
 ## Reporting defects
 
 For public issues, provide a minimal synthetic reproduction and dependency versions. Exclude credentials, proprietary prompts, private model files and personally identifying data. For sensitive defects, use GitHub's private vulnerability reporting for this repository — it is enabled (verified through the GitHub API, 2026-10-23): open the repository's **Security** tab and choose **Report a vulnerability**, or go to `https://github.com/strmt7/model-protocol-lab/security/advisories/new`. Reports there are visible only to the maintainer until a fix ships.

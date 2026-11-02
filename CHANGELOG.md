@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security (cycle 228 — Dependabot filelock alerts, 2026-11-02)
+
+- The new cocoindex tool lock surfaced 13 Dependabot alerts
+  against its transitive `filelock==3.32.7` pin. All 13 are
+  patched only in filelock 4.x, which the closure's litellm
+  (latest release) still excludes (`filelock<4.0`), so no
+  admissible upgrade exists; the alerts stand open and are
+  enumerated with the full analysis in `docs/SECURITY.md`
+  rather than dismissed.
+
 ### Fixed (cycle 228 — release-notes story, 2026-11-02)
 
 - The stale 0.1.0 release notes (they described cycles up to 144
