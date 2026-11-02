@@ -57,14 +57,19 @@ doctor's resource fallbacks degrade there.
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  94.9836% (cycle 228, 2026-11-02)**. The gate compares the
+  94.9964% (cycle 228, 2026-11-02)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+0.484) is auditable rather than inferred from the display.
-  Cycle 228's release-machinery and tooling-lock work leaves both
+  (+0.496) is auditable rather than inferred from the display.
+  Cycle 228's release-machinery and tooling-lock pushes leave both
   totals unchanged (39,260 statements, 37,755 covered): those
   changes live in tools/, the workflows and tests, not in the
-  measured package.
+  measured package; its package fixes (the contamination-sweep
+  deadline budget and the CLI signal-hook hardening) added 44
+  statements (39,260 → 39,304) and 48 covered statements
+  (37,755 → 37,803), carried by
+  `tests/test_cycle228_package_fixes.py`; the rewritten
+  `contamination.py` is at full line coverage.
   Cycle 227 moves both figures slightly: the deferred-findings
   fixes added 161 statements net (39,099 → 39,260) and 160
   covered statements (37,595 → 37,755) — the wave-2 correctness
