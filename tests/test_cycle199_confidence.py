@@ -824,7 +824,6 @@ class TestTinyCheckpointEndToEnd(unittest.TestCase):
     def setUpClass(cls):
         """Set up the test fixture."""
         import tempfile
-        from pathlib import Path
 
         from tests.test_adapter_integration import build_tiny_gpt2
 

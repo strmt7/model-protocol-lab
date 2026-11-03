@@ -106,7 +106,6 @@ class HierarchyDemoBackend(DemoBackend):
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
         """Generate exactly the cap unless cancelled or failed."""
-        import re
 
         from model_protocol_lab.hierarchy import PRIVILEGE_CLOSE, PRIVILEGE_OPEN
 
@@ -354,7 +353,6 @@ class PositionDemoBackend(DemoBackend):
         self, input_ids: tuple[int, ...], *, max_new_tokens: int, seed: int, cancel: Event
     ) -> Generation:
         """Generate exactly the cap unless cancelled or failed."""
-        import re
 
         prompt = self.decode(input_ids)
         options = [

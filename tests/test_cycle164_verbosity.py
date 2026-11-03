@@ -1178,7 +1178,6 @@ class VerbosityCoverageGapTests(unittest.TestCase):
 
     def test_profile_stage_invalid_branches(self):
         """Test profile stage invalid branches."""
-        from model_protocol_lab.experiments import verbosity_profile
 
         base = {
             "available": True,
@@ -1203,7 +1202,6 @@ class VerbosityCoverageGapTests(unittest.TestCase):
 
     def test_profile_non_dict_entry_is_stage_invalid(self):
         """Test profile non dict entry is stage invalid."""
-        from model_protocol_lab.experiments import verbosity_profile
 
         stage = {
             "available": True,
@@ -1217,7 +1215,6 @@ class VerbosityCoverageGapTests(unittest.TestCase):
 
     def test_diff_valid_verbosity_rejections(self):
         """Test diff valid verbosity rejections."""
-        from model_protocol_lab import diffreports
 
         base = _vb_diff_payload()
         p = dict(base)

@@ -479,7 +479,6 @@ def build_tiny_bpe_gpt2(root: Path) -> None:
     encode("ab")`` -- a genuine merge-sensitive boundary -- while pairs
     like ``"a"`` / ``"c"`` concatenate cleanly for the aligned case.
     """
-    import torch
     from tokenizers import Tokenizer, decoders
     from tokenizers.models import BPE
     from transformers import GPT2Config, GPT2LMHeadModel

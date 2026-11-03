@@ -1414,7 +1414,6 @@ class WsCoverageGapTests(unittest.TestCase):
 
     def test_native_input_ids_malformed_entries(self):
         """Test native input ids malformed entries."""
-        from model_protocol_lab.experiments import native_search_input_ids
 
         # Non-dict entry: candidate degrades to None.
         out = native_search_input_ids(["nope"], ("c1",))
@@ -1526,7 +1525,6 @@ class WsCoverageGapTests(unittest.TestCase):
 
     def test_canonicalization_rejects_malformed_native(self):
         """Test canonicalization rejects malformed native."""
-        from model_protocol_lab.experiments import ws_canonicalization
 
         out = ws_canonicalization("nope", {}, self._good_stage(), ("c1",))
         self.assertEqual(out["detail"], "native_data_malformed")
@@ -1535,7 +1533,6 @@ class WsCoverageGapTests(unittest.TestCase):
 
     def test_canonicalization_rejects_malformed_stage(self):
         """Test canonicalization rejects malformed stage."""
-        from model_protocol_lab.experiments import ws_canonicalization
 
         out = ws_canonicalization({}, {}, "nope", ("c1",))
         self.assertEqual(out["detail"], "ws_result_malformed")
@@ -1548,7 +1545,6 @@ class WsCoverageGapTests(unittest.TestCase):
 
     def test_canonicalization_malformed_variant_cell(self):
         """Test canonicalization malformed variant cell."""
-        from model_protocol_lab.experiments import ws_canonicalization
 
         stage = {
             "mutations": ["trailing_space"],
@@ -1575,7 +1571,6 @@ class WsCoverageGapTests(unittest.TestCase):
 
     def test_canonicalization_skips_bad_fixture_rows(self):
         """Test canonicalization skips bad fixture rows."""
-        from model_protocol_lab.experiments import ws_canonicalization
 
         stage = {
             "mutations": ["trailing_space"],

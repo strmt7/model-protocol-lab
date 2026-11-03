@@ -723,7 +723,6 @@ class TestBackendDtype(unittest.TestCase):
 
 def _event():
     """Event."""
-    from threading import Event
 
     return Event()
 

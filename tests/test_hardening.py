@@ -708,7 +708,6 @@ class BoundaryTextMatchTests(unittest.TestCase):
     @staticmethod
     def _case():
         """Case."""
-        from tests.test_workflows import split
 
         return split().search[0]
 
@@ -728,7 +727,6 @@ class BoundaryTextMatchTests(unittest.TestCase):
         # The model emits the boundary TEXT ("|") as token 2000 while the
         # configured boundary is token 1000: the ID-level match misses, but
         # the text cross-check catches it.
-        from model_protocol_lab.core import Generation
 
         class MismatchBackend(FakeBackend):
             """Mismatch backend."""
@@ -751,7 +749,6 @@ class BoundaryTextMatchTests(unittest.TestCase):
 
     def test_genuine_miss_has_no_text_match(self):
         """Test genuine miss has no text match."""
-        from model_protocol_lab.core import Generation
 
         backend = FakeBackend(generate_script=[Generation(ids("nope"), "limit")])
         report = evaluate(backend, BASE, (self._case(),), boundary=ids("|"), max_new_tokens=4)
@@ -804,8 +801,6 @@ class AdversarialLoaderTests(unittest.TestCase):
         """Test loader never crashes on adversarial json."""
         import json as _json
 
-        from model_protocol_lab.datasets import load_dataset
-
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "adv.json"
             try:
@@ -844,7 +839,6 @@ class AdversarialLoaderTests(unittest.TestCase):
     @settings(suppress_health_check=[HealthCheck.differing_executors])
     def test_loader_rejects_garbage_bytes(self, payload):
         """Test loader rejects garbage bytes."""
-        from model_protocol_lab.datasets import load_dataset
 
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "garbage.json"
@@ -858,7 +852,6 @@ class SecurityFixTests(unittest.TestCase):
 
     def test_deeply_nested_json_raises_value_error(self):
         """Test deeply nested json raises value error."""
-        from model_protocol_lab.datasets import parse_dataset
 
         payload = "[" * 200000 + "]" * 200000
         self.assertLess(len(payload.encode("utf-8")), 2_000_000)
@@ -868,8 +861,6 @@ class SecurityFixTests(unittest.TestCase):
     def test_character_device_fixture_rejected(self):
         """Test character device fixture rejected."""
         import os
-
-        from model_protocol_lab.datasets import load_dataset
 
         # /dev/null is a character device on POSIX; skip where it is absent.
         if not os.path.exists("/dev/null"):
@@ -884,8 +875,6 @@ class SecurityFixTests(unittest.TestCase):
         # with a watchdog thread.
         import os
         import threading
-
-        from model_protocol_lab.datasets import load_dataset
 
         with TemporaryDirectory() as tmp:
             fifo = Path(tmp) / "pipe.json"
@@ -910,7 +899,6 @@ class SecurityFixTests(unittest.TestCase):
 
     def test_missing_fixture_file_is_value_error(self):
         """Test missing fixture file is value error."""
-        from model_protocol_lab.datasets import load_dataset
 
         with (
             TemporaryDirectory() as tmp,
@@ -923,9 +911,6 @@ class SecurityFixTests(unittest.TestCase):
         import os as _os
         import stat as _stat
 
-        from model_protocol_lab.reporting import save_report
-        from tests.test_workflows import experiment
-
         with TemporaryDirectory() as tmp:
             target = Path(tmp) / "report"
             json_path, html_path = save_report(experiment(), target)
@@ -935,8 +920,6 @@ class SecurityFixTests(unittest.TestCase):
 
     def test_report_refuses_to_overwrite(self):
         """Test report refuses to overwrite."""
-        from model_protocol_lab.reporting import save_report
-        from tests.test_workflows import experiment
 
         with TemporaryDirectory() as tmp:
             target = Path(tmp) / "report"
@@ -1023,10 +1006,6 @@ class RenderRobustnessTests(unittest.TestCase):
         """Test output dir claimed before backend init and released on failure."""
         # M1: an unwritable output path must fail before model loading, and a
         # claimed-but-unused directory must not block a retry.
-        import io
-        from unittest.mock import patch
-
-        from model_protocol_lab.cli import main
 
         with TemporaryDirectory() as tmp:
             out = Path(tmp) / "out"
@@ -1053,10 +1032,6 @@ class RenderRobustnessTests(unittest.TestCase):
     def test_output_through_regular_file_fails_before_backend_init(self):
         """Test output through regular file fails before backend init."""
         # M1: --output beneath a regular file is a pre-detectable error.
-        import io
-        from unittest.mock import patch
-
-        from model_protocol_lab.cli import main
 
         with TemporaryDirectory() as tmp:
             blocker = Path(tmp) / "afile"
@@ -1084,7 +1059,6 @@ class RenderRobustnessTests(unittest.TestCase):
         """Test fingerprint normalizes null bos repeat."""
         # L2: behaviorally identical hypotheses share a fingerprint, matching
         # local_repairs' dedup key.
-        from model_protocol_lab.core import Format
         from model_protocol_lab.experiments import candidate_fingerprint
 
         base = Format("x", "", "u:", "a:", "\n", repeat_bos=False)
@@ -1116,7 +1090,6 @@ class RenderRobustnessTests(unittest.TestCase):
         # Requires the hf stack: without transformers the deep check is skipped.
         if not HAS_HF:
             self.skipTest("the 'hf' extra is not installed")
-        import json
 
         from model_protocol_lab.doctor import examine_model
 
@@ -1137,11 +1110,6 @@ class RenderRobustnessTests(unittest.TestCase):
     def test_inspect_warns_on_empty_expected(self):
         """Test inspect warns on empty expected."""
         # L1: empty expected answers are flagged as vacuously passing.
-        import io
-        import json
-        from unittest.mock import patch
-
-        from model_protocol_lab.cli import main
 
         payload = {
             "search": [
@@ -1198,7 +1166,6 @@ class RenderRobustnessTests(unittest.TestCase):
             with patch("socket.socket", BlockedSocket):
                 report = examine_model(root)
                 self.assertEqual(report["verdict"], "ok")
-                from threading import Event
 
                 from model_protocol_lab.backends import LocalHFBackend
 
@@ -1213,11 +1180,6 @@ class RenderRobustnessTests(unittest.TestCase):
         """Test run warns on empty expected before backend init."""
         # The run-path empty-expected warning fires even when backend init
         # later fails (warning precedes expensive work).
-        import io
-        import json
-        from unittest.mock import patch
-
-        from model_protocol_lab.cli import main
 
         payload = {
             "search": [
@@ -1263,10 +1225,6 @@ class RenderRobustnessTests(unittest.TestCase):
     def test_run_value_error_shows_sanitized_code(self):
         """Test run value error shows sanitized code."""
         # A fixture ValueError in run surfaces the fixed vocabulary (line 191).
-        import io
-        from unittest.mock import patch
-
-        from model_protocol_lab.cli import main
 
         with TemporaryDirectory() as tmp:
             bad = Path(tmp) / "bad.json"
@@ -1294,10 +1252,6 @@ class RenderRobustnessTests(unittest.TestCase):
         """Test deep nested output chain released on failure."""
         # QA round 2, issue 1: a failed run with --output a/b/c removes the
         # whole created chain, not just the leaf.
-        import io
-        from unittest.mock import patch
-
-        from model_protocol_lab.cli import main
 
         with TemporaryDirectory() as tmp:
             out = Path(tmp) / "a" / "b" / "c"
@@ -1399,7 +1353,7 @@ class RoundTwoFixTests(unittest.TestCase):
 
     def test_split_rejects_nfc_nfd_duplicate_ids(self):
         """Test split rejects nfc nfd duplicate ids."""
-        from model_protocol_lab.core import Fixture, Message, Split
+        from model_protocol_lab.core import Fixture
 
         def fx(fid, content):
             """Fx."""
@@ -1410,7 +1364,7 @@ class RoundTwoFixTests(unittest.TestCase):
 
     def test_split_rejects_nfc_nfd_cross_split_message_leak(self):
         """Test split rejects nfc nfd cross split message leak."""
-        from model_protocol_lab.core import Fixture, Message, Split
+        from model_protocol_lab.core import Fixture
 
         search = Fixture("s1", (Message("user", "caf\u00e9 au lait?"),), "a", "gs")
         held = Fixture("h1", (Message("user", "cafe\u0301 au lait?"),), "a", "gh")
@@ -1419,7 +1373,7 @@ class RoundTwoFixTests(unittest.TestCase):
 
     def test_split_rejects_nfc_nfd_group_overlap(self):
         """Test split rejects nfc nfd group overlap."""
-        from model_protocol_lab.core import Fixture, Message, Split
+        from model_protocol_lab.core import Fixture
 
         search = Fixture("s1", (Message("user", "q1"),), "a", "caf\u00e9")
         held = Fixture("h1", (Message("user", "q2"),), "a", "cafe\u0301")
@@ -1430,8 +1384,6 @@ class RoundTwoFixTests(unittest.TestCase):
         """Test inspect warning strips terminal escapes."""
         # A hostile fixture ID must not inject terminal escape sequences
         # into the empty-expected stderr warning.
-        import io
-        from unittest.mock import patch
 
         payload = {
             "search": [
@@ -1562,7 +1514,7 @@ class RoundThreeFixTests(unittest.TestCase):
         # evaluate's uniqueness check used raw string equality while Split
         # compares NFC-normalized keys (red-team round 2): canonically
         # equivalent IDs evaded evaluate's check.
-        from model_protocol_lab.core import Fixture, Message
+        from model_protocol_lab.core import Fixture
 
         fx1 = Fixture("caf\u00e9", (Message("user", "q"),), "a", "g")
         fx2 = Fixture("cafe\u0301", (Message("user", "q"),), "a", "g")

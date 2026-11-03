@@ -944,7 +944,6 @@ class SampleDeterminismTests(unittest.TestCase):
 
     def test_sample_batchinv_deterministic(self):
         """Test sample batchinv deterministic."""
-        import importlib.util
 
         script = Path(__file__).resolve().parent.parent / "examples" / "make_sample_report.py"
         spec = importlib.util.spec_from_file_location("make_sample_report_c153", script)
