@@ -673,6 +673,22 @@ are; those lines were rewritten to import only `Fixture`. The
 aliased class of PYL-W0404 (×200) is addressed in the following
 pushes of this wave.
 
+Fixed in code in the following push: PYL-W0404 ×117 (the aliased
+class in shipped code — function-local imports of the form
+`import json as _json` in `diffreports.py` (×113) and
+`reporting.py` (×4)). Every use of each alias inside its enclosing
+function was renamed to the canonical module-level name and the
+local import line deleted; the alias and the canonical name bind
+the same module object, so behaviour is unchanged. No test anchor
+pins any renamed line (verified by a literal scan of test string
+constants against both files before editing). The deleted import
+lines were covered statements, so the same push adds nine contract
+tests for previously uncovered fail-closed paths
+(`tests/test_cycle229_fixdown_wave1.py`: boundary-audit family
+extraction for degenerate names, the verify CLI's digest argument
+validation, and the healing pipeline's fixed-code errors on failing
+injected callables) to hold the coverage floor honestly.
+
 ### Dependabot: filelock in the cocoindex tool lock (cycle 228)
 
 Cycle 228's hash-pinned cocoindex lock made its full transitive

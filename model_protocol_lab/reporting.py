@@ -4850,10 +4850,8 @@ def _ablation_section(result: dict[str, Any]) -> str:
     triple, and that only main effects are measured. Every interpolation
     is escaped at this boundary.
     """
-    import re as _re
-    from html import escape as _escape
 
-    _control_chars = _re.compile(
+    _control_chars = re.compile(
         r"[\x00-\x1f\x7f-\x9f\ud800-\udfff\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]"
     )
 
@@ -4866,7 +4864,7 @@ def _ablation_section(result: dict[str, Any]) -> str:
 
     def _display_id(raw: Any) -> str:
         """Return the display id."""
-        return _escape(_control_chars.sub("", str(raw)))
+        return escape(_control_chars.sub("", str(raw)))
 
     blocks: list[str] = []
     for name in sorted(candidates):
@@ -4891,25 +4889,25 @@ def _ablation_section(result: dict[str, Any]) -> str:
                 arm = arms[field]
                 if type(arm) is not dict or arm.get("status") != "ok":
                     rows.append(
-                        "<tr><td>" + _escape(str(field)) + "</td>"
+                        "<tr><td>" + escape(str(field)) + "</td>"
                         '<td colspan="4">unavailable</td></tr>'
                     )
                     continue
                 marker = " &#9733;" if field in load_set else ""
                 rows.append(
                     "<tr><td>"
-                    + _escape(str(field))
+                    + escape(str(field))
                     + marker
                     + "</td><td>"
-                    + _escape(str(arm.get("n_flips")))
+                    + escape(str(arm.get("n_flips")))
                     + "</td><td>"
-                    + _escape(str(arm.get("pass_to_fail")))
+                    + escape(str(arm.get("pass_to_fail")))
                     + " / "
-                    + _escape(str(arm.get("fail_to_pass")))
+                    + escape(str(arm.get("fail_to_pass")))
                     + "</td><td>"
                     + ("yes" if arm.get("selection_bar_held") else "no")
                     + "</td><td>"
-                    + _escape(", ".join(arm.get("flipped_fixture_ids") or ()))
+                    + escape(", ".join(arm.get("flipped_fixture_ids") or ()))
                     + "</td></tr>"
                 )
         table = (
@@ -4927,9 +4925,9 @@ def _ablation_section(result: dict[str, Any]) -> str:
             )
         blocks.append(
             "<h3>" + _display_id(name) + "</h3>"
-            "<p>Base accuracy: " + _escape(str(rep.get("base_accuracy"))) + "; "
+            "<p>Base accuracy: " + escape(str(rep.get("base_accuracy"))) + "; "
             "load-bearing fields: "
-            + _escape(", ".join(load_set) if load_set else "none")
+            + escape(", ".join(load_set) if load_set else "none")
             + ".</p>"
             + note
             + table
@@ -4960,10 +4958,8 @@ def _template_robustness_section(result: dict[str, Any]) -> str:
     observed flips are upper bounds. Every interpolation is escaped at this
     boundary.
     """
-    import re as _re
-    from html import escape as _escape
 
-    _control_chars = _re.compile(
+    _control_chars = re.compile(
         r"[\x00-\x1f\x7f-\x9f\ud800-\udfff\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]"
     )
 
@@ -4983,7 +4979,7 @@ def _template_robustness_section(result: dict[str, Any]) -> str:
     def _display_id(raw: Any) -> str:
         # Strip control characters (terminal-escape injection) then HTML-escape.
         """Return the display id."""
-        return _escape(_control_chars.sub("", str(raw)))
+        return escape(_control_chars.sub("", str(raw)))
 
     rows: list[str] = []
     for name in sorted(candidates):
@@ -5005,18 +5001,16 @@ def _template_robustness_section(result: dict[str, Any]) -> str:
             for op in ("case_flip", "whitespace", "unicode_variant"):
                 op_rep = ops.get(op)
                 if type(op_rep) is dict:
-                    op_cells.append(
-                        _escape(str(op)) + ": " + _rate(op_rep.get("preservation_rate"))
-                    )
+                    op_cells.append(escape(str(op)) + ": " + _rate(op_rep.get("preservation_rate")))
         rows.append(
             "<tr><td>"
             + _display_id(name)
             + "</td><td>"
             + _rate(rep.get("preservation_rate"))
             + "</td><td>"
-            + _escape(str(rep.get("n_preserved")))
+            + escape(str(rep.get("n_preserved")))
             + "/"
-            + _escape(str(rep.get("n_preservation_denominator")))
+            + escape(str(rep.get("n_preservation_denominator")))
             + "</td><td>"
             + "; ".join(op_cells)
             + "</td></tr>"
