@@ -1073,7 +1073,9 @@ class StopMatrixTests(unittest.TestCase):
             boundary=(5,),
             eos_id=99,
         )
-        (row,) = rows
+        row_items = list(rows)
+        assert len(row_items) == 1
+        row = row_items[0]
         self.assertTrue(row["native_pass"])
         # HF's overhang walk fires at step 2 ("pre<" + "stop>post" covers
         # "<stop>"), truncating before the real boundary token: flip.
@@ -1125,7 +1127,9 @@ class StopMatrixTests(unittest.TestCase):
             boundary=(5,),
             eos_id=99,
         )
-        (row,) = rows
+        row_items = list(rows)
+        assert len(row_items) == 1
+        row = row_items[0]
         eos = row["cells"]["eos_appended"]
         self.assertTrue(eos["fired"])
         self.assertEqual(eos["detail"], "fired_at_step_2")
@@ -1150,7 +1154,9 @@ class StopMatrixTests(unittest.TestCase):
             boundary=(5,),
             eos_id=99,
         )
-        (row,) = rows
+        row_items = list(rows)
+        assert len(row_items) == 1
+        row = row_items[0]
         self.assertFalse(row["cells"]["hf_stop_string"]["available"])
         self.assertFalse(row["cells"]["vllm_holdback"]["available"])
         self.assertTrue(row["cells"]["eos_appended"]["available"])
@@ -1165,7 +1171,9 @@ class StopMatrixTests(unittest.TestCase):
             (quirk_observation(status="failed", exact_match=False, boundary_found=False),),
             boundary=(5,),
         )
-        (row,) = rows
+        row_items = list(rows)
+        assert len(row_items) == 1
+        row = row_items[0]
         self.assertFalse(row["native_pass"])
         for semantic in ("hf_stop_string", "vllm_holdback", "eos_appended"):
             self.assertFalse(row["cells"][semantic]["available"])
@@ -1850,7 +1858,9 @@ class EmulationBranchTests(unittest.TestCase):
             boundary=(5,),
             eos_id=99,
         )
-        (row,) = rows
+        row_items = list(rows)
+        assert len(row_items) == 1
+        row = row_items[0]
         self.assertFalse(row["cells"]["hf_stop_string"]["available"])
         self.assertFalse(row["cells"]["vllm_holdback"]["available"])
 
@@ -1863,7 +1873,9 @@ class EmulationBranchTests(unittest.TestCase):
             (quirk_observation(output_ids=("a",), exact_match=False, boundary_found=False),),
             boundary=(5,),
         )
-        (row,) = rows
+        row_items = list(rows)
+        assert len(row_items) == 1
+        row = row_items[0]
         for semantic in ("hf_stop_string", "vllm_holdback", "eos_appended"):
             cell = row["cells"][semantic]
             self.assertFalse(cell["available"])

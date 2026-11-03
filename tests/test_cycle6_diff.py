@@ -36,6 +36,8 @@ from model_protocol_lab.diffbackends import (
     run_diff_backends,
 )
 
+_SENTINEL = object()
+
 
 class TableBackend:
     """Fake backend decoding token ids through a fixed per-token text table.
@@ -135,8 +137,14 @@ class DiffBackendsTests(unittest.TestCase):
         self.assertIn("FIRING_STEP_DIFFERS", classes)
         self.assertEqual(result["verdict"], "diverge")
         gated = next(
-            finding for finding in result["divergences"] if finding["class"] == "MIN_TOKENS_GATED"
+            (
+                finding
+                for finding in result["divergences"]
+                if finding["class"] == "MIN_TOKENS_GATED"
+            ),
+            _SENTINEL,
         )
+        self.assertIsNot(gated, _SENTINEL)
         self.assertIn("step 2", gated["detail"])
         self.assertEqual(gated["stop_text"], "STOP")
         strip = result["cells"][0]["semantics"][VLLM_HOLDBACK_STRIP]

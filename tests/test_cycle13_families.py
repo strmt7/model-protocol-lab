@@ -45,6 +45,8 @@ from pathlib import Path
 from model_protocol_lab.catalog import CATALOG, candidates
 from model_protocol_lab.core import Format, Message, local_repairs
 
+_SENTINEL = object()
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _MESSAGES: tuple[Message, ...] = (
@@ -205,7 +207,10 @@ class LingThinkingOffTests(unittest.TestCase):
 
         base = CATALOG["ling"]
         repair_keys = {_key(variant) for variant in local_repairs(base)}
-        off = next(v for v in candidates("ling", mutate=True) if v.name == "ling/thinking-off")
+        off = next(
+            (v for v in candidates("ling", mutate=True) if v.name == "ling/thinking-off"), _SENTINEL
+        )
+        self.assertIsNot(off, _SENTINEL)
         self.assertNotIn(_key(off), repair_keys)
         # Sanity: the same uniqueness property holds for the earlier
         # thinking-off families (the invariant covers existence; this
@@ -214,8 +219,10 @@ class LingThinkingOffTests(unittest.TestCase):
             base_f = CATALOG[family]
             repair_keys_f = {_key(variant) for variant in local_repairs(base_f)}
             off_f = next(
-                v for v in candidates(family, mutate=True) if v.name == f"{family}/thinking-off"
+                (v for v in candidates(family, mutate=True) if v.name == f"{family}/thinking-off"),
+                _SENTINEL,
             )
+            self.assertIsNot(off_f, _SENTINEL)
             self.assertNotIn(_key(off_f), repair_keys_f)
 
 

@@ -118,6 +118,8 @@ from model_protocol_lab.doctor import (
 )
 from model_protocol_lab.fixtures import _extract_special_tokens
 
+_SENTINEL = object()
+
 # ---------------------------------------------------------------------------
 # Fake HF stack
 # ---------------------------------------------------------------------------
@@ -1066,7 +1068,8 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
             assert row["verdict"] == "incompatible"
             assert row["reason"] == "unregistered"
             assert row["detail"] == f"unregistered on {lit!r}"
-            token_row = next(t for t in row["tokens"] if t["token"] == lit)
+            token_row = next((t for t in row["tokens"] if t["token"] == lit), _SENTINEL)
+            self.assertIsNot(token_row, _SENTINEL)
             assert token_row["registered"] is False
             assert token_row["registered_id"] is None
             assert token_row["single_token"] is True  # encode was fine
@@ -1088,7 +1091,8 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         for row in hits:
             assert row["verdict"] == "incompatible"
             assert row["reason"] == "fragments"
-            token_row = next(t for t in row["tokens"] if t["token"] == lit)
+            token_row = next((t for t in row["tokens"] if t["token"] == lit), _SENTINEL)
+            self.assertIsNot(token_row, _SENTINEL)
             assert token_row["single_token"] is False
             assert token_row["id_match"] is None
 
@@ -1108,7 +1112,8 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         for row in hits:
             assert row["verdict"] == "incompatible"
             assert row["reason"] == "id_mismatch"
-            token_row = next(t for t in row["tokens"] if t["token"] == lit)
+            token_row = next((t for t in row["tokens"] if t["token"] == lit), _SENTINEL)
+            self.assertIsNot(token_row, _SENTINEL)
             assert token_row["id_match"] is False
             assert token_row["encoded_id"] == ids[lit] + 1
             assert token_row["registered_id"] == ids[lit]
@@ -1151,7 +1156,8 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
         hits = [r for r in report["rows"] if any(t["token"] == lit for t in r["tokens"])]
         assert hits
         for row in hits:
-            token_row = next(t for t in row["tokens"] if t["token"] == lit)
+            token_row = next((t for t in row["tokens"] if t["token"] == lit), _SENTINEL)
+            self.assertIsNot(token_row, _SENTINEL)
             assert token_row["registered"] is False  # suppressed exception -> skipped
             assert row["reason"] == "unregistered"
 

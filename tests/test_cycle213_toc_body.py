@@ -43,6 +43,8 @@ from tests.test_cycle223_invisiblechars import _payload as _invisible_chars_payl
 from tests.test_cycle223_invisiblechars import _WordBackend as _IcWordBackend
 from tests.test_cycle224_confusableskeleton import _payload as _confusable_skeleton_payload
 
+_SENTINEL = object()
+
 _SECTION_ID_RE = re.compile(r'<section[^>]*? id="([^"]+)"')
 
 
@@ -199,10 +201,14 @@ class RenderHtmlSourceGuardTests(unittest.TestCase):
         source = Path(reporting_mod.__file__).read_text(encoding="utf-8")
         tree = ast.parse(source)
         render = next(
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef) and node.name == "render_html"
+            (
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.FunctionDef) and node.name == "render_html"
+            ),
+            _SENTINEL,
         )
+        assert render is not _SENTINEL
         section_vars = set()
         toc_vars = []
         for node in ast.walk(render):

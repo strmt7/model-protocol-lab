@@ -56,6 +56,8 @@ from model_protocol_lab.core import (
     request_seed_for,
 )
 
+_SENTINEL = object()
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 try:
@@ -850,7 +852,8 @@ class TestVerifyWiring(unittest.TestCase):
         audit = payload["determinism"]
         self.assertFalse(audit["available"])
         self.assertEqual(audit["detail"], "observations_stripped")
-        check = next(c for c in payload["checks"] if c["id"] == "determinism_replay")
+        check = next((c for c in payload["checks"] if c["id"] == "determinism_replay"), _SENTINEL)
+        self.assertIsNot(check, _SENTINEL)
         self.assertEqual(check["status"], "unavailable")
 
     def test_full_determinism_run_via_verify(self) -> None:
@@ -868,7 +871,8 @@ class TestVerifyWiring(unittest.TestCase):
         self.assertEqual(audit["verdict"], "deterministic")
         self.assertIsNotNone(audit["certificate"])
         self.assertEqual(audit["certificate"]["replay"], {"device": "cpu", "max_context": 2048})
-        check = next(c for c in payload["checks"] if c["id"] == "determinism_replay")
+        check = next((c for c in payload["checks"] if c["id"] == "determinism_replay"), _SENTINEL)
+        self.assertIsNot(check, _SENTINEL)
         self.assertEqual(check["status"], "passed")
 
     def test_diverged_run_fails_verify_with_finding_framing(self) -> None:
@@ -885,7 +889,8 @@ class TestVerifyWiring(unittest.TestCase):
                 code, payload, _err = _run_verify(args)
         self.assertEqual(code, 2)
         self.assertEqual(payload["verdict"], "failed")
-        check = next(c for c in payload["checks"] if c["id"] == "determinism_replay")
+        check = next((c for c in payload["checks"] if c["id"] == "determinism_replay"), _SENTINEL)
+        self.assertIsNot(check, _SENTINEL)
         self.assertEqual(check["status"], "failed")
         self.assertIn("backend-determinism finding", check["detail"])
 
@@ -905,7 +910,8 @@ class TestVerifyWiring(unittest.TestCase):
                 code, payload, _err = _run_verify(args)
         self.assertEqual(code, 0)
         self.assertEqual(payload["determinism"]["verdict"], "inconclusive")
-        check = next(c for c in payload["checks"] if c["id"] == "determinism_replay")
+        check = next((c for c in payload["checks"] if c["id"] == "determinism_replay"), _SENTINEL)
+        self.assertIsNot(check, _SENTINEL)
         self.assertEqual(check["status"], "unavailable")
         self.assertIn("determinism not established", check["detail"])
 
@@ -922,7 +928,8 @@ class TestVerifyWiring(unittest.TestCase):
             ):
                 code, payload, _err = _run_verify(args)
         self.assertEqual(code, 0)
-        check = next(c for c in payload["checks"] if c["id"] == "determinism_replay")
+        check = next((c for c in payload["checks"] if c["id"] == "determinism_replay"), _SENTINEL)
+        self.assertIsNot(check, _SENTINEL)
         self.assertEqual(check["status"], "unavailable")
         self.assertIn("search incomplete", check["detail"])
 

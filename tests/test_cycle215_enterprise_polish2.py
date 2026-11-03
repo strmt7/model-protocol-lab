@@ -14,6 +14,8 @@ import re
 import unittest
 from pathlib import Path
 
+_SENTINEL = object()
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 DOCS = REPO_ROOT / "docs"
@@ -163,7 +165,8 @@ class TestWorkflowPermissionScoping(unittest.TestCase):
         """The CI test step's script contains no template expansion."""
         doc = _load_yaml(WORKFLOWS / "ci.yml")
         steps = doc["jobs"]["test"]["steps"]
-        step = next(s for s in steps if s.get("name") == "run tests (output captured)")
+        step = next((s for s in steps if s.get("name") == "run tests (output captured)"), _SENTINEL)
+        self.assertIsNot(step, _SENTINEL)
         self.assertNotIn("${{", step["run"])
         self.assertEqual(step["env"]["PYTHON_VERSION"], "${{ matrix.python-version }}")
         self.assertIn("unittest-py$PYTHON_VERSION.log", step["run"])
@@ -197,10 +200,14 @@ class TestDependencyReview(unittest.TestCase):
         self.assertEqual(job.get("name"), "dependency review")
         self.assertIsInstance(job.get("timeout-minutes"), int)
         review = next(
-            s
-            for s in job["steps"]
-            if str(s.get("uses", "")).startswith("actions/dependency-review-action@")
+            (
+                s
+                for s in job["steps"]
+                if str(s.get("uses", "")).startswith("actions/dependency-review-action@")
+            ),
+            _SENTINEL,
         )
+        self.assertIsNot(review, _SENTINEL)
         self.assertEqual(review["uses"], f"actions/dependency-review-action@{DEP_REVIEW_SHA}")
         posture = review["with"]
         self.assertEqual(posture.get("fail-on-severity"), "high")

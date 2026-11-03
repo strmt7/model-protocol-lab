@@ -18,6 +18,8 @@ from model_protocol_lab.core import Fixture, Message, Split
 from model_protocol_lab.debug import DebugShell, run_debug
 from model_protocol_lab.fixtures import split_to_json_text
 
+_SENTINEL = object()
+
 
 class FakeTokenizer:
     """Deterministic char-level tokenizer shim (no weights, no network)."""
@@ -188,7 +190,10 @@ class TestRender(unittest.TestCase):
             offset = int(end)
         self.assertEqual(offset, len(rendered))
         # Exact per-segment token IDs from the attached tokenizer.
-        content_line = next(line for line in out.splitlines() if "user_content" in line)
+        content_line = next(
+            (line for line in out.splitlines() if "user_content" in line), _SENTINEL
+        )
+        self.assertIsNot(content_line, _SENTINEL)
         self.assertIn("tokens=[104, 101, 108, 108, 111]", content_line)
 
     def test_render_without_tokenizer_omits_ids(self) -> None:

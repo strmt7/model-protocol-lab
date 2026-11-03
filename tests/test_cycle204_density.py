@@ -26,6 +26,8 @@ from model_protocol_lab.core import Format, Generation
 from model_protocol_lab.diffreports import _valid_density, diff_density
 from model_protocol_lab.reporting import render_html
 
+_SENTINEL = object()
+
 FORMATS = (
     Format(name="dn-a", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
     Format(name="dn-b", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
@@ -456,10 +458,12 @@ class TestAggregate(unittest.TestCase):
         records = _synthetic_records(self.cases, lambda case: [])
         agg = density.aggregate_candidate(records, self.cases)
         self.assertEqual(agg["n_zero_word"], 20)
-        count_row = next(r for r in agg["by_kind"] if r["kind"] == "count")
+        count_row = next((r for r in agg["by_kind"] if r["kind"] == "count"), _SENTINEL)
+        self.assertIsNot(count_row, _SENTINEL)
         self.assertEqual(count_row["k16_checked"], 0)
         self.assertIsNone(count_row["k16_rate"])
-        include_row = next(r for r in agg["by_kind"] if r["kind"] == "include")
+        include_row = next((r for r in agg["by_kind"] if r["kind"] == "include"), _SENTINEL)
+        self.assertIsNot(include_row, _SENTINEL)
         self.assertEqual(include_row["k16_checked"], 80)
 
     def test_screen_accounting_is_disjoint(self):
@@ -845,12 +849,15 @@ class TestGapCoverage(unittest.TestCase):
         records = _synthetic_records(cases, _perfect_hashes, solo_hashes=lambda case, j: [])
         agg = density.aggregate_candidate(records, cases)
         self.assertEqual(agg["n_zero_word"], 320)
-        count_row = next(r for r in agg["by_kind"] if r["kind"] == "count")
+        count_row = next((r for r in agg["by_kind"] if r["kind"] == "count"), _SENTINEL)
+        self.assertIsNot(count_row, _SENTINEL)
         self.assertEqual(count_row["solo_checked"], 0)
         self.assertIsNone(count_row["solo_rate"])
-        include_row = next(r for r in agg["by_kind"] if r["kind"] == "include")
+        include_row = next((r for r in agg["by_kind"] if r["kind"] == "include"), _SENTINEL)
+        self.assertIsNot(include_row, _SENTINEL)
         self.assertEqual(include_row["solo_checked"], 80)
-        k16_row = next(r for r in agg["by_density"] if r["density"] == 16)
+        k16_row = next((r for r in agg["by_density"] if r["density"] == 16), _SENTINEL)
+        self.assertIsNot(k16_row, _SENTINEL)
         self.assertEqual(k16_row["solo_checked"], 240)
 
     def test_reverse_discordance_is_not_falsified(self):

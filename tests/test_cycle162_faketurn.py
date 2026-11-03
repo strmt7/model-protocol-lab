@@ -170,7 +170,9 @@ class FixtureBuilderTests(unittest.TestCase):
                 group="g",
             ),
         )
-        (forged,) = build_faketurn_fixtures(cases, payload="fake_system", marker_index=2)
+        forged_items = list(build_faketurn_fixtures(cases, payload="fake_system", marker_index=2))
+        assert len(forged_items) == 1
+        forged = forged_items[0]
         self.assertNotIn("ref: faketurn", forged.messages[0].content)
         self.assertNotIn("ref: faketurn", forged.messages[1].content)
         self.assertIn("(ref: faketurn/fake_system/2/m0)", forged.messages[2].content)
@@ -181,7 +183,11 @@ class FixtureBuilderTests(unittest.TestCase):
         cases = (_fixture("f0"),)
         for payload in PAYLOADS:
             for index in range(len(MARKERS)):
-                (forged,) = build_faketurn_fixtures(cases, payload=payload, marker_index=index)
+                forged_items = list(
+                    build_faketurn_fixtures(cases, payload=payload, marker_index=index)
+                )
+                assert len(forged_items) == 1
+                forged = forged_items[0]
                 for decoy in ("WRONG", "INCORRECT", "DECOY", "NOT_THE_ANSWER"):
                     if decoy in forged.messages[0].content:
                         self.assertNotEqual(decoy, "WORD")

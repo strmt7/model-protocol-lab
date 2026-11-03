@@ -21,6 +21,8 @@ from hypothesis import strategies as st
 from model_protocol_lab import surfacenoise as sn
 from model_protocol_lab.core import Fixture, Message
 
+_SENTINEL = object()
+
 
 def _fixtures(expected="BLUE", n=3, group="t"):
     """Fixtures."""
@@ -144,7 +146,11 @@ class ValidationTests(unittest.TestCase):
         bidi_prompt = "a\u202eb"
         report = sn.probe_surface_noise(bidi_prompt, fixtures, backend, protocol, boundary=(7,))
         self.assertEqual(report["status"], "ok")
-        bidi = next(c for c in report["static_lint"]["checks"] if c["name"] == "no_bidi_controls")
+        bidi = next(
+            (c for c in report["static_lint"]["checks"] if c["name"] == "no_bidi_controls"),
+            _SENTINEL,
+        )
+        self.assertIsNot(bidi, _SENTINEL)
         self.assertFalse(bidi["passed"])
 
     def test_boundary_validation(self):
@@ -660,7 +666,8 @@ class StaticLintTests(unittest.TestCase):
     def test_lint_flags_bidi(self):
         """Test lint flags bidi."""
         lint = sn.static_lint("a\u202eb")
-        bidi = next(c for c in lint["checks"] if c["name"] == "no_bidi_controls")
+        bidi = next((c for c in lint["checks"] if c["name"] == "no_bidi_controls"), _SENTINEL)
+        self.assertIsNot(bidi, _SENTINEL)
         self.assertFalse(bidi["passed"])
         self.assertIn("U+202E", bidi["detail"])
 
@@ -669,13 +676,15 @@ class StaticLintTests(unittest.TestCase):
         # Fully-duplicated two-sentence prompt: dup_ratio = 0.5, and the
         # predicate is < 0.5, so it flags.
         lint = sn.static_lint("Say it twice. Say it twice.")
-        rep = next(c for c in lint["checks"] if c["name"] == "sentence_repetition")
+        rep = next((c for c in lint["checks"] if c["name"] == "sentence_repetition"), _SENTINEL)
+        self.assertIsNot(rep, _SENTINEL)
         self.assertFalse(rep["passed"])
 
     def test_lint_flags_empty(self):
         """Test lint flags empty."""
         lint = sn.static_lint("   ")
-        nonempty = next(c for c in lint["checks"] if c["name"] == "nonempty")
+        nonempty = next((c for c in lint["checks"] if c["name"] == "nonempty"), _SENTINEL)
+        self.assertIsNot(nonempty, _SENTINEL)
         self.assertFalse(nonempty["passed"])
 
     def test_lint_passes_clean(self):

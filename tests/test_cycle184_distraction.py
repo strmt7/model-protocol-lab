@@ -30,6 +30,8 @@ from model_protocol_lab.diffreports import _valid_distraction, diff_distraction,
 from model_protocol_lab.experiments import distraction_analysis, distraction_stage
 from model_protocol_lab.reporting import render_html
 
+_SENTINEL = object()
+
 BOUNDARY_WORD = "endmark"
 TEMPLATE_WORDS = ("ledger", "timetable", "manifest", "kiln")
 CORPUS_WORDS = ("harbour", "gardener", "ferries", "cobbles")
@@ -1815,7 +1817,8 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
             self._record0(p)["cell_details"]["neutral_1024_before"] = "bogus"
             yield "detail_vocabulary", p
             p = copy.deepcopy(self.payload)
-            vac = next(r for r in p["candidates"]["dst-a"]["records"] if r["vacuous"])
+            vac = next((r for r in p["candidates"]["dst-a"]["records"] if r["vacuous"]), _SENTINEL)
+            assert vac is not _SENTINEL
             vac["cells"]["neutral_64_before"] = {
                 "verdict": True,
                 "boundary_found": True,

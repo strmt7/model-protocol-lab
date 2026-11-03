@@ -50,6 +50,8 @@ from typing import Any
 
 from model_protocol_lab import diffreports as impl
 
+_SENTINEL = object()
+
 # ---------------------------------------------------------------------------
 # Independent oracle, written from the docstrings of diffreports.py.
 # Naming and control flow deliberately differ from the implementation so a
@@ -1876,8 +1878,10 @@ def oracle_diff_reports(
                 r_tuples: set[Any] = set()
                 for entry in primary:
                     cell = next(
-                        r for r in entry["records"] if r["evaluable"] and r["fixture"] == fixture
+                        (r for r in entry["records"] if r["evaluable"] and r["fixture"] == fixture),
+                        _SENTINEL,
                     )
+                    assert cell is not _SENTINEL
                     r_tuples.add(cell["input_sha256"])
                     m_tuples.add((cell["input_sha256"], tuple(entry["boundary_token_ids"])))
                 redundant_measurement += len(primary) - len(m_tuples)
@@ -1892,10 +1896,14 @@ def oracle_diff_reports(
                     outcomes: set[tuple[Any, ...]] = set()
                     for name in names:
                         cell = next(
-                            r
-                            for r in by_name[name]["records"]
-                            if r["evaluable"] and r["fixture"] == fixture
+                            (
+                                r
+                                for r in by_name[name]["records"]
+                                if r["evaluable"] and r["fixture"] == fixture
+                            ),
+                            _SENTINEL,
                         )
+                        assert cell is not _SENTINEL
                         outputs.add(cell["output_sha256"])
                         outcomes.add(
                             (
@@ -3527,8 +3535,8 @@ def oracle_diff_reports(
             da, db = str(a), str(b)
             if len(da) != len(db):
                 return "different_length"
-            for index in range(len(da)):
-                if da[index] != db[index]:
+            for index, char_a in enumerate(da):
+                if char_a != db[index]:
                     if index == len(da) - 1:
                         return "same_length_last_digit"
                     if index * 2 < len(da):
@@ -9718,7 +9726,10 @@ class SummaryAndDriftShape(unittest.TestCase):
                 "fixtures:search",
             ],
         )
-        planned = next(e for e in diff["config_drift"] if e["field"] == "planned:llama3/a")
+        planned = next(
+            (e for e in diff["config_drift"] if e["field"] == "planned:llama3/a"), _SENTINEL
+        )
+        self.assertIsNot(planned, _SENTINEL)
         self.assertEqual((planned["old"], planned["new"]), (2, 3))
         # no fixtures:held_out entry: held fixture ids identical ({h1})
         self.assertNotIn("fixtures:held_out", fields)

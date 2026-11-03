@@ -114,6 +114,8 @@ from model_protocol_lab.core import (
 from model_protocol_lab.experiments import FAILURE_MODES, failure_taxonomy, run_experiment
 from model_protocol_lab.scoring import score_target_logprobs
 
+_SENTINEL = object()
+
 # ---------------------------------------------------------------------------
 # Test harness: bijective test codec and a configurable hostile backend.
 # ---------------------------------------------------------------------------
@@ -823,7 +825,8 @@ class MixedHostileTaxonomyTest(unittest.TestCase):
             assert all(
                 v == 0 for k, v in counts.items() if k not in ("no-boundary-in-N", "backend-error")
             )
-            entry = next(e for e in result["search"] if e["format"]["name"] == name)
+            entry = next((e for e in result["search"] if e["format"]["name"] == name), _SENTINEL)
+            assert entry is not _SENTINEL
             observations = entry["observations"]
             non_passing = sum(
                 1 for o in observations if not (o["exact_match"] and o["boundary_found"])

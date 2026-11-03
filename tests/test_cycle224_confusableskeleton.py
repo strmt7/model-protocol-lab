@@ -47,6 +47,8 @@ from model_protocol_lab import canonicalform, density, diffreports, experiments,
 from model_protocol_lab import confusableskeleton as cs
 from model_protocol_lab.core import Format, Generation
 
+_SENTINEL = object()
+
 _CHATML = Format("chatml", "", "<|im_start|>user\n", "<|im_start|>assistant\n", "<|im_end|>\n")
 _LLAMA3 = Format(
     "llama3",
@@ -1889,14 +1891,20 @@ class TestGapPassMirror(unittest.TestCase):
         # substituted, where the arm's echo substitutes the
         # first), the rest passes.
         form_index = next(
-            i
-            for i, case in enumerate(cases[:12])
-            if i >= 7
-            and sum(
-                1 for char in case["expected"].partition("-")[0] if char in cs.FROZEN_REPLACEMENTS
-            )
-            >= 2
+            (
+                i
+                for i, case in enumerate(cases[:12])
+                if i >= 7
+                and sum(
+                    1
+                    for char in case["expected"].partition("-")[0]
+                    if char in cs.FROZEN_REPLACEMENTS
+                )
+                >= 2
+            ),
+            _SENTINEL,
         )
+        self.assertIsNot(form_index, _SENTINEL)
         for index, case in enumerate(cases[:12]):
             expected = case["expected"]
             if index < 6:

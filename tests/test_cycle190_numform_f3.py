@@ -26,6 +26,8 @@ import sys
 import unittest
 from pathlib import Path
 
+_SENTINEL = object()
+
 sys.path.insert(0, "tests")
 
 from test_cycle186_numform import FORMATS, _base_payload, _NumformBackend  # noqa: E402
@@ -217,10 +219,14 @@ class TestF0Regression(unittest.TestCase):
         payload = _base_payload()
         name = next(iter(payload["candidates"]))
         record = next(
-            r
-            for r in payload["candidates"][name]["records"]
-            if r["cell"] is not None and r["task"] == "copy"
+            (
+                r
+                for r in payload["candidates"][name]["records"]
+                if r["cell"] is not None and r["task"] == "copy"
+            ),
+            _SENTINEL,
         )
+        self.assertIsNot(record, _SENTINEL)
         record["answer_value"] += 999
         _producer_recompute(payload)
         self.assertFalse(_valid_numform(payload))
@@ -264,8 +270,10 @@ class TestBindingBattery(unittest.TestCase):
         for field, value in (("answer_value", 5), ("answer_text", "5")):
             payload = copy.deepcopy(base)
             record = next(
-                r for r in payload["candidates"][FORMATS[0].name]["records"] if r["cell"] is None
+                (r for r in payload["candidates"][FORMATS[0].name]["records"] if r["cell"] is None),
+                _SENTINEL,
             )
+            self.assertIsNot(record, _SENTINEL)
             record[field] = value
             self.assertFalse(_valid_numform(payload), field)
 

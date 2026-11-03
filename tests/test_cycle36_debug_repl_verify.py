@@ -78,6 +78,8 @@ from model_protocol_lab.core import Fixture, Message, Split
 from model_protocol_lab.debug import DebugShell, attach_tokenizer, run_debug, run_script
 from model_protocol_lab.fixtures import split_to_json_text
 
+_SENTINEL = object()
+
 
 class FakeTokenizer:
     """Deterministic char-level tokenizer shim (no weights, no network)."""
@@ -534,7 +536,10 @@ class TestRender(unittest.TestCase):
         """Test render per segment token ids."""
         shell, buf = _make_shell()
         out = _run(shell, buf, ".render", ".quit")
-        content_line = next(line for line in out.splitlines() if "user_content" in line)
+        content_line = next(
+            (line for line in out.splitlines() if "user_content" in line), _SENTINEL
+        )
+        self.assertIsNot(content_line, _SENTINEL)
         self.assertIn("tokens=[104, 101, 108, 108, 111]", content_line)
 
     def test_render_without_tokenizer_omits_ids(self) -> None:
@@ -1565,7 +1570,10 @@ class TestAttachTokenizerEndToEnd(unittest.TestCase):
             tok = attach_tokenizer(self._build_checkpoint(tmp))
             shell, buf = _make_shell(tokenizer=tok)
             out = _run(shell, buf, ".render", ".quit")
-            content_line = next(line for line in out.splitlines() if "user_content" in line)
+            content_line = next(
+                (line for line in out.splitlines() if "user_content" in line), _SENTINEL
+            )
+            self.assertIsNot(content_line, _SENTINEL)
             expected = tok.encode("hello", add_special_tokens=False)
             self.assertIn(f"tokens=[{', '.join(str(i) for i in expected)}]", content_line)
 

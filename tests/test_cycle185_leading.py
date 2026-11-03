@@ -34,6 +34,8 @@ from model_protocol_lab.diffreports import (
 from model_protocol_lab.experiments import leading_analysis, leading_stage
 from model_protocol_lab.reporting import render_html
 
+_SENTINEL = object()
+
 BOUNDARY_WORD = "endmark"
 
 
@@ -2055,8 +2057,10 @@ class TestValidatorFinalBranches(unittest.TestCase):
         payload = _payload(backend, _run_stage(backend))
         self.assertTrue(_valid_leading(payload))
         blank = next(
-            r for r in payload["candidates"]["ld-a"]["records"] if r["fixture"] == "fx-blank"
+            (r for r in payload["candidates"]["ld-a"]["records"] if r["fixture"] == "fx-blank"),
+            _SENTINEL,
         )
+        self.assertIsNot(blank, _SENTINEL)
         blank["cell_details"]["wrong_first_person"] = ""
         self.assertFalse(_valid_leading(payload))
 

@@ -62,6 +62,8 @@ from model_protocol_lab.diffbackends import (
 )
 from model_protocol_lab.reporting import render_html
 
+_SENTINEL = object()
+
 
 class TableBackend:
     """Fake backend decoding token ids through a fixed per-token text table.
@@ -203,10 +205,14 @@ class MultiStopSelectionTests(unittest.TestCase):
         result = self._run(("a", "is"))
         self.assertIn("MULTI_STOP_SELECTION", self._classes(result))
         finding = next(
-            finding
-            for finding in result["divergences"]
-            if finding["class"] == "MULTI_STOP_SELECTION"
+            (
+                finding
+                for finding in result["divergences"]
+                if finding["class"] == "MULTI_STOP_SELECTION"
+            ),
+            _SENTINEL,
         )
+        self.assertIsNot(finding, _SENTINEL)
         self.assertIn("sglang_stop selects stop 'a' at step 2", finding["detail"])
         self.assertIn("first-listed", finding["detail"])
         self.assertIn("vllm_holdback_strip selects stop 'is' at step 2", finding["detail"])
@@ -407,10 +413,14 @@ class NoTgiCellRationaleTests(unittest.TestCase):
             backend=backend,
         )
         finding = next(
-            finding
-            for finding in result["divergences"]
-            if finding["class"] == "MULTI_STOP_SELECTION"
+            (
+                finding
+                for finding in result["divergences"]
+                if finding["class"] == "MULTI_STOP_SELECTION"
+            ),
+            _SENTINEL,
         )
+        self.assertIsNot(finding, _SENTINEL)
         self.assertIn("sglang_stop selects stop 'a' at step 2", finding["detail"])
 
     def test_tgi_no_min_tokens_covered_by_sglang_ungated_path(self) -> None:
@@ -445,10 +455,14 @@ class NoTgiCellRationaleTests(unittest.TestCase):
             backend=backend,
         )
         finding = next(
-            finding
-            for finding in result["divergences"]
-            if finding["class"] == "STR_OVER_EOS_PRECEDENCE"
+            (
+                finding
+                for finding in result["divergences"]
+                if finding["class"] == "STR_OVER_EOS_PRECEDENCE"
+            ),
+            _SENTINEL,
         )
+        self.assertIsNot(finding, _SENTINEL)
         # TGI's reverse precedence is cited as the contrast, not emulated
         # as a cell.
         self.assertIn("TGI", finding["detail"])

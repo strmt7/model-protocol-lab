@@ -195,7 +195,9 @@ class DiagnosticEngineTests(unittest.TestCase):
             backend, make_result("cand", [make_obs("f1", prompt_ids)]), (fixture,)
         )
         self.assertTrue(diag["available"])
-        (cand,) = diag["candidates"]
+        cand_items = list(diag["candidates"])
+        assert len(cand_items) == 1
+        cand = cand_items[0]
         self.assertEqual(cand["name"], "cand")
         (score,) = cand["fixture_scores"]
         self.assertEqual(score["status"], "ok")
@@ -218,7 +220,9 @@ class DiagnosticEngineTests(unittest.TestCase):
         diag = logprob_diagnostic(
             backend, make_result("cand", [make_obs("f1", prompt_ids)]), (fixture,)
         )
-        (cand,) = diag["candidates"]
+        cand_items = list(diag["candidates"])
+        assert len(cand_items) == 1
+        cand = cand_items[0]
         (score,) = cand["fixture_scores"]
         self.assertEqual(score["status"], "unavailable")
         self.assertEqual(score["reason"], "boundary_merge_mismatch")
