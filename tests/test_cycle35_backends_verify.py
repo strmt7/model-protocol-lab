@@ -569,7 +569,7 @@ def _write_json(path, value):
     path.write_text(json.dumps(value), encoding="utf-8")
 
 
-class AssetHelpers(unittest.TestCase):
+class AssetHelpers:
     """Temp-dir scaffolding shared by the loading tests."""
 
     def setUp(self):
@@ -616,7 +616,7 @@ class AssetHelpers(unittest.TestCase):
                         (root / shard).write_bytes(b"\x00" * 16)
 
 
-class TestDirectory(AssetHelpers):
+class TestDirectory(AssetHelpers, unittest.TestCase):
     """Test directory."""
 
     def test_valid_directory(self):
@@ -656,7 +656,7 @@ class TestDirectory(AssetHelpers):
                 _directory(bad)
 
 
-class TestMember(AssetHelpers):
+class TestMember(AssetHelpers, unittest.TestCase):
     """Test member."""
 
     def setUp(self):
@@ -708,7 +708,7 @@ class TestMember(AssetHelpers):
             self.assertEqual(str(ctx.exception), "invalid_asset_name")
 
 
-class TestReadJson(AssetHelpers):
+class TestReadJson(AssetHelpers, unittest.TestCase):
     """Test read json."""
 
     def test_valid_dict(self):
@@ -784,7 +784,7 @@ class TestReadJson(AssetHelpers):
         self.assertEqual(len(value["a"]), 128 * 1024 * 1024 - 10)
 
 
-class TestModelAssets(AssetHelpers):
+class TestModelAssets(AssetHelpers, unittest.TestCase):
     """Test model assets."""
 
     def test_single_layout(self):
@@ -872,7 +872,7 @@ class TestModelAssets(AssetHelpers):
         self.assertEqual(str(ctx.exception), "missing_or_unsafe_asset")
 
 
-class TestManifest(AssetHelpers):
+class TestManifest(AssetHelpers, unittest.TestCase):
     """Test manifest."""
 
     def test_records(self):
@@ -920,7 +920,7 @@ class TestIdsValid(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class TestLocalHFBackendInit(AssetHelpers):
+class TestLocalHFBackendInit(AssetHelpers, unittest.TestCase):
     """Test local hf backend init."""
 
     def assertInitFailed(self, *args, **kwargs):

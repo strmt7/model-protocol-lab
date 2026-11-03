@@ -755,7 +755,7 @@ _CLASS_CASES = {
 }
 
 
-class _Cycle37Base(unittest.TestCase):
+class _Cycle37Base:
     """Cycle37 base."""
 
     def setUp(self) -> None:
@@ -812,7 +812,7 @@ class _Cycle37Base(unittest.TestCase):
                 self.assertEqual(icell["disposition"], snap.disposition, where)
 
 
-class OracleDifferentialTests(_Cycle37Base):
+class OracleDifferentialTests(_Cycle37Base, unittest.TestCase):
     """``diff_backends`` vs the docstring-derived oracle, hand cases + fuzz."""
 
     def test_hand_cases_match_oracle(self) -> None:
@@ -1019,7 +1019,7 @@ class OracleDifferentialTests(_Cycle37Base):
                 self.assertEqual(str(oracle_cm.exception), code, name)
 
 
-class ClassificationDetailTests(_Cycle37Base):
+class ClassificationDetailTests(_Cycle37Base, unittest.TestCase):
     """Per-class predicate details, finding construction, and edge cases."""
 
     @staticmethod
@@ -1450,7 +1450,7 @@ class ClassificationDetailTests(_Cycle37Base):
             self.assertIn("vLLM PR #49391", detail)
 
 
-class SectionAggregationTests(_Cycle37Base):
+class SectionAggregationTests(_Cycle37Base, unittest.TestCase):
     """``divergence_section_data`` aggregation vs the oracle's ``summarize``."""
 
     def assert_section_matches(

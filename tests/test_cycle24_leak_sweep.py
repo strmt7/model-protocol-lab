@@ -110,7 +110,7 @@ def _no_ws(text: str) -> str:
     return "".join(text.split())
 
 
-class LeakAsserts(unittest.TestCase):
+class LeakAsserts:
     """Shared canary scanners; not a test case itself (no test_ methods)."""
 
     def assertNoCanary(self, text: str, surface: str) -> None:  # noqa: N802 -- unittest-style name
@@ -198,7 +198,7 @@ def _evidence_report(directory: Path) -> dict:
     return json.loads(json_path.read_text(encoding="utf-8"))
 
 
-class DiffReportsLeakSweep(LeakAsserts):
+class DiffReportsLeakSweep(LeakAsserts, unittest.TestCase):
     """diff-reports must reduce observations to verdicts, never re-emit them."""
 
     @staticmethod
@@ -283,7 +283,7 @@ class _OrdTokenizer:
         return "".join(map(chr, token_ids))
 
 
-class DebugReplContract(LeakAsserts):
+class DebugReplContract(LeakAsserts, unittest.TestCase):
     """The debug REPL shows the operator's own dataset by design; pin it.
 
     ``mpl debug`` is a local interactive debugger over a dataset the
@@ -391,7 +391,7 @@ def _write_checkpoint(root: Path, *, real_tokenizer: bool) -> Path:
     return root
 
 
-class DoctorLeakSweep(LeakAsserts):
+class DoctorLeakSweep(LeakAsserts, unittest.TestCase):
     """mpl doctor's report carries checks and counts, never fixture text."""
 
     @staticmethod
@@ -473,7 +473,7 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-class CliSurfaceSweep(LeakAsserts):
+class CliSurfaceSweep(LeakAsserts, unittest.TestCase):
     """catalog / inspect / diff-backends: no fixture-derived content."""
 
     def test_catalog_output_is_lab_owned_hypotheses(self) -> None:
@@ -551,7 +551,7 @@ def _walk_keys(value: object, seen: set[str]) -> None:
             _walk_keys(item, seen)
 
 
-class SampleReportPublicHygiene(LeakAsserts):
+class SampleReportPublicHygiene(LeakAsserts, unittest.TestCase):
     """The committed examples/sample-report/ is synthetic and evidence-free."""
 
     def test_committed_json_has_no_observations(self) -> None:

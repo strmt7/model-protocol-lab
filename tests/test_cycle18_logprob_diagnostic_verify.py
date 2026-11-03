@@ -635,7 +635,7 @@ def _interpretation_mean(fixture_scores: list[dict]) -> float | None:
     return total / tokens if tokens else None
 
 
-class DiagnosticCase(unittest.TestCase):
+class DiagnosticCase:
     """Shared differential assertion: implementation vs independent oracle."""
 
     maxDiff = None
@@ -1128,7 +1128,7 @@ class InterpretationBoundaryTests(unittest.TestCase):
         self.assertIn("-2.00", actual["text"])
 
 
-class EngineeredBoundaryEndToEndTests(DiagnosticCase):
+class EngineeredBoundaryEndToEndTests(DiagnosticCase, unittest.TestCase):
     """Boundary semantics through the whole stack: scripted logits place a
     fixture's engine-reported mean logprob exactly on (or just off) a
     threshold, and the diagnostic must read the band correctly.
@@ -1191,7 +1191,7 @@ class EngineeredBoundaryEndToEndTests(DiagnosticCase):
                 self.assertEqual(cand["aggregate"]["scored_token_count"], 3)
 
 
-class InterpretationEndToEndTests(DiagnosticCase):
+class InterpretationEndToEndTests(DiagnosticCase, unittest.TestCase):
     """Each of the six interpretation kinds, driven end to end."""
 
     def _run(self, specs, **backend_kw):
@@ -1293,7 +1293,7 @@ class InterpretationEndToEndTests(DiagnosticCase):
             self.assertEqual(score["reason"], "encode_failed")
 
 
-class EndToEndFuzzTests(DiagnosticCase):
+class EndToEndFuzzTests(DiagnosticCase, unittest.TestCase):
     """Seeded differential fuzz: random candidates x fixtures x observation
     shapes x logit modes, full payload compared against the oracle.
     """
@@ -1381,7 +1381,7 @@ class EndToEndFuzzTests(DiagnosticCase):
                 self.assertTrue(diag["available"])
 
 
-class InputValidationTests(DiagnosticCase):
+class InputValidationTests(DiagnosticCase, unittest.TestCase):
     """Input validation tests."""
 
     def test_result_must_be_dict_with_search_list(self):

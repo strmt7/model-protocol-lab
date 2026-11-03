@@ -131,7 +131,7 @@ def _write_dataset(path: Path, *, special_literal: bool = False) -> None:
     path.write_text(json.dumps(split), encoding="utf-8")
 
 
-class _Base(unittest.TestCase):
+class _Base:
     """Base."""
 
     def mkroot(self) -> Path:
@@ -150,7 +150,7 @@ class _Base(unittest.TestCase):
         return report["model"]["checks"]
 
 
-class ReportAssemblyTests(_Base):
+class ReportAssemblyTests(_Base, unittest.TestCase):
     """Check ordering, result shape, determinism, fail-fast vs. continue."""
 
     @NEEDS_HF
@@ -279,7 +279,7 @@ class ReportAssemblyTests(_Base):
         self.assertNotIn("asset_manifest", self.checks(bare_report))
 
 
-class VerdictPrecedenceTests(_Base):
+class VerdictPrecedenceTests(_Base, unittest.TestCase):
     """Minimal pairs: which failure wins, and with what detail vocabulary."""
 
     def _shard_pair(self, corrupt_a: bool, corrupt_b: bool) -> Path:
@@ -421,7 +421,7 @@ class VerdictPrecedenceTests(_Base):
                     )
 
 
-class ContextWindowTests(_Base):
+class ContextWindowTests(_Base, unittest.TestCase):
     """The declared window is informational: malformed values degrade to None."""
 
     def _ctx(self, **kwargs) -> object:
@@ -462,7 +462,7 @@ class ContextWindowTests(_Base):
         self.assertEqual(report["model"]["context_window"], 512)
 
 
-class BoundaryIntegrationTests(_Base):
+class BoundaryIntegrationTests(_Base, unittest.TestCase):
     """boundary_ids / boundary_map validation against the measured vocabulary."""
 
     @NEEDS_HF
@@ -555,7 +555,7 @@ class BoundaryIntegrationTests(_Base):
         self.assertEqual(no_ids["verdict"], "ok")
 
 
-class AdversarialEdgeTests(_Base):
+class AdversarialEdgeTests(_Base, unittest.TestCase):
     """Empty dirs, 0-byte files, garbage, oversized configs, odd paths."""
 
     def test_empty_directory(self):
@@ -820,7 +820,7 @@ class AdversarialEdgeTests(_Base):
         self.assertEqual(checks["asset_manifest"]["detail"], "missing_or_unsafe_asset")
 
 
-class DoctorOrchestrationTests(_Base):
+class DoctorOrchestrationTests(_Base, unittest.TestCase):
     """How doctor() combines model, dataset, matrix and suggestion sections."""
 
     def _dataset(self, **kwargs) -> Path:
