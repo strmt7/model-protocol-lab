@@ -702,6 +702,60 @@ PYL-W0404 site (×290: 90 redundant, 200 aliased) is fixed in code;
 a pylint sweep for `reimported` over the package, tests and
 examples reports zero.
 
+Fixed in code in the following push: the two PTC-W0063 occurrences
+in test files added by cycles 227/228 (after the cycle-225
+capture) — a sentinel-checked lookup in
+`tests/test_cycle227_findings.py` and a defaulted scripted-clock
+`next()` in `tests/test_cycle228_package_fixes.py`.
+
+Cycle 229 wave-1 disposition. Baseline: 911 occurrences standing
+open at the cycle-226 final head (910 captured at the cycle-225
+head `db2f3605`, plus PYL-R0401 ×1 at the 226 head). DeepSource
+produced no analysis run for any cycle-227–229 head (23 capture
+attempts, all "Run does not exist", `complete=false`), so no
+analyzer-verified closing census exists; the fixed column below is
+verified by the local proxy analyzers and whole-tree rescans named
+per class, and the remaining column is a derivation from the
+baseline, labelled as such.
+
+| code | baseline | disposition |
+|---|---|---|
+| PYL-W0404 | 290 | fixed in code (pushes 4–6); pylint `reimported` sweep over package, tests, examples: zero |
+| PTC-W0063 | 103 | fixed in code (push 3) except nine sites standing open below; whole-tree AST rescan at the closing head finds exactly those nine plus the two post-baseline sites fixed in the closing push |
+| PYL-W0621 | 51 | fixed in code (push 2) |
+| PYL-W0632 | 41 | fixed in code (push 3) |
+| FLK-E501 | 23 | fixed in code (push 1) |
+| PYL-R0124 | 10 | fixed in code (push 1) |
+| TYP-022 | 4 | fixed in code (push 1) |
+| PY-W2000 | 2 | eliminated by the cycle 227/228 edits to `cli.py` (before this wave) |
+| PYL-R0201 | 2 | fixed in code in cycle 225 push 4 (before this wave) |
+| PTC-W0060 | 1 | fixed in code (push 3) |
+
+Standing open, enumerated for cycle 230 and later waves (derived
+remaining total 393): PY-R1000 ×326 (cyclomatic-complexity metric
+on measured, gate-pinned code; not a defect class this wave was
+scoped to restructure), PTC-W0046 ×9, FLK-E402 ×7, PYL-W0122 ×5,
+PYL-W1114 ×4, PYL-W0212 ×4, PYL-W0640 ×3, PYL-E0202 ×3,
+PYL-E1125 ×3, PYL-W0603 ×3, PYL-R0401 ×3, PTC-W0043 ×2,
+PYL-W0102 ×2, PYL-W0622 ×2, SCT-A000 ×1 (prose false positive;
+the record is not edited to dodge the scanner), seven singleton
+occurrences ×1 each, and the nine PTC-W0063 sites below.
+
+The nine PTC-W0063 sites standing open, each verified by the
+closing rescan: eight are mirror sites —
+`model_protocol_lab/diffreports.py` lines 4313, 4327, 19093,
+19097, 19101 and `tests/test_cycle67_diffreports_audit.py`
+lines 2110, 2125, 13670. The producer lines and the cycle-67
+oracle copies are textually paired mirror code; the lookups run
+over records the surrounding construction guarantees, and
+exhaustion fails closed (a raised error, never a wrong result).
+Fixing them honestly requires moving producer, both oracle
+mirrors, and the flip-identical gate anchor conjunction in one
+change — scoped to a later wave rather than bundled here. The
+ninth, `tests/test_cycle217_deepsource_inventory.py:90`, is not
+a defect: exhaustion there is the asserted failure path,
+converted to a test failure with its own message.
+
 ### Dependabot: filelock in the cocoindex tool lock (cycle 228)
 
 Cycle 228's hash-pinned cocoindex lock made its full transitive
