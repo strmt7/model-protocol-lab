@@ -614,7 +614,6 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
     def test_scorer_lens_dispatches_through_main(self):
         """Test scorer lens dispatches through main."""
         from model_protocol_lab import backends, doctor, experiments
-        from model_protocol_lab import reporting as reporting_mod
 
         with tempfile.TemporaryDirectory() as tmp:
             fixture_path = Path(tmp) / "fixture.json"
@@ -697,7 +696,7 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
                     )
                 )
                 stack.enter_context(
-                    mock.patch.object(reporting_mod, "prepare_report_dir", fake_prepare)
+                    mock.patch.object(reporting, "prepare_report_dir", fake_prepare)
                 )
                 out, err = io.StringIO(), io.StringIO()
                 with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):

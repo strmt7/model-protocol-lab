@@ -275,9 +275,7 @@ class TestParserMutationGate(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up the test fixture."""
-        import model_protocol_lab.confidence as _cf
-
-        cls.source = Path(_cf.__file__).read_text(encoding="utf-8")
+        cls.source = Path(confidence.__file__).read_text(encoding="utf-8")
 
     def _mutant_parse(self, original: str, mutant: str):
         """Mutant parse."""

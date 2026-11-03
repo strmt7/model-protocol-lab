@@ -1117,10 +1117,9 @@ class TestValidatorAndDiff(unittest.TestCase):
         # The fingerprint is rebuilt over the payload's own
         # components, exactly as the validator rebuilds it.
         import hashlib as _h
-        import json as _j
 
         rebuilt = {k: v for k, v in foreign["protocol"].items() if k != "fingerprint"}
-        canonical = _j.dumps(rebuilt, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        canonical = json.dumps(rebuilt, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         foreign["protocol"]["fingerprint"] = _h.sha256(canonical.encode()).hexdigest()
         self.assertTrue(_valid_distraction(foreign))
         result = diff_distraction(self.payload, foreign)

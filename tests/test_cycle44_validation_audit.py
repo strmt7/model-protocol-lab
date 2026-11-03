@@ -390,9 +390,8 @@ class ValidationConfigFileTests(unittest.TestCase):
         self.assertTrue(with_block.get("fail_ci_if_error"))
         # The repo-side config mirrors the owner's other repos: patch
         # target holds the CI gate, tests/examples are ignored.
-        import yaml as yaml2
 
-        codecov = yaml2.safe_load((REPO_ROOT / ".codecov.yml").read_text(encoding="utf-8"))
+        codecov = yaml.safe_load((REPO_ROOT / ".codecov.yml").read_text(encoding="utf-8"))
         self.assertEqual(codecov["coverage"]["status"]["patch"]["default"]["target"], "95%")
         self.assertIn("tests/", codecov["ignore"])
 

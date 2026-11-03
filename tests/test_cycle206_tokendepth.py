@@ -822,7 +822,6 @@ class TokenCliTests(unittest.TestCase):
                     )
                 )
                 from model_protocol_lab import doctor as doctor_mod
-                from model_protocol_lab import reporting as reporting_mod
 
                 stack.enter_context(
                     mock.patch.object(doctor_mod, "template_conformance", return_value={"ok": True})
@@ -842,7 +841,7 @@ class TokenCliTests(unittest.TestCase):
                     return Path(path)
 
                 stack.enter_context(
-                    mock.patch.object(reporting_mod, "prepare_report_dir", fake_prepare)
+                    mock.patch.object(reporting, "prepare_report_dir", fake_prepare)
                 )
                 argv = [
                     "run",

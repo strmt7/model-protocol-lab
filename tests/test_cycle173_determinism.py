@@ -61,10 +61,8 @@ _SENTINEL = object()
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 try:
-    import importlib.util as _ilu
-
     HAS_HF = all(
-        _ilu.find_spec(name) is not None
+        importlib.util.find_spec(name) is not None
         for name in ("torch", "transformers", "safetensors", "tokenizers")
     )
 except Exception:  # noqa: BLE001 -- availability probe only

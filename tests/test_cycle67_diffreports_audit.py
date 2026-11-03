@@ -2872,8 +2872,6 @@ def _o_dst_int(value: Any) -> bool:
 
 def _o_distraction_recompute(value: dict) -> dict | None:
     """Oracle distraction recompute: aggregates/conditions from records."""
-    import hashlib as _h
-    import json as _j
 
     protocol = value.get("protocol")
     if type(protocol) is not dict:
@@ -2927,7 +2925,9 @@ def _o_distraction_recompute(value: dict) -> dict | None:
         total += len(records)
         if total > 2400:
             return None
-        n_bytes += len(_j.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8"))
+        n_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
         if n_bytes > 12 * 1024 * 1024:
             return None
         ids: list[str] = []
@@ -3137,7 +3137,7 @@ def _o_distraction_recompute(value: dict) -> dict | None:
         }
     if fixture_ids is None:
         return None
-    fixture_sha = _h.sha256("\n".join(sorted(fixture_ids)).encode("utf-8")).hexdigest()
+    fixture_sha = hashlib.sha256("\n".join(sorted(fixture_ids)).encode("utf-8")).hexdigest()
     if protocol.get("fixture_set_sha256") != fixture_sha:
         return None
     rebuilt = {
@@ -3155,8 +3155,8 @@ def _o_distraction_recompute(value: dict) -> dict | None:
         "fixture_set_sha256": fixture_sha,
         "backend_fingerprint": protocol.get("backend_fingerprint"),
     }
-    canonical = _j.dumps(rebuilt, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    if protocol.get("fingerprint") != _h.sha256(canonical.encode("utf-8")).hexdigest():
+    canonical = json.dumps(rebuilt, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    if protocol.get("fingerprint") != hashlib.sha256(canonical.encode("utf-8")).hexdigest():
         return None
     primary_decision = value.get("primary_decision")
     primary_winner = value.get("primary_winner")
@@ -3390,13 +3390,12 @@ def _o_lead_int(item: Any) -> bool:
 
 def _o_lead_mcnemar(ctrl_only: int, treat_only: int) -> float | None:
     """O lead mcnemar."""
-    import math as _math
 
     n = ctrl_only + treat_only
     if n == 0:
         return None
     k = min(ctrl_only, treat_only)
-    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    tail = sum(math.comb(n, i) for i in range(k + 1)) / (2**n)
     return min(1.0, 2.0 * tail)
 
 
@@ -3550,8 +3549,6 @@ def _o_lead_aggregate(records: list) -> dict[str, Any]:
 
 def _o_leading_recompute(value: dict) -> dict | None:
     """Oracle leading recompute: aggregates/conditions/common from records."""
-    import hashlib as _h
-    import json as _j
 
     protocol = value.get("protocol")
     if type(protocol) is not dict:
@@ -3560,12 +3557,12 @@ def _o_leading_recompute(value: dict) -> dict | None:
         return None
     if protocol.get("claim_templates") != _O_LEADING_TEMPLATES:
         return None
-    templates_canonical = _j.dumps(
+    templates_canonical = json.dumps(
         _O_LEADING_TEMPLATES, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     )
     if (
         protocol.get("claim_templates_sha256")
-        != _h.sha256(templates_canonical.encode("utf-8")).hexdigest()
+        != hashlib.sha256(templates_canonical.encode("utf-8")).hexdigest()
     ):
         return None
     if protocol.get("donor_rule") != "smallest-eligible-id-donor-first-v1":
@@ -3607,7 +3604,9 @@ def _o_leading_recompute(value: dict) -> dict | None:
         total += len(records)
         if total > 2400:
             return None
-        n_bytes += len(_j.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8"))
+        n_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
         if n_bytes > 12 * 1024 * 1024:
             return None
         ids: list[str] = []
@@ -3714,7 +3713,7 @@ def _o_leading_recompute(value: dict) -> dict | None:
             return None
         if fields["planted_digest"] != reference[donor]["expected_digest"]:
             return None
-    fixture_sha = _h.sha256("\n".join(sorted(fixture_ids)).encode("utf-8")).hexdigest()
+    fixture_sha = hashlib.sha256("\n".join(sorted(fixture_ids)).encode("utf-8")).hexdigest()
     if protocol.get("fixture_set_sha256") != fixture_sha:
         return None
     rows = sorted(
@@ -3726,8 +3725,8 @@ def _o_leading_recompute(value: dict) -> dict | None:
         )
         for fixture, fields in reference.items()
     )
-    donor_map_sha = _h.sha256(
-        _j.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    donor_map_sha = hashlib.sha256(
+        json.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     ).hexdigest()
     if protocol.get("donor_map_sha256") != donor_map_sha:
         return None
@@ -3748,8 +3747,8 @@ def _o_leading_recompute(value: dict) -> dict | None:
         "donor_map_sha256": donor_map_sha,
         "backend_fingerprint": protocol.get("backend_fingerprint"),
     }
-    canonical = _j.dumps(rebuilt, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    if protocol.get("fingerprint") != _h.sha256(canonical.encode("utf-8")).hexdigest():
+    canonical = json.dumps(rebuilt, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    if protocol.get("fingerprint") != hashlib.sha256(canonical.encode("utf-8")).hexdigest():
         return None
     primary_decision = value.get("primary_decision")
     primary_winner = value.get("primary_winner")
@@ -4536,7 +4535,6 @@ def _o_dateline_recompute(value: Any) -> dict[str, Any] | None:
     it from literal tables -- a drift in either side's constants
     breaks the agreement the fuzz harness asserts.
     """
-    import json as _json
 
     protocol = value.get("protocol")
     if type(protocol) is not dict:
@@ -4569,7 +4567,7 @@ def _o_dateline_recompute(value: Any) -> dict[str, Any] | None:
         if total_records > dateline.MAX_GROUND_RECORDS:
             return None
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > dateline.MAX_RECORDS_BYTES:
             return None
@@ -5706,8 +5704,6 @@ def _o_placement_recompute(value: Any) -> dict[str, Any] | None:
     literal tables -- a drift in either side's constants breaks
     the agreement the fuzz harness asserts.
     """
-    import hashlib as _hashlib
-    import json as _json
 
     protocol = value.get("protocol")
     if type(protocol) is not dict:
@@ -5758,7 +5754,7 @@ def _o_placement_recompute(value: Any) -> dict[str, Any] | None:
             return None
         total += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > placement.MAX_RECORDS_BYTES:
             return None
@@ -5775,7 +5771,7 @@ def _o_placement_recompute(value: Any) -> dict[str, Any] | None:
                 return None
             if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
                 return None
-            expected_digest = _hashlib.sha256(case["value"].encode("utf-8")).hexdigest()
+            expected_digest = hashlib.sha256(case["value"].encode("utf-8")).hexdigest()
             if record["expected_digest"] != expected_digest:
                 return None
             arm_tokens = record["arm_tokens"]
@@ -6046,9 +6042,8 @@ _O_CF_AGGREGATE_KEYS = {
 
 def _o_cf_digest(text: str) -> str:
     """O cf digest."""
-    import hashlib as _hashlib
 
-    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _o_cf_digest_ok(value: Any) -> bool:
@@ -6062,15 +6057,13 @@ def _o_cf_digest_ok(value: Any) -> bool:
 
 def _o_cf_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """O cf derive."""
-    import hashlib as _hashlib
 
     material = f"{seed}|canonicalform|{index}|{slot}|{counter}"
-    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
 
 def _o_cf_generate(seed: int) -> list[dict[str, Any]]:
     """O cf generate."""
-    import unicodedata as _unicodedata
 
     cases: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -6099,8 +6092,8 @@ def _o_cf_generate(seed: int) -> list[dict[str, Any]]:
                 "value": value,
                 "sentence_indices": [first, second],
                 "content": content,
-                "nfc_content": _unicodedata.normalize("NFC", content),
-                "nfd_content": _unicodedata.normalize("NFD", content),
+                "nfc_content": unicodedata.normalize("NFC", content),
+                "nfd_content": unicodedata.normalize("NFD", content),
             }
         )
     return cases
@@ -6108,9 +6101,8 @@ def _o_cf_generate(seed: int) -> list[dict[str, Any]]:
 
 def _o_cf_case_material_sha256() -> str:
     """O cf case material sha256."""
-    import json as _json
 
-    canonical = _json.dumps(
+    canonical = json.dumps(
         [
             _O_CF_FACT,
             _O_CF_QUESTION,
@@ -6126,7 +6118,6 @@ def _o_cf_case_material_sha256() -> str:
 
 def _o_cf_ground_sha256(seed: int) -> str:
     """O cf ground sha256."""
-    import json as _json
 
     rows = [
         [
@@ -6139,13 +6130,12 @@ def _o_cf_ground_sha256(seed: int) -> str:
         ]
         for case in _o_cf_generate(seed)
     ]
-    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
     return _o_cf_digest(canonical)
 
 
 def _o_cf_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """O cf protocol."""
-    import json as _json
 
     protocol: dict[str, Any] = {
         "version": 1,
@@ -6162,20 +6152,19 @@ def _o_cf_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
         "seed": seed,
         "backend_fingerprint": backend_fingerprint,
     }
-    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     protocol["fingerprint"] = _o_cf_digest(canonical)
     return protocol
 
 
 def _o_cf_mcnemar_p(a_only: int, b_only: int) -> float | None:
     """O cf mcnemar p."""
-    import math as _math
 
     n = a_only + b_only
     if n == 0:
         return None
     k = min(a_only, b_only)
-    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    tail = sum(math.comb(n, i) for i in range(k + 1)) / (2**n)
     return min(1.0, 2.0 * tail)
 
 
@@ -6450,7 +6439,6 @@ def _o_cf_cell_ok(cell: Any, expected_digest: str) -> bool:
 
 def _o_cf_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     """O cf recompute."""
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -6486,7 +6474,7 @@ def _o_cf_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         total_records += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > _O_CF_MAX_BYTES:
             return None
@@ -6878,9 +6866,8 @@ _O_ID_COMPLIANT = ("compliant_correct", "compliant_wrong")
 
 def _o_id_digest(text: str) -> str:
     """O id digest."""
-    import hashlib as _hashlib
 
-    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _o_id_digest_ok(value: Any) -> bool:
@@ -6899,10 +6886,9 @@ def _o_id_run_digest_ok(value: Any) -> bool:
 
 def _o_id_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """O id derive."""
-    import hashlib as _hashlib
 
     material = f"{seed}|instructiondistance|{index}|{slot}|{counter}"
-    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
 
 def _o_id_generate(seed: int) -> list[dict[str, Any]]:
@@ -6926,9 +6912,8 @@ def _o_id_generate(seed: int) -> list[dict[str, Any]]:
 
 def _o_id_case_material_sha256() -> str:
     """O id case material sha256."""
-    import json as _json
 
-    canonical = _json.dumps(
+    canonical = json.dumps(
         [_O_ID_CONSTRAINT, _O_ID_FACT, _O_ID_QUESTION, list(_O_ID_TOPICS)],
         separators=(",", ":"),
         ensure_ascii=True,
@@ -6938,16 +6923,14 @@ def _o_id_case_material_sha256() -> str:
 
 def _o_id_ground_sha256(seed: int) -> str:
     """O id ground sha256."""
-    import json as _json
 
     rows = [[case["fixture_id"], case["topic"], case["value"]] for case in _o_id_generate(seed)]
-    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
     return _o_id_digest(canonical)
 
 
 def _o_id_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """O id protocol."""
-    import json as _json
 
     protocol: dict[str, Any] = {
         "version": 1,
@@ -6970,7 +6953,7 @@ def _o_id_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
         "seed": seed,
         "backend_fingerprint": backend_fingerprint,
     }
-    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     protocol["fingerprint"] = _o_id_digest(canonical)
     return protocol
 
@@ -7183,7 +7166,6 @@ def _o_id_cell_ok(cell: Any, expected_digest: str) -> bool:
 
 def _o_id_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     """O id recompute."""
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -7218,7 +7200,7 @@ def _o_id_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         total_records += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > _O_ID_MAX_BYTES:
             return None
@@ -12192,8 +12174,6 @@ def _o_rotation_recompute(value: Any) -> dict[str, Any] | None:
     literal tables -- a drift in either side's constants breaks
     the agreement the fuzz harness asserts.
     """
-    import hashlib as _hashlib
-    import json as _json
 
     protocol = value.get("protocol")
     if type(protocol) is not dict:
@@ -12248,7 +12228,7 @@ def _o_rotation_recompute(value: Any) -> dict[str, Any] | None:
             return None
         total += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > rotation.MAX_RECORDS_BYTES:
             return None
@@ -12265,7 +12245,7 @@ def _o_rotation_recompute(value: Any) -> dict[str, Any] | None:
                 return None
             if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
                 return None
-            expected_digest = _hashlib.sha256(case["values"][0].encode("utf-8")).hexdigest()
+            expected_digest = hashlib.sha256(case["values"][0].encode("utf-8")).hexdigest()
             if record["expected_digest"] != expected_digest:
                 return None
             arm_tokens = record["arm_tokens"]
@@ -12461,7 +12441,6 @@ def _o_density_recompute(value: Any) -> dict[str, Any] | None:
     literal tables -- a drift in either side's constants breaks
     the agreement the fuzz harness asserts.
     """
-    import json as _json
 
     protocol = value.get("protocol")
     if type(protocol) is not dict:
@@ -12517,7 +12496,7 @@ def _o_density_recompute(value: Any) -> dict[str, Any] | None:
             return None
         total += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > density.MAX_DENSITY_PAYLOAD_BYTES:
             return None
@@ -13054,13 +13033,12 @@ def _o_choiceaudit_recompute(value: Any) -> dict[str, Any] | None:
     float32-representable. A drift in either side's constants
     breaks the agreement.
     """
-    import math as _math
     import struct as _struct
 
     def _f32(v: float) -> float:
         """F32."""
-        if _math.isfinite(v) and abs(v) > float.fromhex("0x1.fffffep+127"):
-            return _math.copysign(_math.inf, v)
+        if math.isfinite(v) and abs(v) > float.fromhex("0x1.fffffep+127"):
+            return math.copysign(math.inf, v)
         return _struct.unpack("<f", _struct.pack("<f", v))[0]
 
     protocol = value.get("protocol")
@@ -13215,7 +13193,7 @@ def _o_choiceaudit_recompute(value: Any) -> dict[str, Any] | None:
                     for cell_value in (cell["total"], cell["mean"]):
                         if (
                             type(cell_value) is not float
-                            or not _math.isfinite(cell_value)
+                            or not math.isfinite(cell_value)
                             or _f32(cell_value) != cell_value
                         ):
                             return None
@@ -13407,7 +13385,6 @@ def _o_precision_recompute(value: Any) -> dict[str, Any] | None:
     independently here. A drift in either side's constants
     breaks the agreement.
     """
-    from model_protocol_lab import precision as _prec
 
     def _dig(v: Any) -> bool:
         """Dig."""
@@ -13490,7 +13467,7 @@ def _o_precision_recompute(value: Any) -> dict[str, Any] | None:
         return None
     if protocol["declared_dtype"] is not None and type(protocol["declared_dtype"]) is not str:
         return None
-    if protocol["fingerprint"] != _prec.protocol_fingerprint(protocol):
+    if protocol["fingerprint"] != precision.protocol_fingerprint(protocol):
         return None
     decision = value.get("primary_decision")
     winner = value.get("primary_winner")
@@ -13687,7 +13664,7 @@ def _o_precision_recompute(value: Any) -> dict[str, Any] | None:
             if not completed:
                 return None
             all_pass[cand] = all(
-                _prec.cell_verdict(
+                precision.cell_verdict(
                     cells_by_fixture[f],
                     str(
                         next(
@@ -13885,7 +13862,6 @@ def _o_confidence_recompute(value: Any) -> dict[str, Any] | None:
     (compliance, joint tables, gap, bins, flips, knowability)
     is mirrored independently here.
     """
-    from model_protocol_lab import confidence as _cf
 
     def _dig(v: Any) -> bool:
         """Dig."""
@@ -14066,9 +14042,9 @@ def _o_confidence_recompute(value: Any) -> dict[str, Any] | None:
             "no_user_turn",
         }:
             return None
-    if protocol["control_cases"] != _cf.case_protocol(protocol["seed"]):
+    if protocol["control_cases"] != confidence.case_protocol(protocol["seed"]):
         return None
-    if protocol["fingerprint"] != _cf.protocol_fingerprint(protocol):
+    if protocol["fingerprint"] != confidence.protocol_fingerprint(protocol):
         return None
     decision = value.get("primary_decision")
     winner = value.get("primary_winner")
@@ -20474,11 +20450,10 @@ class _FuzzMultiturnBackend:
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
         """Generate."""
-        import re as _re
 
         text = self.decode(list(input_ids))
-        entries = [int(v) for v in _re.findall(r"Ledger entry: (-?\d+)\.", text)]
-        shelves = _re.findall(r"Shelf ([ABC]) holds (\d+) units\.", text)
+        entries = [int(v) for v in re.findall(r"Ledger entry: (-?\d+)\.", text)]
+        shelves = re.findall(r"Shelf ([ABC]) holds (\d+) units\.", text)
         if "What is the ledger total?" in text:
             answer = str(sum(entries) + (1 if self.fail_deep and len(entries) >= 3 else 0))
         elif "Which shelf holds the most units?" in text:
@@ -20571,10 +20546,9 @@ class _FuzzNeedleBackend:
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
         """Generate."""
-        import re as _re
 
         text = self.decode(list(input_ids))
-        found = _re.findall(r"code is ([a-z]+-\d+)\.", text)
+        found = re.findall(r"code is ([a-z]+-\d+)\.", text)
         if found:
             answer = found[-1]
             if self.mode == "midfail" and len(text) > 1000:
@@ -20667,10 +20641,9 @@ class _FuzzPlacementBackend:
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
         """Generate."""
-        import re as _re
 
         text = self.decode(list(input_ids))
-        found = _re.findall(r"inspection code is ([a-z]+-\d+)\.", text)
+        found = re.findall(r"inspection code is ([a-z]+-\d+)\.", text)
         if found:
             answer = found[-1]
             if self.mode == "payloadfirst_fail":
@@ -20764,14 +20737,13 @@ class _FuzzRotationBackend:
 
     def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
         """Generate."""
-        import re as _re
 
         text = self.decode(list(input_ids))
-        asked = _re.search(r"What is the (.+?) access code\?", text)
+        asked = re.search(r"What is the (.+?) access code\?", text)
         answer = "unknown"
         if asked is not None:
             topic = asked.group(1)
-            facts = _re.findall(r"The (.+?) access code is ([a-z]+-\d+)\.", text)
+            facts = re.findall(r"The (.+?) access code is ([a-z]+-\d+)\.", text)
             for fact_topic, value in facts:
                 if fact_topic == topic:
                     answer = value
@@ -21407,7 +21379,7 @@ def _fuzz_confidentiality_section(rng: random.Random) -> dict[str, Any]:
     # hostile mutations then try to break them, and oracle and
     # implementation must agree on every rejection.
     """Fuzz confidentiality section."""
-    from model_protocol_lab import confidentiality as _cf
+    from model_protocol_lab import confidentiality as confidence
 
     def _det(leak_p: float) -> dict[str, Any]:
         """Det."""
@@ -21431,7 +21403,7 @@ def _fuzz_confidentiality_section(rng: random.Random) -> dict[str, Any]:
             }
             for _ in range(12)
         ]
-        entry = _cf.confidentiality_cell(pairs)
+        entry = confidence.confidentiality_cell(pairs)
         if rng.random() < 0.1:
             entry["gap"] = 0.99  # hostile: stale/inconsistent gap
         if rng.random() < 0.1:
@@ -21445,7 +21417,9 @@ def _fuzz_confidentiality_section(rng: random.Random) -> dict[str, Any]:
         per_candidate[name] = entry
     if rng.random() < 0.15:
         per_candidate[rng.choice([7, 8.5])] = {"n": 12}  # hostile: non-string key
-    profile = _cf.confidentiality_profile(("alpha", "beta"), per_candidate, _cf.protocol_dict())
+    profile = confidence.confidentiality_profile(
+        ("alpha", "beta"), per_candidate, confidence.protocol_dict()
+    )
     profile["n_fixtures"] = rng.choice([12, 12, 12, 0, -1, "12"])
     if rng.random() < 0.2:
         profile["protocol"] = {"fingerprint": rng.choice(["x" * 64, 7, None])}
@@ -22048,7 +22022,6 @@ class CanonicalFormOracleAgreementTests(unittest.TestCase):
 
     def _backend(self, mode="perfect", fail_count=0):
         """Backend."""
-        import re as _re
 
         class _WordBackend:
             """Word backend."""
@@ -22081,14 +22054,13 @@ class CanonicalFormOracleAgreementTests(unittest.TestCase):
 
             def generate(self, input_ids, *, max_new_tokens, seed=None, cancel=None):
                 """Generate."""
-                import unicodedata as _unicodedata
 
                 text = self.decode(list(input_ids))
-                found = _re.findall(r"inspection code is (\S+?)\.", text)
+                found = re.findall(r"inspection code is (\S+?)\.", text)
                 answer = found[-1] if found else "unknown"
                 if (
                     self.mode == "nfd_fail"
-                    and _unicodedata.normalize("NFC", text) != text
+                    and unicodedata.normalize("NFC", text) != text
                     and self.nfd_fails < self.fail_count
                 ):
                     self.nfd_fails += 1

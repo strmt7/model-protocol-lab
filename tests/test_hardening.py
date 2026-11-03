@@ -799,12 +799,11 @@ class AdversarialLoaderTests(unittest.TestCase):
     @settings(max_examples=500, suppress_health_check=[HealthCheck.differing_executors])
     def test_loader_never_crashes_on_adversarial_json(self, data):
         """Test loader never crashes on adversarial json."""
-        import json as _json
 
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "adv.json"
             try:
-                text = _json.dumps(data, allow_nan=False)
+                text = json.dumps(data, allow_nan=False)
             except (ValueError, TypeError):
                 return  # not representable; nothing to test
             path.write_text(text, encoding="utf-8")
@@ -934,11 +933,10 @@ class InspectDiagnosticTests(unittest.TestCase):
 
     def test_inspect_reports_validation_reason(self):
         """Test inspect reports validation reason."""
-        import json as _json
 
         with TemporaryDirectory() as tmp:
             bad = Path(tmp) / "bad.json"
-            bad.write_text(_json.dumps({"search": [], "held_out": []}), encoding="utf-8")
+            bad.write_text(json.dumps({"search": [], "held_out": []}), encoding="utf-8")
             with redirect_stdout(io.StringIO()), patch("sys.stderr", io.StringIO()) as err:
                 code = main(["inspect", str(bad)])
             self.assertEqual(code, 1)

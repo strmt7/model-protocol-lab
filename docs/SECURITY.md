@@ -689,6 +689,19 @@ extraction for degenerate names, the verify CLI's digest argument
 validation, and the healing pipeline's fixed-code errors on failing
 injected callables) to hold the coverage floor honestly.
 
+Fixed in code in the following push: PYL-W0404 ×83 (the aliased
+class in tests — ×80 across 13 files, plus three sites fixed by
+hand: a module-level `importlib.util` probe in
+`tests/test_cycle173_determinism.py` whose plain import already
+existed, a module-level `reporting` alias in
+`tests/test_cycle174_refusals.py` duplicating the group import, and
+a `setUpClass` `confidence` import in
+`tests/test_cycle199_confidence.py` duplicating the module import).
+With the two earlier pushes of this wave, every adjudicated
+PYL-W0404 site (×290: 90 redundant, 200 aliased) is fixed in code;
+a pylint sweep for `reimported` over the package, tests and
+examples reports zero.
+
 ### Dependabot: filelock in the cocoindex tool lock (cycle 228)
 
 Cycle 228's hash-pinned cocoindex lock made its full transitive

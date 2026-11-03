@@ -46,7 +46,6 @@ from unittest import mock
 from model_protocol_lab import backends, diffreports, experiments, refusals, reporting
 from model_protocol_lab import cli as cli_module
 from model_protocol_lab import doctor as doctor_mod
-from model_protocol_lab import reporting as reporting_mod
 from model_protocol_lab.cli import main as cli_main
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -1055,9 +1054,7 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
                 Path(path).mkdir(parents=True, exist_ok=False)
                 return Path(path)
 
-            patches.enter_context(
-                mock.patch.object(reporting_mod, "prepare_report_dir", fake_prepare)
-            )
+            patches.enter_context(mock.patch.object(reporting, "prepare_report_dir", fake_prepare))
             argv = [
                 "run",
                 "--model",
