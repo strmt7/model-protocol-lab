@@ -266,9 +266,9 @@ def block_text(date_string: str) -> str:
     return BLOCK_TEMPLATE.replace("{DATE}", date_string)
 
 
-def control_block(neutral_text: str) -> str:
+def control_block(neutral: str) -> str:
     """The control block: same envelope, sized neutral text."""
-    return CONTROL_TEMPLATE.replace("{NEUTRAL}", neutral_text)
+    return CONTROL_TEMPLATE.replace("{NEUTRAL}", neutral)
 
 
 def neutral_text(reps: int, cut: int) -> str:

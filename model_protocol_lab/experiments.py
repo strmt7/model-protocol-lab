@@ -6934,7 +6934,6 @@ def repetition_stage(
 def _fixture_with_content(fixture: Any, content: str) -> Any:
     """A copy of ``fixture`` whose target message carries ``content``."""
     from . import repetition as _rep
-    from .core import Fixture, Message
 
     index = _rep.target_index(fixture)
     messages = tuple(
@@ -8313,7 +8312,6 @@ def _multiturn_turn(
     digests only.
     """
     from . import multiturn as _mt
-    from .core import Fixture
 
     fixture = Fixture(id=case_id, messages=messages, expected=expected, group=_mt.GROUP)
     ids = tuple(backend.encode(fmt.render(fixture.messages)))
@@ -8371,7 +8369,6 @@ def multiturn_stage(
     docs/MULTITURN_DESIGN.md.
     """
     from . import multiturn as _mt
-    from .core import Message
     from .fixtures import audit_special_token_literals
 
     if type(formats) is not tuple or not formats:
@@ -8735,7 +8732,6 @@ def _needle_run_cell(
     ``cell_details`` and the cell itself stays None.
     """
     from . import needle as _nd
-    from .core import Fixture, Message
 
     if any(_nd.filler_screened(span, value, boundary_text) for span in spans if span):
         record["cell_details"][key] = "arm_screened"
@@ -8795,7 +8791,6 @@ def needle_stage(
     fail-closed payload. Design: docs/NEEDLE_DESIGN.md.
     """
     from . import needle as _nd
-    from .core import Fixture, Message
     from .distraction import NEUTRAL_CORPUS, span_candidates, span_text
     from .fixtures import audit_special_token_literals
 
@@ -9317,7 +9312,6 @@ def placement_stage(
     fail-closed payload. Design: docs/PLACEMENT_DESIGN.md.
     """
     from . import placement as _pl
-    from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
     if type(formats) is not tuple or not formats:
@@ -9573,7 +9567,6 @@ def canonicalform_stage(
     Design: docs/CANONICALFORM_DESIGN.md.
     """
     from . import canonicalform as _cf
-    from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
     if type(formats) is not tuple or not formats:
@@ -9859,7 +9852,6 @@ def negation_stage(
     Design: docs/NEGATION_DESIGN.md.
     """
     from . import negation as _ng
-    from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
     from .numform import margin_class
 
@@ -10188,7 +10180,6 @@ def instruction_distance_stage(
     docs/INSTRUCTIONDISTANCE_DESIGN.md.
     """
     from . import instructiondistance as _id
-    from .core import Fixture, Message
     from .distraction import NEUTRAL_CORPUS, span_candidates, span_text
     from .fixtures import audit_special_token_literals
 
@@ -10589,7 +10580,6 @@ def history_frame_stage(
     docs/HISTORYFRAME_DESIGN.md.
     """
     from . import historyframe as _hf
-    from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
     from .synthhistory import SYNTHETIC_TURNS
 
@@ -10964,7 +10954,6 @@ def prune_sweep_stage(
     Design: docs/PRUNESWEEP_DESIGN.md.
     """
     from . import prunesweep as _ps
-    from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
     if type(formats) is not tuple or not formats:
@@ -11274,7 +11263,6 @@ def record_notation_stage(
     docs/PAYLOADSERIALIZATION_DESIGN.md.
     """
     from . import recordnotation as _rn
-    from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
     if type(formats) is not tuple or not formats:
@@ -11602,7 +11590,6 @@ def invisible_chars_stage(
     docs/INVISIBLECHARS_DESIGN.md.
     """
     from . import invisiblechars as _ic
-    from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
     if type(formats) is not tuple or not formats:
@@ -11965,7 +11952,6 @@ def confusable_skeleton_stage(
     docs/CONFUSABLESKELETON_DESIGN.md.
     """
     from . import confusableskeleton as _cs
-    from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
     if type(formats) is not tuple or not formats:
@@ -12317,7 +12303,6 @@ def rotation_stage(
     payload. Design: docs/ROTATION_DESIGN.md.
     """
     from . import rotation as _rot
-    from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
     if type(formats) is not tuple or not formats:
@@ -12586,7 +12571,6 @@ def density_stage(
     docs/DENSITY_DESIGN.md.
     """
     from . import density as _den
-    from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
 
     if type(formats) is not tuple or not formats:
@@ -12853,7 +12837,6 @@ def fieldorder_stage(
     docs/FIELDORDER_DESIGN.md.
     """
     from . import fieldorder as _fo
-    from .core import Fixture, Message
     from .fixtures import audit_special_token_literals
     from .structured import _canonical_json
 
@@ -14129,7 +14112,6 @@ def answer_collision_stage(
         score_observation,
         subword_emission,
     )
-    from .core import Fixture, Message, first_boundary
 
     if backend is None:
         raise ValueError("backend must not be None")
@@ -14737,7 +14719,6 @@ def _precision_logprob(backend: Any, prompt_ids: tuple[int, ...], expected: str)
     any non-ok score (alignment, provider, context) degrades this
     cell's logprob to None -- never a stage failure, never a guess.
     """
-    from .scoring import score_target_logprobs
 
     if not callable(getattr(backend, "forward_logits", None)):
         return None

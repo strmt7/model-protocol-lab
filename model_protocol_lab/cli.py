@@ -1780,7 +1780,7 @@ def _run_ws_probe(
         )
         from .wscanonical import MUTATIONS
 
-        candidates = tuple(fmt.name for fmt in formats)
+        format_names = tuple(fmt.name for fmt in formats)
         stage = ws_stage(
             backend,
             formats,
@@ -1792,10 +1792,10 @@ def _run_ws_probe(
             seed=seed,
         )
         result["ws_canonical"] = ws_canonicalization(
-            native_search_outcomes(result.get("search") or [], candidates),
-            native_search_input_ids(result.get("search") or [], candidates),
+            native_search_outcomes(result.get("search") or [], format_names),
+            native_search_input_ids(result.get("search") or [], format_names),
             stage,
-            candidates,
+            format_names,
         )
     except Exception:  # noqa: BLE001 -- ws-scan probe must not fail the run
         result["ws_canonical"] = {
@@ -1877,7 +1877,7 @@ def _run_deliforge_probe(
     try:
         from .experiments import deliforge_authority, deliforge_stage, native_search_outcomes
 
-        candidates = tuple(fmt.name for fmt in formats)
+        format_names = tuple(fmt.name for fmt in formats)
         stage = deliforge_stage(
             backend,
             formats,
@@ -1888,9 +1888,9 @@ def _run_deliforge_probe(
             seed=seed,
         )
         result["deliforge"] = deliforge_authority(
-            native_search_outcomes(result.get("search") or [], candidates),
+            native_search_outcomes(result.get("search") or [], format_names),
             stage,
-            candidates,
+            format_names,
         )
     except Exception:  # noqa: BLE001 -- deliforge probe must not fail the run
         result["deliforge"] = {
@@ -1923,7 +1923,7 @@ def _run_faketurn_probe(
     try:
         from .experiments import faketurn_robustness, faketurn_stage, native_search_outcomes
 
-        candidates = tuple(fmt.name for fmt in formats)
+        format_names = tuple(fmt.name for fmt in formats)
         stage = faketurn_stage(
             backend,
             formats,
@@ -1934,9 +1934,9 @@ def _run_faketurn_probe(
             seed=seed,
         )
         result["faketurn"] = faketurn_robustness(
-            native_search_outcomes(result.get("search") or [], candidates),
+            native_search_outcomes(result.get("search") or [], format_names),
             stage,
-            candidates,
+            format_names,
         )
     except Exception:  # noqa: BLE001 -- faketurn probe must not fail the run
         result["faketurn"] = {
@@ -1974,7 +1974,7 @@ def _run_toolcall_probe(
         )
 
         queries = validate_toolcall_queries(TOOLCALL_QUERIES)
-        candidates = tuple(fmt.name for fmt in formats)
+        format_names = tuple(fmt.name for fmt in formats)
         # Floor the token budget: the longest canonical call is 79
         # characters, and real tokenizers may split JSON punctuation,
         # so the probe must not let an unrelated budget parameter
@@ -1990,7 +1990,7 @@ def _run_toolcall_probe(
             max_new_tokens=max(128, max_new_tokens),
             seed=seed,
         )
-        result["toolcall"] = toolcall_adherence(candidates, stage)
+        result["toolcall"] = toolcall_adherence(format_names, stage)
     except Exception:  # noqa: BLE001 -- toolcall probe must not fail the run
         result["toolcall"] = {
             "available": False,
@@ -2031,14 +2031,14 @@ def _run_verbosity_probe(
                 continue
             observations.extend(o for o in entry_obs if type(o) is dict)
         expected_by_fixture = {f.id: f.expected for f in search_fixtures}
-        candidates = tuple(fmt.name for fmt in formats)
+        format_names = tuple(fmt.name for fmt in formats)
         stage = verbosity_stage(
             observations=observations,
             expected_by_fixture=expected_by_fixture,
             backend=backend,
             max_new_tokens=max_new_tokens,
         )
-        result["verbosity"] = verbosity_profile(candidates, stage)
+        result["verbosity"] = verbosity_profile(format_names, stage)
     except Exception:  # noqa: BLE001 -- verbosity probe must not fail the run
         result["verbosity"] = {
             "available": False,
@@ -3211,12 +3211,12 @@ def _run_cache_profile_probe(
             if type(entry_obs) is not list:
                 continue
             observations.extend(o for o in entry_obs if type(o) is dict)
-        candidates = tuple(fmt.name for fmt in formats)
+        format_names = tuple(fmt.name for fmt in formats)
         stage = cache_profile_stage(
             observations=observations,
             block_size=block_size,
         )
-        result["cache_profile"] = cache_profile_profile(candidates, stage)
+        result["cache_profile"] = cache_profile_profile(format_names, stage)
     except Exception:  # noqa: BLE001 -- cache-profile probe must not fail the run
         result["cache_profile"] = {
             "available": False,
@@ -3262,8 +3262,8 @@ def _run_confidentiality_probe(
             max_new_tokens=max_new_tokens,
             seed=seed,
         )
-        candidates = tuple(fmt.name for fmt in formats)
-        result["confidentiality"] = confidentiality_profile(candidates, stage)
+        format_names = tuple(fmt.name for fmt in formats)
+        result["confidentiality"] = confidentiality_profile(format_names, stage)
     except Exception:  # noqa: BLE001 -- confidentiality probe must not fail the run
         result["confidentiality"] = {
             "available": False,
@@ -3301,8 +3301,8 @@ def _run_answer_collision_probe(
             boundary_map=boundary_map,
             seed=seed,
         )
-        candidates = tuple(fmt.name for fmt in formats)
-        result["answer_collision"] = answer_collision_profile(candidates, stage)
+        format_names = tuple(fmt.name for fmt in formats)
+        result["answer_collision"] = answer_collision_profile(format_names, stage)
     except Exception:  # noqa: BLE001 -- answer-collision audit must not fail the run
         result["answer_collision"] = {
             "available": False,

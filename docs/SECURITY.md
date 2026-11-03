@@ -641,6 +641,15 @@ TYP-022 ×4 (`tools/agent_context.py` return annotations completed to
 already eliminated by the cycle 227/228 edits to that file; pyflakes
 over the current tree is clean there.
 
+Fixed in code in the following push: PYL-W0621 ×51 (names redefined
+from an outer scope, all in shipped code — function-local reimports
+of module-level bindings deleted in `experiments.py` and
+`doctor.py`, and shadowing locals/parameters renamed in `cli.py`,
+`dateline.py`, `repetition.py`, and `backends.py`). Two tests were
+added for previously uncovered branches of the CLI contamination
+warning (the ten-pair print cap and the non-dict pair skip), each
+verified to fail against its targeted mutant.
+
 ### Dependabot: filelock in the cocoindex tool lock (cycle 228)
 
 Cycle 228's hash-pinned cocoindex lock made its full transitive

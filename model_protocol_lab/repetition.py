@@ -167,7 +167,7 @@ def is_echo_fixture(fixture: Fixture) -> bool:
     return bool(expected) and expected in target_content(fixture)
 
 
-def build_arm_fixture(fixture: Fixture, arm: str, filler_text: str = "") -> Fixture:
+def build_arm_fixture(fixture: Fixture, arm: str, filler: str = "") -> Fixture:
     """A copy of ``fixture`` with the target content surgically rewritten.
 
     Same id (request seeds stay paired across arms), same group and
@@ -178,7 +178,7 @@ def build_arm_fixture(fixture: Fixture, arm: str, filler_text: str = "") -> Fixt
     if arm == "x2":
         new_content = content + JOINER + content
     elif arm == "pad":
-        new_content = content + JOINER + filler_text
+        new_content = content + JOINER + filler
     elif arm == "x1":
         new_content = content
     else:
