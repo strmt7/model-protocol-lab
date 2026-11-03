@@ -36,6 +36,7 @@ renders exactly the hand-derived expected values (see checks below).
 import copy
 import hashlib
 import importlib
+import itertools
 import json
 import os
 import re
@@ -1151,7 +1152,7 @@ def check_no_caller_mutation(mod, tc):
             tc.assertEqual(result, snapshot)
 
 
-_FRESH_COUNTER = 0
+_FRESH_COUNTER = itertools.count(1)
 
 
 def _fresh(tag):
@@ -1159,10 +1160,8 @@ def _fresh(tag):
     root. save_report refuses existing leaves (O_EXCL), so the path must not
     exist until save_report creates it.
     """
-    global _FRESH_COUNTER
     _SCRATCH.mkdir(parents=True, exist_ok=True)
-    _FRESH_COUNTER += 1
-    return _SCRATCH / f"c75_{tag}_{os.getpid()}_{_FRESH_COUNTER}"
+    return _SCRATCH / f"c75_{tag}_{os.getpid()}_{next(_FRESH_COUNTER)}"
 
 
 # ---------------------------------------------------------------------------

@@ -28,32 +28,32 @@ class CrawlerContracts(unittest.TestCase):
         Inputs: Resolver outcomes
         Outputs: Isolation checks.
         """
+
+        def make_resolver(observed, home, failure):
+            """Build the resolver fake bound to one iteration's values."""
+
+            def resolve(command, env, timeout=900):
+                """Purpose: Inspect the resolver boundary
+                Inputs: Actual argv/env
+                Outputs: Result or error.
+                """
+                observed.append(command)
+                self.assertTrue(Path(command[0]).parent.parent.is_relative_to(home))
+                self.assertIn("--dry-run", command)
+                self.assertIn("--ignore-installed", command)
+                self.assertNotIn("--no-deps", command)
+                self.assertEqual(command[-2:], ["-r", str(tool.LOCK)])
+                self.assertEqual(env["PYTHONNOUSERSITE"], "1")
+                if failure:
+                    raise subprocess.CalledProcessError(1, command)
+
+            return resolve
+
         for failure in (False, True):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temp:
                 home = Path(temp)
                 observed = []
-
-                def resolve(
-                    command,
-                    env,
-                    timeout=900,
-                    _calls=observed,
-                    _home=home,
-                    _failure=failure,
-                ):
-                    """Purpose: Inspect the resolver boundary
-                    Inputs: Actual argv/env
-                    Outputs: Result or error.
-                    """
-                    _calls.append(command)
-                    self.assertTrue(Path(command[0]).parent.parent.is_relative_to(_home))
-                    self.assertIn("--dry-run", command)
-                    self.assertIn("--ignore-installed", command)
-                    self.assertNotIn("--no-deps", command)
-                    self.assertEqual(command[-2:], ["-r", str(tool.LOCK)])
-                    self.assertEqual(env["PYTHONNOUSERSITE"], "1")
-                    if _failure:
-                        raise subprocess.CalledProcessError(1, command)
+                resolve = make_resolver(observed, home, failure)
 
                 with (
                     patch.object(tool.venv, "EnvBuilder") as builder,

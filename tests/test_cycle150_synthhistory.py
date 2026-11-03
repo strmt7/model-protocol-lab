@@ -1267,17 +1267,24 @@ class SynthhistoryValidatorTests(unittest.TestCase):
         """Mutants."""
         good = _synthhistory_payload()
         cond = good["per_condition"]["history_2"]
-        mutants = []
-        mutants.append(("not_a_dict", "nope"))
-        mutants.append(("available_false", {**good, "available": False}))
-        mutants.append(("bad_decision", {**good, "primary_decision": 7}))
-        mutants.append(("bad_winner", {**good, "primary_winner": 7}))
-        mutants.append(("bad_n_fixtures", {**good, "n_fixtures": 0}))
-        mutants.append(("bad_conditions", {**good, "conditions": "history_2"}))
-        mutants.append(("empty_conditions", {**good, "conditions": []}))
-        mutants.append(("conditions_mismatch", {**good, "per_condition": {"history_2": cond}}))
         bad_cond = dict(cond, decision=7)
-        mutants.append(
+        bad_cond2 = dict(cond, winner=7)
+        bad_cond3 = dict(cond, n_evaluable=-1)
+        bad_cand = dict(cond["per_candidate"], alpha="nope")
+        bad_cond4 = dict(cond, per_candidate=bad_cand)
+        bad_cand2 = dict(cond["per_candidate"], alpha={"pass_rate": "high", "pass": True})
+        bad_cond5 = dict(cond, per_candidate=bad_cand2)
+        bad_cand3 = dict(cond["per_candidate"], alpha={"pass_rate": 1.0, "pass": "yes"})
+        bad_cond6 = dict(cond, per_candidate=bad_cand3)
+        return [
+            ("not_a_dict", "nope"),
+            ("available_false", {**good, "available": False}),
+            ("bad_decision", {**good, "primary_decision": 7}),
+            ("bad_winner", {**good, "primary_winner": 7}),
+            ("bad_n_fixtures", {**good, "n_fixtures": 0}),
+            ("bad_conditions", {**good, "conditions": "history_2"}),
+            ("empty_conditions", {**good, "conditions": []}),
+            ("conditions_mismatch", {**good, "per_condition": {"history_2": cond}}),
             (
                 "bad_cond_decision",
                 {
@@ -1287,10 +1294,7 @@ class SynthhistoryValidatorTests(unittest.TestCase):
                         "history_6": good["per_condition"]["history_6"],
                     },
                 },
-            )
-        )
-        bad_cond2 = dict(cond, winner=7)
-        mutants.append(
+            ),
             (
                 "bad_cond_winner",
                 {
@@ -1300,10 +1304,7 @@ class SynthhistoryValidatorTests(unittest.TestCase):
                         "history_6": good["per_condition"]["history_6"],
                     },
                 },
-            )
-        )
-        bad_cond3 = dict(cond, n_evaluable=-1)
-        mutants.append(
+            ),
             (
                 "bad_n_evaluable",
                 {
@@ -1313,11 +1314,7 @@ class SynthhistoryValidatorTests(unittest.TestCase):
                         "history_6": good["per_condition"]["history_6"],
                     },
                 },
-            )
-        )
-        bad_cand = dict(cond["per_candidate"], alpha="nope")
-        bad_cond4 = dict(cond, per_candidate=bad_cand)
-        mutants.append(
+            ),
             (
                 "bad_candidate_entry",
                 {
@@ -1327,11 +1324,7 @@ class SynthhistoryValidatorTests(unittest.TestCase):
                         "history_6": good["per_condition"]["history_6"],
                     },
                 },
-            )
-        )
-        bad_cand2 = dict(cond["per_candidate"], alpha={"pass_rate": "high", "pass": True})
-        bad_cond5 = dict(cond, per_candidate=bad_cand2)
-        mutants.append(
+            ),
             (
                 "bad_pass_rate",
                 {
@@ -1341,11 +1334,7 @@ class SynthhistoryValidatorTests(unittest.TestCase):
                         "history_6": good["per_condition"]["history_6"],
                     },
                 },
-            )
-        )
-        bad_cand3 = dict(cond["per_candidate"], alpha={"pass_rate": 1.0, "pass": "yes"})
-        bad_cond6 = dict(cond, per_candidate=bad_cand3)
-        mutants.append(
+            ),
             (
                 "bad_pass_flag",
                 {
@@ -1355,13 +1344,12 @@ class SynthhistoryValidatorTests(unittest.TestCase):
                         "history_6": good["per_condition"]["history_6"],
                     },
                 },
-            )
-        )
-        mutants.append(("bad_flips", {**good, "flips": "nope"}))
-        mutants.append(("bad_flip_entry", {**good, "flips": ["nope"]}))
-        mutants.append(("bad_groups", {**good, "group_pass_rates": "nope"}))
-        mutants.append(("bad_group_entry", {**good, "group_pass_rates": {"explicit": "nope"}}))
-        return mutants
+            ),
+            ("bad_flips", {**good, "flips": "nope"}),
+            ("bad_flip_entry", {**good, "flips": ["nope"]}),
+            ("bad_groups", {**good, "group_pass_rates": "nope"}),
+            ("bad_group_entry", {**good, "group_pass_rates": {"explicit": "nope"}}),
+        ]
 
     def test_hostile_payloads_degrade_to_asymmetric(self):
         """Test hostile payloads degrade to asymmetric."""

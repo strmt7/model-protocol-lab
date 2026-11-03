@@ -2022,6 +2022,11 @@ class FailClosedCoverageWave6Tests(unittest.TestCase):
             fingerprint = "wave6-cancel-on-last/v1"
 
             def __init__(self):
+                super().__init__()
+                # The base init computes the stock self-test
+                # fingerprint; this double's identity is the wave-6
+                # one declared above.
+                self.fingerprint = "wave6-cancel-on-last/v1"
                 self.calls = 0
 
             def generate(self, input_ids, *, max_new_tokens, seed, cancel):

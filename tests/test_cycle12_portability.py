@@ -154,13 +154,19 @@ class CompatibilityProbeTests(unittest.TestCase):
 
     def test_unknown_when_encode_returns_garbage(self):
         """Test unknown when encode returns garbage."""
+
+        def make_encoder(value):
+            """Build an encoder returning the scripted garbage value."""
+
+            def encode(text):
+                """Encode."""
+                return value
+
+            return encode
+
         for bad in (["not-a-tuple"], (1, -2), ()):
             with self.subTest(bad=bad):
-
-                def encode(text, bad=bad):
-                    """Encode."""
-                    return bad
-
+                encode = make_encoder(bad)
                 result = template_tokenizer_compatibility(
                     "chatml", ("<|im_start|>",), {"<|im_start|>": 3}, encode
                 )

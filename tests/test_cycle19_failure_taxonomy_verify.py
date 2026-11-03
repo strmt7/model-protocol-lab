@@ -712,14 +712,12 @@ class TaxonomyFuzzTests(unittest.TestCase):
 # a directory (a fixed name raced: one process's rmtree deleted the other's
 # in-use package copies -> import failures).
 _MUTANT_ROOT = Path(tempfile.gettempdir()) / f"mpl_cycle19_taxonomy_mutants_{os.getpid()}"
-_MUTANT_PATH_READY = False
 
 
 def _build_mutant(package_name, replacements):
     """Copy the package under a fresh top-level name, apply textual mutations
     to its experiments.py, and import the mutated module.
     """
-    global _MUTANT_PATH_READY
     src = Path(real.__file__).resolve().parent
     dest = _MUTANT_ROOT / package_name
     if dest.exists():
@@ -732,9 +730,8 @@ def _build_mutant(package_name, replacements):
         assert found == expected_count, (package_name, old[:60], found, expected_count)
         text = text.replace(old, new)
     path.write_text(text, encoding="utf-8")
-    if not _MUTANT_PATH_READY:
+    if str(_MUTANT_ROOT) not in sys.path:
         sys.path.insert(0, str(_MUTANT_ROOT))
-        _MUTANT_PATH_READY = True
     return importlib.import_module(f"{package_name}.experiments")
 
 

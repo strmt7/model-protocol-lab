@@ -395,9 +395,9 @@ class AggregateTests(unittest.TestCase):
     """
 
     @staticmethod
-    def _records(count: int, **kwargs):
+    def _records(count: int, *, own, foreign, **kwargs):
         """Build synthetic records with per-record cell kwargs."""
-        return [_record(f"fx-{i:02d}", **kwargs) for i in range(count)]
+        return [_record(f"fx-{i:02d}", own=own, foreign=foreign, **kwargs) for i in range(count)]
 
     def test_render_identical_contrast_is_inapplicable(self):
         """A render-identical contrast is marked inapplicable."""
@@ -1242,7 +1242,6 @@ class GapValidatorBatteryTests(unittest.TestCase):
     def test_candidate_cap_rejected(self):
         """A candidate set past the cap is rejected."""
         forged = copy.deepcopy(self.payload)
-        entry = forged["candidates"]["chatml"]
         for i in range(24):
             forged["candidates"][f"extra-{i:02d}"] = {
                 "status": "unavailable",
@@ -1250,7 +1249,6 @@ class GapValidatorBatteryTests(unittest.TestCase):
                 "records": [],
             }
         self.assertFalse(diffreports._valid_history_frame(forged))
-        del entry
 
     def test_diff_candidates_added_removed_and_stratum_drift(self):
         """Diffing detects added and removed candidates and stratum drift."""

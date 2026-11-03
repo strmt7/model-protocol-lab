@@ -27,8 +27,9 @@ class _BurnTokenizer:
     ) -> str:
         """Apply chat template."""
         end = time.monotonic() + self._seconds
+        ticks = 0
         while time.monotonic() < end:
-            pass
+            ticks += 1
         return "burned"
 
 
