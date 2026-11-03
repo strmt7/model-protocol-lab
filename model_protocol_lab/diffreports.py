@@ -4687,8 +4687,6 @@ def _repetition_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     not verifiability against fabricated records (the aliasing
     standard). Returns None on any structural defect.
     """
-    import hashlib as _hashlib
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -4810,7 +4808,7 @@ def _repetition_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     if total_records > 2400 or fixture_ids is None:
         return None
     try:
-        fixture_hash = _hashlib.sha256("\n".join(fixture_ids).encode("utf-8")).hexdigest()
+        fixture_hash = hashlib.sha256("\n".join(fixture_ids).encode("utf-8")).hexdigest()
     except UnicodeEncodeError:
         return None  # lone-surrogate fixture id: fail closed (F6)
     if protocol["fixture_set_sha256"] != fixture_hash:
@@ -4824,8 +4822,8 @@ def _repetition_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         "fixture_set_sha256": protocol["fixture_set_sha256"],
         "backend_fingerprint": protocol["backend_fingerprint"],
     }
-    canonical = _json.dumps(table, sort_keys=True, separators=(",", ":"))
-    if protocol["fingerprint"] != _hashlib.sha256(canonical.encode("utf-8")).hexdigest():
+    canonical = json.dumps(table, sort_keys=True, separators=(",", ":"))
+    if protocol["fingerprint"] != hashlib.sha256(canonical.encode("utf-8")).hexdigest():
         return None
 
     def _verdict(record: dict[str, Any], arm: str) -> bool | None:
@@ -5175,8 +5173,6 @@ def _distraction_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     protocol fingerprint — is then rebuilt with independent
     arithmetic and compared by _valid_distraction.
     """
-    import hashlib as _hashlib
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -5231,7 +5227,7 @@ def _distraction_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         if total_records > 2400:
             return None
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > 12 * 1024 * 1024:
             return None
@@ -5447,7 +5443,7 @@ def _distraction_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     if fixture_ids is None:
         return None
     try:
-        expected_fixture_sha = _hashlib.sha256(
+        expected_fixture_sha = hashlib.sha256(
             "\n".join(sorted(fixture_ids)).encode("utf-8")
         ).hexdigest()
     except UnicodeEncodeError:
@@ -5469,10 +5465,10 @@ def _distraction_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         "fixture_set_sha256": expected_fixture_sha,
         "backend_fingerprint": protocol.get("backend_fingerprint"),
     }
-    canonical = _json.dumps(
+    canonical = json.dumps(
         protocol_rebuilt, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     )
-    if protocol.get("fingerprint") != _hashlib.sha256(canonical.encode("utf-8")).hexdigest():
+    if protocol.get("fingerprint") != hashlib.sha256(canonical.encode("utf-8")).hexdigest():
         return None
     primary_decision = payload.get("primary_decision")
     primary_winner = payload.get("primary_winner")
@@ -5739,13 +5735,12 @@ def _leading_mcnemar_p(ctrl_only: int, treat_only: int) -> float | None:
     cycle-185 tests pin the two implementations to the same
     values.
     """
-    import math as _math
 
     n = ctrl_only + treat_only
     if n == 0:
         return None
     k = min(ctrl_only, treat_only)
-    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    tail = sum(math.comb(n, i) for i in range(k + 1)) / (2**n)
     result: float = min(1.0, 2.0 * tail)
     return result
 
@@ -5932,8 +5927,6 @@ def _leading_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     property of answer text and is not recomputable from
     digests; the design doc states that limit.
     """
-    import hashlib as _hashlib
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -5942,12 +5935,12 @@ def _leading_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         return None
     if protocol.get("claim_templates") != _LEADING_TEMPLATES:
         return None
-    templates_canonical = _json.dumps(
+    templates_canonical = json.dumps(
         _LEADING_TEMPLATES, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     )
     if (
         protocol.get("claim_templates_sha256")
-        != _hashlib.sha256(templates_canonical.encode("utf-8")).hexdigest()
+        != hashlib.sha256(templates_canonical.encode("utf-8")).hexdigest()
     ):
         return None
     if protocol.get("donor_rule") != "smallest-eligible-id-donor-first-v1":
@@ -5990,7 +5983,7 @@ def _leading_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         if total_records > 2400:
             return None
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > 12 * 1024 * 1024:
             return None
@@ -6100,7 +6093,7 @@ def _leading_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         if fields["planted_digest"] != reference[donor]["expected_digest"]:
             return None
     try:
-        expected_fixture_sha = _hashlib.sha256(
+        expected_fixture_sha = hashlib.sha256(
             "\n".join(sorted(fixture_ids)).encode("utf-8")
         ).hexdigest()
     except UnicodeEncodeError:
@@ -6116,8 +6109,8 @@ def _leading_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         )
         for fixture, fields in reference.items()
     )
-    donor_map_sha = _hashlib.sha256(
-        _json.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    donor_map_sha = hashlib.sha256(
+        json.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     ).hexdigest()
     if protocol.get("donor_map_sha256") != donor_map_sha:
         return None
@@ -6138,10 +6131,10 @@ def _leading_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         "donor_map_sha256": donor_map_sha,
         "backend_fingerprint": protocol.get("backend_fingerprint"),
     }
-    canonical = _json.dumps(
+    canonical = json.dumps(
         protocol_rebuilt, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     )
-    if protocol.get("fingerprint") != _hashlib.sha256(canonical.encode("utf-8")).hexdigest():
+    if protocol.get("fingerprint") != hashlib.sha256(canonical.encode("utf-8")).hexdigest():
         return None
     primary_decision = payload.get("primary_decision")
     primary_winner = payload.get("primary_winner")
@@ -6615,10 +6608,9 @@ def _numform_derive(
     seed: int, task: str, band_index: int, slot: int, counter: int, stream: int
 ) -> int:
     """Return the numform derive."""
-    import hashlib as _hashlib
 
     material = f"numform-v1|{seed}|{task}|{band_index}|{slot}|{counter}|{stream}"
-    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
 
 def _numform_value_in_band(derived: int, lo: int, hi: int, *, min_length: int = 1) -> int:
@@ -6909,14 +6901,13 @@ def _numform_classify_grouping(evidence: Any) -> str:
 
 def _numform_decomposition(record: dict[str, Any]) -> str:
     """Return the numform decomposition."""
-    import hashlib as _hashlib
 
     cell = record["cell"]
     if cell["verdict"]:
         return "exact_pass"
     if record["task"] == "compare":
         other = "second" if record["expected_answer"] == "first" else "first"
-        other_digest = _hashlib.sha256(other.encode("utf-8")).hexdigest()
+        other_digest = hashlib.sha256(other.encode("utf-8")).hexdigest()
         return "wrong_label" if cell["answer_digest"] == other_digest else "non_label"
     if record["answer_value"] is not None and record["answer_value"] == record["expected_value"]:
         return "value_pass_form_fail"
@@ -7030,7 +7021,6 @@ def _numform_record_construction(
     tuple (the fields that must be constant across candidates)
     or None when the record is not an honest numform record.
     """
-    import hashlib as _hashlib
 
     if type(record) is not dict or set(record) != _NUMFORM_RECORD_KEYS:
         return None
@@ -7134,7 +7124,7 @@ def _numform_record_construction(
             or any(char not in _LEADING_HEX for char in digest)
         ):
             return None
-        expected_digest = _hashlib.sha256(expected_answer.encode("utf-8")).hexdigest()
+        expected_digest = hashlib.sha256(expected_answer.encode("utf-8")).hexdigest()
         if cell["verdict"] != bool(digest == expected_digest and cell["boundary_found"]):
             return None
         if (
@@ -7200,8 +7190,6 @@ def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     answer to the expected string, the value is checked
     against the expected value exactly.
     """
-    import hashlib as _hashlib
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -7277,7 +7265,7 @@ def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     if not available_names or total_records > 4608:
         return None
     if (
-        len(_json.dumps(all_records, separators=(",", ":"), ensure_ascii=True).encode("utf-8"))
+        len(json.dumps(all_records, separators=(",", ":"), ensure_ascii=True).encode("utf-8"))
         > 12 * 1024 * 1024
     ):
         return None
@@ -7293,10 +7281,10 @@ def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         return None
     if construction != expected_construction:
         return None
-    generator_sha = _hashlib.sha256(
-        _json.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    generator_sha = hashlib.sha256(
+        json.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     ).hexdigest()
-    templates_canonical = _json.dumps(
+    templates_canonical = json.dumps(
         _NUMFORM_TEMPLATES, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     )
     expected_protocol: dict[str, Any] = {
@@ -7315,7 +7303,7 @@ def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         "renderer_spec": "value-only-renderers-v1",
         "generator_rule": "sha256-derived-paired-v1",
         "prompt_templates": dict(_NUMFORM_TEMPLATES),
-        "prompt_templates_sha256": _hashlib.sha256(templates_canonical.encode("utf-8")).hexdigest(),
+        "prompt_templates_sha256": hashlib.sha256(templates_canonical.encode("utf-8")).hexdigest(),
         "seed": seed,
         "generator_sha256": generator_sha,
         "backend_fingerprint": backend_fingerprint,
@@ -7323,8 +7311,8 @@ def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     expected_with_fingerprint = {**expected_protocol, "fingerprint": protocol.get("fingerprint")}
     if not _recomputed_equal(protocol, expected_with_fingerprint):
         return None
-    fingerprint = _hashlib.sha256(
-        _json.dumps(
+    fingerprint = hashlib.sha256(
+        json.dumps(
             expected_protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True
         ).encode("utf-8")
     ).hexdigest()
@@ -7669,13 +7657,12 @@ def _dateline_arm_table() -> dict[str, str]:
 
 def _dateline_mcnemar_p(a_only: int, b_only: int) -> float | None:
     """Two-sided exact McNemar p (the frozen formula, local copy)."""
-    import math as _math
 
     n = a_only + b_only
     if n == 0:
         return None
     k = min(a_only, b_only)
-    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    tail = sum(math.comb(n, i) for i in range(k + 1)) / (2**n)
     result: float = min(1.0, 2.0 * tail)
     return result
 
@@ -7888,8 +7875,6 @@ def _dateline_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     message-date-bearing flags' cross-candidate constancy as
     reference fields, and the design doc states that limit.
     """
-    import hashlib as _hashlib
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -7969,7 +7954,7 @@ def _dateline_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         if total_records > 2400:
             return None
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > 24 * 1024 * 1024:
             return None
@@ -8089,7 +8074,7 @@ def _dateline_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     if fixture_ids is None:
         return None
     try:
-        expected_fixture_sha = _hashlib.sha256(
+        expected_fixture_sha = hashlib.sha256(
             "\n".join(sorted(fixture_ids)).encode("utf-8")
         ).hexdigest()
     except UnicodeEncodeError:
@@ -8114,10 +8099,10 @@ def _dateline_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         "fixture_set_sha256": expected_fixture_sha,
         "backend_fingerprint": protocol.get("backend_fingerprint"),
     }
-    canonical = _json.dumps(
+    canonical = json.dumps(
         protocol_rebuilt, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     )
-    if protocol.get("fingerprint") != _hashlib.sha256(canonical.encode("utf-8")).hexdigest():
+    if protocol.get("fingerprint") != hashlib.sha256(canonical.encode("utf-8")).hexdigest():
         return None
     primary_decision = payload.get("primary_decision")
     primary_winner = payload.get("primary_winner")
@@ -8432,10 +8417,9 @@ def _multiturn_derive(
     seed: int, family: str, depth: int, index: int, slot: int, counter: int
 ) -> int:
     """Return the multiturn derive."""
-    import hashlib as _hashlib
 
     material = f"multiturn-v1|{seed}|{family}|{depth}|{index}|{slot}|{counter}"
-    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
 
 def _multiturn_generate(seed: int) -> list[dict[str, Any]]:
@@ -8506,28 +8490,23 @@ def _multiturn_generate(seed: int) -> list[dict[str, Any]]:
 
 def _multiturn_digest(text: str) -> str:
     """Return the multiturn digest."""
-    import hashlib as _hashlib
 
-    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _multiturn_template_digest() -> str:
     """Return the multiturn template digest."""
-    import hashlib as _hashlib
-    import json as _json
 
-    canonical = _json.dumps(
+    canonical = json.dumps(
         [list(_MULTITURN_TEMPLATES), _MULTITURN_JOINER, _MULTITURN_SCRIPTED],
         separators=(",", ":"),
         ensure_ascii=True,
     )
-    return _hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _multiturn_ground_sha(seed: int) -> str:
     """Return the multiturn ground sha."""
-    import hashlib as _hashlib
-    import json as _json
 
     rows = [
         [
@@ -8540,8 +8519,8 @@ def _multiturn_ground_sha(seed: int) -> str:
         ]
         for fixture in _multiturn_generate(seed)
     ]
-    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
-    return _hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _multiturn_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
@@ -8566,13 +8545,12 @@ def _multiturn_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
 
 def _multiturn_mcnemar_p(a_only: int, b_only: int) -> float | None:
     """Two-sided exact McNemar p (the frozen formula, local copy)."""
-    import math as _math
 
     n = a_only + b_only
     if n == 0:
         return None
     k = min(a_only, b_only)
-    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    tail = sum(math.comb(n, i) for i in range(k + 1)) / (2**n)
     result: float = min(1.0, 2.0 * tail)
     return result
 
@@ -8857,8 +8835,6 @@ def _multiturn_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     re-derived from its digest identity; aggregates and
     selection readouts are recomputed and compared.
     """
-    import hashlib as _hashlib
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -8868,8 +8844,8 @@ def _multiturn_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     if type(seed) is not int or type(backend_fingerprint) is not str:
         return None
     expected_protocol = _multiturn_protocol(seed, backend_fingerprint)
-    fingerprint = _hashlib.sha256(
-        _json.dumps(
+    fingerprint = hashlib.sha256(
+        json.dumps(
             expected_protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True
         ).encode("utf-8")
     ).hexdigest()
@@ -8901,7 +8877,7 @@ def _multiturn_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         total_records += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > 12 * 1024 * 1024:
             return None
@@ -9368,9 +9344,8 @@ _NEEDLE_CELL_KEYS = (
 
 def _needle_digest(text: str) -> str:
     """Return the needle digest."""
-    import hashlib as _hashlib
 
-    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _needle_digest_ok(value: Any) -> bool:
@@ -9384,10 +9359,9 @@ def _needle_digest_ok(value: Any) -> bool:
 
 def _needle_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """Return the needle derive."""
-    import hashlib as _hashlib
 
     material = f"{seed}|needle|{index}|{slot}|{counter}"
-    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
 
 def _needle_generate(seed: int) -> list[dict[str, Any]]:
@@ -9420,10 +9394,8 @@ def _needle_generate(seed: int) -> list[dict[str, Any]]:
 
 def _needle_case_material_sha() -> str:
     """Return the needle case material sha."""
-    import hashlib as _hashlib
-    import json as _json
 
-    canonical = _json.dumps(
+    canonical = json.dumps(
         [
             _NEEDLE_FACT_TEMPLATE,
             _NEEDLE_QUESTION_TEMPLATE,
@@ -9433,23 +9405,19 @@ def _needle_case_material_sha() -> str:
         separators=(",", ":"),
         ensure_ascii=True,
     )
-    return _hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _needle_ground_sha(seed: int) -> str:
     """Return the needle ground sha."""
-    import hashlib as _hashlib
-    import json as _json
 
     rows = [[case["fixture_id"], case["topic"], case["value"]] for case in _needle_generate(seed)]
-    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
-    return _hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _needle_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     """Return the needle protocol."""
-    import hashlib as _hashlib
-    import json as _json
 
     protocol = {
         "version": 1,
@@ -9470,8 +9438,8 @@ def _needle_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
         "seed": seed,
         "backend_fingerprint": backend_fingerprint,
     }
-    fingerprint = _hashlib.sha256(
-        _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
+    fingerprint = hashlib.sha256(
+        json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode(
             "utf-8"
         )
     ).hexdigest()
@@ -9785,7 +9753,6 @@ def _needle_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     headline readouts, and per-cell selections are recomputed
     and compared.
     """
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -9821,7 +9788,7 @@ def _needle_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         total_records += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > _NEEDLE_MAX_RECORDS_BYTES:
             return None
@@ -10191,9 +10158,8 @@ def _placement_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     placement.py anywhere in this mirror).
     """
-    import hashlib as _hashlib
 
-    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _placement_digest_ok(value: Any) -> bool:
@@ -10210,10 +10176,9 @@ def _placement_digest_ok(value: Any) -> bool:
 
 def _placement_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """Mirror of placement._derive (frozen material string)."""
-    import hashlib as _hashlib
 
     material = f"{seed}|placement|{index}|{slot}|{counter}"
-    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
 
 def _placement_generate(seed: int) -> list[dict[str, Any]]:
@@ -10253,9 +10218,8 @@ def _placement_generate(seed: int) -> list[dict[str, Any]]:
 
 def _placement_case_material_sha256() -> str:
     """Mirror of placement.case_material_sha256."""
-    import json as _json
 
-    canonical = _json.dumps(
+    canonical = json.dumps(
         [
             _PLACEMENT_FACT_TEMPLATE,
             _PLACEMENT_QUESTION_TEMPLATE,
@@ -10271,13 +10235,12 @@ def _placement_case_material_sha256() -> str:
 
 def _placement_ground_sha256(seed: int) -> str:
     """Mirror of placement.ground_sha256."""
-    import json as _json
 
     rows = [
         [case["fixture_id"], case["topic"], case["value"], list(case["sentence_indices"])]
         for case in _placement_generate(seed)
     ]
-    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
     return _placement_digest(canonical)
 
 
@@ -10286,7 +10249,6 @@ def _placement_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     literals plus the payload's seed and backend fingerprint,
     fingerprint included (compared whole).
     """
-    import json as _json
 
     protocol: dict[str, Any] = {
         "version": 1,
@@ -10304,20 +10266,19 @@ def _placement_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
         "seed": seed,
         "backend_fingerprint": backend_fingerprint,
     }
-    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     protocol["fingerprint"] = _placement_digest(canonical)
     return protocol
 
 
 def _placement_mcnemar_p(a_only: int, b_only: int) -> float | None:
     """Two-sided exact McNemar p (the frozen formula, local copy)."""
-    import math as _math
 
     n = a_only + b_only
     if n == 0:
         return None
     k = min(a_only, b_only)
-    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    tail = sum(math.comb(n, i) for i in range(k + 1)) / (2**n)
     result: float = min(1.0, 2.0 * tail)
     return result
 
@@ -10633,7 +10594,6 @@ def _placement_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     ``arm_tokens`` for that arm; the aggregates and the per-arm
     selections are recomputed and compared.
     """
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -10669,7 +10629,7 @@ def _placement_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         total_records += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > _PLACEMENT_MAX_RECORDS_BYTES:
             return None
@@ -10994,9 +10954,8 @@ def _canonicalform_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     canonicalform.py anywhere in this mirror).
     """
-    import hashlib as _hashlib
 
-    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _canonicalform_digest_ok(value: Any) -> bool:
@@ -11013,10 +10972,9 @@ def _canonicalform_digest_ok(value: Any) -> bool:
 
 def _canonicalform_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """Mirror of canonicalform._derive (frozen material string)."""
-    import hashlib as _hashlib
 
     material = f"{seed}|canonicalform|{index}|{slot}|{counter}"
-    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
 
 def _canonicalform_generate(seed: int) -> list[dict[str, Any]]:
@@ -11068,9 +11026,8 @@ def _canonicalform_generate(seed: int) -> list[dict[str, Any]]:
 
 def _canonicalform_case_material_sha256() -> str:
     """Mirror of canonicalform.case_material_sha256."""
-    import json as _json
 
-    canonical = _json.dumps(
+    canonical = json.dumps(
         [
             _CANONICALFORM_FACT_TEMPLATE,
             _CANONICALFORM_QUESTION_TEMPLATE,
@@ -11089,7 +11046,6 @@ def _canonicalform_ground_sha256(seed: int) -> str:
     arms' content digests so the ground digest binds the
     treatment.
     """
-    import json as _json
 
     rows = [
         [
@@ -11102,7 +11058,7 @@ def _canonicalform_ground_sha256(seed: int) -> str:
         ]
         for case in _canonicalform_generate(seed)
     ]
-    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
     return _canonicalform_digest(canonical)
 
 
@@ -11111,7 +11067,6 @@ def _canonicalform_protocol(seed: int, backend_fingerprint: str) -> dict[str, An
     own literals plus the payload's seed and backend
     fingerprint, fingerprint included (compared whole).
     """
-    import json as _json
 
     protocol: dict[str, Any] = {
         "version": 1,
@@ -11128,20 +11083,19 @@ def _canonicalform_protocol(seed: int, backend_fingerprint: str) -> dict[str, An
         "seed": seed,
         "backend_fingerprint": backend_fingerprint,
     }
-    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     protocol["fingerprint"] = _canonicalform_digest(canonical)
     return protocol
 
 
 def _canonicalform_mcnemar_p(a_only: int, b_only: int) -> float | None:
     """Two-sided exact McNemar p (the frozen formula, local copy)."""
-    import math as _math
 
     n = a_only + b_only
     if n == 0:
         return None
     k = min(a_only, b_only)
-    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    tail = sum(math.comb(n, i) for i in range(k + 1)) / (2**n)
     result: float = min(1.0, 2.0 * tail)
     return result
 
@@ -11449,7 +11403,6 @@ def _canonicalform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     for that arm; the aggregates, per-arm selections, and
     winner headline are recomputed and compared.
     """
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -11485,7 +11438,7 @@ def _canonicalform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         total_records += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > _CANONICALFORM_MAX_RECORDS_BYTES:
             return None
@@ -11890,9 +11843,8 @@ def _instructiondistance_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     instructiondistance.py anywhere in this mirror).
     """
-    import hashlib as _hashlib
 
-    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _instructiondistance_digest_ok(value: Any) -> bool:
@@ -11918,10 +11870,9 @@ def _instructiondistance_derive(seed: int, index: int, slot: int, counter: int) 
     """Mirror of instructiondistance._derive (frozen material
     string).
     """
-    import hashlib as _hashlib
 
     material = f"{seed}|instructiondistance|{index}|{slot}|{counter}"
-    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
 
 def _instructiondistance_generate(seed: int) -> list[dict[str, Any]]:
@@ -11953,9 +11904,8 @@ def _instructiondistance_generate(seed: int) -> list[dict[str, Any]]:
 
 def _instructiondistance_case_material_sha256() -> str:
     """Mirror of instructiondistance.case_material_sha256."""
-    import json as _json
 
-    canonical = _json.dumps(
+    canonical = json.dumps(
         [
             _INSTRUCTIONDISTANCE_CONSTRAINT,
             _INSTRUCTIONDISTANCE_FACT_TEMPLATE,
@@ -11970,13 +11920,12 @@ def _instructiondistance_case_material_sha256() -> str:
 
 def _instructiondistance_ground_sha256(seed: int) -> str:
     """Mirror of instructiondistance.ground_sha256."""
-    import json as _json
 
     rows = [
         [case["fixture_id"], case["topic"], case["value"]]
         for case in _instructiondistance_generate(seed)
     ]
-    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
     return _instructiondistance_digest(canonical)
 
 
@@ -11985,7 +11934,6 @@ def _instructiondistance_protocol(seed: int, backend_fingerprint: str) -> dict[s
     module's own literals plus the payload's seed and backend
     fingerprint, fingerprint included (compared whole).
     """
-    import json as _json
 
     protocol: dict[str, Any] = {
         "version": 1,
@@ -12010,7 +11958,7 @@ def _instructiondistance_protocol(seed: int, backend_fingerprint: str) -> dict[s
         "seed": seed,
         "backend_fingerprint": backend_fingerprint,
     }
-    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     protocol["fingerprint"] = _instructiondistance_digest(canonical)
     return protocol
 
@@ -12270,7 +12218,6 @@ def _instructiondistance_recompute(payload: dict[str, Any]) -> dict[str, Any] | 
     recomputed from the recorded digests alone; the
     aggregates are recomputed and compared.
     """
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -12305,7 +12252,7 @@ def _instructiondistance_recompute(payload: dict[str, Any]) -> dict[str, Any] | 
             return None
         total_records += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > _INSTRUCTIONDISTANCE_MAX_RECORDS_BYTES:
             return None
@@ -12637,9 +12584,8 @@ def _historyframe_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     historyframe.py anywhere in this mirror).
     """
-    import hashlib as _hashlib
 
-    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _historyframe_digest_ok(value: Any) -> bool:
@@ -12655,13 +12601,12 @@ def _historyframe_mcnemar_p(a: int, b: int) -> float | None:
     """Mirror of confidentiality.mcnemar_exact_p: two-sided
     exact McNemar p; None when there are no discordant pairs.
     """
-    import math as _math
 
     n = a + b
     if n == 0:
         return None
     k = min(a, b)
-    tail: float = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    tail: float = sum(math.comb(n, i) for i in range(k + 1)) / (2**n)
     result: float = min(1.0, 2.0 * tail)
     return result
 
@@ -12688,20 +12633,19 @@ def _historyframe_random_fire_rate(n: int) -> float:
     (exact enumeration over the discordant count and its
     split under independent fair arms).
     """
-    import math as _math
 
     if type(n) is not int or n < _HISTORYFRAME_MIN_N:
         return 0.0
     total = 0.0
     for d in range(_HISTORYFRAME_MIN_D, n + 1):
-        p_d = _math.comb(n, d) * (0.5**n)
+        p_d = math.comb(n, d) * (0.5**n)
         for a in range(d + 1):
             b = d - a
             if a == b:
                 continue
             p = _historyframe_mcnemar_p(a, b)
             if p is not None and p < 0.05:
-                total += p_d * _math.comb(d, a) * (0.5**d)
+                total += p_d * math.comb(d, a) * (0.5**d)
     return total
 
 
@@ -12722,9 +12666,8 @@ def _historyframe_history_material_sha256() -> str:
     """Mirror of historyframe's history-material digest over
     the frozen transcript.
     """
-    import json as _json
 
-    canonical = _json.dumps(
+    canonical = json.dumps(
         [[role, content] for role, content in _HISTORYFRAME_TURNS],
         separators=(",", ":"),
         ensure_ascii=True,
@@ -12738,7 +12681,6 @@ def _historyframe_protocol(
     """Mirror of historyframe.protocol_object, fingerprint
     included (compared whole).
     """
-    import json as _json
 
     protocol: dict[str, Any] = {
         "version": 1,
@@ -12763,7 +12705,7 @@ def _historyframe_protocol(
         "backend_fingerprint": backend_fingerprint,
         "fixture_ids": list(fixture_ids),
     }
-    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     protocol["fingerprint"] = _historyframe_digest(canonical)
     return protocol
 
@@ -13127,7 +13069,6 @@ def _historyframe_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     headlines, the primary flips, and the family-wise block
     are recomputed from the records and compared.
     """
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -13177,7 +13118,7 @@ def _historyframe_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         total_records += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > _HISTORYFRAME_MAX_RECORDS_BYTES:
             return None
@@ -13702,16 +13643,14 @@ _PRUNESWEEP_AGGREGATE_KEYS = {
 
 def _prunesweep_digest(text: str) -> str:
     """Return the prunesweep digest."""
-    import hashlib as _hashlib
 
-    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _prunesweep_digest_ok(value: Any) -> bool:
     """Return whether the prunesweep digest is well-formed."""
-    import re as _re
 
-    return type(value) is str and _re.fullmatch(r"[0-9a-f]{64}", value) is not None
+    return type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
 
 def _prunesweep_value_digests() -> frozenset[str]:
@@ -13842,7 +13781,6 @@ def _prunesweep_dropped_shares(case: dict[str, Any], seed: int) -> dict[str, Any
 
 def _prunesweep_case_material_sha256() -> str:
     """Mirror of prunesweep.case_material_sha256."""
-    import json as _json
 
     material = {
         "instruction": _PRUNESWEEP_INSTRUCTION,
@@ -13858,13 +13796,12 @@ def _prunesweep_case_material_sha256() -> str:
         "negation_words": sorted(_PRUNESWEEP_NEGATION_WORDS),
         "doses": list(_PRUNESWEEP_DOSES),
     }
-    canonical = _json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return _prunesweep_digest(canonical)
 
 
 def _prunesweep_ground_sha256(seed: int) -> str:
     """Mirror of prunesweep.ground_sha256."""
-    import json as _json
 
     rows = [
         [
@@ -13876,7 +13813,7 @@ def _prunesweep_ground_sha256(seed: int) -> str:
         ]
         for case in _prunesweep_generate(seed)
     ]
-    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
     return _prunesweep_digest(canonical)
 
 
@@ -13885,7 +13822,6 @@ def _prunesweep_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     own literals plus the payload's seed and backend
     fingerprint, fingerprint included (compared whole).
     """
-    import json as _json
 
     protocol: dict[str, Any] = {
         "version": 1,
@@ -13908,7 +13844,7 @@ def _prunesweep_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
         "seed": seed,
         "backend_fingerprint": backend_fingerprint,
     }
-    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     protocol["fingerprint"] = _prunesweep_digest(canonical)
     return protocol
 
@@ -13917,13 +13853,12 @@ def _prunesweep_mcnemar_p(a: int, b: int) -> float | None:
     """Two-sided exact McNemar p (the confidentiality formula,
     local, as in the sibling mirrors).
     """
-    import math as _math
 
     n = a + b
     if n == 0:
         return None
     k = min(a, b)
-    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    tail = sum(math.comb(n, i) for i in range(k + 1)) / (2**n)
     result: float = min(1.0, 2.0 * tail)
     return result
 
@@ -14240,7 +14175,6 @@ def _prunesweep_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     from the recorded digests alone; the aggregates are
     recomputed and compared.
     """
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -14277,7 +14211,7 @@ def _prunesweep_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         total_records += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > _PRUNESWEEP_MAX_RECORDS_BYTES:
             return None
@@ -14643,9 +14577,8 @@ def _recordnotation_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     recordnotation.py anywhere in this mirror).
     """
-    import hashlib as _hashlib
 
-    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _recordnotation_digest_ok(value: Any) -> bool:
@@ -14708,9 +14641,8 @@ def _recordnotation_render_json(table: list[dict[str, str]]) -> str:
     """Mirror of recordnotation.render_json (the canonical
     JSON parameters, applied to the record sequence).
     """
-    import json as _json
 
-    return _json.dumps(table, sort_keys=True, separators=(", ", ": "), allow_nan=False)
+    return json.dumps(table, sort_keys=True, separators=(", ", ": "), allow_nan=False)
 
 
 def _recordnotation_render_prose(table: list[dict[str, str]]) -> str:
@@ -14746,13 +14678,12 @@ def _recordnotation_embedding_audit() -> dict[str, Any]:
     """Mirror of recordnotation.audit_answer_embedding (the
     guard set stated exactly, amendment B).
     """
-    import re as _re
 
     tokens = set(_RECORDNOTATION_FIELDS_4)
     tokens.update(
-        _re.findall(r"[a-z]+", _RECORDNOTATION_QUESTION_TEMPLATE.replace("{key}", " ").lower())
+        re.findall(r"[a-z]+", _RECORDNOTATION_QUESTION_TEMPLATE.replace("{key}", " ").lower())
     )
-    tokens.update(_re.findall(r"[a-z]+", _RECORDNOTATION_CONTRACT.lower()))
+    tokens.update(re.findall(r"[a-z]+", _RECORDNOTATION_CONTRACT.lower()))
     violations = 0
     for token in tokens:
         for word in _RECORDNOTATION_WORDS:
@@ -14768,7 +14699,6 @@ def _recordnotation_embedding_audit() -> dict[str, Any]:
 
 def _recordnotation_case_material_sha256() -> str:
     """Mirror of recordnotation.case_material_sha256."""
-    import json as _json
 
     material = {
         "words": list(_RECORDNOTATION_WORDS),
@@ -14783,13 +14713,12 @@ def _recordnotation_case_material_sha256() -> str:
         "arm_keys": list(_RECORDNOTATION_ARM_KEYS),
         "embedding_audit": _recordnotation_embedding_audit(),
     }
-    canonical = _json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return _recordnotation_digest(canonical)
 
 
 def _recordnotation_ground_sha256(seed: int) -> str:
     """Mirror of recordnotation.ground_sha256."""
-    import json as _json
 
     rows = [
         [
@@ -14801,7 +14730,7 @@ def _recordnotation_ground_sha256(seed: int) -> str:
         ]
         for case in _recordnotation_generate(seed)
     ]
-    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
     return _recordnotation_digest(canonical)
 
 
@@ -14809,7 +14738,6 @@ def _recordnotation_protocol(seed: int, backend_fingerprint: str) -> dict[str, A
     """The record-notation protocol rebuilt from this module's
     own literals, fingerprint included (compared whole).
     """
-    import json as _json
 
     protocol: dict[str, Any] = {
         "version": 1,
@@ -14832,7 +14760,7 @@ def _recordnotation_protocol(seed: int, backend_fingerprint: str) -> dict[str, A
         "seed": seed,
         "backend_fingerprint": backend_fingerprint,
     }
-    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     protocol["fingerprint"] = _recordnotation_digest(canonical)
     return protocol
 
@@ -14841,12 +14769,11 @@ def _recordnotation_scorer_r1(text: str) -> str:
     """Literal mirror of scorerlens._norm_r1: trim, collapse
     space/tab runs, cap newline runs at two.
     """
-    import re as _re
 
     out = text.strip()
     out = out.replace("\r\n", "\n").replace("\r", "\n")
-    out = _re.sub(r"[ \t]+", " ", out)
-    out = _re.sub(r"\n{3,}", "\n\n", out)
+    out = re.sub(r"[ \t]+", " ", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
     return out
 
 
@@ -14854,10 +14781,9 @@ def _recordnotation_scorer_fence(text: str) -> str:
     """Literal mirror of scorerlens._fence_strip: remove one
     pair of line-anchored fences, if present.
     """
-    import re as _re
 
     lines = text.split("\n")
-    if len(lines) >= 3 and _re.fullmatch(r"```[^`]*", lines[0]) and lines[-1] == "```":
+    if len(lines) >= 3 and re.fullmatch(r"```[^`]*", lines[0]) and lines[-1] == "```":
         return "\n".join(lines[1:-1]).strip("\n")
     return text
 
@@ -14925,10 +14851,9 @@ def _recordnotation_decompose_pair(prose_cell: dict[str, Any], json_cell: dict[s
 
 def _recordnotation_parsed_hit(answer_text: str, expected: str) -> bool:
     """Mirror of recordnotation._parsed_hit."""
-    import json as _json
 
     try:
-        parsed = _json.loads(
+        parsed = json.loads(
             answer_text,
             parse_constant=_reject_constant,
             parse_float=_reject_nonfinite_float,
@@ -15194,7 +15119,6 @@ def _recordnotation_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     certifies a completed evaluation and the verdict's status
     conjunct is discharged structurally (amendment D).
     """
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -15231,7 +15155,7 @@ def _recordnotation_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         total_records += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > _RECORDNOTATION_MAX_RECORDS_BYTES:
             return None
@@ -15724,9 +15648,8 @@ def _invisiblechars_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     invisiblechars.py anywhere in this mirror).
     """
-    import hashlib as _hashlib
 
-    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _invisiblechars_digest_ok(value: Any) -> bool:
@@ -15742,10 +15665,9 @@ def _invisiblechars_derive(seed: int, index: int, slot: int, counter: int) -> in
     """Mirror of invisiblechars._derive (the draw conversion
     pinned by amendment A1).
     """
-    import hashlib as _hashlib
 
     material = f"{seed}|invisiblechars|{index}|{slot}|{counter}"
-    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
 
 class _InvisibleCharsMirrorExhausted(Exception):
@@ -15855,7 +15777,6 @@ def _invisiblechars_population_audit() -> dict[str, Any]:
 
 def _invisiblechars_case_material_sha256() -> str:
     """Mirror of invisiblechars.case_material_sha256."""
-    import json as _json
 
     material = {
         "topics": list(_INVISIBLECHARS_TOPICS),
@@ -15873,13 +15794,12 @@ def _invisiblechars_case_material_sha256() -> str:
         "redraw_limit": _INVISIBLECHARS_REDRAW_LIMIT,
         "population_audit": _invisiblechars_population_audit(),
     }
-    canonical = _json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return _invisiblechars_digest(canonical)
 
 
 def _invisiblechars_ground_sha256(seed: int) -> str:
     """Mirror of invisiblechars.ground_sha256."""
-    import json as _json
 
     rows = [
         [
@@ -15890,7 +15810,7 @@ def _invisiblechars_ground_sha256(seed: int) -> str:
         ]
         for case in _invisiblechars_generate(seed)
     ]
-    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
     return _invisiblechars_digest(canonical)
 
 
@@ -15898,7 +15818,6 @@ def _invisiblechars_protocol(seed: int, backend_fingerprint: str) -> dict[str, A
     """The invisible-chars protocol rebuilt from this module's
     own literals, fingerprint included (compared whole).
     """
-    import json as _json
 
     protocol: dict[str, Any] = {
         "version": 1,
@@ -15919,7 +15838,7 @@ def _invisiblechars_protocol(seed: int, backend_fingerprint: str) -> dict[str, A
         "seed": seed,
         "backend_fingerprint": backend_fingerprint,
     }
-    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     protocol["fingerprint"] = _invisiblechars_digest(canonical)
     return protocol
 
@@ -15965,7 +15884,6 @@ def _invisiblechars_decompose_cell(
     """Mirror of invisiblechars.decompose_cell (the ordered
     decision list of amendment A5).
     """
-    import re as _re
 
     if cell.get("verdict") is True:
         return "pass"
@@ -15975,7 +15893,7 @@ def _invisiblechars_decompose_cell(
     text = cell.get("answer_text")
     if type(text) is not str:
         return "non_answer"
-    if text != expected and _re.match(r"^[a-z]+-[0-9]{4}$", text):
+    if text != expected and re.match(r"^[a-z]+-[0-9]{4}$", text):
         word, _, number = text.partition("-")
         if word in _INVISIBLECHARS_WORDS and 1000 <= int(number) <= 9999:
             return "wrong_value"
@@ -16218,7 +16136,6 @@ def _invisiblechars_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     a completed evaluation and the verdict's status conjunct
     is discharged structurally.
     """
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -16262,7 +16179,7 @@ def _invisiblechars_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         total_records += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > _INVISIBLECHARS_MAX_RECORDS_BYTES:
             return None
@@ -16808,9 +16725,8 @@ def _confusableskeleton_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     confusableskeleton.py anywhere in this mirror).
     """
-    import hashlib as _hashlib
 
-    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _confusableskeleton_digest_ok(value: Any) -> bool:
@@ -16826,10 +16742,9 @@ def _confusableskeleton_derive(seed: int, index: int, slot: int, counter: int) -
     """Mirror of confusableskeleton._derive (the draw
     conversion pinned by the design's generator spec).
     """
-    import hashlib as _hashlib
 
     material = f"{seed}|confusableskeleton|{index}|{slot}|{counter}"
-    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
 
 class _ConfusableSkeletonMirrorExhausted(Exception):
@@ -17074,7 +16989,6 @@ def _confusableskeleton_population_audit() -> dict[str, Any]:
 
 def _confusableskeleton_table_sha256() -> str:
     """Mirror of confusableskeleton.table_sha256."""
-    import json as _json
 
     material = {
         "frozen_replacements": _CONFUSABLESKELETON_FROZEN_REPLACEMENTS,
@@ -17088,13 +17002,12 @@ def _confusableskeleton_table_sha256() -> str:
         "confusables_sha256": _CONFUSABLESKELETON_CONFUSABLES_SHA256,
         "confusables_derived_sha256": _CONFUSABLESKELETON_CONFUSABLES_DERIVED_SHA256,
     }
-    canonical = _json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return _confusableskeleton_digest(canonical)
 
 
 def _confusableskeleton_case_material_sha256() -> str:
     """Mirror of confusableskeleton.case_material_sha256."""
-    import json as _json
 
     material = {
         "topics": list(_CONFUSABLESKELETON_TOPICS),
@@ -17110,13 +17023,12 @@ def _confusableskeleton_case_material_sha256() -> str:
         "redraw_limit": _CONFUSABLESKELETON_REDRAW_LIMIT,
         "population_audit": _confusableskeleton_population_audit(),
     }
-    canonical = _json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return _confusableskeleton_digest(canonical)
 
 
 def _confusableskeleton_ground_sha256(seed: int) -> str:
     """Mirror of confusableskeleton.ground_sha256."""
-    import json as _json
 
     rows = [
         [
@@ -17127,7 +17039,7 @@ def _confusableskeleton_ground_sha256(seed: int) -> str:
         ]
         for case in _confusableskeleton_generate(seed)
     ]
-    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
     return _confusableskeleton_digest(canonical)
 
 
@@ -17136,7 +17048,6 @@ def _confusableskeleton_protocol(seed: int, backend_fingerprint: str) -> dict[st
     module's own literals, fingerprint included (compared
     whole).
     """
-    import json as _json
 
     protocol: dict[str, Any] = {
         "version": 1,
@@ -17158,7 +17069,7 @@ def _confusableskeleton_protocol(seed: int, backend_fingerprint: str) -> dict[st
         "seed": seed,
         "backend_fingerprint": backend_fingerprint,
     }
-    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     protocol["fingerprint"] = _confusableskeleton_digest(canonical)
     return protocol
 
@@ -17205,7 +17116,6 @@ def _confusableskeleton_decompose_cell(
     ordered decision list, with the position-aware rarity
     form_only predicate of amendment A3).
     """
-    import re as _re
 
     if cell.get("verdict") is True:
         return "pass"
@@ -17215,7 +17125,7 @@ def _confusableskeleton_decompose_cell(
     text = cell.get("answer_text")
     if type(text) is not str:
         return "non_answer"
-    if text != expected and _re.match(r"^[a-z]+-[0-9]{4}$", text):
+    if text != expected and re.match(r"^[a-z]+-[0-9]{4}$", text):
         word, _, number = text.partition("-")
         if word in _CONFUSABLESKELETON_WORDS and 1000 <= int(number) <= 9999:
             return "wrong_value"
@@ -17500,7 +17410,6 @@ def _confusableskeleton_recompute(payload: dict[str, Any]) -> dict[str, Any] | N
     certifies a completed evaluation and the verdict's status
     conjunct is discharged structurally.
     """
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -17544,7 +17453,7 @@ def _confusableskeleton_recompute(payload: dict[str, Any]) -> dict[str, Any] | N
             return None
         total_records += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > _CONFUSABLESKELETON_MAX_RECORDS_BYTES:
             return None
@@ -18013,9 +17922,8 @@ def _rotation_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     rotation.py anywhere in this mirror).
     """
-    import hashlib as _hashlib
 
-    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _rotation_digest_ok(value: Any) -> bool:
@@ -18032,10 +17940,9 @@ def _rotation_digest_ok(value: Any) -> bool:
 
 def _rotation_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """Mirror of rotation._derive (frozen material string)."""
-    import hashlib as _hashlib
 
     material = f"{seed}|rotation|{index}|{slot}|{counter}"
-    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
 
 def _rotation_generate(seed: int) -> list[dict[str, Any]]:
@@ -18093,9 +18000,8 @@ def _rotation_generate(seed: int) -> list[dict[str, Any]]:
 
 def _rotation_case_material_sha256() -> str:
     """Mirror of rotation.case_material_sha256."""
-    import json as _json
 
-    canonical = _json.dumps(
+    canonical = json.dumps(
         [
             _ROTATION_FACT_TEMPLATE,
             _ROTATION_QUESTION_TEMPLATE,
@@ -18110,13 +18016,12 @@ def _rotation_case_material_sha256() -> str:
 
 def _rotation_ground_sha256(seed: int) -> str:
     """Mirror of rotation.ground_sha256."""
-    import json as _json
 
     rows = [
         [case["fixture_id"], list(case["topics"]), list(case["values"])]
         for case in _rotation_generate(seed)
     ]
-    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
     return _rotation_digest(canonical)
 
 
@@ -18125,7 +18030,6 @@ def _rotation_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     literals plus the payload's seed and backend fingerprint,
     fingerprint included (compared whole).
     """
-    import json as _json
 
     protocol: dict[str, Any] = {
         "version": 1,
@@ -18146,7 +18050,7 @@ def _rotation_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
         "seed": seed,
         "backend_fingerprint": backend_fingerprint,
     }
-    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     protocol["fingerprint"] = _rotation_digest(canonical)
     return protocol
 
@@ -18514,7 +18418,6 @@ def _rotation_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     aggregates and the per-arm selections are recomputed and
     compared.
     """
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -18550,7 +18453,7 @@ def _rotation_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         total_records += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > _ROTATION_MAX_RECORDS_BYTES:
             return None
@@ -19064,9 +18967,8 @@ def _density_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     density.py anywhere in this mirror).
     """
-    import hashlib as _hashlib
 
-    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _density_digest_ok(value: Any) -> bool:
@@ -19081,10 +18983,9 @@ def _density_digest_ok(value: Any) -> bool:
 
 def _density_derive(seed: int, index: int, slot: int, counter: int) -> int:
     """Mirror of density._derive (frozen material string)."""
-    import hashlib as _hashlib
 
     material = f"{seed}|density|{index}|{slot}|{counter}"
-    return int.from_bytes(_hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
 
 def _density_normalize_words(text: str) -> list[str]:
@@ -19261,9 +19162,8 @@ def _density_arm_content(case: dict[str, Any], arm: str) -> str:
 
 def _density_case_material_sha256() -> str:
     """Mirror of density.case_material_sha256."""
-    import json as _json
 
-    canonical = _json.dumps(
+    canonical = json.dumps(
         [
             _DENSITY_FACT_TEMPLATE,
             _DENSITY_QUESTION_TEMPLATE,
@@ -19282,7 +19182,6 @@ def _density_case_material_sha256() -> str:
 
 def _density_ground_sha256(seed: int) -> str:
     """Mirror of density.ground_sha256."""
-    import json as _json
 
     rows: list[list[Any]] = []
     for case in _density_generate(seed):
@@ -19298,7 +19197,7 @@ def _density_ground_sha256(seed: int) -> str:
                 list(case["neutrals"]),
             ]
         )
-    canonical = _json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
     return _density_digest(canonical)
 
 
@@ -19307,7 +19206,6 @@ def _density_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
     literals plus the payload's seed and backend fingerprint,
     fingerprint included (compared whole).
     """
-    import json as _json
 
     protocol: dict[str, Any] = {
         "version": 1,
@@ -19329,16 +19227,15 @@ def _density_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
         "seed": seed,
         "backend_fingerprint": backend_fingerprint,
     }
-    canonical = _json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     protocol["fingerprint"] = _density_digest(canonical)
     return protocol
 
 
 def _density_commitment_digest(hashes: list[str]) -> str:
     """Mirror of density.commitment_digest."""
-    import json as _json
 
-    canonical = _json.dumps(list(hashes), separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(list(hashes), separators=(",", ":"), ensure_ascii=True)
     return _density_digest(canonical)
 
 
@@ -19364,13 +19261,12 @@ def _density_task_present(case: dict[str, Any], hashes: list[str]) -> bool:
 
 def _density_sign_test_p(n_pos: int, n_neg: int) -> float:
     """Mirror of density.sign_test_p."""
-    import math as _math
 
     n = n_pos + n_neg
     if n == 0:
         return 1.0
     k = min(n_pos, n_neg)
-    tail: float = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    tail: float = sum(math.comb(n, i) for i in range(k + 1)) / (2**n)
     return min(1.0, 2.0 * tail)
 
 
@@ -19657,7 +19553,6 @@ def _density_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     falsification decision is re-derived from the commitments
     and compared.
     """
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -19692,7 +19587,7 @@ def _density_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         total_records += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > _DENSITY_MAX_PAYLOAD_BYTES:
             return None
@@ -20327,16 +20222,14 @@ _FO_AGGREGATE_KEYS = {
 
 def _fo_digest(text: str) -> str:
     """Mirror of fieldorder.digest_text (SHA-256 hex)."""
-    import hashlib as _hashlib
 
-    return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _fo_canonical_json(document: Any) -> str:
     """Mirror of structured._canonical_json (the pinned form)."""
-    import json as _json
 
-    return _json.dumps(document, sort_keys=True, separators=(", ", ": "), allow_nan=False)
+    return json.dumps(document, sort_keys=True, separators=(", ", ": "), allow_nan=False)
 
 
 def _fo_digest_ok(value: Any) -> bool:
@@ -20496,12 +20389,11 @@ def _fo_parse_stored(value: Any) -> tuple[bool, Any]:
     Total (design F10): ValueError (including the int/str digit
     limit), TypeError, and RecursionError all yield False.
     """
-    import json as _json
 
     if type(value) is not str:
         return False, None
     try:
-        return True, _json.loads(value)
+        return True, json.loads(value)
     except (ValueError, TypeError, RecursionError):
         return False, None
 
@@ -20546,13 +20438,12 @@ def _fo_record_derived(spec: dict[str, Any], record: dict[str, Any]) -> dict[str
 
 def _fo_sign_test_p(n_pos: int, n_neg: int) -> float:
     """Return the fo sign test p."""
-    import math as _math
 
     n = n_pos + n_neg
     if n == 0:
         return 1.0
     k = min(n_pos, n_neg)
-    tail = sum(_math.comb(n, i) for i in range(k + 1)) / (2**n)
+    tail = sum(math.comb(n, i) for i in range(k + 1)) / (2**n)
     return float(min(1.0, 2.0 * tail))
 
 
@@ -20804,7 +20695,6 @@ def _fo_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     and every readout and the endpoint decision is re-derived
     from the commitments and compared.
     """
-    import json as _json
 
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
@@ -20839,7 +20729,7 @@ def _fo_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         total_records += len(records)
         records_bytes += len(
-            _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         )
         if records_bytes > _FO_MAX_PAYLOAD_BYTES:
             return None
@@ -21137,11 +21027,10 @@ _CA_METHOD_KEYS = {
 
 def _ca_f32(value: float) -> float:
     """Mirror of scoring._f32 (struct-based float32 rounding)."""
-    import math as _math
     import struct as _struct
 
-    if _math.isfinite(value) and abs(value) > float.fromhex("0x1.fffffep+127"):
-        return _math.copysign(_math.inf, value)
+    if math.isfinite(value) and abs(value) > float.fromhex("0x1.fffffep+127"):
+        return math.copysign(math.inf, value)
     rounded: float = _struct.unpack("<f", _struct.pack("<f", value))[0]
     return rounded
 
@@ -21209,7 +21098,6 @@ def _ca_rank_verdict(values: list[float]) -> str:
 
 def _ca_record_evaluable(record: dict[str, Any], fixture_entry: dict[str, Any]) -> bool:
     """Return the ca record evaluable."""
-    import math as _math
 
     if not fixture_entry["constructible"]:
         return False
@@ -21219,9 +21107,9 @@ def _ca_record_evaluable(record: dict[str, Any], fixture_entry: dict[str, Any]) 
     return all(
         cell["status"] == "ok"
         and type(cell["total"]) is float
-        and _math.isfinite(cell["total"])
+        and math.isfinite(cell["total"])
         and type(cell["mean"]) is float
-        and _math.isfinite(cell["mean"])
+        and math.isfinite(cell["mean"])
         for cell in cells
     )
 
@@ -21433,7 +21321,6 @@ def _choiceaudit_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     screen and donor provenance against the fixture texts
     (records carry digests, not texts).
     """
-    import math as _math
 
     protocol = payload.get("protocol")
     block = payload.get("fixtures")
@@ -21592,7 +21479,7 @@ def _choiceaudit_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
                     for value in (cell["total"], cell["mean"]):
                         if (
                             type(value) is not float
-                            or not _math.isfinite(value)
+                            or not math.isfinite(value)
                             or _ca_f32(value) != value
                         ):
                             return None
