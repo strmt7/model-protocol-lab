@@ -66,6 +66,8 @@ from model_protocol_lab import doctor as doctor_mod
 from model_protocol_lab.catalog import CATALOG, candidates
 from model_protocol_lab.core import Fixture, Format, Message
 
+_SENTINEL = object()
+
 # ---------------------------------------------------------------------------
 # Fixture builders (tmp dirs only; no network, no downloads)
 # ---------------------------------------------------------------------------
@@ -1038,7 +1040,8 @@ class PortabilityMatrixTests(_TmpTestCase):
         """Test compatible row when inventory registered."""
         root = self._second_ckpt(extra_specials=("<|im_start|>", "<|im_end|>"))
         section = doctor_mod.portability_matrix(root)
-        row = next(r for r in section["rows"] if r["format"] == "chatml")
+        row = next((r for r in section["rows"] if r["format"] == "chatml"), _SENTINEL)
+        self.assertIsNot(row, _SENTINEL)
         self.assertEqual(row["verdict"], "compatible")
         self.assertTrue(row["bos_skipped"])
 
@@ -1046,7 +1049,8 @@ class PortabilityMatrixTests(_TmpTestCase):
         """Test incompatible row when inventory missing."""
         root = self._second_ckpt()
         section = doctor_mod.portability_matrix(root)
-        row = next(r for r in section["rows"] if r["format"] == "chatml")
+        row = next((r for r in section["rows"] if r["format"] == "chatml"), _SENTINEL)
+        self.assertIsNot(row, _SENTINEL)
         self.assertEqual(row["verdict"], "incompatible")
 
     def test_matrix_never_touches_weights(self) -> None:
@@ -1081,14 +1085,17 @@ class RenderPortabilityTableTests(_TmpTestCase):
             lines[0].startswith("portability matrix vs ")
             and lines[0].endswith(": 118 candidates (tokenizer-only; no weights loaded)")
         )
-        header = next(line for line in lines if line.startswith("format"))
+        header = next((line for line in lines if line.startswith("format")), _SENTINEL)
+        self.assertIsNot(header, _SENTINEL)
         self.assertIn("verdict", header)
         self.assertIn("reason", header)
-        chatml_line = next(line for line in lines if line.startswith("chatml "))
+        chatml_line = next((line for line in lines if line.startswith("chatml ")), _SENTINEL)
+        self.assertIsNot(chatml_line, _SENTINEL)
         self.assertIn("compatible", chatml_line)
         self.assertTrue(chatml_line.rstrip().endswith("bos-skipped"))
         # A bos-carrying format has no bos-skipped suffix.
-        deepseek_line = next(line for line in lines if line.startswith("deepseek "))
+        deepseek_line = next((line for line in lines if line.startswith("deepseek ")), _SENTINEL)
+        self.assertIsNot(deepseek_line, _SENTINEL)
         self.assertFalse(deepseek_line.rstrip().endswith("bos-skipped"))
         self.assertIn(doctor_mod._PORTABILITY_ASYMMETRY, text)
 

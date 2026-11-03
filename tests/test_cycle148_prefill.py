@@ -45,6 +45,8 @@ from model_protocol_lab.prefill import (
 )
 from model_protocol_lab.reporting import _prefill_section
 
+_SENTINEL = object()
+
 CANDIDATES = ("alpha", "beta")
 BOUNDARY = (7,)
 
@@ -121,7 +123,10 @@ class ScriptedPrefillBackend:
 
 def _run_stage(policy, prefill_id="answer-colon", cases=None, backend=None):
     """Run stage."""
-    spec = next(s for s in validate_prefill_specs(PREFILL_SPECS) if s["id"] == prefill_id)
+    spec = next(
+        (s for s in validate_prefill_specs(PREFILL_SPECS) if s["id"] == prefill_id), _SENTINEL
+    )
+    assert spec is not _SENTINEL
     return prefill_stage(
         ScriptedPrefillBackend(policy, spec["text"]) if backend is None else backend,
         tuple(_format(c) for c in CANDIDATES),

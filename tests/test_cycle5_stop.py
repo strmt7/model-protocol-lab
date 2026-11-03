@@ -272,7 +272,9 @@ class StopMatrixStopTextTests(unittest.TestCase):
 
     def test_stop_text_field_distinguishes_hf_and_vllm(self) -> None:
         """Test stop text field distinguishes hf and vllm."""
-        (row,) = self._rows()
+        row_items = list(self._rows())
+        assert len(row_items) == 1
+        row = row_items[0]
         hf = row["cells"]["hf_stop_string"]
         vllm = row["cells"]["vllm_holdback"]
         self.assertTrue(hf["available"] and hf["fired"])
@@ -285,13 +287,17 @@ class StopMatrixStopTextTests(unittest.TestCase):
 
     def test_include_stop_str_flips_vllm_disposition(self) -> None:
         """Test include stop str flips vllm disposition."""
-        (row,) = self._rows(vllm_include_stop_str_in_output=True)
+        row_items = list(self._rows(vllm_include_stop_str_in_output=True))
+        assert len(row_items) == 1
+        row = row_items[0]
         self.assertEqual(row["cells"]["vllm_holdback"]["stop_text"], "kept")
         self.assertEqual(row["cells"]["hf_stop_string"]["stop_text"], "kept")
 
     def test_min_tokens_gates_vllm_cell(self) -> None:
         """Test min tokens gates vllm cell."""
-        (row,) = self._rows(vllm_min_tokens=9)
+        row_items = list(self._rows(vllm_min_tokens=9))
+        assert len(row_items) == 1
+        row = row_items[0]
         vllm = row["cells"]["vllm_holdback"]
         self.assertTrue(vllm["available"])
         self.assertFalse(vllm["fired"])
@@ -312,7 +318,9 @@ class StopMatrixStopTextTests(unittest.TestCase):
 
     def test_row_schema_is_additive(self) -> None:
         """Test row schema is additive."""
-        (row,) = self._rows()
+        row_items = list(self._rows())
+        assert len(row_items) == 1
+        row = row_items[0]
         self.assertEqual(set(row.keys()), {"fixture", "native_pass", "cells", "flips"})
         for semantic, cell in row["cells"].items():
             self.assertIn("detail", cell, semantic)

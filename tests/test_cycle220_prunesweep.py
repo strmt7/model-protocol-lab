@@ -36,6 +36,8 @@ from model_protocol_lab import prunesweep as ps
 from model_protocol_lab.confidentiality import mcnemar_exact_p
 from model_protocol_lab.core import Format, Generation
 
+_SENTINEL = object()
+
 _CHATML = Format("chatml", "", "<|im_start|>user\n", "<|im_start|>assistant\n", "<|im_end|>\n")
 _LLAMA3 = Format(
     "llama3",
@@ -1341,8 +1343,14 @@ class CliTests(unittest.TestCase):
         # (rendering it exercises argparse's percent expansion
         # of help strings).
         subparsers = next(
-            action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
+            (
+                action
+                for action in parser._actions
+                if isinstance(action, argparse._SubParsersAction)
+            ),
+            _SENTINEL,
         )
+        self.assertIsNot(subparsers, _SENTINEL)
         run_parser = subparsers.choices["run"]
         self.assertIn("--prune-sweep", run_parser.format_help())
         buffer = io.StringIO()

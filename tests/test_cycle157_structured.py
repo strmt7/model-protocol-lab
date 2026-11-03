@@ -48,6 +48,8 @@ from model_protocol_lab.structured import (
     validate_structured_specs,
 )
 
+_SENTINEL = object()
+
 BOUNDARY = (124,)  # ord("|")
 
 
@@ -1509,7 +1511,8 @@ class StructuredSampleTests(unittest.TestCase):
         """Base prompt."""
         from model_protocol_lab.structured import render_prompt
 
-        spec = next(s for s in _SPECS if s["id"] == fixture_id.split("/")[1])
+        spec = next((s for s in _SPECS if s["id"] == fixture_id.split("/")[1]), _SENTINEL)
+        assert spec is not _SENTINEL
         return (
             "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n"
             + render_prompt(spec)

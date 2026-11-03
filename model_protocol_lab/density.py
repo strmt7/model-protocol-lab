@@ -501,25 +501,25 @@ def generate_cases(seed: int) -> list[dict[str, Any]]:
             pick = _derive(seed, index, slot, 0) % len(limit_pool)
             count_limits.append(limit_pool.pop(pick))
         constraints: list[dict[str, Any]] = []
-        pools = {
-            "include": iter(include_targets),
-            "start": iter([start_target] * 4),
-            "end": iter([end_target] * 4),
-            "count": iter(count_limits),
+        pools: dict[str, list[Any]] = {
+            "include": include_targets,
+            "start": [start_target] * 4,
+            "end": [end_target] * 4,
+            "count": count_limits,
         }
         for position in range(1, CONSTRAINT_COUNT + 1):
             kind = kind_at(index, position)
             if kind == "count":
                 constraints.append(
-                    {"position": position, "kind": kind, "limit": next(pools["count"])}
+                    {"position": position, "kind": kind, "limit": pools["count"].pop(0)}
                 )
             elif kind == "include":
                 constraints.append(
-                    {"position": position, "kind": kind, "target": next(pools["include"])}
+                    {"position": position, "kind": kind, "target": pools["include"].pop(0)}
                 )
             else:
                 constraints.append(
-                    {"position": position, "kind": kind, "target": next(pools[kind])}
+                    {"position": position, "kind": kind, "target": pools[kind].pop(0)}
                 )
         cases.append(
             {

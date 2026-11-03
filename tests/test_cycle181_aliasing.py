@@ -44,6 +44,8 @@ from model_protocol_lab.core import Format
 from model_protocol_lab.diffreports import _valid_aliasing, diff_aliasing
 from model_protocol_lab.experiments import aliasing_profile, candidate_fingerprint
 
+_SENTINEL = object()
+
 
 def _obs(
     candidate: str,
@@ -280,7 +282,8 @@ class TestProfileClasses(unittest.TestCase):
         self.assertEqual(payload["n_effective_measurement"], 2)
         self.assertEqual(payload["n_redundant_completed_observations"], 2)
         self.assertEqual(payload["n_redundant_render_observations"], 2)
-        pair = next(p for p in payload["pairs"] if p["candidates"] == ["A", "B"])
+        pair = next((p for p in payload["pairs"] if p["candidates"] == ["A", "B"]), _SENTINEL)
+        self.assertIsNot(pair, _SENTINEL)
         self.assertEqual(pair["n_common_completed"], 2)
         self.assertEqual(pair["n_shared"], 2)
         self.assertTrue(_valid_aliasing(payload))
@@ -335,7 +338,8 @@ class TestProfileClasses(unittest.TestCase):
         self.assertEqual(payload["n_primary_cohort"], 2)
         self.assertEqual(payload["excluded_candidates"], ["Z"])
         self.assertEqual(payload["n_effective_measurement"], 1)
-        zed = next(c for c in payload["candidates"] if c["candidate"] == "Z")
+        zed = next((c for c in payload["candidates"] if c["candidate"] == "Z"), _SENTINEL)
+        self.assertIsNot(zed, _SENTINEL)
         self.assertFalse(zed["in_primary_cohort"])
         self.assertIsNone(zed["measurement_class_members"])
         self.assertTrue(_valid_aliasing(payload))
@@ -1239,16 +1243,20 @@ class TestValidatorGapBattery(unittest.TestCase):
     def test_evaluable_status_coupling(self):
         """Test evaluable status coupling."""
         payload = self._interrupted_payload()
-        zed = next(c for c in payload["candidates"] if c["candidate"] == "Z")
-        failed_record = next(r for r in zed["records"] if r["status"] == "failed")
+        zed = next((c for c in payload["candidates"] if c["candidate"] == "Z"), _SENTINEL)
+        self.assertIsNot(zed, _SENTINEL)
+        failed_record = next((r for r in zed["records"] if r["status"] == "failed"), _SENTINEL)
+        self.assertIsNot(failed_record, _SENTINEL)
         failed_record["evaluable"] = True  # evaluable but not completed
         self.assertFalse(_valid_aliasing(payload))
 
     def test_non_evaluable_digest_must_be_none(self):
         """Test non evaluable digest must be none."""
         payload = self._interrupted_payload()
-        zed = next(c for c in payload["candidates"] if c["candidate"] == "Z")
-        failed_record = next(r for r in zed["records"] if r["status"] == "failed")
+        zed = next((c for c in payload["candidates"] if c["candidate"] == "Z"), _SENTINEL)
+        self.assertIsNot(zed, _SENTINEL)
+        failed_record = next((r for r in zed["records"] if r["status"] == "failed"), _SENTINEL)
+        self.assertIsNot(failed_record, _SENTINEL)
         failed_record["input_sha256"] = "a" * 64
         self.assertFalse(_valid_aliasing(payload))
 
@@ -1355,3 +1363,58 @@ class TestReportingGaps(unittest.TestCase):
         html = self._render(payload)
         self.assertIn("not all", html)
         self.assertIn("measured on the same completed fixture set", html)
+
+
+class TestMissingCellGuards(unittest.TestCase):
+    """A cohort member without an evaluable record for a cohort
+    fixture is malformed input: the counters fail closed with
+    ValueError (cycle 229; previously a bare StopIteration escaped).
+    """
+
+    @staticmethod
+    def _record(fixture: str, evaluable: bool = True) -> dict[str, Any]:
+        """Build one cell record in the shape the counters read."""
+        return {
+            "fixture": fixture,
+            "evaluable": evaluable,
+            "input_sha256": "a" * 64,
+            "output_sha256": "b" * 64,
+            "exact_match": True,
+            "boundary_found": True,
+            "boundary_text_match": True,
+            "status": "completed",
+        }
+
+    @staticmethod
+    def _member(name: str, records: list[dict[str, Any]]) -> dict[str, Any]:
+        """Build one cohort member wrapping the given cell records."""
+        return {"candidate": name, "boundary_token_ids": [99], "records": records}
+
+    def test_redundant_counts_missing_cell_raises(self):
+        """redundant_counts raises ValueError when a member lacks the fixture."""
+        members = [
+            self._member("A", [self._record("f1")]),
+            self._member("B", [self._record("f2")]),
+        ]
+        with self.assertRaises(ValueError) as ctx:
+            aliasing.redundant_counts(members)
+        self.assertIn("lacks an evaluable record", str(ctx.exception))
+
+    def test_redundant_counts_unevaluable_cell_raises(self):
+        """A present but non-evaluable record is also a missing cell."""
+        members = [
+            self._member("A", [self._record("f1")]),
+            self._member("B", [self._record("f1", evaluable=False)]),
+        ]
+        with self.assertRaises(ValueError):
+            aliasing.redundant_counts(members)
+
+    def test_suspect_cells_missing_cell_raises(self):
+        """suspect_cells raises ValueError when a class member lacks the fixture."""
+        members = [
+            self._member("A", [self._record("f1")]),
+            self._member("B", [self._record("f2")]),
+        ]
+        with self.assertRaises(ValueError) as ctx:
+            aliasing.suspect_cells(members, [["A", "B"]])
+        self.assertIn("lacks an evaluable record", str(ctx.exception))

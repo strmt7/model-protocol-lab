@@ -106,6 +106,8 @@ from model_protocol_lab.experiments import (
     run_experiment,
 )
 
+_SENTINEL = object()
+
 DERAILED = LOGPROB_DERAILED_MEAN_THRESHOLD  # -2.0
 UNKNOWN = LOGPROB_UNKNOWN_MEAN_THRESHOLD  # -5.0
 
@@ -1180,8 +1182,10 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         sc2 = _logprob_scenario(means2, self.BEHAVIOR, exp_seed=21)
         result2 = run_search_experiment(sc2)
         diag2 = logprob_diagnostic(sc2.backend, result2, sc2.split.search)
-        cand1 = next(c for c in diag1["candidates"] if c["name"] == "cand-A")
-        cand2 = next(c for c in diag2["candidates"] if c["name"] == "cand-A")
+        cand1 = next((c for c in diag1["candidates"] if c["name"] == "cand-A"), _SENTINEL)
+        self.assertIsNot(cand1, _SENTINEL)
+        cand2 = next((c for c in diag2["candidates"] if c["name"] == "cand-A"), _SENTINEL)
+        self.assertIsNot(cand2, _SENTINEL)
         fs1 = {s["fixture"]: s for s in cand1["fixture_scores"]}
         fs2 = {s["fixture"]: s for s in cand2["fixture_scores"]}
         assert fs1["S1"] == fs2["S1"]  # untouched cell identical
@@ -1193,8 +1197,10 @@ class TestLogprobDiagnosticOracle(unittest.TestCase):
         assert cand1["interpretation"]["kind"] == "greedy_derailed"
         assert cand2["interpretation"]["kind"] == "weights_dont_know"
         # cand-B untouched end to end.
-        b1 = next(c for c in diag1["candidates"] if c["name"] == "cand-B")
-        b2 = next(c for c in diag2["candidates"] if c["name"] == "cand-B")
+        b1 = next((c for c in diag1["candidates"] if c["name"] == "cand-B"), _SENTINEL)
+        self.assertIsNot(b1, _SENTINEL)
+        b2 = next((c for c in diag2["candidates"] if c["name"] == "cand-B"), _SENTINEL)
+        self.assertIsNot(b2, _SENTINEL)
         assert b1 == b2
 
     def test_diagnostic_runs_on_ambiguous_decision(self):
@@ -1470,7 +1476,10 @@ class TestCliWiring(unittest.TestCase):
     def _run_options() -> dict[str, argparse.Action]:
         """Run options."""
         parser = build_parser()
-        sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+        sub = next(
+            (a for a in parser._actions if isinstance(a, argparse._SubParsersAction)), _SENTINEL
+        )
+        assert sub is not _SENTINEL
         run_parser = sub.choices["run"]
         return {name: action for action in run_parser._actions for name in action.option_strings}
 

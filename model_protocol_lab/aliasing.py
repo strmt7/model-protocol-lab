@@ -330,7 +330,12 @@ def redundant_counts(
         measurement_tuples: set[tuple[Any, ...]] = set()
         render_tuples: set[Any] = set()
         for record in members:
-            cell = next(r for r in record["records"] if r["evaluable"] and r["fixture"] == fixture)
+            cell = next(
+                (r for r in record["records"] if r["evaluable"] and r["fixture"] == fixture),
+                None,
+            )
+            if cell is None:  # cohort members share one evaluable fixture set
+                raise ValueError("cohort member lacks an evaluable record for a cohort fixture")
             render_tuples.add(cell["input_sha256"])
             measurement_tuples.add((cell["input_sha256"], tuple(record["boundary_token_ids"])))
         measurement_total += len(members) - len(measurement_tuples)
@@ -362,10 +367,15 @@ def suspect_cells(
             outcomes: set[tuple[Any, ...]] = set()
             for name in names:
                 cell = next(
-                    r
-                    for r in by_name[name]["records"]
-                    if r["evaluable"] and r["fixture"] == fixture
+                    (
+                        r
+                        for r in by_name[name]["records"]
+                        if r["evaluable"] and r["fixture"] == fixture
+                    ),
+                    None,
                 )
+                if cell is None:  # cohort members share one evaluable fixture set
+                    raise ValueError("cohort member lacks an evaluable record for a cohort fixture")
                 outputs.add(cell["output_sha256"])
                 outcomes.add(
                     (

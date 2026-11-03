@@ -39,6 +39,8 @@ from typing import Any
 from model_protocol_lab import determinism, pack, refusals
 from model_protocol_lab.core import Generation
 
+_SENTINEL = object()
+
 
 def _pure_output(input_ids: tuple[int, ...], seed: int, count: int) -> tuple[int, ...]:
     """Pure output."""
@@ -211,7 +213,8 @@ class TestDeterminismBlockingSet(unittest.TestCase):
         audit = determinism.audit_determinism(_artifact([good, bad]), _PureBackend())
         self.assertNotEqual(audit["verdict"], "deterministic")
         self.assertIsNone(audit["certificate"])
-        bad_cell = next(c for c in audit["cells"] if c["fixture"] == "f2")
+        bad_cell = next((c for c in audit["cells"] if c["fixture"] == "f2"), _SENTINEL)
+        self.assertIsNot(bad_cell, _SENTINEL)
         self.assertEqual(bad_cell["detail"], "recorded_ids_invalid")
 
     def test_empty_input_completed_cell_blocks_certificate(self) -> None:
@@ -233,7 +236,8 @@ class TestDeterminismBlockingSet(unittest.TestCase):
         audit = determinism.audit_determinism(_artifact([good, aborted]), _PureBackend())
         self.assertEqual(audit["verdict"], "deterministic")
         self.assertIsNotNone(audit["certificate"])
-        aborted_cell = next(c for c in audit["cells"] if c["fixture"] == "f2")
+        aborted_cell = next((c for c in audit["cells"] if c["fixture"] == "f2"), _SENTINEL)
+        self.assertIsNot(aborted_cell, _SENTINEL)
         self.assertEqual(aborted_cell["detail"], "observation_not_completed")
 
     def test_blocking_set_matches_design_doc_i5(self) -> None:

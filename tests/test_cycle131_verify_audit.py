@@ -42,6 +42,8 @@ from model_protocol_lab.experiments import (
 )
 from model_protocol_lab.reporting import MAX_FRONTIER_STEP_POINTS, margin_trajectory
 
+_SENTINEL = object()
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SOURCE = Path(verify.__file__)
 
@@ -138,7 +140,8 @@ def _artifact(
         "raw_evidence_included": True,
     }
     if selected is not None:
-        entry = next(e for e in entries if e["format"]["name"] == selected)
+        entry = next((e for e in entries if e["format"]["name"] == selected), _SENTINEL)
+        assert entry is not _SENTINEL
         data["selected_boundary_token_ids"] = list(entry["boundary_token_ids"])
     if decision in (
         "compatible_on_fixture_set",
@@ -411,7 +414,10 @@ class TestTamperDetection(unittest.TestCase):
         report = verify.verify_results(data)
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(_check_status(report, "candidates_unique"), "failed")
-        detail = next(c["detail"] for c in report["checks"] if c["id"] == "candidates_unique")
+        detail = next(
+            (c["detail"] for c in report["checks"] if c["id"] == "candidates_unique"), _SENTINEL
+        )
+        self.assertIsNot(detail, _SENTINEL)
         self.assertNotIn("\x1b", detail)
         self.assertIn("alpha", detail)
 

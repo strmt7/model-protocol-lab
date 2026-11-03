@@ -31,6 +31,8 @@ from model_protocol_lab.diffreports import _valid_numform, diff_numform, diff_re
 from model_protocol_lab.experiments import numform_analysis, numform_stage
 from model_protocol_lab.reporting import render_html
 
+_SENTINEL = object()
+
 BOUNDARY_WORD = "<|im_end|>"
 SPACE = "\u202f"
 
@@ -78,7 +80,8 @@ def _margin_oracle(a: int, b: int) -> str:
     da, db = _digits_of(a), _digits_of(b)
     if len(da) != len(db):
         return "different_length"
-    index = next(i for i, (x, y) in enumerate(zip(da, db, strict=True)) if x != y)
+    index = next((i for i, (x, y) in enumerate(zip(da, db, strict=True)) if x != y), _SENTINEL)
+    assert index is not _SENTINEL
     if index == len(da) - 1:
         return "same_length_last_digit"
     if 2 * index < len(da):
@@ -284,7 +287,10 @@ class TestGeneration(unittest.TestCase):
                 # larger side).
                 magnitude = max(record["operands"])
                 digits = len(str(magnitude))
-                expected_band = next(i for i, (lo, hi) in enumerate(nf.BANDS) if lo <= digits <= hi)
+                expected_band = next(
+                    (i for i, (lo, hi) in enumerate(nf.BANDS) if lo <= digits <= hi), _SENTINEL
+                )
+                self.assertIsNot(expected_band, _SENTINEL)
                 self.assertEqual(record["band"], expected_band, record["value_id"])
             if task == "copy":
                 for band in range(4):
@@ -1389,11 +1395,16 @@ class TestValidatorBattery(unittest.TestCase):
 
         def first(payload, task, form="plain"):
             """First."""
-            return next(
-                r
-                for r in payload["candidates"]["nf-a"]["records"]
-                if r["task"] == task and r["form"] == form
+            _found_1 = next(
+                (
+                    r
+                    for r in payload["candidates"]["nf-a"]["records"]
+                    if r["task"] == task and r["form"] == form
+                ),
+                _SENTINEL,
             )
+            assert _found_1 is not _SENTINEL
+            return _found_1
 
         tampers = [
             lambda p: first(p, "copy")["cell"].__setitem__(
@@ -1954,19 +1965,28 @@ class TestGapCoverage(unittest.TestCase):
 
         def first(payload, task, form="plain"):
             """First."""
-            return next(
-                r
-                for r in payload["candidates"]["nf-a"]["records"]
-                if r["task"] == task and r["form"] == form
+            _found_2 = next(
+                (
+                    r
+                    for r in payload["candidates"]["nf-a"]["records"]
+                    if r["task"] == task and r["form"] == form
+                ),
+                _SENTINEL,
             )
+            assert _found_2 is not _SENTINEL
+            return _found_2
 
         def middle_compare(payload):
             """Middle compare."""
             record = next(
-                r
-                for r in payload["candidates"]["nf-a"]["records"]
-                if r["task"] == "compare" and r["form"] == "plain" and r["band"] == 1
+                (
+                    r
+                    for r in payload["candidates"]["nf-a"]["records"]
+                    if r["task"] == "compare" and r["form"] == "plain" and r["band"] == 1
+                ),
+                _SENTINEL,
             )
+            assert record is not _SENTINEL
             record["operands"] = [1211, 1291]
             record["expected_value"] = 1291
             record["expected_answer"] = "second"
@@ -1978,20 +1998,40 @@ class TestGapCoverage(unittest.TestCase):
             record = first(payload, "compare")
             true_class = nf.margin_class(*record["operands"])
             record["stratum"] = next(
-                c
-                for c in (
-                    "different_length",
-                    "same_length_early",
-                    "same_length_last_digit",
-                )
-                if c != true_class
+                (
+                    c
+                    for c in (
+                        "different_length",
+                        "same_length_early",
+                        "same_length_last_digit",
+                    )
+                    if c != true_class
+                ),
+                _SENTINEL,
             )
+            assert record["stratum"] is not _SENTINEL
 
         def wrong_add_stratum(payload):
             """Wrong add stratum."""
             record = first(payload, "add")
             true_class = nf.carry_class(*record["operands"])
-            record["stratum"] = next(c for c in ("none", "some", "full_chain") if c != true_class)
+            record["stratum"] = next(
+                (c for c in ("none", "some", "full_chain") if c != true_class), _SENTINEL
+            )
+            assert record["stratum"] is not _SENTINEL
+
+        def comma_identical_flip(payload):
+            """Comma identical flip."""
+            record = next(
+                (
+                    r
+                    for r in payload["candidates"]["nf-a"]["records"]
+                    if r["form"] == "comma" and r["form_identical"] is False
+                ),
+                _SENTINEL,
+            )
+            assert record is not _SENTINEL
+            record["form_identical"] = True
 
         tampers = [
             lambda p: p["candidates"]["nf-a"]["records"].__setitem__(0, "junk"),
@@ -2011,11 +2051,7 @@ class TestGapCoverage(unittest.TestCase):
             wrong_add_stratum,
             middle_compare,
             lambda p: first(p, "copy").__setitem__("form_identical", 1),
-            lambda p: next(
-                r
-                for r in p["candidates"]["nf-a"]["records"]
-                if r["form"] == "comma" and r["form_identical"] is False
-            ).__setitem__("form_identical", True),
+            comma_identical_flip,
             lambda p: first(p, "copy").__setitem__("expected_answer_tokens", -1),
             lambda p: first(p, "copy").__setitem__("answer_value", -3),
             lambda p: first(p, "copy")["cell"].__setitem__("verdict", "yes"),
@@ -2151,11 +2187,16 @@ class TestGapCoverageRoundThree(unittest.TestCase):
 
         def first(payload, task, form="plain", name="nf-a"):
             """First."""
-            return next(
-                r
-                for r in payload["candidates"][name]["records"]
-                if r["task"] == task and r["form"] == form
+            _found_3 = next(
+                (
+                    r
+                    for r in payload["candidates"][name]["records"]
+                    if r["task"] == task and r["form"] == form
+                ),
+                _SENTINEL,
             )
+            assert _found_3 is not _SENTINEL
+            return _found_3
 
         def equal_compare(payload):
             """Equal compare."""
@@ -2196,10 +2237,14 @@ class TestGapCoverageRoundThree(unittest.TestCase):
             # different -- individually consistent -- value in
             # the second candidate: construction tuples differ.
             record = next(
-                r
-                for r in payload["candidates"]["nf-b"]["records"]
-                if r["value_id"] == "nf-copy-00" and r["form"] == "plain"
+                (
+                    r
+                    for r in payload["candidates"]["nf-b"]["records"]
+                    if r["value_id"] == "nf-copy-00" and r["form"] == "plain"
+                ),
+                _SENTINEL,
             )
+            assert record is not _SENTINEL
             record["operands"] = [101]
             record["expected_value"] = 101
             record["expected_answer"] = "101"

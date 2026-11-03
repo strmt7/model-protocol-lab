@@ -64,6 +64,8 @@ from model_protocol_lab.choiceaudit import (
 from model_protocol_lab.core import Fixture, Format, Message
 from model_protocol_lab.experiments import choiceaudit_analysis, choiceaudit_stage
 
+_SENTINEL = object()
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -100,7 +102,8 @@ class TestConstruction(unittest.TestCase):
             _fx("b3", "wolf", "animal"),
         ]
         block = build_choice_sets(cases)
-        target = next(e for e in block if e["fixture"] == "a1")
+        target = next((e for e in block if e["fixture"] == "a1"), _SENTINEL)
+        self.assertIsNot(target, _SENTINEL)
         self.assertTrue(target["constructible"])
         self.assertIsNone(target["excluded"])
         # True choice first (source None), donors in ascending
@@ -125,7 +128,8 @@ class TestConstruction(unittest.TestCase):
             _fx("d4", "frog", "wild"),
         ]
         block = build_choice_sets(cases)
-        target = next(e for e in block if e["fixture"] == "t1")
+        target = next((e for e in block if e["fixture"] == "t1"), _SENTINEL)
+        self.assertIsNot(target, _SENTINEL)
         self.assertEqual(_donor_ids(target), ["d2", "d3", "d4"])
 
     def test_containment_rejected_both_directions(self):
@@ -139,7 +143,8 @@ class TestConstruction(unittest.TestCase):
             _fx("d5", "Miami", "other"),
         ]
         block = build_choice_sets(cases)
-        target = next(e for e in block if e["fixture"] == "t1")
+        target = next((e for e in block if e["fixture"] == "t1"), _SENTINEL)
+        self.assertIsNot(target, _SENTINEL)
         self.assertEqual(_donor_ids(target), ["d3", "d4", "d5"])
 
     def test_rung4_equivalent_donor_rejected(self):
@@ -152,7 +157,8 @@ class TestConstruction(unittest.TestCase):
             _fx("d4", "Madrid", "other"),
         ]
         block = build_choice_sets(cases)
-        target = next(e for e in block if e["fixture"] == "t1")
+        target = next((e for e in block if e["fixture"] == "t1"), _SENTINEL)
+        self.assertIsNot(target, _SENTINEL)
         self.assertNotIn("d1", _donor_ids(target))
         self.assertTrue(target["constructible"])
 
@@ -167,7 +173,8 @@ class TestConstruction(unittest.TestCase):
             _fx("d5", "mars", "night"),
         ]
         block = build_choice_sets(cases)
-        target = next(e for e in block if e["fixture"] == "t1")
+        target = next((e for e in block if e["fixture"] == "t1"), _SENTINEL)
+        self.assertIsNot(target, _SENTINEL)
         self.assertEqual(_donor_ids(target), ["d1", "d4", "d5"])
 
     def test_shortfall_recorded_not_repaired(self):
@@ -178,7 +185,8 @@ class TestConstruction(unittest.TestCase):
             _fx("d2", "three", "h"),
         ]
         block = build_choice_sets(cases)
-        target = next(e for e in block if e["fixture"] == "t1")
+        target = next((e for e in block if e["fixture"] == "t1"), _SENTINEL)
+        self.assertIsNot(target, _SENTINEL)
         self.assertFalse(target["constructible"])
         # The realised (partial) choices stay on the record.
         self.assertEqual(_donor_ids(target), ["d1", "d2"])
@@ -214,7 +222,8 @@ class TestConstruction(unittest.TestCase):
             _fx("d3", "delta", "h"),
         ]
         block = build_choice_sets(cases)
-        target = next(e for e in block if e["fixture"] == "t1")
+        target = next((e for e in block if e["fixture"] == "t1"), _SENTINEL)
+        self.assertIsNot(target, _SENTINEL)
         self.assertNotIn("e1", _donor_ids(target))
         self.assertEqual(_donor_ids(target), ["d1", "d2", "d3"])
 
@@ -231,7 +240,8 @@ class TestConstruction(unittest.TestCase):
         import copy
 
         altered = copy.deepcopy(block)
-        target = next(e for e in altered if e["fixture"] == "t1")
+        target = next((e for e in altered if e["fixture"] == "t1"), _SENTINEL)
+        self.assertIsNot(target, _SENTINEL)
         target["choices"][1]["group"] = "elsewhere"
         self.assertNotEqual(donor_map_sha256(altered), digest_a)
 
@@ -438,7 +448,9 @@ class TestAggregation(unittest.TestCase):
 
     def _entry(self, fixture):
         """Entry."""
-        return next(e for e in self.fixtures if e["fixture"] == fixture)
+        _found_1 = next((e for e in self.fixtures if e["fixture"] == fixture), _SENTINEL)
+        self.assertIsNot(_found_1, _SENTINEL)
+        return _found_1
 
     def test_denominators_and_discordance(self):
         """Test denominators and discordance."""
@@ -1060,7 +1072,8 @@ class TestValidatorBattery(unittest.TestCase):
 
         def mutate(p):
             """Mutate."""
-            entry = next(e for e in p["fixtures"] if e["constructible"])
+            entry = next((e for e in p["fixtures"] if e["constructible"]), _SENTINEL)
+            assert entry is not _SENTINEL
             entry["choices"][1]["digest"] = "0" * 64
 
         self.assertFalse(diffreports._valid_choiceaudit(self._tampered(mutate)))
@@ -1070,7 +1083,8 @@ class TestValidatorBattery(unittest.TestCase):
 
         def mutate(p):
             """Mutate."""
-            entry = next(e for e in p["fixtures"] if e["constructible"])
+            entry = next((e for e in p["fixtures"] if e["constructible"]), _SENTINEL)
+            assert entry is not _SENTINEL
             entry["choices"][1]["group"] = entry["group"]
 
         self.assertFalse(diffreports._valid_choiceaudit(self._tampered(mutate)))
@@ -1080,7 +1094,8 @@ class TestValidatorBattery(unittest.TestCase):
 
         def mutate(p):
             """Mutate."""
-            entry = next(e for e in p["fixtures"] if e["constructible"])
+            entry = next((e for e in p["fixtures"] if e["constructible"]), _SENTINEL)
+            assert entry is not _SENTINEL
             digest = entry["choices"][0]["digest"]
             for choice in entry["choices"]:
                 choice["digest"] = digest
@@ -1273,9 +1288,13 @@ class TestReportingAndCli(unittest.TestCase):
         import argparse
 
         parser = cli.build_parser()
-        subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+        subparsers = next(
+            (a for a in parser._actions if isinstance(a, argparse._SubParsersAction)), _SENTINEL
+        )
+        self.assertIsNot(subparsers, _SENTINEL)
         run_parser = subparsers.choices["run"]
-        action = next(a for a in run_parser._actions if a.dest == "choice_audit")
+        action = next((a for a in run_parser._actions if a.dest == "choice_audit"), _SENTINEL)
+        self.assertIsNot(action, _SENTINEL)
         self.assertIn("9,600", action.help)
         self.assertIn("acc_norm", action.help)
         self.assertIn("second opinion", action.help)
@@ -1442,7 +1461,8 @@ class TestValidatorGuardBattery(unittest.TestCase):
     def test_excluded_payload_is_valid(self):
         """Test excluded payload is valid."""
         self.assertTrue(diffreports._valid_choiceaudit(self.excluded))
-        entry = next(e for e in self.excluded["fixtures"] if e["fixture"] == "f8")
+        entry = next((e for e in self.excluded["fixtures"] if e["fixture"] == "f8"), _SENTINEL)
+        self.assertIsNot(entry, _SENTINEL)
         self.assertEqual(entry["excluded"], "blank_expected")
 
     def test_block_guards(self):
@@ -1530,7 +1550,8 @@ class TestValidatorGuardBattery(unittest.TestCase):
 
         def mutate(p):
             """Mutate."""
-            entry = next(e for e in p["fixtures"] if e["fixture"] == "f8")
+            entry = next((e for e in p["fixtures"] if e["fixture"] == "f8"), _SENTINEL)
+            assert entry is not _SENTINEL
             entry["constructible"] = True
 
         self._assert_invalid(self.excluded, mutate, base=self.excluded)
@@ -1873,7 +1894,8 @@ class TestReportingStates(unittest.TestCase):
         stage, base = _run_stage(_KeyedBackend())
         top = base["method_comparison"]["choice_top_candidate"]
         self.assertEqual(top, "chatml")
-        other = next(n for n in ("chatml", "plain") if n != top)
+        other = next((n for n in ("chatml", "plain") if n != top), _SENTINEL)
+        self.assertIsNot(other, _SENTINEL)
         agree = choiceaudit_analysis(
             stage, "compatible_on_fixture_set", top, tuple(f.name for f in _FORMATS)
         )

@@ -35,6 +35,8 @@ from model_protocol_lab import cli, experiments, fieldorder, reporting, structur
 from model_protocol_lab.core import Format, Generation
 from model_protocol_lab.diffreports import _valid_field_order, diff_field_order
 
+_SENTINEL = object()
+
 FORMATS = (
     Format(name="fo-a", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>"),
     Format(name="fo-b", bos="", user_prefix="U>", assistant_prefix="A>", turn_end="<e>"),
@@ -62,7 +64,10 @@ def _wrong_value(spec, field):
     expected = spec["answer"][field]
     enum = schema_field.get("enum")
     if enum is not None:
-        return next(value for value in enum if value != expected)
+        wrong = next((value for value in enum if value != expected), _SENTINEL)
+        if wrong is _SENTINEL:
+            raise AssertionError("no enum value differs from the expected answer")
+        return wrong
     if schema_field["type"] == "integer":
         for candidate in (expected + 1, expected - 1):
             if schema_field.get("minimum") is not None and candidate < schema_field["minimum"]:

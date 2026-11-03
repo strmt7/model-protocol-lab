@@ -82,6 +82,8 @@ import unittest
 from model_protocol_lab.catalog import CATALOG, candidates
 from model_protocol_lab.core import Message
 
+_SENTINEL = object()
+
 # --- Official Ling 3.0 Flash literals (from the primary sources above) -------
 
 _OFFICIAL_BOS = "<|startoftext|>"
@@ -132,7 +134,10 @@ class Ling30OfficialLiteralsTests(unittest.TestCase):
 
     def test_thinking_off_suffix_matches_official_30(self) -> None:
         """Test thinking off suffix matches official 30."""
-        off = next(v for v in candidates("ling", mutate=True) if v.name == "ling/thinking-off")
+        off = next(
+            (v for v in candidates("ling", mutate=True) if v.name == "ling/thinking-off"), _SENTINEL
+        )
+        self.assertIsNot(off, _SENTINEL)
         self.assertEqual(off.open_suffix, _OFFICIAL_GEN_PROMPT_OFF)
 
 
@@ -157,7 +162,10 @@ class Ling30RenderAuditTests(unittest.TestCase):
 
     def test_thinking_off_render_tail_matches_official(self) -> None:
         """Test thinking off render tail matches official."""
-        off = next(v for v in candidates("ling", mutate=True) if v.name == "ling/thinking-off")
+        off = next(
+            (v for v in candidates("ling", mutate=True) if v.name == "ling/thinking-off"), _SENTINEL
+        )
+        self.assertIsNot(off, _SENTINEL)
         rendered = off.render(_SINGLE)
         self.assertTrue(rendered.endswith(_OFFICIAL_GEN_PROMPT_OFF))
         self.assertEqual(
@@ -187,7 +195,10 @@ class Ling30VerdictTests(unittest.TestCase):
         for name, documented, actual in pairs:
             if documented != actual:
                 diffs.append(f"{name}: DOCUMENTED {documented!r} -> ACTUAL {actual!r}")
-        off = next(v for v in candidates("ling", mutate=True) if v.name == "ling/thinking-off")
+        off = next(
+            (v for v in candidates("ling", mutate=True) if v.name == "ling/thinking-off"), _SENTINEL
+        )
+        self.assertIsNot(off, _SENTINEL)
         if off.open_suffix != _OFFICIAL_GEN_PROMPT_OFF:
             diffs.append(
                 f"thinking-off open_suffix: DOCUMENTED {_OFFICIAL_GEN_PROMPT_OFF!r} "

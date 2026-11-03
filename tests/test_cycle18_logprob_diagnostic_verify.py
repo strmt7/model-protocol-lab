@@ -1167,7 +1167,9 @@ class EngineeredBoundaryEndToEndTests(DiagnosticCase):
                 fixture = _make_fixture("f1", "c")
                 result = {"search": [_candidate_entry("cand", [_make_obs("f1", prompt_ids)])]}
                 diag = self.assert_diagnostic_matches(backend, result, (fixture,), vocab_size=128)
-                (cand,) = diag["candidates"]
+                cand_items = list(diag["candidates"])
+                assert len(cand_items) == 1
+                cand = cand_items[0]
                 self.assertEqual(cand["interpretation"]["kind"], expected_kind)
                 self.assertEqual(cand["aggregate"]["mean_logprob"], mean_p)
 
@@ -1181,7 +1183,9 @@ class EngineeredBoundaryEndToEndTests(DiagnosticCase):
                 fixture = _make_fixture("f1", "dcd")
                 result = {"search": [_candidate_entry("cand", [_make_obs("f1", prompt_ids)])]}
                 diag = self.assert_diagnostic_matches(backend, result, (fixture,), vocab_size=128)
-                (cand,) = diag["candidates"]
+                cand_items = list(diag["candidates"])
+                assert len(cand_items) == 1
+                cand = cand_items[0]
                 self.assertEqual(cand["interpretation"]["kind"], expected_kind)
                 self.assertEqual(cand["aggregate"]["mean_logprob"], mean_p)
                 self.assertEqual(cand["aggregate"]["scored_token_count"], 3)
@@ -1271,7 +1275,9 @@ class InterpretationEndToEndTests(DiagnosticCase):
         diag = self.assert_diagnostic_matches(
             backend, result, (_make_fixture("f1", "c"),), vocab_size=128
         )
-        (cand,) = diag["candidates"]
+        cand_items = list(diag["candidates"])
+        assert len(cand_items) == 1
+        cand = cand_items[0]
         self.assertEqual(cand["interpretation"]["kind"], "no_failures")
         self.assertEqual(cand["aggregate"]["scored_fixtures"], 0)
 

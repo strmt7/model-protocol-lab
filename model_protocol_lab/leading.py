@@ -201,6 +201,9 @@ def build_donor_map(cases: tuple[Fixture, ...]) -> dict[str, dict[str, Any]]:
         if case.expected.strip():
             by_group.setdefault(case.group, []).append(case.expected)
     donor_map: dict[str, dict[str, Any]] = {}
+    by_id: dict[str, Fixture] = {}
+    for other in cases:
+        by_id.setdefault(other.id, other)  # first occurrence wins, as a scan would find
     for case in cases:
         entry: dict[str, Any] = {
             "donor_fixture": None,
@@ -218,7 +221,7 @@ def build_donor_map(cases: tuple[Fixture, ...]) -> dict[str, dict[str, Any]]:
                 and _eligible_plant(other.expected, group_expecteds)
             )
             if donors:
-                donor = next(other for other in cases if other.id == donors[0])
+                donor = by_id[donors[0]]  # donors are ids of cases in this call
                 entry = {
                     "donor_fixture": donor.id,
                     "plant_source": "donor",

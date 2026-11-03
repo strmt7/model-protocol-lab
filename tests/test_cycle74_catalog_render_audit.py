@@ -82,6 +82,8 @@ from typing import Literal
 from model_protocol_lab.catalog import CATALOG, candidates
 from model_protocol_lab.core import Format, Message
 
+_SENTINEL = object()
+
 Role = Literal["user", "assistant"]
 
 # ---------------------------------------------------------------------------
@@ -344,7 +346,10 @@ class CatalogRenderAuditTests(unittest.TestCase):
     @staticmethod
     def test_crosscheck_hy4_no_think_variant():
         """Test crosscheck hy4 no think variant."""
-        variant = next(f for f in candidates("hy4", mutate=True) if f.name == "hy4/no-think")
+        variant = next(
+            (f for f in candidates("hy4", mutate=True) if f.name == "hy4/no-think"), _SENTINEL
+        )
+        assert variant is not _SENTINEL
         assert variant.render(_one_turn("U1")) == _HY4_USER + _HY4_NOTHINK_GEN
 
 

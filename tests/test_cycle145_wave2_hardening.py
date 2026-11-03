@@ -130,7 +130,8 @@ class TestMarginTrajectoryComplexity(unittest.TestCase):
             start = time.perf_counter()
             margin_trajectory(frontier)
             timings.append(time.perf_counter() - start)
-        small, large = timings
+        self.assertEqual(len(timings), 2)
+        small, large = timings[0], timings[1]
         if small < 1e-3:
             self.skipTest(f"timer resolution too coarse ({small:.2e}s)")
         ratio = large / small

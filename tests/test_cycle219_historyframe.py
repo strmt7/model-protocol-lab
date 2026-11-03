@@ -25,6 +25,8 @@ from model_protocol_lab import historyframe as hf
 from model_protocol_lab.catalog import CATALOG
 from model_protocol_lab.core import Fixture, Format, Generation, Message
 
+_SENTINEL = object()
+
 _CHATML = Format("chatml", "", "<|im_start|>user\n", "<|im_start|>assistant\n", "<|im_end|>\n")
 _LLAMA3 = Format(
     "llama3",
@@ -764,10 +766,15 @@ class ValidatorTests(unittest.TestCase):
         diff = diffreports.diff_history_frame(perfect, dropped)
         self.assertTrue(diff["changed"])
         metric = next(
-            entry
-            for entry in diff["candidate_drift"]
-            if entry["candidate"] == "chatml" and entry["metric"] == "classification_foreign_llama3"
+            (
+                entry
+                for entry in diff["candidate_drift"]
+                if entry["candidate"] == "chatml"
+                and entry["metric"] == "classification_foreign_llama3"
+            ),
+            _SENTINEL,
         )
+        self.assertIsNot(metric, _SENTINEL)
         self.assertEqual(
             (metric["old"], metric["new"]),
             ("no_discordance_observed", "discordant_asymmetric"),
@@ -831,10 +838,20 @@ class CliTests(unittest.TestCase):
 
         parser = build_parser()
         run = next(
-            action for action in parser._actions if action.__class__.__name__ == "_SubParsersAction"
+            (
+                action
+                for action in parser._actions
+                if action.__class__.__name__ == "_SubParsersAction"
+            ),
+            _SENTINEL,
         )
+        self.assertIsNot(run, _SENTINEL)
         help_text = run.choices["run"].format_help()  # raises on a bare %
-        flag = next(a for a in run.choices["run"]._actions if "--history-frame" in a.option_strings)
+        flag = next(
+            (a for a in run.choices["run"]._actions if "--history-frame" in a.option_strings),
+            _SENTINEL,
+        )
+        self.assertIsNot(flag, _SENTINEL)
         self.assertIsNotNone(flag)
         # Naming condition: the prepend disclosure sits in
         # the help's opening sentence (before "Per candidate").

@@ -847,7 +847,9 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             boundary=(33,),
             eos_id=99,
         )
-        (row,) = rows
+        row_items = list(rows)
+        assert len(row_items) == 1
+        row = row_items[0]
         self.assertEqual(
             row,
             {
@@ -893,7 +895,9 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             boundary=(33,),
             eos_id=99,
         )
-        (row,) = rows
+        row_items = list(rows)
+        assert len(row_items) == 1
+        row = row_items[0]
         self.assertTrue(row["native_pass"])
         cells = row["cells"]
         self.assertEqual(cells["eos_appended"]["detail"], "fired_at_step_3")
@@ -919,7 +923,9 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             eos_id=99,
             vllm_include_stop_str_in_output=True,
         )
-        (row,) = rows
+        row_items = list(rows)
+        assert len(row_items) == 1
+        row = row_items[0]
         self.assertEqual(row["cells"]["vllm_holdback"]["stop_text"], "kept")
         self.assertTrue(row["cells"]["vllm_holdback"]["fired"])
         self.assertEqual(row["flips"], [])
@@ -941,7 +947,9 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             boundary=(8364,),
             eos_id=99,
         )
-        (row,) = rows
+        row_items = list(rows)
+        assert len(row_items) == 1
+        row = row_items[0]
         hf = row["cells"]["hf_stop_string"]
         vllm = row["cells"]["vllm_holdback"]
         for cell in (hf, vllm):
@@ -963,7 +971,9 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             boundary=(33,),
             eos_id=99,
         )
-        (row,) = rows
+        row_items = list(rows)
+        assert len(row_items) == 1
+        row = row_items[0]
         self.assertFalse(row["native_pass"])
         for semantic in STOP_SEMANTICS[1:]:
             with self.subTest(semantic=semantic):
@@ -981,7 +991,9 @@ class StopMatrixHandDerivedTests(unittest.TestCase):
             (_matrix_observation(output_ids=("a",), exact_match=False, boundary_found=False),),
             boundary=(33,),
         )
-        (row,) = rows
+        row_items = list(rows)
+        assert len(row_items) == 1
+        row = row_items[0]
         for semantic in STOP_SEMANTICS[1:]:
             with self.subTest(semantic=semantic):
                 self.assertFalse(row["cells"][semantic]["available"])
@@ -1077,15 +1089,19 @@ class StopMatrixWiringTests(unittest.TestCase):
             for eos_id, keep in itertools.product((None, 99), (False, True)):
                 with self.subTest(index=index, eos_id=eos_id, keep=keep):
                     expected = self._predict(backend, fixture, (33,), obs, eos_id, keep_vllm=keep)
-                    (actual,) = stop_matrix(
-                        backend,
-                        "tiny",
-                        (fixture,),
-                        (obs,),
-                        boundary=(33,),
-                        eos_id=eos_id,
-                        vllm_include_stop_str_in_output=keep,
+                    actual_items = list(
+                        stop_matrix(
+                            backend,
+                            "tiny",
+                            (fixture,),
+                            (obs,),
+                            boundary=(33,),
+                            eos_id=eos_id,
+                            vllm_include_stop_str_in_output=keep,
+                        )
                     )
+                    assert len(actual_items) == 1
+                    actual = actual_items[0]
                     self.assertEqual(actual, expected)
 
 
@@ -1159,7 +1175,9 @@ class StopMatrixValidationTests(unittest.TestCase):
                 return super().decode(token_ids)
 
         rows = self._run(backend=NoBoundaryText(), eos_id=99)
-        (row,) = rows
+        row_items = list(rows)
+        assert len(row_items) == 1
+        row = row_items[0]
         self.assertFalse(row["cells"]["hf_stop_string"]["available"])
         self.assertFalse(row["cells"]["vllm_holdback"]["available"])
         # The token-id cell does not need the boundary text.

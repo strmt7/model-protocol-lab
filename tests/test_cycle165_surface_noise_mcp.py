@@ -52,7 +52,9 @@ class MCPContractTests(unittest.TestCase):
 
     def test_tools_list(self):
         """Test tools list."""
-        (resp,) = _run_session([_req(1, "tools/list")])
+        resp_items = list(_run_session([_req(1, "tools/list")]))
+        assert len(resp_items) == 1
+        resp = resp_items[0]
         self.assertEqual(resp["id"], 1)
         tools = resp["result"]["tools"]
         names = {t["name"] for t in tools}
@@ -71,7 +73,9 @@ class MCPContractTests(unittest.TestCase):
 
     def test_server_discover(self):
         """Test server discover."""
-        (resp,) = _run_session([_req(1, "server/discover")])
+        resp_items = list(_run_session([_req(1, "server/discover")]))
+        assert len(resp_items) == 1
+        resp = resp_items[0]
         self.assertIn("tools", resp["result"]["capabilities"])
         self.assertIn("serverInfo", resp["result"])
         self.assertIn("2026-07-28", resp["result"]["protocolVersions"])
@@ -81,37 +85,45 @@ class MCPContractTests(unittest.TestCase):
         # The server accepts initialize without a prior handshake (liberal
         # acceptance); it must not require the 2026-07-28 stateless
         # framing nor the older stateful one.
-        (resp,) = _run_session(
-            [_req(1, "initialize", {"protocolVersion": "2026-07-28", "clientInfo": {}})]
+        resp_items = list(
+            _run_session(
+                [_req(1, "initialize", {"protocolVersion": "2026-07-28", "clientInfo": {}})]
+            )
         )
+        assert len(resp_items) == 1
+        resp = resp_items[0]
         self.assertIn("result", resp)
         self.assertIn("protocolVersion", resp["result"])
 
     def test_probe_tool_end_to_end(self):
         """Test probe tool end to end."""
-        (resp,) = _run_session(
-            [
-                _req(
-                    1,
-                    "tools/call",
-                    {
-                        "name": "probe_surface_noise_stability",
-                        "arguments": {
-                            "prompt": "MAGICWORD please answer now",
-                            "fixtures": [
-                                {
-                                    "id": "f1",
-                                    "messages": [{"role": "user", "content": "x"}],
-                                    "expected": "BLUE",
-                                    "group": "probe",
-                                }
-                            ],
-                            "boundary": [7],
+        resp_items = list(
+            _run_session(
+                [
+                    _req(
+                        1,
+                        "tools/call",
+                        {
+                            "name": "probe_surface_noise_stability",
+                            "arguments": {
+                                "prompt": "MAGICWORD please answer now",
+                                "fixtures": [
+                                    {
+                                        "id": "f1",
+                                        "messages": [{"role": "user", "content": "x"}],
+                                        "expected": "BLUE",
+                                        "group": "probe",
+                                    }
+                                ],
+                                "boundary": [7],
+                            },
                         },
-                    },
-                )
-            ]
+                    )
+                ]
+            )
         )
+        assert len(resp_items) == 1
+        resp = resp_items[0]
         self.assertIn("result", resp)
         structured = resp["result"]["structuredContent"]
         self.assertEqual(structured["status"], "ok")
@@ -123,27 +135,35 @@ class MCPContractTests(unittest.TestCase):
 
     def test_controls_tool(self):
         """Test controls tool."""
-        (resp,) = _run_session(
-            [
-                _req(
-                    1,
-                    "tools/call",
-                    {
-                        "name": "surface_noise_controls",
-                        "arguments": {"boundary": [7]},
-                    },
-                )
-            ]
+        resp_items = list(
+            _run_session(
+                [
+                    _req(
+                        1,
+                        "tools/call",
+                        {
+                            "name": "surface_noise_controls",
+                            "arguments": {"boundary": [7]},
+                        },
+                    )
+                ]
+            )
         )
+        assert len(resp_items) == 1
+        resp = resp_items[0]
         structured = resp["result"]["structuredContent"]
         self.assertTrue(structured["discriminates"])
         self.assertEqual(len(structured["controls"]), 2)
 
     def test_protocol_info_tool(self):
         """Test protocol info tool."""
-        (resp,) = _run_session(
-            [_req(1, "tools/call", {"name": "surface_noise_protocol_info", "arguments": {}})]
+        resp_items = list(
+            _run_session(
+                [_req(1, "tools/call", {"name": "surface_noise_protocol_info", "arguments": {}})]
+            )
         )
+        assert len(resp_items) == 1
+        resp = resp_items[0]
         structured = resp["result"]["structuredContent"]
         self.assertEqual(structured["instrument"], "surface-noise-probe")
         self.assertIn("adapter_rule", structured)
@@ -182,63 +202,81 @@ class MCPContractTests(unittest.TestCase):
         )
         probe_report = responses[0]["result"]["structuredContent"]
         # Re-send with the report attached (the tool takes a report object).
-        (resp,) = _run_session(
-            [
-                _req(
-                    1,
-                    "tools/call",
-                    {
-                        "name": "surface_noise_hardening_notes",
-                        "arguments": {"report": probe_report},
-                    },
-                )
-            ]
+        resp_items = list(
+            _run_session(
+                [
+                    _req(
+                        1,
+                        "tools/call",
+                        {
+                            "name": "surface_noise_hardening_notes",
+                            "arguments": {"report": probe_report},
+                        },
+                    )
+                ]
+            )
         )
+        assert len(resp_items) == 1
+        resp = resp_items[0]
         structured = resp["result"]["structuredContent"]
         self.assertIn("counterfactuals", structured)
         self.assertIn("loop_guidance", structured)
         # A missing report is a param error, not a crash.
-        (err,) = _run_session(
-            [
-                _req(
-                    1,
-                    "tools/call",
-                    {"name": "surface_noise_hardening_notes", "arguments": {}},
-                )
-            ]
+        err_items = list(
+            _run_session(
+                [
+                    _req(
+                        1,
+                        "tools/call",
+                        {"name": "surface_noise_hardening_notes", "arguments": {}},
+                    )
+                ]
+            )
         )
+        assert len(err_items) == 1
+        err = err_items[0]
         self.assertEqual(err["error"]["code"], -32602)
 
     def test_unknown_tool_error(self):
         """Test unknown tool error."""
         # tools/call exists, so an unknown tool NAME is an invalid param.
-        (resp,) = _run_session([_req(1, "tools/call", {"name": "nope", "arguments": {}})])
+        resp_items = list(_run_session([_req(1, "tools/call", {"name": "nope", "arguments": {}})]))
+        assert len(resp_items) == 1
+        resp = resp_items[0]
         self.assertEqual(resp["error"]["code"], -32602)
 
     def test_unknown_method_error(self):
         """Test unknown method error."""
-        (resp,) = _run_session([_req(1, "frobnicate")])
+        resp_items = list(_run_session([_req(1, "frobnicate")]))
+        assert len(resp_items) == 1
+        resp = resp_items[0]
         self.assertEqual(resp["error"]["code"], -32601)
 
     def test_invalid_params_error(self):
         """Test invalid params error."""
-        (resp,) = _run_session(
-            [
-                _req(
-                    1,
-                    "tools/call",
-                    {
-                        "name": "probe_surface_noise_stability",
-                        "arguments": {"prompt": "x"},  # missing fixtures/boundary
-                    },
-                )
-            ]
+        resp_items = list(
+            _run_session(
+                [
+                    _req(
+                        1,
+                        "tools/call",
+                        {
+                            "name": "probe_surface_noise_stability",
+                            "arguments": {"prompt": "x"},  # missing fixtures/boundary
+                        },
+                    )
+                ]
+            )
         )
+        assert len(resp_items) == 1
+        resp = resp_items[0]
         self.assertEqual(resp["error"]["code"], -32602)
 
     def test_parse_error(self):
         """Test parse error."""
-        (resp,) = _run_session([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}])
+        resp_items = list(_run_session([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}]))
+        assert len(resp_items) == 1
+        resp = resp_items[0]
         # Sanity: a well-formed request still works through _run_session.
         self.assertIn("result", resp)
         proc = subprocess.run(
@@ -255,56 +293,64 @@ class MCPContractTests(unittest.TestCase):
 
     def test_prompt_size_cap(self):
         """Test prompt size cap."""
-        (resp,) = _run_session(
-            [
-                _req(
-                    1,
-                    "tools/call",
-                    {
-                        "name": "probe_surface_noise_stability",
-                        "arguments": {
-                            "prompt": "x" * (1 << 20 + 1),
-                            "fixtures": [
-                                {
-                                    "id": "f1",
-                                    "messages": [{"role": "user", "content": "x"}],
-                                    "expected": "BLUE",
-                                    "group": "probe",
-                                }
-                            ],
-                            "boundary": [7],
+        resp_items = list(
+            _run_session(
+                [
+                    _req(
+                        1,
+                        "tools/call",
+                        {
+                            "name": "probe_surface_noise_stability",
+                            "arguments": {
+                                "prompt": "x" * (1 << 20 + 1),
+                                "fixtures": [
+                                    {
+                                        "id": "f1",
+                                        "messages": [{"role": "user", "content": "x"}],
+                                        "expected": "BLUE",
+                                        "group": "probe",
+                                    }
+                                ],
+                                "boundary": [7],
+                            },
                         },
-                    },
-                )
-            ]
+                    )
+                ]
+            )
         )
+        assert len(resp_items) == 1
+        resp = resp_items[0]
         self.assertEqual(resp["error"]["code"], -32602)
 
     def test_fixture_group_defaults(self):
         """Test fixture group defaults."""
         # Fixtures without an explicit group are accepted (defaulted).
-        (resp,) = _run_session(
-            [
-                _req(
-                    1,
-                    "tools/call",
-                    {
-                        "name": "probe_surface_noise_stability",
-                        "arguments": {
-                            "prompt": "MAGICWORD",
-                            "fixtures": [
-                                {
-                                    "id": "f1",
-                                    "messages": [{"role": "user", "content": "x"}],
-                                    "expected": "BLUE",
-                                }
-                            ],
-                            "boundary": [7],
+        resp_items = list(
+            _run_session(
+                [
+                    _req(
+                        1,
+                        "tools/call",
+                        {
+                            "name": "probe_surface_noise_stability",
+                            "arguments": {
+                                "prompt": "MAGICWORD",
+                                "fixtures": [
+                                    {
+                                        "id": "f1",
+                                        "messages": [{"role": "user", "content": "x"}],
+                                        "expected": "BLUE",
+                                    }
+                                ],
+                                "boundary": [7],
+                            },
                         },
-                    },
-                )
-            ]
+                    )
+                ]
+            )
         )
+        assert len(resp_items) == 1
+        resp = resp_items[0]
         self.assertIn("result", resp)
         self.assertEqual(resp["result"]["structuredContent"]["status"], "ok")
 

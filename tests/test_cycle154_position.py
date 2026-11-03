@@ -265,7 +265,9 @@ class BuildPositionFixturesTests(unittest.TestCase):
         specs = validate_position_specs((_spec(),))
         for condition in CONDITIONS:
             for seed in (0, 1, 20261012):
-                (fixture,) = build_position_fixtures(specs, condition=condition, seed=seed)
+                fixture_items = list(build_position_fixtures(specs, condition=condition, seed=seed))
+                assert len(fixture_items) == 1
+                fixture = fixture_items[0]
                 expected_layout = _ref_layout(("w", "x", "y", "z"), "y", condition, seed)
                 self.assertEqual(
                     fixture.messages[0].content, render_options("Which one?", expected_layout)
