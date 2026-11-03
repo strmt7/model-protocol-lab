@@ -589,7 +589,6 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
 
 def self_test() -> int:
     """Run one embedded probe end-to-end (offline) and exit 0 on success."""
-    from model_protocol_lab.core import Fixture, Message
 
     backend = sn.SelfTestBackend()
     fixtures = (

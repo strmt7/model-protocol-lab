@@ -650,6 +650,29 @@ added for previously uncovered branches of the CLI contamination
 warning (the ten-pair print cap and the non-dict pair skip), each
 verified to fail against its targeted mutant.
 
+Fixed in code in the following push: PTC-W0063 ×103 (`next()` without
+a default, so exhaustion surfaced as a bare `StopIteration`) and
+PYL-W0632 ×41 (unbalanced tuple unpacking), plus PTC-W0060 ×1. In
+tests, every flagged lookup now passes an explicit sentinel and
+asserts it was not returned, so a missing element fails at the cause
+with the test's own message; every flagged unpack now materialises
+the sequence and asserts its length before indexing, preserving both
+failure directions of the original unpack. In shipped code, the two
+`aliasing.py` lookups gained an explicit cohort-invariant error (the
+cohort construction proves the record exists), `density.py` consumes
+its by-construction pools with `pop(0)` instead of iterators, and
+`leading.py`'s provable donor lookup asserts its invariant.
+
+Fixed in code in the following push: PYL-W0404 ×90 (the redundant
+class: function-local imports that rebind, unaliased, the identical
+module-level binding). Each local import line was deleted; the
+name resolves through the module-level import, which binds the same
+object. Four lines in `tests/test_hardening.py` imported one name
+(`Fixture`) that is not bound at module level alongside two that
+are; those lines were rewritten to import only `Fixture`. The
+aliased class of PYL-W0404 (×200) is addressed in the following
+pushes of this wave.
+
 ### Dependabot: filelock in the cocoindex tool lock (cycle 228)
 
 Cycle 228's hash-pinned cocoindex lock made its full transitive

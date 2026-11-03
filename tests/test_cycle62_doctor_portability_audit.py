@@ -606,9 +606,7 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up the test fixture."""
-        import sys
         import tempfile
-        from pathlib import Path
 
         # tmp_path fixture
         self._td = tempfile.TemporaryDirectory()
@@ -631,7 +629,6 @@ class DoctorPortabilityAuditTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         """Tear down the test fixture."""
-        import sys
 
         # Undo fake module installation (monkeypatch.setitem equivalent)
         if self._orig_transformers is None:

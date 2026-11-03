@@ -1984,7 +1984,6 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
 
     def test_stage_sizing_skips_plant_cutting_suffix(self):
         """Test stage sizing skips plant cutting suffix."""
-        from unittest import mock
 
         backend = _CharBackend()
         real = distraction.suffix_cuts_plant
@@ -2004,7 +2003,6 @@ class TestValidatorBatteryAndGaps(unittest.TestCase):
 
     def test_stage_sizing_skips_empty_span(self):
         """Test stage sizing skips empty span."""
-        from unittest import mock
 
         backend = _WordBackend(RULES, EXPECTED_BY_MARKER)
         real = distraction.span_text

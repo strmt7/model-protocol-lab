@@ -780,7 +780,6 @@ class EvaluateCaseTests(unittest.TestCase):
     @staticmethod
     def _call(render, backend, messages=None, expected="BLUE"):
         """Call."""
-        import threading
 
         messages = messages or (Message(role="user", content="Say MAGICWORD"),)
         return sn._evaluate_template_case(
@@ -1611,7 +1610,6 @@ class FailClosedCoverageTests(unittest.TestCase):
 
     def test_pre_cancelled_control_backend_generate(self):
         """Test pre cancelled control backend generate."""
-        import threading
 
         backend = sn._ControlCalibrationBackend()
         event = threading.Event()
@@ -1822,7 +1820,6 @@ class FailClosedCoverageTests(unittest.TestCase):
 
     def _cancel_probe(self, fire_on):
         """Cancel probe."""
-        import threading
 
         class CancelBackend(MarkerBackend):
             """Cancel backend."""
@@ -1859,7 +1856,6 @@ class FailClosedCoverageTests(unittest.TestCase):
         """Test cancel during last baseline is cancelled."""
         # Wave-6 red-team A finding 4: a cancel landing during the last
         # baseline evaluation must report "cancelled", not "unavailable".
-        from model_protocol_lab.core import Generation
 
         event = threading.Event()
 
@@ -1899,7 +1895,6 @@ class FailClosedCoverageTests(unittest.TestCase):
         # is_set() calls before the sweep: pre-baseline (1) + baseline tops
         # (2) + backend cancel checks during baseline generates (2) +
         # post-baseline check (1); the sweep's first top check is #7.
-        import threading
 
         class CountingEvent(threading.Event):
             """Counting event."""

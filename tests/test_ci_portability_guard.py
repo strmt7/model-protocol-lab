@@ -251,7 +251,6 @@ class TestDualRunnerContribution(unittest.TestCase):
 
     def test_every_test_file_collected_by_unittest(self) -> None:
         """Test every test file collected by unittest."""
-        import unittest
 
         loader = unittest.TestLoader()
         zero: list[str] = []

@@ -1549,7 +1549,6 @@ class ParseEmittedFailClosedTests(unittest.TestCase):
         """Test classify never raises on degenerate answer."""
         # One degenerate observation must not kill the stage: classify
         # degrades to parse_failed.
-        from model_protocol_lab.toolcall import classify_tool_call
 
         evil = "CALL get_weather " + "[" * 10000 + "]" * 10000
         result = classify_tool_call(evil, {"name": "get_weather", "arguments": {"city": "Paris"}})

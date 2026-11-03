@@ -230,7 +230,6 @@ class FixtureSerializationAuditTests(unittest.TestCase):
     def setUp(self) -> None:
         """Set up the test fixture."""
         import tempfile
-        from pathlib import Path
 
         self._td = tempfile.TemporaryDirectory()
         self.tmp_path = Path(self._td.name)

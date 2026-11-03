@@ -202,8 +202,6 @@ class ParserHostilePropertiesTests(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up the test fixture."""
-        import tempfile
-        from pathlib import Path
 
         # PID-scoped temp dir; tempfile picks the location (no hard-coded /tmp).
         self._td = tempfile.TemporaryDirectory(prefix=f"mpl88-{os.getpid()}-")

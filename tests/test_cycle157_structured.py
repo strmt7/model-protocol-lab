@@ -1509,7 +1509,6 @@ class StructuredSampleTests(unittest.TestCase):
     @staticmethod
     def _base_prompt(fixture_id):
         """Base prompt."""
-        from model_protocol_lab.structured import render_prompt
 
         spec = next((s for s in _SPECS if s["id"] == fixture_id.split("/")[1]), _SENTINEL)
         assert spec is not _SENTINEL
@@ -1547,7 +1546,6 @@ class StructuredSampleTests(unittest.TestCase):
 
     def test_structured_exercise_is_deterministic(self):
         """Test structured exercise is deterministic."""
-        from model_protocol_lab.experiments import structured_adherence, structured_stage
 
         def _run_once():
             """Run once."""
@@ -1650,7 +1648,6 @@ class StructuredCoverageGapTests(unittest.TestCase):
 
     def test_validate_schema_def_rejects_bad_properties(self):
         """Test validate schema def rejects bad properties."""
-        from model_protocol_lab.structured import validate_schema_def
 
         base = {
             "type": "object",
@@ -1665,7 +1662,6 @@ class StructuredCoverageGapTests(unittest.TestCase):
 
     def test_describe_schema_allows_additional_properties(self):
         """Test describe schema allows additional properties."""
-        from model_protocol_lab.structured import describe_schema
 
         schema = {
             "type": "object",

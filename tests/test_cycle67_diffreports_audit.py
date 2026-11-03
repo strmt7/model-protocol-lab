@@ -16881,7 +16881,6 @@ def _o_confidentiality_cell_valid(entry: Any) -> bool:
     # Derived-value recomputation (cycle 177, F6c mirror). The
     # McNemar p-value is recomputed from the binomial definition
     # here, not by calling the producer's function.
-    import math
 
     from model_protocol_lab.confidentiality import control_block, treatment_block
 
@@ -20991,7 +20990,6 @@ class _FuzzPrecisionBackend:
 
     def generate(self, prompt_ids, *, max_new_tokens, seed, cancel):
         """Generate."""
-        from model_protocol_lab.core import Generation
 
         prompt = self.decode(prompt_ids)
         answer = ""
@@ -21165,7 +21163,6 @@ class _FuzzConfidenceBackend:
 
     def generate(self, prompt_ids, *, max_new_tokens, seed, cancel):
         """Generate."""
-        from model_protocol_lab.core import Generation
 
         prompt = self.decode(prompt_ids)
         answer = ""

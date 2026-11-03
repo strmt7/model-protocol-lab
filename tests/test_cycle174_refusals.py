@@ -638,7 +638,6 @@ class TestDiffRefusals(unittest.TestCase):
         # a changed opener list with its own matching digest. A bare
         # digest edit is list/digest corruption and validates as
         # neither (asserted below), not drift.
-        import hashlib
 
         old = self._profile()
         new = json.loads(json.dumps(old))

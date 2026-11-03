@@ -990,7 +990,6 @@ class StageTests(unittest.TestCase):
 
     def test_cancelled_stage(self):
         """A pre-set cancel event yields the cancelled, unavailable payload."""
-        import threading
 
         cancel = threading.Event()
         cancel.set()

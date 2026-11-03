@@ -1583,7 +1583,6 @@ class Wave5FixesTests(unittest.TestCase):
 
     def test_finding5_fixture_content_capped(self):
         """Test finding5 fixture content capped."""
-        from model_protocol_lab.core import Fixture, Message
 
         big_content = "x" * (sn.MAX_FIXTURE_MESSAGE_CHARS + 1)
         fixtures = (
@@ -1796,7 +1795,6 @@ class CoverageGapTests2(unittest.TestCase):
         """Test controls handles probe failure."""
         # If a control's probe is cancelled, the control reports its
         # status and mean_stability stays None.
-        import threading
 
         cancel = threading.Event()
         cancel.set()
@@ -2013,7 +2011,6 @@ class FailClosedCoverageWave6Tests(unittest.TestCase):
         """Test cancel during last baseline is cancelled."""
         # Wave-6 red-team A finding 4: a cancel landing during the baseline
         # must report "cancelled" (exit 2), not "unavailable" (exit 3).
-        import threading
 
         from model_protocol_lab.core import Generation
 
