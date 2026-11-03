@@ -254,10 +254,10 @@ def _verify_manifest_fingerprints(
     for name in names:
         path = _member(root, name)
         try:
-            stat = path.stat()
+            info = path.stat()
         except OSError:
             raise ValueError("assets_changed") from None
-        if (stat.st_size, stat.st_mtime_ns, stat.st_ino) != fingerprints[name]:
+        if (info.st_size, info.st_mtime_ns, info.st_ino) != fingerprints[name]:
             raise ValueError("assets_changed")
 
 

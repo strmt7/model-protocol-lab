@@ -1474,9 +1474,6 @@ def _longest_prompt_tokens(tokenizer: Any, dataset_path: str | Path) -> int | No
     budget.
     """
     try:
-        from .catalog import CATALOG, candidates
-        from .datasets import load_dataset
-
         # bandit B615: load_dataset is this repo's own bounded JSON
         # reader, not the Hugging Face datasets library.
         split = load_dataset(Path(dataset_path))  # nosec B615
@@ -1527,7 +1524,6 @@ def _next_command(
     window = model.get("context_window") if type(model) is dict else None
     if type(window) is not int:
         return None
-    from .catalog import CATALOG
 
     new_tokens = _DEFAULT_NEW_TOKENS
     longest: int | None = None

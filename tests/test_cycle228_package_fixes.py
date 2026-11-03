@@ -170,6 +170,35 @@ class TestContaminationBudget(unittest.TestCase):
             cli._warn_contamination("inspect", {"worst_tier": "clean", "pairs": []})
         self.assertEqual(stderr.getvalue(), "")
 
+    def test_cli_warning_truncates_after_ten_pairs(self) -> None:
+        """Purpose: Hold the documented ten-pair print cap on the warning
+        Inputs: A contamination report with twelve flagged pairs
+        Outputs: Ten pair lines plus the "2 more (see JSON)" trailer.
+        """
+        pair = {"held_out": "h1", "search": "s1", "ratio": 0.9, "jaccard": 0.8, "tier": "high"}
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            cli._warn_contamination("inspect", {"worst_tier": "high", "pairs": [pair] * 12})
+        text = stderr.getvalue()
+        self.assertIn("(12 pair(s))", text)
+        self.assertEqual(text.count("held_out h1 ~ search s1"), 10)
+        self.assertIn("... and 2 more (see JSON)", text)
+
+    def test_cli_warning_skips_non_dict_pairs(self) -> None:
+        """Purpose: Keep a malformed pair entry from breaking the warning
+        Inputs: A pairs list mixing dict entries with a non-dict entry
+        Outputs: Only the dict pairs print; the header counts all entries.
+        """
+        pair = {"held_out": "h1", "search": "s1", "ratio": 0.9, "jaccard": 0.8, "tier": "high"}
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            cli._warn_contamination(
+                "inspect", {"worst_tier": "high", "pairs": [pair, "malformed", pair]}
+            )
+        text = stderr.getvalue()
+        self.assertIn("(3 pair(s))", text)
+        self.assertEqual(text.count("held_out h1 ~ search s1"), 2)
+
     def test_report_line_surfaces_exhaustion(self) -> None:
         """Purpose: Keep the HTML hygiene line honest under exhaustion
         Inputs: An exhausted clean-prefix report dict
