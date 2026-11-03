@@ -2088,8 +2088,6 @@ def oracle_diff_reports(
         # pre-checks, record structure, aggregates, conditions,
         # and the protocol fingerprint all recomputed.
         """Or distraction valid."""
-        import hashlib as _hashlib
-        import json as _json
 
         _details = {
             "",
@@ -2167,7 +2165,7 @@ def oracle_diff_reports(
                 if total > 2400:
                     return None
                 n_bytes += len(
-                    _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                    json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
                 )
                 if n_bytes > 12 * 1024 * 1024:
                     return None
@@ -2382,9 +2380,7 @@ def oracle_diff_reports(
                 }
             if fixture_ids is None:
                 return None
-            fixture_sha = _hashlib.sha256(
-                "\n".join(sorted(fixture_ids)).encode("utf-8")
-            ).hexdigest()
+            fixture_sha = hashlib.sha256("\n".join(sorted(fixture_ids)).encode("utf-8")).hexdigest()
             if protocol.get("fixture_set_sha256") != fixture_sha:
                 return None
             rebuilt = {
@@ -2402,13 +2398,10 @@ def oracle_diff_reports(
                 "fixture_set_sha256": fixture_sha,
                 "backend_fingerprint": protocol.get("backend_fingerprint"),
             }
-            canonical = _json.dumps(
+            canonical = json.dumps(
                 rebuilt, sort_keys=True, separators=(",", ":"), ensure_ascii=True
             )
-            if (
-                protocol.get("fingerprint")
-                != _hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-            ):
+            if protocol.get("fingerprint") != hashlib.sha256(canonical.encode("utf-8")).hexdigest():
                 return None
             primary_decision = payload.get("primary_decision")
             primary_winner = payload.get("primary_winner")
@@ -2499,8 +2492,6 @@ def oracle_diff_reports(
         # common population, and the protocol fingerprint all
         # recomputed.
         """Or leading valid."""
-        import hashlib as _hashlib
-        import json as _json
         import math as _math
 
         _details = {
@@ -2697,12 +2688,12 @@ def oracle_diff_reports(
                 return None
             if protocol.get("claim_templates") != _templates:
                 return None
-            templates_canonical = _json.dumps(
+            templates_canonical = json.dumps(
                 _templates, sort_keys=True, separators=(",", ":"), ensure_ascii=True
             )
             if (
                 protocol.get("claim_templates_sha256")
-                != _hashlib.sha256(templates_canonical.encode("utf-8")).hexdigest()
+                != hashlib.sha256(templates_canonical.encode("utf-8")).hexdigest()
             ):
                 return None
             if protocol.get("donor_rule") != "smallest-eligible-id-donor-first-v1":
@@ -2748,7 +2739,7 @@ def oracle_diff_reports(
                 if total > 2400:
                     return None
                 n_bytes += len(
-                    _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                    json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
                 )
                 if n_bytes > 12 * 1024 * 1024:
                     return None
@@ -2861,9 +2852,7 @@ def oracle_diff_reports(
                     return None
                 if fields["planted_digest"] != reference[donor]["expected_digest"]:
                     return None
-            fixture_sha = _hashlib.sha256(
-                "\n".join(sorted(fixture_ids)).encode("utf-8")
-            ).hexdigest()
+            fixture_sha = hashlib.sha256("\n".join(sorted(fixture_ids)).encode("utf-8")).hexdigest()
             if protocol.get("fixture_set_sha256") != fixture_sha:
                 return None
             rows = sorted(
@@ -2875,8 +2864,8 @@ def oracle_diff_reports(
                 )
                 for fixture, fields in reference.items()
             )
-            donor_map_sha = _hashlib.sha256(
-                _json.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+            donor_map_sha = hashlib.sha256(
+                json.dumps(rows, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
             ).hexdigest()
             if protocol.get("donor_map_sha256") != donor_map_sha:
                 return None
@@ -2897,13 +2886,10 @@ def oracle_diff_reports(
                 "donor_map_sha256": donor_map_sha,
                 "backend_fingerprint": protocol.get("backend_fingerprint"),
             }
-            canonical = _json.dumps(
+            canonical = json.dumps(
                 rebuilt, sort_keys=True, separators=(",", ":"), ensure_ascii=True
             )
-            if (
-                protocol.get("fingerprint")
-                != _hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-            ):
+            if protocol.get("fingerprint") != hashlib.sha256(canonical.encode("utf-8")).hexdigest():
                 return None
             primary_decision = payload.get("primary_decision")
             primary_winner = payload.get("primary_winner")
@@ -3054,8 +3040,6 @@ def oracle_diff_reports(
         # availability-level oracle must agree with the implementation
         # on hostile payloads too, including every recompute identity.
         """Or repetition valid."""
-        import hashlib as _hashlib
-        import json as _json
 
         _details = {
             "",
@@ -3196,7 +3180,7 @@ def oracle_diff_reports(
                 per_candidate[name] = records
             if total_records > 2400 or fixture_ids is None:
                 return None
-            fixture_hash = _hashlib.sha256("\n".join(fixture_ids).encode("utf-8")).hexdigest()
+            fixture_hash = hashlib.sha256("\n".join(fixture_ids).encode("utf-8")).hexdigest()
             if protocol["fixture_set_sha256"] != fixture_hash:
                 return None
             table = {
@@ -3208,8 +3192,8 @@ def oracle_diff_reports(
                 "fixture_set_sha256": protocol["fixture_set_sha256"],
                 "backend_fingerprint": protocol["backend_fingerprint"],
             }
-            canonical = _json.dumps(table, sort_keys=True, separators=(",", ":"))
-            if protocol["fingerprint"] != _hashlib.sha256(canonical.encode("utf-8")).hexdigest():
+            canonical = json.dumps(table, sort_keys=True, separators=(",", ":"))
+            if protocol["fingerprint"] != hashlib.sha256(canonical.encode("utf-8")).hexdigest():
                 return None
 
             def _verdict(record: dict, arm: str) -> bool | None:
@@ -3424,8 +3408,6 @@ def oracle_diff_reports(
         # stored evidence, the grouping delta relation checked,
         # and every aggregate and paired contrast recomputed.
         """Or numform valid."""
-        import hashlib as _hashlib
-        import json as _json
         import math as _math
         import re as _re
 
@@ -3588,7 +3570,7 @@ def oracle_diff_reports(
         def _text_digest(text: Any) -> Any:
             """Text digest."""
             try:
-                return _hashlib.sha256(text.encode("utf-8")).hexdigest()
+                return hashlib.sha256(text.encode("utf-8")).hexdigest()
             except UnicodeEncodeError:
                 return None
 
@@ -3659,7 +3641,7 @@ def oracle_diff_reports(
                 return "exact_pass"
             if record["task"] == "compare":
                 other = "second" if record["expected_answer"] == "first" else "first"
-                digest = _hashlib.sha256(other.encode("utf-8")).hexdigest()
+                digest = hashlib.sha256(other.encode("utf-8")).hexdigest()
                 return "wrong_label" if cell["answer_digest"] == digest else "non_label"
             if record["answer_value"] is not None and str(record["answer_value"]) == str(
                 record["expected_value"]
@@ -3850,7 +3832,7 @@ def oracle_diff_reports(
                     or any(char not in _hex for char in digest)
                 ):
                     return None
-                expected_digest = _hashlib.sha256(expected_answer.encode("utf-8")).hexdigest()
+                expected_digest = hashlib.sha256(expected_answer.encode("utf-8")).hexdigest()
                 if cell["verdict"] != bool(digest == expected_digest and cell["boundary_found"]):
                     return None
                 if (
@@ -3961,7 +3943,7 @@ def oracle_diff_reports(
         if not available_names or total_records > 4608:
             return False
         if (
-            len(_json.dumps(all_records, separators=(",", ":"), ensure_ascii=True).encode("utf-8"))
+            len(json.dumps(all_records, separators=(",", ":"), ensure_ascii=True).encode("utf-8"))
             > 12 * 1024 * 1024
         ):
             return False
@@ -3999,7 +3981,7 @@ def oracle_diff_reports(
                     )
         if construction != expected_construction:
             return False
-        templates_canonical = _json.dumps(
+        templates_canonical = json.dumps(
             _templates, sort_keys=True, separators=(",", ":"), ensure_ascii=True
         )
         expected_protocol = {
@@ -4018,7 +4000,7 @@ def oracle_diff_reports(
             "renderer_spec": "value-only-renderers-v1",
             "generator_rule": "sha256-derived-paired-v1",
             "prompt_templates": dict(_templates),
-            "prompt_templates_sha256": _hashlib.sha256(
+            "prompt_templates_sha256": hashlib.sha256(
                 templates_canonical.encode("utf-8")
             ).hexdigest(),
             "seed": seed,
@@ -4027,8 +4009,8 @@ def oracle_diff_reports(
         }
         if protocol != {**expected_protocol, "fingerprint": protocol.get("fingerprint")}:
             return False
-        fingerprint = _hashlib.sha256(
-            _json.dumps(
+        fingerprint = hashlib.sha256(
+            json.dumps(
                 expected_protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True
             ).encode("utf-8")
         ).hexdigest()
@@ -4117,7 +4099,6 @@ def oracle_diff_reports(
         # recomputes through its own literal tables -- a drift in
         # either side's constants breaks the agreement.
         """Or dateline valid."""
-        import json as _json
 
         from model_protocol_lab import dateline as _dl
 
@@ -4205,7 +4186,7 @@ def oracle_diff_reports(
             if total_records > _dl.MAX_GROUND_RECORDS:
                 return False
             records_bytes += len(
-                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
             )
             if records_bytes > _dl.MAX_RECORDS_BYTES:
                 return False
@@ -4587,8 +4568,6 @@ def oracle_diff_reports(
         # selection readouts recomputed. A drift in either
         # side's constants breaks the agreement.
         """Or multiturn valid."""
-        import hashlib as _hashlib
-        import json as _json
 
         from model_protocol_lab import multiturn as _mt
 
@@ -4709,7 +4688,7 @@ def oracle_diff_reports(
             return False
         generated = _mt.generate_fixtures(seed)
         by_id = {f["fixture_id"]: f for f in generated}
-        empty_digest = _hashlib.sha256(b"").hexdigest()
+        empty_digest = hashlib.sha256(b"").hexdigest()
         total = 0
         records_bytes = 0
         raw: dict = {}
@@ -4729,7 +4708,7 @@ def oracle_diff_reports(
                 return False
             total += len(records)
             records_bytes += len(
-                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
             )
             if records_bytes > _mt.MAX_RECORDS_BYTES:
                 return False
@@ -4766,7 +4745,7 @@ def oracle_diff_reports(
                     return False
                 if type(details) is not dict or set(details) != set(_arms):
                     return False
-                expected_digest = _hashlib.sha256(
+                expected_digest = hashlib.sha256(
                     str(fixture["expected"]).encode("utf-8")
                 ).hexdigest()
                 for arm in _arms:
@@ -4859,8 +4838,6 @@ def oracle_diff_reports(
         # per-cell selections recomputed. A drift in either
         # side's constants breaks the agreement.
         """Or needle valid."""
-        import hashlib as _hashlib
-        import json as _json
 
         from model_protocol_lab import needle as _nd
 
@@ -4970,7 +4947,7 @@ def oracle_diff_reports(
                 return False
             total += len(records)
             records_bytes += len(
-                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
             )
             if records_bytes > _nd.MAX_RECORDS_BYTES:
                 return False
@@ -4986,7 +4963,7 @@ def oracle_diff_reports(
                     return False
                 if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
                     return False
-                expected_digest = _hashlib.sha256(str(case["value"]).encode("utf-8")).hexdigest()
+                expected_digest = hashlib.sha256(str(case["value"]).encode("utf-8")).hexdigest()
                 if record["expected_digest"] != expected_digest:
                     return False
                 if type(record["question_tokens"]) is not int or record["question_tokens"] < 0:
@@ -5068,8 +5045,6 @@ def oracle_diff_reports(
         # recomputed. A drift in either side's constants breaks
         # the agreement.
         """Or placement valid."""
-        import hashlib as _hashlib
-        import json as _json
 
         from model_protocol_lab import placement as _pl
 
@@ -5119,7 +5094,7 @@ def oracle_diff_reports(
                 return False
             total += len(records)
             records_bytes += len(
-                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
             )
             if records_bytes > _pl.MAX_RECORDS_BYTES:
                 return False
@@ -5136,7 +5111,7 @@ def oracle_diff_reports(
                     return False
                 if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
                     return False
-                expected_digest = _hashlib.sha256(case["value"].encode("utf-8")).hexdigest()
+                expected_digest = hashlib.sha256(case["value"].encode("utf-8")).hexdigest()
                 if record["expected_digest"] != expected_digest:
                     return False
                 arm_tokens = record["arm_tokens"]
@@ -5224,8 +5199,6 @@ def oracle_diff_reports(
         # selections recomputed. A drift in either side's
         # constants breaks the agreement.
         """Or canonicalform valid."""
-        import hashlib as _hashlib
-        import json as _json
 
         from model_protocol_lab import canonicalform as _cf
 
@@ -5276,7 +5249,7 @@ def oracle_diff_reports(
                 return False
             total += len(records)
             records_bytes += len(
-                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
             )
             if records_bytes > _cf.MAX_RECORDS_BYTES:
                 return False
@@ -5297,7 +5270,7 @@ def oracle_diff_reports(
                     return False
                 if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
                     return False
-                expected_digest = _hashlib.sha256(case["value"].encode("utf-8")).hexdigest()
+                expected_digest = hashlib.sha256(case["value"].encode("utf-8")).hexdigest()
                 if record["expected_digest"] != expected_digest:
                     return False
                 if record["nfc_content_digest"] != _cf.digest_text(_cf.form_content(case, "nfc")):
@@ -5405,8 +5378,6 @@ def oracle_diff_reports(
         # the recorded digests alone, amendment C). A drift in
         # either side's constants breaks the agreement.
         """Or instructiondistance valid."""
-        import hashlib as _hashlib
-        import json as _json
 
         from model_protocol_lab import instructiondistance as _idm
 
@@ -5468,7 +5439,7 @@ def oracle_diff_reports(
                 return False
             total += len(records)
             records_bytes += len(
-                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
             )
             if records_bytes > _idm.MAX_RECORDS_BYTES:
                 return False
@@ -5485,7 +5456,7 @@ def oracle_diff_reports(
                     return False
                 if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
                     return False
-                expected_digest = _hashlib.sha256(case["value"].encode("utf-8")).hexdigest()
+                expected_digest = hashlib.sha256(case["value"].encode("utf-8")).hexdigest()
                 if record["expected_digest"] != expected_digest:
                     return False
                 arm_tokens = record["arm_tokens"]
@@ -5614,7 +5585,6 @@ def oracle_diff_reports(
         # derive from the recorded id digests alone). A drift
         # in either side's constants breaks the agreement.
         """Or historyframe valid."""
-        import json as _json
         import re as _re
 
         from model_protocol_lab import historyframe as _hfm
@@ -5753,7 +5723,7 @@ def oracle_diff_reports(
                 return False
             total_records += len(records)
             records_bytes += len(
-                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
             )
             if records_bytes > _hfm.MAX_RECORDS_BYTES:
                 return False
@@ -5884,7 +5854,6 @@ def oracle_diff_reports(
         # producer's own aggregate function. A drift in
         # either side's constants breaks the agreement.
         """Or prunesweep valid."""
-        import json as _json
         import re as _re
 
         from model_protocol_lab import prunesweep as _psm
@@ -5975,7 +5944,7 @@ def oracle_diff_reports(
                 return False
             total_records += len(records)
             records_bytes += len(
-                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
             )
             if records_bytes > _psm.MAX_RECORDS_BYTES:
                 return False
@@ -6093,7 +6062,6 @@ def oracle_diff_reports(
         # function. A drift in either side's constants breaks
         # the agreement.
         """Or recordnotation valid."""
-        import json as _json
         import re as _re
 
         from model_protocol_lab import recordnotation as _rnm
@@ -6181,7 +6149,7 @@ def oracle_diff_reports(
                 return False
             total_records += len(records)
             records_bytes += len(
-                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
             )
             if records_bytes > _rnm.MAX_RECORDS_BYTES:
                 return False
@@ -6313,7 +6281,6 @@ def oracle_diff_reports(
         # producer's own aggregate function. A drift in
         # either side's constants breaks the agreement.
         """Or invisiblechars valid."""
-        import json as _json
         import re as _re
 
         from model_protocol_lab import invisiblechars as _icm
@@ -6399,7 +6366,7 @@ def oracle_diff_reports(
                 return False
             total_records += len(records)
             records_bytes += len(
-                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
             )
             if records_bytes > _icm.MAX_RECORDS_BYTES:
                 return False
@@ -6545,7 +6512,6 @@ def oracle_diff_reports(
         # producer's own aggregate function. A drift in
         # either side's constants breaks the agreement.
         """Or confusableskeleton valid."""
-        import json as _json
         import re as _re
 
         from model_protocol_lab import confusableskeleton as _csm
@@ -6632,7 +6598,7 @@ def oracle_diff_reports(
                 return False
             total_records += len(records)
             records_bytes += len(
-                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
             )
             if records_bytes > _csm.MAX_RECORDS_BYTES:
                 return False
@@ -6779,8 +6745,6 @@ def oracle_diff_reports(
         # recomputed. A drift in either side's constants breaks
         # the agreement.
         """Or rotation valid."""
-        import hashlib as _hashlib
-        import json as _json
 
         from model_protocol_lab import rotation as _rt
 
@@ -6848,7 +6812,7 @@ def oracle_diff_reports(
                 return False
             total += len(records)
             records_bytes += len(
-                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
             )
             if records_bytes > _rt.MAX_RECORDS_BYTES:
                 return False
@@ -6865,7 +6829,7 @@ def oracle_diff_reports(
                     return False
                 if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
                     return False
-                expected_digest = _hashlib.sha256(case["values"][0].encode("utf-8")).hexdigest()
+                expected_digest = hashlib.sha256(case["values"][0].encode("utf-8")).hexdigest()
                 if record["expected_digest"] != expected_digest:
                     return False
                 arm_tokens = record["arm_tokens"]
@@ -6958,7 +6922,6 @@ def oracle_diff_reports(
         # pure aggregation. A drift in either side's constants
         # breaks the agreement.
         """Or density valid."""
-        import json as _json
 
         from model_protocol_lab import density as _dn
 
@@ -7047,7 +7010,7 @@ def oracle_diff_reports(
                 return False
             total += len(records)
             records_bytes += len(
-                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
             )
             if records_bytes > _dn.MAX_DENSITY_PAYLOAD_BYTES:
                 return False
@@ -7112,7 +7075,6 @@ def oracle_diff_reports(
         # pure aggregation. A drift in either side's constants
         # breaks the agreement.
         """Or field order valid."""
-        import json as _json
         import math as _math
 
         from model_protocol_lab import fieldorder as _fo
@@ -7182,7 +7144,7 @@ def oracle_diff_reports(
                 return False
             total += len(records)
             records_bytes += len(
-                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
             )
             if records_bytes > _fo.MAX_FIELD_ORDER_PAYLOAD_BYTES:
                 return False
@@ -7248,7 +7210,7 @@ def oracle_diff_reports(
                     if type(item) is not str:
                         return False
                     try:
-                        parsed = _json.loads(item)
+                        parsed = json.loads(item)
                     except (ValueError, TypeError, RecursionError):
                         return False
                     if type(parsed) is float and not _math.isfinite(parsed):
@@ -7265,7 +7227,7 @@ def oracle_diff_reports(
                     if record["document_digest"] is not None:
                         return False
                 else:
-                    document = {key: _json.loads(item) for key, item in field_values.items()}
+                    document = {key: json.loads(item) for key, item in field_values.items()}
                     try:
                         expected_digest = _fo.digest_text(_fo._canonical_json(document))
                     except (ValueError, TypeError, RecursionError):
@@ -7296,7 +7258,6 @@ def oracle_diff_reports(
         # recomputed through the producer's pure aggregation.
         # A drift in either side's constants breaks the agreement.
         """Or choiceaudit valid."""
-        import json as _json
         import math as _math
         import struct as _struct
 
@@ -7423,7 +7384,7 @@ def oracle_diff_reports(
                 return False
             total += len(records)
             records_bytes += len(
-                _json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
             )
             if records_bytes > _ca.MAX_RECORDS_BYTES:
                 return False
@@ -7538,7 +7499,6 @@ def oracle_diff_reports(
         # (precision.compute_derived). A drift in either side's
         # constants breaks the agreement.
         """Or precision valid."""
-        import json as _json
         import math as _math
 
         from model_protocol_lab import precision as _pr
@@ -7646,7 +7606,7 @@ def oracle_diff_reports(
         records = value.get("records")
         if type(records) is not list or len(records) > _pr.MAX_RECORDS:
             return False
-        blob = _json.dumps(records, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        blob = json.dumps(records, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         if len(blob.encode("utf-8")) > _pr.MAX_RECORDS_BYTES:
             return False
         seen: set = set()
@@ -7771,7 +7731,6 @@ def oracle_diff_reports(
         # (confidence.compute_derived). A drift in either side's
         # constants breaks the agreement.
         """Or confidence valid."""
-        import json as _json
         import re
 
         from model_protocol_lab import confidence as _cfd
@@ -7948,7 +7907,7 @@ def oracle_diff_reports(
             return False
         if type(control_records) is not list or len(control_records) > _cfd.MAX_CONTROL_RECORDS:
             return False
-        blob = _json.dumps(
+        blob = json.dumps(
             {"records": records, "control_records": control_records},
             ensure_ascii=True,
             separators=(",", ":"),

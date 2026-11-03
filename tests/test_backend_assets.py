@@ -102,9 +102,8 @@ class WeightIndexEdgeTests(unittest.TestCase):
     @staticmethod
     def _root_with_index(tmp, weight_map):
         """Root with index."""
-        from pathlib import Path as _Path
 
-        root = _Path(tmp)
+        root = Path(tmp)
         (root / "config.json").write_text("{}", encoding="utf-8")
         (root / "model.safetensors.index.json").write_text(
             json.dumps({"weight_map": weight_map}), encoding="utf-8"
@@ -113,21 +112,18 @@ class WeightIndexEdgeTests(unittest.TestCase):
 
     def test_empty_and_nondict_weight_maps_rejected(self):
         """Test empty and nondict weight maps rejected."""
-        from tempfile import TemporaryDirectory as _TD
 
         for mapping in ({}, [], "x", None, 0):
-            with self.subTest(mapping=mapping), _TD() as tmp:
+            with self.subTest(mapping=mapping), TemporaryDirectory() as tmp:
                 root = self._root_with_index(tmp, mapping)
                 with self.assertRaises(ValueError):
                     _model_assets(root)
 
     def test_oversized_asset_json_rejected(self):
         """Test oversized asset json rejected."""
-        from pathlib import Path as _Path
-        from tempfile import TemporaryDirectory as _TD
 
-        with _TD() as tmp:
-            path = _Path(tmp) / "big.json"
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "big.json"
             # Sparse file: reports a huge size without consuming disk, so this
             # stays reliable on small tmpfs mounts.
             with path.open("wb") as handle:

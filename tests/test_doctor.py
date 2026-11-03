@@ -342,13 +342,12 @@ class DoctorBranchTests(unittest.TestCase):
 
     def test_dataset_examination_reports_counts(self):
         """Test dataset examination reports counts."""
-        import json as _json
 
         from model_protocol_lab.doctor import examine_dataset
 
         with TemporaryDirectory() as tmp:
             good = Path(tmp) / "good.json"
-            good.write_text(_json.dumps(dataset_object()), encoding="utf-8")
+            good.write_text(json.dumps(dataset_object()), encoding="utf-8")
             self.assertEqual(examine_dataset(good)["verdict"], "ok")
             bad = Path(tmp) / "bad.json"
             bad.write_text("{}", encoding="utf-8")

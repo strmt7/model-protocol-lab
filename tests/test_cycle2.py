@@ -832,12 +832,11 @@ class WriteFixtureFileTests(unittest.TestCase):
 
     def test_partial_write_leaves_no_file(self):
         """Test partial write leaves no file."""
-        import os as _os
         from unittest.mock import patch
 
         with (
             TemporaryDirectory() as tmp,
-            patch.object(_os, "fdopen", side_effect=OSError("boom")),
+            patch.object(os, "fdopen", side_effect=OSError("boom")),
             self.assertRaises(OSError),
         ):
             target = Path(tmp) / "out.json"

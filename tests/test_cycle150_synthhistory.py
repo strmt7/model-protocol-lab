@@ -731,9 +731,8 @@ class SynthhistoryMutationGateTests(unittest.TestCase):
         # The experiments mutant reuses the real synthhistory module
         # (only experiments.py is rewritten), so build fixtures from the
         # real module here.
-        from model_protocol_lab.synthhistory import build_history_fixtures as real_build
 
-        real_built, _ = real_build((_case("f1", expected),), condition="history_2")
+        real_built, _ = build_history_fixtures((_case("f1", expected),), condition="history_2")
         stage = mod.synthhistory_stage(
             BoundarylessBackend(expected),
             (_format("alpha"),),
