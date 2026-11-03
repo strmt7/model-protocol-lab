@@ -927,7 +927,8 @@ class TestFormatValidation(unittest.TestCase):
         self.assertEqual(variant.name, "f2")
         self.assertIs(variant.repeat_bos, True)
         self.assertEqual(variant.bos, "<b>")
-        self.assertEqual(len({fmt, fmt}), 1)
+        # A distinct but equal instance dedupes too: the hash is by value.
+        self.assertEqual(len({fmt, dataclasses.replace(fmt)}), 1)
         self.assertNotEqual(fmt, variant)
 
 

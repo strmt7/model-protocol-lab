@@ -257,7 +257,7 @@ class TestGenerator(unittest.TestCase):
                 self.assertEqual(len(set(values)), len(values))
                 for value in values:
                     self.assertTrue(1 <= value <= 99)
-                best = max(range(len(values)), key=lambda i: values[i])
+                best = values.index(max(values))
                 self.assertEqual(fixture["expected"], "ABC"[best])
                 text = multiturn.JOINER.join(fixture["shards"])
                 self.assertTrue(text.endswith("Answer with the shelf label."))

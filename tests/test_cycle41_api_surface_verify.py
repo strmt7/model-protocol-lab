@@ -193,10 +193,19 @@ class TestPackageSurface(unittest.TestCase):
     def test_import_star_leaks_nothing(self) -> None:
         """Test import star leaks nothing."""
         _, name = self._load_init_fresh("star")
+        probe_name = "mpl_init_surface_probe_star_import"
         try:
-            namespace: dict = {}
-            exec(f"from {name} import *", namespace)  # noqa: S102
-            leaked = sorted(n for n in namespace if not n.startswith("__"))
+            with tempfile.TemporaryDirectory() as tmp:
+                probe_path = Path(tmp) / f"{probe_name}.py"
+                probe_path.write_text(f"from {name} import *\n", encoding="utf-8")
+                spec = importlib.util.spec_from_file_location(probe_name, probe_path)
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[probe_name] = module
+                try:
+                    spec.loader.exec_module(module)
+                finally:
+                    sys.modules.pop(probe_name, None)
+            leaked = sorted(n for n in vars(module) if not n.startswith("__"))
             self.assertEqual(leaked, [], f"import * leaked names: {leaked}")
         finally:
             self._drop_probe(name)

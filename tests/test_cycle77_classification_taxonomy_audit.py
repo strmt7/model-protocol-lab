@@ -1123,14 +1123,7 @@ class StopMatrixValidationTests(unittest.TestCase):
         """Run."""
         args = self._good_args()
         args.update(overrides)
-        backend = args.pop("backend")
-        candidate_name = args.pop("candidate_name")
-        fixtures = args.pop("fixtures")
-        observations = args.pop("observations")
-        boundary = args.pop("boundary")
-        return stop_matrix(
-            backend, candidate_name, fixtures, observations, boundary=boundary, **args
-        )
+        return stop_matrix(**args)
 
     def test_rejects_bad_inputs(self):
         """Test rejects bad inputs."""

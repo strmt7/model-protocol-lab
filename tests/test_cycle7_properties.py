@@ -106,10 +106,11 @@ class DivergencePropertyTests(unittest.TestCase):
         """Set up the test fixture."""
         self.backend = PropertyTableBackend()
 
-    def _classify(self, **kwargs: Any) -> dict[str, Any]:
+    def _classify(self, *, output_ids: Any, **kwargs: Any) -> dict[str, Any]:
         """Classify."""
         base: dict[str, Any] = {
             "prompt_ids": (),
+            "output_ids": output_ids,
             "stop_texts": ("STOP",),
             "backend": self.backend,
         }

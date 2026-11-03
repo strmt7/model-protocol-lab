@@ -21,7 +21,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-_CACHE: tuple[dict[str, int], int] | None = None
+_CACHE: dict[str, tuple[dict[str, int], int]] = {}
 
 
 def pytest_collect_counts(repo_root: Path) -> tuple[dict[str, int], int]:
@@ -31,9 +31,8 @@ def pytest_collect_counts(repo_root: Path) -> tuple[dict[str, int], int]:
     per process; subsequent calls reuse the cached result. Raises
     RuntimeError with collection diagnostics after 3 failed attempts.
     """
-    global _CACHE
-    if _CACHE is not None:
-        return _CACHE
+    if "result" in _CACHE:
+        return _CACHE["result"]
     last_diagnostics = ""
     for attempt in range(3):
         try:
@@ -74,8 +73,8 @@ def pytest_collect_counts(repo_root: Path) -> tuple[dict[str, int], int]:
                 fname = line.split("::")[0].split("/")[-1]
                 counts[fname] = counts.get(fname, 0) + 1
         if total is not None:
-            _CACHE = (counts, total)
-            return _CACHE
+            _CACHE["result"] = (counts, total)
+            return _CACHE["result"]
         last_diagnostics = (
             f"attempt {attempt + 1}: returncode={proc.returncode}, "
             f"no 'N tests collected' line, "
