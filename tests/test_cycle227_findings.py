@@ -109,7 +109,10 @@ def _bundle_with_manifest(mutate: str) -> bytes:
 
 def _schema_check(report: dict) -> dict:
     """Return the seal_manifest_schema check of a verify report."""
-    return next(c for c in report["checks"] if c["id"] == "seal_manifest_schema")
+    check = next((c for c in report["checks"] if c["id"] == "seal_manifest_schema"), None)
+    if check is None:
+        raise AssertionError("verify report has no seal_manifest_schema check")
+    return check
 
 
 class ManifestNonfiniteFloatTests(unittest.TestCase):

@@ -111,7 +111,7 @@ class TestContaminationBudget(unittest.TestCase):
         # (one more check) -- three zeros finish fixture h1; the next
         # call, h2's pre-pair check, jumps past the deadline.
         calls = iter([0.0] * 3 + [1e9] * 1000)
-        fake_time = SimpleNamespace(monotonic=lambda: next(calls))
+        fake_time = SimpleNamespace(monotonic=lambda: next(calls, 1e9))
         search = [_fx("s1", "alpha beta gamma")]
         held = [_fx("h1", "alpha beta gamma"), _fx("h2", "delta epsilon zeta")]
         with mock.patch.object(contamination, "time", fake_time):
