@@ -296,7 +296,7 @@ class ScriptedBackend:
         raise AssertionError(f"bad outcome kind: {kind}")
 
 
-class EvaluateHarness(unittest.TestCase):
+class EvaluateHarness:
     """Evaluate harness."""
 
     def setUp(self) -> None:
@@ -331,7 +331,7 @@ class EvaluateHarness(unittest.TestCase):
         return _ids(self.candidate.render(case.messages))
 
 
-class EvaluateValidation(EvaluateHarness):
+class EvaluateValidation(EvaluateHarness, unittest.TestCase):
     """Every validation branch raises ValueError."""
 
     def test_candidate_must_be_format(self) -> None:
@@ -451,7 +451,7 @@ class EvaluateValidation(EvaluateHarness):
         self.assertTrue(obs.boundary_found)
 
 
-class EvaluateObservationFidelity(EvaluateHarness):
+class EvaluateObservationFidelity(EvaluateHarness, unittest.TestCase):
     """Hand-derived expected observation fields per scripted outcome."""
 
     def test_pass_full_fidelity(self) -> None:
@@ -712,7 +712,7 @@ class EvaluateObservationFidelity(EvaluateHarness):
         self.assertIsNone(obs.boundary_text_match)
 
 
-class EvaluateMinimalPairs(EvaluateHarness):
+class EvaluateMinimalPairs(EvaluateHarness, unittest.TestCase):
     """One-id flips move exactly one observation field."""
 
     def test_one_id_flip_moves_exact_match_only(self) -> None:
@@ -851,7 +851,7 @@ class EvaluateMinimalPairs(EvaluateHarness):
         self.assertFalse(obs.exact_match)
 
 
-class EvaluateAggregateSemantics(EvaluateHarness):
+class EvaluateAggregateSemantics(EvaluateHarness, unittest.TestCase):
     """Which report statuses are eligible; planned_count accounting."""
 
     def test_completed_all_pass_eligible(self) -> None:
@@ -906,7 +906,7 @@ class EvaluateAggregateSemantics(EvaluateHarness):
         self.assertEqual(repr(first), repr(second))
 
 
-class EvaluateNoLeak(EvaluateHarness):
+class EvaluateNoLeak(EvaluateHarness, unittest.TestCase):
     """Raw backend text must never appear in a report."""
 
     def test_exception_text_never_leaks(self) -> None:

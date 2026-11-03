@@ -171,7 +171,7 @@ def _no_ws(text: str) -> str:
     return "".join(text.split())
 
 
-class LeakAsserts(unittest.TestCase):
+class LeakAsserts:
     """Shared canary scanners; not a test case itself (no test_ methods)."""
 
     def assertNoCanary(self, text: str, surface: str) -> None:  # noqa: N802 -- unittest-style name
@@ -458,7 +458,7 @@ def _walk_keys(value: object, seen: set[str]) -> None:
             _walk_keys(item, seen)
 
 
-class PublicViewBarrier(LeakAsserts):
+class PublicViewBarrier(LeakAsserts, unittest.TestCase):
     """The _public_view / _strip_raw_diagnostics barrier over every carrier."""
 
     def test_public_view_strips_every_carrier(self) -> None:
@@ -551,7 +551,7 @@ class PublicViewBarrier(LeakAsserts):
         self.assertNoCanary(html_text, "report.html (include_evidence=True)")
 
 
-class EndToEndDivergencePipeline(LeakAsserts):
+class EndToEndDivergencePipeline(LeakAsserts, unittest.TestCase):
     """The real divergence_section_data output through the real barrier."""
 
     @staticmethod
@@ -624,7 +624,7 @@ class _OrdBackend:
         return "".join(map(chr, token_ids))
 
 
-class DiffBackendsSweep43(LeakAsserts):
+class DiffBackendsSweep43(LeakAsserts, unittest.TestCase):
     """diff-backends takes no dataset input; only operator args are echoed."""
 
     def test_diff_backends_clean_inputs_clean_output(self) -> None:
@@ -705,7 +705,7 @@ class DiffBackendsSweep43(LeakAsserts):
         self.assertNoCanary(proc.stderr, "mpl diff-backends stderr (canary args)")
 
 
-class DiffReportsSweep43(LeakAsserts):
+class DiffReportsSweep43(LeakAsserts, unittest.TestCase):
     """diff-reports reduces observations to verdicts; drift carries IDs only."""
 
     @staticmethod
@@ -858,7 +858,7 @@ class _OrdTokenizer:
         return "".join(map(chr, token_ids))
 
 
-class DebugReplSweep43(LeakAsserts):
+class DebugReplSweep43(LeakAsserts, unittest.TestCase):
     """The debug REPL shows the operator's own dataset BY DESIGN (USAGE.md
     section 10); surfaces that must stay content-free are pinned clean.
     """
@@ -967,7 +967,7 @@ def _hostile_csv() -> str:
     return "\n".join(lines) + "\n"
 
 
-class FixturesBuildSweep(LeakAsserts):
+class FixturesBuildSweep(LeakAsserts, unittest.TestCase):
     """`fixtures build`: the fixture file is the operator's own dataset (its
     content appears BY DESIGN); the audit sidecar must stay content-free.
     """
@@ -1009,7 +1009,7 @@ class FixturesBuildSweep(LeakAsserts):
         self.assertNoCanary(proc.stderr, "fixtures build stderr")
 
 
-class InspectSweep43(LeakAsserts):
+class InspectSweep43(LeakAsserts, unittest.TestCase):
     """`mpl inspect` prints counts only."""
 
     def test_inspect_emits_counts_only(self) -> None:
@@ -1025,7 +1025,7 @@ class InspectSweep43(LeakAsserts):
         self.assertNoCanary(proc.stderr, "mpl inspect stderr")
 
 
-class DoctorSweep43(LeakAsserts):
+class DoctorSweep43(LeakAsserts, unittest.TestCase):
     """`mpl doctor`: checks and counts only, incl. the portability matrix."""
 
     def test_examine_dataset_clean(self) -> None:
@@ -1097,7 +1097,7 @@ class DoctorSweep43(LeakAsserts):
         self.assertNoCanary(json.dumps(section, ensure_ascii=True), "portability_matrix JSON")
 
 
-class ScoringSweep43(LeakAsserts):
+class ScoringSweep43(LeakAsserts, unittest.TestCase):
     """stop_matrix / budget_frontier / logprob interpretation: aggregates only."""
 
     @staticmethod
@@ -1192,7 +1192,7 @@ class ScoringSweep43(LeakAsserts):
         self.assertEqual(interpretation["kind"], "greedy_derailed")
 
 
-class SampleReportHygiene43(LeakAsserts):
+class SampleReportHygiene43(LeakAsserts, unittest.TestCase):
     """The committed examples/sample-report/ stays synthetic and evidence-free."""
 
     def test_committed_sample_report_clean(self) -> None:

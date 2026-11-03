@@ -99,7 +99,7 @@ def _no_ws(text: str) -> str:
     return "".join(text.split())
 
 
-class LeakAsserts(unittest.TestCase):
+class LeakAsserts:
     """Shared canary scanners; not a test case itself (no test_ methods)."""
 
     def assertNoCanary(self, text: str, surface: str) -> None:  # noqa: N802 -- unittest-style name
@@ -303,7 +303,7 @@ def _run_cli(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess
     )
 
 
-class PublicViewBarrier48(LeakAsserts):
+class PublicViewBarrier48(LeakAsserts, unittest.TestCase):
     """The _public_view / _strip_raw_diagnostics barrier over every carrier."""
 
     def test_public_view_strips_every_carrier(self) -> None:
@@ -433,7 +433,7 @@ def _canary_word_ids(tok) -> list[int]:
     return tok.encode(CANARY).ids
 
 
-class CliRunSweep48(LeakAsserts):
+class CliRunSweep48(LeakAsserts, unittest.TestCase):
     """``mpl run --output``: the real CLI end to end with CLI defaults."""
 
     def _cli_run(self, tmp: Path, include_evidence: bool):
@@ -510,7 +510,7 @@ class CliRunSweep48(LeakAsserts):
         )
 
 
-class DiffReportsSweep48(LeakAsserts):
+class DiffReportsSweep48(LeakAsserts, unittest.TestCase):
     """diff-reports reduces observations to verdicts; drift carries IDs only.
 
     There is no HTML render for diff-reports (stdout JSON + stderr summary
@@ -579,7 +579,7 @@ class _OrdTokenizer:
         return "".join(map(chr, token_ids))
 
 
-class DebugTranscriptSweep48(LeakAsserts):
+class DebugTranscriptSweep48(LeakAsserts, unittest.TestCase):
     """The ``.save`` transcript is a faithful echo of the session.
 
     A content-free session's saved transcript must carry no fixture
@@ -642,7 +642,7 @@ class DebugTranscriptSweep48(LeakAsserts):
         self.assertIn("c48-search-1", proc.stdout)
 
 
-class DoctorSweep48(LeakAsserts):
+class DoctorSweep48(LeakAsserts, unittest.TestCase):
     """``mpl doctor``: checks and counts only, never fixture content."""
 
     def test_doctor_report_clean(self) -> None:
@@ -682,7 +682,7 @@ class DoctorSweep48(LeakAsserts):
         self.assertNoCanary(proc.stderr, "mpl doctor stderr")
 
 
-class SampleReportHygiene48(LeakAsserts):
+class SampleReportHygiene48(LeakAsserts, unittest.TestCase):
     """The committed examples/sample-report/ stays synthetic and evidence-free."""
 
     def test_committed_sample_report_clean(self) -> None:

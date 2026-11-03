@@ -141,7 +141,7 @@ def _write_dataset(path: Path, search_texts: list[str], heldout_texts: list[str]
     )
 
 
-class _TmpTestCase(unittest.TestCase):
+class _TmpTestCase:
     """Tmp test case."""
 
     def setUp(self) -> None:
@@ -160,7 +160,7 @@ class _TmpTestCase(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class ModelResultAssemblyTests(_TmpTestCase):
+class ModelResultAssemblyTests(_TmpTestCase, unittest.TestCase):
     """Model result assembly tests."""
 
     def test_check_returns_status_detail_shape(self) -> None:
@@ -227,7 +227,7 @@ class ModelResultAssemblyTests(_TmpTestCase):
 # ---------------------------------------------------------------------------
 
 
-class ContextWindowTests(_TmpTestCase):
+class ContextWindowTests(_TmpTestCase, unittest.TestCase):
     """Context window tests."""
 
     def _window(self, config: dict) -> object:
@@ -273,7 +273,7 @@ class ContextWindowTests(_TmpTestCase):
 # ---------------------------------------------------------------------------
 
 
-class ConfigCheckTests(_TmpTestCase):
+class ConfigCheckTests(_TmpTestCase, unittest.TestCase):
     """Config check tests."""
 
     def _config_check(self, config: object, raw: bytes | None = None) -> dict:
@@ -368,7 +368,7 @@ class ConfigCheckTests(_TmpTestCase):
 # ---------------------------------------------------------------------------
 
 
-class TokenizerFileCheckTests(_TmpTestCase):
+class TokenizerFileCheckTests(_TmpTestCase, unittest.TestCase):
     """Tokenizer file check tests."""
 
     def _patch_tokenizer_doc(self, patch: dict) -> dict:
@@ -444,7 +444,7 @@ class TokenizerFileCheckTests(_TmpTestCase):
 # ---------------------------------------------------------------------------
 
 
-class TokenizerDeepCheckTests(_TmpTestCase):
+class TokenizerDeepCheckTests(_TmpTestCase, unittest.TestCase):
     """Tokenizer deep check tests."""
 
     def test_deep_ok_reports_vocab_and_added_count(self) -> None:
@@ -526,7 +526,7 @@ class TokenizerDeepCheckTests(_TmpTestCase):
 # ---------------------------------------------------------------------------
 
 
-class AssetManifestTests(_TmpTestCase):
+class AssetManifestTests(_TmpTestCase, unittest.TestCase):
     """Asset manifest tests."""
 
     def test_manifest_records_name_bytes_sha256(self) -> None:
@@ -547,7 +547,7 @@ class AssetManifestTests(_TmpTestCase):
 # ---------------------------------------------------------------------------
 
 
-class BoundaryChecksTests(_TmpTestCase):
+class BoundaryChecksTests(_TmpTestCase, unittest.TestCase):
     """Boundary checks tests."""
 
     def setUp(self) -> None:
@@ -670,7 +670,7 @@ class BoundaryChecksTests(_TmpTestCase):
 # ---------------------------------------------------------------------------
 
 
-class VerdictLogicTests(_TmpTestCase):
+class VerdictLogicTests(_TmpTestCase, unittest.TestCase):
     """Verdict logic tests."""
 
     def test_clean_checkpoint_verdict_ok(self) -> None:
@@ -726,7 +726,7 @@ class VerdictLogicTests(_TmpTestCase):
 # ---------------------------------------------------------------------------
 
 
-class PortabilityCheckUnitTests(_TmpTestCase):
+class PortabilityCheckUnitTests(_TmpTestCase, unittest.TestCase):
     """Portability check unit tests."""
 
     def test_primary_tokenizer_none(self) -> None:
@@ -943,7 +943,7 @@ class LoaderFailureCodeTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
-class PortabilityMatrixTests(_TmpTestCase):
+class PortabilityMatrixTests(_TmpTestCase, unittest.TestCase):
     """Portability matrix tests."""
 
     def _second_ckpt(self, name: str = "second", **kwargs) -> Path:
@@ -1067,7 +1067,7 @@ class PortabilityMatrixTests(_TmpTestCase):
 # ---------------------------------------------------------------------------
 
 
-class RenderPortabilityTableTests(_TmpTestCase):
+class RenderPortabilityTableTests(_TmpTestCase, unittest.TestCase):
     """Render portability table tests."""
 
     def _ok_section(self) -> dict:
@@ -1138,7 +1138,7 @@ class RenderPortabilityTableTests(_TmpTestCase):
 # ---------------------------------------------------------------------------
 
 
-class ExamineDatasetTests(_TmpTestCase):
+class ExamineDatasetTests(_TmpTestCase, unittest.TestCase):
     """Examine dataset tests."""
 
     def test_missing_file_failed(self) -> None:
@@ -1199,7 +1199,7 @@ class ExamineDatasetTests(_TmpTestCase):
 # ---------------------------------------------------------------------------
 
 
-class TemplateConformanceTests(_TmpTestCase):
+class TemplateConformanceTests(_TmpTestCase, unittest.TestCase):
     """Template conformance tests."""
 
     @staticmethod
@@ -1282,7 +1282,7 @@ class TemplateConformanceTests(_TmpTestCase):
 # ---------------------------------------------------------------------------
 
 
-class DoctorIntegrationTests(_TmpTestCase):
+class DoctorIntegrationTests(_TmpTestCase, unittest.TestCase):
     """Doctor integration tests."""
 
     def test_suggestion_key_always_present(self) -> None:
@@ -1396,7 +1396,7 @@ def _cleanup_mutant_modules() -> None:
         del sys.modules[name]
 
 
-class MutationTests(_TmpTestCase):
+class MutationTests(_TmpTestCase, unittest.TestCase):
     """Each mutant must be caught: the probe assertion must FAIL on the mutant."""
 
     def _assert_mutant_caught(self, mutations: list[tuple[str, str]], probe) -> None:
