@@ -541,6 +541,17 @@ class TestDecomposition(unittest.TestCase):
         for shape in ("unknown-1234", "cedar-999", "cedar-10000", "CEDAR-5678", "cedar_5678"):
             self.assertEqual(self._decomp(shape, "single_site"), "non_answer", shape)
 
+    def test_trailing_newline_is_non_answer(self):
+        """Cycle-231 audit F1 sibling sweep: the grammar
+        applies with fullmatch semantics -- a trailing
+        newline never makes an answer in-grammar (under
+        re.match the `$` anchor matches before a final
+        newline, so the expected value plus newline
+        classified wrong_value and counted toward J).
+        """
+        self.assertEqual(self._decomp("cedar-5678\n", "single_site"), "non_answer")
+        self.assertEqual(self._decomp("cedar-1000\n", "whole_word"), "non_answer")
+
     def test_echo_classes_per_arm(self):
         """Echo classes per arm (expected urn-2133: the
         value word is urn; its single-site echo replaces u,
@@ -1261,6 +1272,10 @@ class TestMirrorValidation(unittest.TestCase):
             (("protocol", "fingerprint"), "0" * 64),
             ((*record0, "content_digests", "single_site"), "0" * 64),
             ((*record0, "cells", "control", "answer_text"), "cedar-5678"),
+            # Cycle-231 audit F2 sibling sweep: a lone
+            # surrogate answer_text is a validation
+            # failure, never an exception.
+            ((*record0, "cells", "control", "answer_text"), "cedar-8160\ud800"),
             ((*record0, "cells", "control", "input_tokens"), 999),
             ((*record0, "cells", "control", "verdict"), False),
             (

@@ -345,7 +345,10 @@ identity on a code-point-free string):
    `^[a-z]+-[0-9]{4}$` with word ∈ WORDS and number ∈ [1000, 9999],
    and is not the expected value (guaranteed at this point in the
    list: a text equal to the expected value has its digest, so it
-   was taken by class 1 or 2). **This is the only class that
+   was taken by class 1 or 2). The grammar is applied with
+   fullmatch semantics: a trailing newline makes the answer
+   out-of-grammar (cycle-231 audit F1 sibling sweep; the battery
+   carries the witness). **This is the only class that
    counts toward the headline J (§6).** Its scope is the frozen
    grammar, disclosed wherever J is glossed (amendment A7): a
    value change outside the grammar — an out-of-pool word

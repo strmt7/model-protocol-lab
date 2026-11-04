@@ -561,7 +561,11 @@ each class is reached only when every earlier predicate fails.
    boundary conjunct alone failed.
 3. `wrong_value` — the answer parses under the frozen value
    grammar `^[a-z]+-[0-9]{4}$` with word ∈ WORDS and number ∈
-   [1000, 9999], and is not the expected value. **The only class
+   [1000, 9999], and is not the expected value. The grammar
+   is applied with fullmatch semantics: a trailing newline
+   makes the answer out-of-grammar (cycle-231 audit F1
+   sibling sweep; the battery carries the witness).
+   **The only class
    counting toward the headline J (§6).** Scope disclosed: J
    counts wrong values *inside* the frozen grammar; a value
    change outside it (out-of-pool word, leading-zero number)

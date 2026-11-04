@@ -301,6 +301,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "record_notation": {"available": "neither", "changed": False},
         "invisible_chars": {"available": "neither", "changed": False},
         "confusable_skeleton": {"available": "neither", "changed": False},
+        "compatibility_form": {"available": "neither", "changed": False},
         "choice_audit": {"available": "neither", "changed": False},
         "precision": {"available": "neither", "changed": False},
         "confidence": {"available": "neither", "changed": False},
@@ -408,6 +409,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "invisible_chars_asymmetric": False,
             "confusable_skeleton_changed": False,
             "confusable_skeleton_asymmetric": False,
+            "compatibility_form_changed": False,
+            "compatibility_form_asymmetric": False,
             "choice_audit_changed": False,
             "choice_audit_asymmetric": False,
             "precision_changed": False,
@@ -9152,6 +9155,14 @@ def _o_rn_sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _o_rn_text_sha(text: str):
+    """Rn text sha (None when unencodable)."""
+    try:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    except UnicodeEncodeError:
+        return None
+
+
 def _o_rn_digest_ok(value: Any) -> bool:
     """O rn digest ok."""
     return type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value) is not None
@@ -9685,7 +9696,7 @@ def _o_rn_recompute(payload: Any):
                     if text is None:
                         if digest is not None:
                             return None
-                    elif type(text) is not str or _o_rn_sha(text) != digest:
+                    elif type(text) is not str or _o_rn_text_sha(text) != digest:
                         return None
                 if cell["verdict"] != (
                     digest == record["expected_digest"] and cell["boundary_found"]
@@ -10098,6 +10109,14 @@ def _o_ic_sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _o_ic_text_sha(text: str):
+    """Ic text sha (None when unencodable)."""
+    try:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    except UnicodeEncodeError:
+        return None
+
+
 def _o_ic_digest_ok(value: Any) -> bool:
     """O ic digest ok."""
     if type(value) is not str or len(value) != 64:
@@ -10303,7 +10322,7 @@ def _o_ic_decompose_cell(cell: dict, expected: str, expected_digest: str, arm: s
     text = cell.get("answer_text")
     if type(text) is not str:
         return "non_answer"
-    if text != expected and re.match(r"^[a-z]+-[0-9]{4}$", text):
+    if text != expected and re.fullmatch(r"^[a-z]+-[0-9]{4}$", text):
         word, _, number = text.partition("-")
         if word in _O_IC_WORDS and 1000 <= int(number) <= 9999:
             return "wrong_value"
@@ -10498,7 +10517,7 @@ def _o_ic_cell_ok(cell: Any, expected_digest: str) -> bool:
     if text is None:
         if digest is not None:
             return False
-    elif type(text) is not str or _o_ic_sha(text) != digest:
+    elif type(text) is not str or _o_ic_text_sha(text) != digest:
         return False
     verdict = (digest == expected_digest) and cell["boundary_found"]
     return bool(cell["verdict"] == verdict)
@@ -11101,6 +11120,14 @@ def _o_cs_sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _o_cs_text_sha(text: str):
+    """Cs text sha (None when unencodable)."""
+    try:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    except UnicodeEncodeError:
+        return None
+
+
 def _o_cs_digest_ok(value: Any) -> bool:
     """O ic digest ok."""
     if type(value) is not str or len(value) != 64:
@@ -11444,7 +11471,7 @@ def _o_cs_decompose_cell(cell: dict, expected: str, expected_digest: str, arm: s
     text = cell.get("answer_text")
     if type(text) is not str:
         return "non_answer"
-    if text != expected and re.match(r"^[a-z]+-[0-9]{4}$", text):
+    if text != expected and re.fullmatch(r"^[a-z]+-[0-9]{4}$", text):
         word, _, number = text.partition("-")
         if word in _O_CS_WORDS and 1000 <= int(number) <= 9999:
             return "wrong_value"
@@ -11670,7 +11697,7 @@ def _o_cs_cell_ok(cell: Any, expected_digest: str) -> bool:
     if text is None:
         if digest is not None:
             return False
-    elif type(text) is not str or _o_cs_sha(text) != digest:
+    elif type(text) is not str or _o_cs_text_sha(text) != digest:
         return False
     verdict = (digest == expected_digest) and cell["boundary_found"]
     return bool(cell["verdict"] == verdict)
@@ -12119,6 +12146,1168 @@ def _o_instructiondistance(old: Any, new: Any) -> tuple[dict[str, Any], bool, bo
                 new_entry["ids"]["sep_1024"]["n_same_ids_compliance_flips"],
             )
         )
+        for metric, old_value, new_value in metrics:
+            if old_value != new_value:
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    diff["candidate_drift"] = candidate_drift
+    diff["candidates_added"] = added
+    diff["candidates_removed"] = removed
+    diff["protocol_drift"] = protocol_drift
+    diff["generator_drift"] = generator_drift
+    diff["backend_drift"] = backend_drift
+    diff["comparable"] = comparable
+    changed = bool(
+        candidate_drift or added or removed or protocol_drift or generator_drift or backend_drift
+    )
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
+# diffreports._valid_compatibility_form / diff_compatibility_form,
+# re-implemented from docs/COMPATIBILITYFORM_DESIGN.md as
+# amended (A1-A9). The population is frozen from the pinned
+# UnicodeData.txt 15.0.0 (tagged compatibility
+# decompositions, NFC == NFD == ch, NFKC != ch, tag not
+# <wide>); readings are the NFKC fold, with the fraction
+# solidus transcribed U+2044 -> U+002F; every cell carries
+# digest-bound answer_text; the headline is the guarded
+# classification over the id-divergent paired population
+# with the divergent-domain size M printed beside the
+# label (A1); the decomposition is the six-class ordered
+# decision list with the arm-table echo predicate and the
+# empty control table (A3, A5).
+
+_O_CXF_TOPICS = (
+    "harbor",
+    "summit",
+    "quarry",
+    "tundra",
+    "granite",
+    "willow",
+    "copper",
+    "saddle",
+    "walnut",
+    "velvet",
+    "cobalt",
+    "marble",
+    "cinder",
+    "falcon",
+    "garnet",
+    "saffron",
+    "indigo",
+    "juniper",
+    "lagoon",
+    "magnet",
+    "nickel",
+    "pepper",
+    "quartz",
+    "birch",
+)
+_O_CXF_WORDS = (
+    "alder",
+    "basalt",
+    "cedar",
+    "drift",
+    "elm",
+    "fern",
+    "glade",
+    "heath",
+    "iris",
+    "jade",
+    "kelp",
+    "loom",
+    "moss",
+    "nova",
+    "ochre",
+    "pine",
+    "quill",
+    "reed",
+    "sage",
+    "tide",
+    "urn",
+    "vale",
+    "wren",
+    "yew",
+)
+_O_CXF_NEUTRAL_STATEMENTS = (
+    "The weather changed slowly during the afternoon hours.",
+    "A wooden fence runs along the edge of the property.",
+    "She placed the documents inside a plain folder yesterday.",
+    "The train arrived later than the schedule suggested.",
+    "Fresh bread was cooling on the counter near the sink.",
+    "He repaired the bicycle with tools from the garage.",
+    "The bookshop extends its opening hours during summer.",
+    "Several chairs were arranged around the long table.",
+    "The recipe calls for a pinch of salt and herbs.",
+    "They walked along the path beside the lake at dawn.",
+    "The committee postponed its decision until next week.",
+    "A thick layer of dust covered the old furniture.",
+    "The children played quietly in the courtyard after lunch.",
+    "His handwriting was difficult to read in places.",
+    "The farmer harvested the fields before the rain came.",
+    "An old map hung framed on the wall of the hallway.",
+    "The accountant reviewed the figures a second time.",
+    "Birds gathered on the rooftops as the sun went down.",
+    "The mechanic inspected the engine and changed the oil.",
+    "A narrow staircase led up to the attic.",
+    "The orchestra rehearsed the piece several times over.",
+    "Someone left a bicycle leaning against the railing.",
+    "The soup simmered gently on the stove all morning.",
+    "Visitors signed the guest book near the entrance.",
+)
+_O_CXF_CLASS_TABLES = {
+    "ligature": (
+        (307, "ĳ", "ij"),
+        (64256, "ﬀ", "ff"),
+        (64257, "ﬁ", "fi"),
+        (64258, "ﬂ", "fl"),
+        (64259, "ﬃ", "ffi"),
+        (64260, "ﬄ", "ffl"),
+        (64262, "ﬆ", "st"),
+    ),
+    "enclosed": (
+        (9312, "①", "1"),
+        (9313, "②", "2"),
+        (9314, "③", "3"),
+        (9315, "④", "4"),
+        (9316, "⑤", "5"),
+        (9317, "⑥", "6"),
+        (9318, "⑦", "7"),
+        (9319, "⑧", "8"),
+        (9320, "⑨", "9"),
+        (9450, "⓪", "0"),
+    ),
+    "fraction": (
+        (188, "¼", "1/4"),
+        (189, "½", "1/2"),
+        (190, "¾", "3/4"),
+        (8528, "⅐", "1/7"),
+        (8529, "⅑", "1/9"),
+        (8530, "⅒", "1/10"),
+        (8531, "⅓", "1/3"),
+        (8532, "⅔", "2/3"),
+        (8533, "⅕", "1/5"),
+        (8534, "⅖", "2/5"),
+        (8535, "⅗", "3/5"),
+        (8536, "⅘", "4/5"),
+        (8537, "⅙", "1/6"),
+        (8538, "⅚", "5/6"),
+        (8539, "⅛", "1/8"),
+        (8540, "⅜", "3/8"),
+        (8541, "⅝", "5/8"),
+        (8542, "⅞", "7/8"),
+        (8585, "↉", "0/3"),
+    ),
+    "superscript": (
+        (178, "²", "2"),
+        (179, "³", "3"),
+        (185, "¹", "1"),
+        (8304, "⁰", "0"),
+        (8308, "⁴", "4"),
+        (8309, "⁵", "5"),
+        (8310, "⁶", "6"),
+        (8311, "⁷", "7"),
+        (8312, "⁸", "8"),
+        (8313, "⁹", "9"),
+    ),
+    "roman": (
+        (8544, "Ⅰ", "I"),
+        (8545, "Ⅱ", "II"),
+        (8546, "Ⅲ", "III"),
+        (8547, "Ⅳ", "IV"),
+        (8548, "Ⅴ", "V"),
+        (8549, "Ⅵ", "VI"),
+        (8550, "Ⅶ", "VII"),
+        (8551, "Ⅷ", "VIII"),
+        (8552, "Ⅸ", "IX"),
+        (8553, "Ⅹ", "X"),
+        (8554, "Ⅺ", "XI"),
+        (8555, "Ⅻ", "XII"),
+        (8556, "Ⅼ", "L"),
+        (8557, "Ⅽ", "C"),
+        (8558, "Ⅾ", "D"),
+        (8559, "Ⅿ", "M"),
+    ),
+    "katakana": (
+        (65382, "ｦ", "ヲ"),
+        (65383, "ｧ", "ァ"),
+        (65384, "ｨ", "ィ"),
+        (65385, "ｩ", "ゥ"),
+        (65386, "ｪ", "ェ"),
+        (65387, "ｫ", "ォ"),
+        (65388, "ｬ", "ャ"),
+        (65389, "ｭ", "ュ"),
+        (65390, "ｮ", "ョ"),
+        (65391, "ｯ", "ッ"),
+        (65393, "ｱ", "ア"),
+        (65394, "ｲ", "イ"),
+        (65395, "ｳ", "ウ"),
+        (65396, "ｴ", "エ"),
+        (65397, "ｵ", "オ"),
+        (65398, "ｶ", "カ"),
+        (65399, "ｷ", "キ"),
+        (65400, "ｸ", "ク"),
+        (65401, "ｹ", "ケ"),
+        (65402, "ｺ", "コ"),
+        (65403, "ｻ", "サ"),
+        (65404, "ｼ", "シ"),
+        (65405, "ｽ", "ス"),
+        (65406, "ｾ", "セ"),
+        (65407, "ｿ", "ソ"),
+        (65408, "ﾀ", "タ"),
+        (65409, "ﾁ", "チ"),
+        (65410, "ﾂ", "ツ"),
+        (65411, "ﾃ", "テ"),
+        (65412, "ﾄ", "ト"),
+        (65413, "ﾅ", "ナ"),
+        (65414, "ﾆ", "ニ"),
+        (65415, "ﾇ", "ヌ"),
+        (65416, "ﾈ", "ネ"),
+        (65417, "ﾉ", "ノ"),
+        (65418, "ﾊ", "ハ"),
+        (65419, "ﾋ", "ヒ"),
+        (65420, "ﾌ", "フ"),
+        (65421, "ﾍ", "ヘ"),
+        (65422, "ﾎ", "ホ"),
+        (65423, "ﾏ", "マ"),
+        (65424, "ﾐ", "ミ"),
+        (65425, "ﾑ", "ム"),
+        (65426, "ﾒ", "メ"),
+        (65427, "ﾓ", "モ"),
+        (65428, "ﾔ", "ヤ"),
+        (65429, "ﾕ", "ユ"),
+        (65430, "ﾖ", "ヨ"),
+        (65431, "ﾗ", "ラ"),
+        (65432, "ﾘ", "リ"),
+        (65433, "ﾙ", "ル"),
+        (65434, "ﾚ", "レ"),
+        (65435, "ﾛ", "ロ"),
+        (65436, "ﾜ", "ワ"),
+        (65437, "ﾝ", "ン"),
+    ),
+}
+_O_CXF_CLASS_CHARS = {
+    "control": frozenset(),
+    **{arm: frozenset(ch for _, ch, _ in table) for arm, table in _O_CXF_CLASS_TABLES.items()},
+}
+_O_CXF_ARM_KEYS = ("control",) + tuple(_O_CXF_CLASS_TABLES)
+_O_CXF_TREATED_ARMS = _O_CXF_ARM_KEYS[1:]
+_O_CXF_UNICODE_VERSION = "15.0.0"
+_O_CXF_UNICODEDATA_SHA256 = "806e9aed65037197f1ec85e12be6e8cd870fc5608b4de0fffd990f689f376a73"
+_O_CXF_CASE_COUNT = 24
+_O_CXF_MIN_D = 10
+_O_CXF_MIN_J = 6
+_O_CXF_MAX_INCOMPLETE = 6
+_O_CXF_REDRAW_LIMIT = 1000
+_O_CXF_GENERATOR_SPEC = (
+    "draw(seed, index, slot, counter) = "
+    "int.from_bytes(sha256(f'{seed}|compatfold|{index}|{slot}|{counter}').digest()[:8], "
+    "'big'); slot 0: word = WORDS[draw % len(WORDS)]; slot 1: number = 1000 + draw % 9000; a "
+    "value colliding with an earlier case redraws slots 0 and 1 only at counter+1 (slots 2-9 "
+    "stay at counter 0), the counter incrementing once per colliding redraw and giving up "
+    "when it exceeds 1000 (the stage fails closed); slots 2/3: neutral indices = draw % "
+    "len(NEUTRAL_STATEMENTS), the second advancing +1 on collision; slot 4: ligature; slot 5: "
+    "enclosed; slot 6: fraction; slot 7: superscript; slot 8: roman; slot 9: katakana, each "
+    "draw % len(class table) over the codepoint-sorted frozen tables"
+)
+_O_CXF_MAX_CANDIDATES = 24
+_O_CXF_MAX_GROUND_RECORDS = _O_CXF_MAX_CANDIDATES * _O_CXF_CASE_COUNT
+_O_CXF_GENERATION_BUDGET = len(_O_CXF_ARM_KEYS) * _O_CXF_MAX_GROUND_RECORDS
+_O_CXF_MAX_RECORDS_BYTES = 12 * 1024 * 1024
+_O_CXF_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+    "answer_text",
+}
+_O_CXF_DETAILS = ("arm_context_exceeded", "arm_evaluation_failed")
+_O_CXF_CELL_CLASSES = (
+    "pass",
+    "wrong_value",
+    "echo_compat",
+    "form_only",
+    "boundary_only",
+    "non_answer",
+)
+_O_CXF_PAIR_CLASSES = ("exact_only", "boundary_only", "mixed")
+_O_CXF_AGGREGATE_KEYS = {
+    "arms",
+    "ids",
+    "dose",
+    "headline",
+    "operating_characteristics",
+    "n_cases",
+    "n_incomplete",
+}
+_O_CXF_OC = {
+    "fire_competent_independent": 0.0173,
+    "fire_competent_paired": 0.0044,
+    "fire_weak_independent": 0.1743,
+    "fire_random_independent": 0.5503,
+    "power_drop10_base90": 0.2542,
+    "power_drop25_base90": 0.8159,
+    "power_drop25_base85": 0.8761,
+    "power_drop25_paired": 0.6981,
+    "power_drop50_base90": 0.999,
+    "sensitivity18_drop25": 0.5214,
+    "sensitivity18_competent": 0.0038,
+    "panel_sweep_16_drop25": 0.3904,
+    "panel_sweep_20_drop25": 0.6395,
+    "transplant_fire_competent_independent": 0.8897,
+    "familywise_competent_expected_144": 2.4875,
+    "familywise_competent_any_144": 0.9187,
+    "familywise_paired_expected_144": 0.6397,
+    "familywise_paired_any_144": 0.4733,
+    "familywise_random_expected_144": 79.2441,
+    "world_a_guarded_fire": 0.0037,
+    "world_a_unguarded_fire": 0.0069,
+    "world_a_guarded_insufficient": 0.9765,
+    "world_b_unguarded_below_threshold": 0.7231,
+    "world_b_guarded_below_threshold": 0.0763,
+    "world_b_guarded_fire": 0.1046,
+    "world_c_guarded_fire": 0.7719,
+    "world_c_unguarded_fire": 0.7824,
+    "m20_drop25": 0.6395,
+    "m20_drop10": 0.1356,
+    "m20_competent": 0.0068,
+    "m18_drop25": 0.5214,
+    "m18_drop10": 0.0889,
+    "m18_competent": 0.0038,
+    "m16_drop25": 0.3904,
+    "m16_drop10": 0.0527,
+    "m16_competent": 0.0019,
+    "m12_drop25": 0.1379,
+    "m12_drop10": 0.0113,
+    "m12_competent": 0.0003,
+    "m10_drop25": 0.0331,
+    "m10_drop10": 0.0022,
+    "m10_competent": 0.0001,
+}
+
+
+def _o_cxf_sha(text: str) -> str:
+    """Cxf sha."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _o_cxf_text_sha(text: str):
+    """Cxf text sha (None when unencodable)."""
+    try:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    except UnicodeEncodeError:
+        return None
+
+
+def _o_cxf_digest_ok(value: Any) -> bool:
+    """Cxf digest ok."""
+    return type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def _o_cxf_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    """Cxf derive."""
+    material = f"{seed}|compatfold|{index}|{slot}|{counter}"
+    return int.from_bytes(hashlib.sha256(material.encode("utf-8")).digest()[:8], "big")
+
+
+_O_CXF_VALUE_SHAPE = re.compile(r"^[a-z]+-[0-9]{4}$")
+
+
+def _o_cxf_marker(fields: dict) -> str:
+    """Cxf marker."""
+    return (
+        f"The marker line reads script {fields['ligature']}, circle {fields['enclosed']}, "
+        f"share {fields['fraction']}, power x{fields['superscript']}, "
+        f"regnal Henry {fields['roman']}, kana {fields['katakana']}."
+    )
+
+
+def _o_cxf_generate(seed: int):
+    """Cxf generate."""
+    cases = []
+    seen_values: set = set()
+    for index in range(_O_CXF_CASE_COUNT):
+        topic = _O_CXF_TOPICS[index]
+        counter = 0
+        while True:
+            word = _O_CXF_WORDS[_o_cxf_derive(seed, index, 0, counter) % len(_O_CXF_WORDS)]
+            number = 1000 + _o_cxf_derive(seed, index, 1, counter) % 9000
+            value = f"{word}-{number}"
+            if value not in seen_values:
+                break
+            counter += 1
+            if counter > _O_CXF_REDRAW_LIMIT:
+                raise ValueError("redraw exhausted")
+        seen_values.add(value)
+        first = _o_cxf_derive(seed, index, 2, 0) % len(_O_CXF_NEUTRAL_STATEMENTS)
+        second = _o_cxf_derive(seed, index, 3, 0) % len(_O_CXF_NEUTRAL_STATEMENTS)
+        if second == first:
+            second = (second + 1) % len(_O_CXF_NEUTRAL_STATEMENTS)
+        members = {}
+        fields = {}
+        for offset, arm in enumerate(_O_CXF_TREATED_ARMS):
+            table = _O_CXF_CLASS_TABLES[arm]
+            codepoint, char, reading = table[_o_cxf_derive(seed, index, 4 + offset, 0) % len(table)]
+            members[arm] = codepoint
+            fields[arm] = (char, reading)
+        case = {
+            "fixture_id": f"compatibilityform-{index:02d}",
+            "topic": topic,
+            "word": word,
+            "number": number,
+            "value": value,
+            "neutral_a": _O_CXF_NEUTRAL_STATEMENTS[first],
+            "neutral_b": _O_CXF_NEUTRAL_STATEMENTS[second],
+            "neutral_indices": [first, second],
+            "members": members,
+            "fields": fields,
+        }
+        cases.append(case)
+    return cases
+
+
+def _o_cxf_fact(case: dict) -> str:
+    """Cxf fact."""
+    return f"The {case['topic']} inspection code is {case['value']}."
+
+
+def _o_cxf_question(case: dict) -> str:
+    """Cxf question."""
+    return f"What is the {case['topic']} inspection code?"
+
+
+def _o_cxf_arm_content(case: dict, arm: str) -> str:
+    """Cxf arm content."""
+    if arm not in _O_CXF_ARM_KEYS:
+        raise ValueError(f"unknown compatibility-form arm: {arm!r}")
+    fields = {name: case["fields"][name][1] for name in _O_CXF_TREATED_ARMS}
+    if arm != "control":
+        fields[arm] = case["fields"][arm][0]
+    marker = _o_cxf_marker(fields)
+    return (
+        f"{case['neutral_a']} {_o_cxf_fact(case)} {marker} "
+        f"{case['neutral_b']} {_o_cxf_question(case)}"
+    )
+
+
+def _o_cxf_member_satisfies(arm: str, char: str, reading: str) -> bool:
+    """Cxf member satisfies."""
+    decomposition = unicodedata.decomposition(char)
+    parts = decomposition.split()
+    if not parts or not parts[0].startswith("<") or parts[0] == "<wide>":
+        return False
+    if unicodedata.normalize("NFC", char) != char or unicodedata.normalize("NFD", char) != char:
+        return False
+    folded = unicodedata.normalize("NFKC", char)
+    if folded == char:
+        return False
+    member_name = unicodedata.name(char, "")
+    if arm == "ligature":
+        targets = "".join(chr(int(token, 16)) for token in parts[1:])
+        return (
+            member_name.startswith("LATIN SMALL LIGATURE")
+            and targets.isascii()
+            and reading == folded == targets
+        )
+    if arm == "enclosed":
+        return member_name.startswith("CIRCLED DIGIT") and reading == folded
+    if arm == "fraction":
+        return member_name.startswith("VULGAR FRACTION") and reading == folded.replace(
+            "\u2044", "/"
+        )
+    if arm == "superscript":
+        return (
+            parts[0] == "<super>"
+            and len(parts) == 2
+            and reading == folded
+            and reading in "0123456789"
+        )
+    if arm == "roman":
+        return member_name.startswith("ROMAN NUMERAL") and reading == folded
+    if arm == "katakana":
+        return member_name.startswith("HALFWIDTH KATAKANA LETTER") and reading == folded
+    return False
+
+
+def _o_cxf_population_audit() -> dict:
+    """Cxf population audit."""
+    classes: dict = {}
+    seen: set = set()
+    ok = True
+    for arm in _O_CXF_TREATED_ARMS:
+        table = _O_CXF_CLASS_TABLES[arm]
+        codepoints = [cp for cp, _ch, _rd in table]
+        members_ok = all(
+            _o_cxf_member_satisfies(arm, char, reading) for _cp, char, reading in table
+        )
+        disjoint = not any(char in seen for _cp, char, _rd in table)
+        seen.update(char for _cp, char, _rd in table)
+        entry_ok = (
+            members_ok
+            and disjoint
+            and codepoints == sorted(codepoints)
+            and all("-" not in reading for _cp, _ch, reading in table)
+        )
+        if arm != "katakana":
+            entry_ok = entry_ok and all(reading.isascii() for _cp, _ch, reading in table)
+        else:
+            entry_ok = entry_ok and all(
+                len(reading) == 1 and not reading.isascii() for _cp, _ch, reading in table
+            )
+        ok = ok and entry_ok
+        classes[arm] = {
+            "count": len(table),
+            "members": [f"U+{codepoint:04X}" for codepoint in codepoints],
+            "satisfies": entry_ok,
+        }
+    total = sum(len(_O_CXF_CLASS_TABLES[arm]) for arm in _O_CXF_TREATED_ARMS)
+    return {
+        "classes": classes,
+        "total": total,
+        "pairwise_disjoint": len(seen) == total,
+        "ok": ok,
+        "unicode_version": unicodedata.unidata_version,
+        "unicodedata_version": _O_CXF_UNICODE_VERSION,
+        "unicodedata_sha256": _O_CXF_UNICODEDATA_SHA256,
+    }
+
+
+def _o_cxf_table_sha256() -> str:
+    """Cxf table sha256."""
+    material = {
+        "classes": {
+            arm: [[char, reading] for _cp, char, reading in _O_CXF_CLASS_TABLES[arm]]
+            for arm in _O_CXF_TREATED_ARMS
+        },
+        "unicode_version": _O_CXF_UNICODE_VERSION,
+        "unicodedata_sha256": _O_CXF_UNICODEDATA_SHA256,
+    }
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return _o_cxf_sha(canonical)
+
+
+def _o_cxf_case_material_sha256() -> str:
+    """Cxf case material sha256."""
+    material = {
+        "topics": list(_O_CXF_TOPICS),
+        "words": list(_O_CXF_WORDS),
+        "neutral_statements": list(_O_CXF_NEUTRAL_STATEMENTS),
+        "arm_keys": list(_O_CXF_ARM_KEYS),
+        "marker_template": (
+            "The marker line reads script {f0}, circle {f1}, share {f2}, "
+            "power {f3}, regnal Henry {f4}, kana {f5}."
+        ),
+        "generator_spec": _O_CXF_GENERATOR_SPEC,
+        "case_count": _O_CXF_CASE_COUNT,
+        "table_sha256": _o_cxf_table_sha256(),
+        "min_d": _O_CXF_MIN_D,
+        "min_j": _O_CXF_MIN_J,
+        "max_incomplete": _O_CXF_MAX_INCOMPLETE,
+        "redraw_limit": _O_CXF_REDRAW_LIMIT,
+        "population_audit": _o_cxf_population_audit(),
+    }
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return _o_cxf_sha(canonical)
+
+
+def _o_cxf_ground_sha256(seed: int):
+    """Cxf ground sha256."""
+    rows = [
+        [
+            case["fixture_id"],
+            case["topic"],
+            case["value"],
+            list(case["neutral_indices"]),
+            [int(case["members"][arm]) for arm in _O_CXF_TREATED_ARMS],
+        ]
+        for case in _o_cxf_generate(seed)
+    ]
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _o_cxf_sha(canonical)
+
+
+def _o_cxf_protocol(seed: int, backend_fingerprint: str):
+    """Cxf protocol."""
+    protocol: dict = {
+        "version": 1,
+        "arm_keys": list(_O_CXF_ARM_KEYS),
+        "treated_arms": list(_O_CXF_TREATED_ARMS),
+        "case_count": _O_CXF_CASE_COUNT,
+        "min_d": _O_CXF_MIN_D,
+        "min_j": _O_CXF_MIN_J,
+        "max_incomplete": _O_CXF_MAX_INCOMPLETE,
+        "case_material_sha256": _o_cxf_case_material_sha256(),
+        "ground_sha256": _o_cxf_ground_sha256(seed),
+        "table_sha256": _o_cxf_table_sha256(),
+        "unicode_version": _O_CXF_UNICODE_VERSION,
+        "unicodedata_sha256": _O_CXF_UNICODEDATA_SHA256,
+        "population_audit": _o_cxf_population_audit(),
+        "generation_budget": _O_CXF_GENERATION_BUDGET,
+        "max_ground_records": _O_CXF_MAX_GROUND_RECORDS,
+        "max_records_bytes": _O_CXF_MAX_RECORDS_BYTES,
+        "max_candidates": _O_CXF_MAX_CANDIDATES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _o_cxf_sha(canonical)
+    return protocol
+
+
+def _o_cxf_cell(record: dict, key: str):
+    """Cxf cell."""
+    cells = record.get("cells")
+    if type(cells) is not dict:
+        return None
+    cell = cells.get(key)
+    return cell if type(cell) is dict else None
+
+
+def _o_cxf_detail(record: dict, key: str) -> str:
+    """Cxf detail."""
+    details = record.get("cell_details")
+    if type(details) is not dict:
+        return ""
+    detail = details.get(key)
+    return detail if type(detail) is str else ""
+
+
+def _o_cxf_verdict(record: dict, key: str) -> bool:
+    """Cxf verdict."""
+    cell = _o_cxf_cell(record, key)
+    return bool(cell is not None and cell.get("verdict") is True)
+
+
+def _o_cxf_ids_identical(record: dict, arm: str) -> bool:
+    """Cxf ids identical."""
+    flags = record.get("ids_identical")
+    if type(flags) is dict and type(flags.get(arm)) is bool:
+        return bool(flags[arm])
+    return False
+
+
+def _o_cxf_decompose_cell(cell: dict, expected: str, expected_digest: str, arm: str) -> str:
+    """Cxf decompose cell."""
+    if cell["verdict"]:
+        return "pass"
+    answer_digest = cell.get("answer_digest")
+    if type(answer_digest) is str and answer_digest == expected_digest:
+        return "boundary_only"
+    text = cell.get("answer_text")
+    if type(text) is str and _O_CXF_VALUE_SHAPE.fullmatch(text):
+        word, _dash, digits = text.partition("-")
+        if word in _O_CXF_WORDS and 1000 <= int(digits) <= 9999 and text != expected:
+            return "wrong_value"
+    if type(text) is str and text != expected and unicodedata.normalize("NFKC", text) == expected:
+        if any(char in _O_CXF_CLASS_CHARS.get(arm, frozenset()) for char in text):
+            return "echo_compat"
+        return "form_only"
+    return "non_answer"
+
+
+def _o_cxf_decompose_pair(control_cell: dict, arm_cell: dict) -> str:
+    """Cxf decompose pair."""
+    if control_cell.get("answer_digest") == arm_cell.get("answer_digest"):
+        return "boundary_only"
+    if control_cell.get("boundary_found") and arm_cell.get("boundary_found"):
+        return "exact_only"
+    return "mixed"
+
+
+def _o_cxf_classify(control_passes: int, wrong_values: int, n_incomplete: int) -> str:
+    """Cxf classify."""
+    if n_incomplete > _O_CXF_MAX_INCOMPLETE:
+        return "insufficient"
+    if control_passes < _O_CXF_MIN_D:
+        return "insufficient"
+    if wrong_values >= _O_CXF_MIN_J:
+        return "discordant_asymmetric"
+    if wrong_values == 0:
+        return "no_discordance_observed" if n_incomplete == 0 else "insufficient"
+    return "below_threshold" if wrong_values + n_incomplete < _O_CXF_MIN_J else "insufficient"
+
+
+def _o_cxf_rate(numerator: int, denominator: int):
+    """Cxf rate."""
+    if denominator == 0:
+        return None
+    return numerator / denominator
+
+
+def _o_cxf_aggregate(records: list, cases: list) -> dict:
+    """Cxf aggregate."""
+    expected_by_fixture = {case["fixture_id"]: case["value"] for case in cases}
+    arms: dict = {}
+    for arm in _O_CXF_ARM_KEYS:
+        n_completed = 0
+        n_pass = 0
+        n_context = 0
+        n_failed = 0
+        decomposition = dict.fromkeys(_O_CXF_CELL_CLASSES, 0)
+        for record in records:
+            detail = _o_cxf_detail(record, arm)
+            if detail == "arm_context_exceeded":
+                n_context += 1
+            elif detail == "arm_evaluation_failed":
+                n_failed += 1
+            cell = _o_cxf_cell(record, arm)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell.get("verdict") is True:
+                n_pass += 1
+            decomposition[
+                _o_cxf_decompose_cell(
+                    cell,
+                    expected_by_fixture.get(str(record.get("fixture", "")), ""),
+                    str(record.get("expected_digest", "")),
+                    arm,
+                )
+            ] += 1
+        arms[arm] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": _o_cxf_rate(n_pass, n_completed),
+            "n_context_exceeded": n_context,
+            "n_evaluation_failed": n_failed,
+            "decomposition": decomposition,
+        }
+    ids: dict = {}
+    dose: dict = {}
+    headline: dict = {}
+    for arm in _O_CXF_TREATED_ARMS:
+        deltas: list = []
+        n_ids_identical = 0
+        n_flips = 0
+        for record in records:
+            tokens = record.get("arm_tokens")
+            tokens = tokens if type(tokens) is dict else {}
+            treated = tokens.get(arm)
+            baseline = tokens.get("control")
+            if type(treated) is int and type(baseline) is int:
+                deltas.append(treated - baseline)
+            else:
+                deltas.append(0)
+            if _o_cxf_ids_identical(record, arm):
+                n_ids_identical += 1
+                control_cell = _o_cxf_cell(record, "control")
+                arm_cell = _o_cxf_cell(record, arm)
+                if (
+                    control_cell is not None
+                    and arm_cell is not None
+                    and (control_cell.get("verdict") is True) != (arm_cell.get("verdict") is True)
+                ):
+                    n_flips += 1
+        ids[arm] = {
+            "n_ids_identical": n_ids_identical,
+            "n_ids_divergent": len(records) - n_ids_identical,
+            "id_length_delta": deltas,
+            "max_abs_id_delta": max((abs(delta) for delta in deltas), default=0),
+            "n_same_ids_verdict_flips": n_flips,
+        }
+        cp_deltas: list = []
+        byte_deltas: list = []
+        for case in cases:
+            treated_content = _o_cxf_arm_content(case, arm)
+            control_content = _o_cxf_arm_content(case, "control")
+            cp_deltas.append(len(treated_content) - len(control_content))
+            byte_deltas.append(
+                len(treated_content.encode("utf-8")) - len(control_content.encode("utf-8"))
+            )
+        dose[arm] = {
+            "codepoint_delta_min": min(cp_deltas, default=0),
+            "codepoint_delta_max": max(cp_deltas, default=0),
+            "byte_delta_min": min(byte_deltas, default=0),
+            "byte_delta_max": max(byte_deltas, default=0),
+        }
+        domain = [record for record in records if not _o_cxf_ids_identical(record, arm)]
+        paired = [
+            record
+            for record in domain
+            if _o_cxf_cell(record, "control") is not None and _o_cxf_cell(record, arm) is not None
+        ]
+        n_incomplete_arm = len(domain) - len(paired)
+        control_passes = 0
+        wrong_values = 0
+        reverse = 0
+        non_answer = 0
+        pair_decomposition = dict.fromkeys(_O_CXF_PAIR_CLASSES, 0)
+        failing_classes = dict.fromkeys(_O_CXF_CELL_CLASSES, 0)
+        for record in paired:
+            control_cell = _o_cxf_cell(record, "control")
+            arm_cell = _o_cxf_cell(record, arm)
+            if control_cell is None or arm_cell is None:
+                continue
+            expected = expected_by_fixture.get(str(record.get("fixture", "")), "")
+            expected_digest = str(record.get("expected_digest", ""))
+            arm_class = _o_cxf_decompose_cell(arm_cell, expected, expected_digest, arm)
+            if arm_class == "non_answer":
+                non_answer += 1
+            control_verdict = control_cell.get("verdict") is True
+            arm_verdict = arm_cell.get("verdict") is True
+            if control_verdict:
+                control_passes += 1
+                if arm_class == "wrong_value":
+                    wrong_values += 1
+            elif arm_verdict:
+                reverse += 1
+            if control_verdict != arm_verdict:
+                pair_decomposition[_o_cxf_decompose_pair(control_cell, arm_cell)] += 1
+                failing = arm_cell if control_verdict else control_cell
+                failing_arm = arm if control_verdict else "control"
+                failing_classes[
+                    _o_cxf_decompose_cell(failing, expected, expected_digest, failing_arm)
+                ] += 1
+        headline[arm] = {
+            "label": _o_cxf_classify(control_passes, wrong_values, n_incomplete_arm),
+            "n_population": len(paired),
+            "n_incomplete": n_incomplete_arm,
+            "n_ids_divergent": len(domain),
+            "control_passes": control_passes,
+            "wrong_values": wrong_values,
+            "n_reverse": reverse,
+            "control_rate": _o_cxf_rate(control_passes, len(paired)),
+            "arm_rate": _o_cxf_rate(
+                sum(1 for record in paired if _o_cxf_verdict(record, arm)),
+                len(paired),
+            ),
+            "n_non_answer": non_answer,
+            "pair_decomposition": pair_decomposition,
+            "failing_classes": failing_classes,
+        }
+    return {
+        "arms": arms,
+        "ids": ids,
+        "dose": dose,
+        "headline": headline,
+        "operating_characteristics": dict(_O_CXF_OC),
+        "n_cases": len(records),
+        "n_incomplete": sum(
+            1
+            for record in records
+            if any(_o_cxf_cell(record, arm) is None for arm in _O_CXF_ARM_KEYS)
+        ),
+    }
+
+
+def _o_cxf_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """Cxf cell ok."""
+    if type(cell) is not dict or set(cell) != _O_CXF_CELL_FIELDS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    tokens = cell["input_tokens"]
+    if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+        return False
+    digest = cell["answer_digest"]
+    if digest is not None and not _o_cxf_digest_ok(digest):
+        return False
+    text = cell["answer_text"]
+    if text is None:
+        if digest is not None:
+            return False
+    elif type(text) is not str or _o_cxf_text_sha(text) != digest:
+        return False
+    return bool(cell["verdict"] == ((digest == expected_digest) and cell["boundary_found"]))
+
+
+def _o_cxf_recompute(payload: Any):
+    """Cxf recompute."""
+    if type(payload) is not dict or payload.get("available") is not True:
+        return None
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return None
+    if payload.get("detail") != "":
+        return None
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fp = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool):
+        return None
+    if type(backend_fp) is not str:
+        return None
+    try:
+        cases = _o_cxf_generate(seed)
+    except Exception:  # noqa: BLE001 -- regeneration failure means invalid
+        return None
+    if len(cases) != _O_CXF_CASE_COUNT:
+        return None
+    if protocol != _o_cxf_protocol(seed, backend_fp):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    if len(candidates) > _O_CXF_MAX_CANDIDATES:
+        return None
+    total_records = 0
+    records_bytes = 0
+    recomputed: dict = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        if entry.get("status") == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            recomputed[name] = None
+            continue
+        if entry.get("status") != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _O_CXF_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(cases):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _O_CXF_MAX_RECORDS_BYTES:
+            return None
+        for record, case in zip(records, cases, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "content_digests",
+                "arm_tokens",
+                "id_digests",
+                "ids_identical",
+                "id_length_delta",
+                "table_pin",
+                "members",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"] or record["topic"] != case["topic"]:
+                return None
+            if record["expected_digest"] != _o_cxf_sha(case["value"]):
+                return None
+            if record["members"] != case["members"]:
+                return None
+            table_pin = record["table_pin"]
+            if type(table_pin) is not dict or set(table_pin) != {
+                "version",
+                "unicodedata_sha256",
+                "table_sha256",
+            }:
+                return None
+            if table_pin["version"] != _O_CXF_UNICODE_VERSION:
+                return None
+            if table_pin["unicodedata_sha256"] != _O_CXF_UNICODEDATA_SHA256:
+                return None
+            if table_pin["table_sha256"] != _o_cxf_table_sha256():
+                return None
+            content_digests = record["content_digests"]
+            if type(content_digests) is not dict or set(content_digests) != set(_O_CXF_ARM_KEYS):
+                return None
+            for arm in _O_CXF_ARM_KEYS:
+                if content_digests[arm] != _o_cxf_sha(_o_cxf_arm_content(case, arm)):
+                    return None
+            arm_tokens = record["arm_tokens"]
+            id_digests = record["id_digests"]
+            ids_identical = record["ids_identical"]
+            id_length_delta = record["id_length_delta"]
+            cells = record["cells"]
+            details = record["cell_details"]
+            for mapping in (arm_tokens, id_digests, cells, details):
+                if type(mapping) is not dict or set(mapping) != set(_O_CXF_ARM_KEYS):
+                    return None
+            for mapping in (ids_identical, id_length_delta):
+                if type(mapping) is not dict or set(mapping) != set(_O_CXF_TREATED_ARMS):
+                    return None
+            for arm in _O_CXF_ARM_KEYS:
+                tokens = arm_tokens[arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                    return None
+                if not _o_cxf_digest_ok(id_digests[arm]):
+                    return None
+            for arm in _O_CXF_TREATED_ARMS:
+                if ids_identical[arm] is not (id_digests[arm] == id_digests["control"]):
+                    return None
+                if id_length_delta[arm] != arm_tokens[arm] - arm_tokens["control"]:
+                    return None
+            for arm in _O_CXF_ARM_KEYS:
+                detail = details[arm]
+                cell = cells[arm]
+                if detail not in ("", *_O_CXF_DETAILS):
+                    return None
+                if cell is None:
+                    if detail == "":
+                        return None
+                    continue
+                if detail != "":
+                    return None
+                if not _o_cxf_cell_ok(cell, record["expected_digest"]):
+                    return None
+                if cell["input_tokens"] != arm_tokens[arm]:
+                    return None
+        expected = _o_cxf_aggregate(records, cases)
+        for key, val in expected.items():
+            if entry.get(key) != val:
+                return None
+        recomputed[name] = expected
+    if total_records > _O_CXF_MAX_GROUND_RECORDS:
+        return None
+    if payload.get("n_candidates") != len(candidates):
+        return None
+    if payload.get("n_cases") != len(cases):
+        return None
+    return recomputed
+
+
+def _o_compatibilityform_valid(value: Any) -> bool:
+    """Compatibilityform valid."""
+    return _o_cxf_recompute(value) is not None
+
+
+def _o_compatibilityform(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle compatibility-form section: mirrors
+    diffreports.diff_compatibility_form.
+    """
+    old_ok = _o_compatibilityform_valid(old)
+    new_ok = _o_compatibilityform_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    ) or old["protocol"].get("case_material_sha256") != new["protocol"].get("case_material_sha256")
+    backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    comparable = not protocol_drift and not generator_drift and not backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    added = sorted(set(new_candidates) - set(old_candidates))
+    removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        metrics: list = []
+        for arm in _O_CXF_ARM_KEYS:
+            metrics.append(
+                (f"{arm}_rate", old_entry["arms"][arm]["rate"], new_entry["arms"][arm]["rate"])
+            )
+        for arm in _O_CXF_TREATED_ARMS:
+            metrics.extend(
+                [
+                    (
+                        f"{arm}_dose_codepoint_min",
+                        old_entry["dose"][arm]["codepoint_delta_min"],
+                        new_entry["dose"][arm]["codepoint_delta_min"],
+                    ),
+                    (
+                        f"{arm}_dose_codepoint_max",
+                        old_entry["dose"][arm]["codepoint_delta_max"],
+                        new_entry["dose"][arm]["codepoint_delta_max"],
+                    ),
+                    (
+                        f"{arm}_dose_byte_min",
+                        old_entry["dose"][arm]["byte_delta_min"],
+                        new_entry["dose"][arm]["byte_delta_min"],
+                    ),
+                    (
+                        f"{arm}_dose_byte_max",
+                        old_entry["dose"][arm]["byte_delta_max"],
+                        new_entry["dose"][arm]["byte_delta_max"],
+                    ),
+                ]
+            )
+        for arm in _O_CXF_TREATED_ARMS:
+            old_head = old_entry["headline"][arm]
+            new_head = new_entry["headline"][arm]
+            old_ids = old_entry["ids"][arm]
+            new_ids = new_entry["ids"][arm]
+            metrics.extend(
+                [
+                    (f"{arm}_label", old_head["label"], new_head["label"]),
+                    (
+                        f"{arm}_control_passes",
+                        old_head["control_passes"],
+                        new_head["control_passes"],
+                    ),
+                    (f"{arm}_wrong_values", old_head["wrong_values"], new_head["wrong_values"]),
+                    (f"{arm}_n_reverse", old_head["n_reverse"], new_head["n_reverse"]),
+                    (f"{arm}_n_population", old_head["n_population"], new_head["n_population"]),
+                    (f"{arm}_n_incomplete", old_head["n_incomplete"], new_head["n_incomplete"]),
+                    (
+                        f"{arm}_n_ids_divergent",
+                        old_head["n_ids_divergent"],
+                        new_head["n_ids_divergent"],
+                    ),
+                    (f"{arm}_n_non_answer", old_head["n_non_answer"], new_head["n_non_answer"]),
+                    (f"{arm}_control_rate", old_head["control_rate"], new_head["control_rate"]),
+                    (f"{arm}_arm_rate", old_head["arm_rate"], new_head["arm_rate"]),
+                    (
+                        f"{arm}_pair_exact_only",
+                        old_head["pair_decomposition"]["exact_only"],
+                        new_head["pair_decomposition"]["exact_only"],
+                    ),
+                    (
+                        f"{arm}_pair_boundary_only",
+                        old_head["pair_decomposition"]["boundary_only"],
+                        new_head["pair_decomposition"]["boundary_only"],
+                    ),
+                    (
+                        f"{arm}_pair_mixed",
+                        old_head["pair_decomposition"]["mixed"],
+                        new_head["pair_decomposition"]["mixed"],
+                    ),
+                    (
+                        f"{arm}_n_ids_identical",
+                        old_ids["n_ids_identical"],
+                        new_ids["n_ids_identical"],
+                    ),
+                    (
+                        f"{arm}_max_abs_id_delta",
+                        old_ids["max_abs_id_delta"],
+                        new_ids["max_abs_id_delta"],
+                    ),
+                    (
+                        f"{arm}_n_same_ids_verdict_flips",
+                        old_ids["n_same_ids_verdict_flips"],
+                        new_ids["n_same_ids_verdict_flips"],
+                    ),
+                ]
+            )
         for metric, old_value, new_value in metrics:
             if old_value != new_value:
                 candidate_drift.append(
@@ -16482,6 +17671,9 @@ def _oracle_diff(
     o_cs, o_cs_changed, o_cs_asymmetric = _o_confusableskeleton(
         old.get("confusable_skeleton"), new.get("confusable_skeleton")
     )
+    o_cxf, o_cxf_changed, o_cxf_asymmetric = _o_compatibilityform(
+        old.get("compatibility_form"), new.get("compatibility_form")
+    )
     o_ca, o_ca_changed, o_ca_asymmetric = _o_choiceaudit(
         old.get("choice_audit"), new.get("choice_audit")
     )
@@ -16663,6 +17855,7 @@ def _oracle_diff(
         "record_notation": o_rn,
         "invisible_chars": o_ic,
         "confusable_skeleton": o_cs,
+        "compatibility_form": o_cxf,
         "choice_audit": o_ca,
         "precision": o_pr,
         "confidence": o_cfd,
@@ -16766,6 +17959,8 @@ def _oracle_diff(
             "invisible_chars_asymmetric": o_ic_asymmetric,
             "confusable_skeleton_changed": o_cs_changed,
             "confusable_skeleton_asymmetric": o_cs_asymmetric,
+            "compatibility_form_changed": o_cxf_changed,
+            "compatibility_form_asymmetric": o_cxf_asymmetric,
             "choice_audit_changed": o_ca_changed,
             "choice_audit_asymmetric": o_ca_asymmetric,
             "precision_changed": o_pr_changed,
@@ -17746,6 +18941,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "invisible_chars_asymmetric": False,
                 "confusable_skeleton_changed": False,
                 "confusable_skeleton_asymmetric": False,
+                "compatibility_form_changed": False,
+                "compatibility_form_asymmetric": False,
                 "choice_audit_changed": False,
                 "choice_audit_asymmetric": False,
                 "precision_changed": False,
@@ -21846,6 +23043,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not invisible_chars_asymmetric\n"
             '        and not confusable_skeleton_diff["changed"]\n'
             "        and not confusable_skeleton_asymmetric\n"
+            '        and not compatibility_form_diff["changed"]\n'
+            "        and not compatibility_form_asymmetric\n"
             '        and not choiceaudit_diff["changed"]\n'
             "        and not choiceaudit_asymmetric\n"
             '        and not precision_diff["changed"]\n'
@@ -21956,6 +23155,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or invisible_chars_asymmetric\n"
             '        or confusable_skeleton_diff["changed"]\n'
             "        or confusable_skeleton_asymmetric\n"
+            '        or compatibility_form_diff["changed"]\n'
+            "        or compatibility_form_asymmetric\n"
             '        or choiceaudit_diff["changed"]\n'
             "        or choiceaudit_asymmetric\n"
             '        or precision_diff["changed"]\n'

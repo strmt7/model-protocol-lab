@@ -119,6 +119,7 @@ STAGE_FLAGS = [
     ("--record-notation", "record_notation", None),
     ("--invisible-chars", "invisible_chars", None),
     ("--confusable-skeleton", "confusable_skeleton", None),
+    ("--compatibility-form", "compatibility_form", None),
     ("--rotate", "rotate", None),
     ("--density", "density", None),
     ("--field-order", "field_order", None),
@@ -354,6 +355,12 @@ HELPER_DISPATCH = [
         "confusable_skeleton",
         "confusable_skeleton_unavailable",
         ["confusable_skeleton_stage", "confusable_skeleton_analysis"],
+    ),
+    (
+        "_run_compatibility_form_probe",
+        "compatibility_form",
+        "compatibility_form_unavailable",
+        ["compatibility_form_stage", "compatibility_form_analysis"],
     ),
     (
         "_run_rotation_probe",

@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–230 (executed 2026-10-14 → 2026-11-04, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–231 (executed 2026-10-14 → 2026-11-04, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9198 tests collected**
-  (cycle 230, 2026-11-04). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9303 tests collected**
+  (cycle 231, 2026-11-04). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -51,16 +51,46 @@ doctor's resource fallbacks degrade there.
   the interior word-loss prune-sweep probe (`run --prune-sweep`),
   the record-notation probe (`run --record-notation`),
   the confusable-skeleton substitution probe (`run --confusable-skeleton`),
+  the compatibility-form substitution probe (`run --compatibility-form`),
   the real batched generation path behind the batch-invariance
   audit (`LocalHFBackend.generate_batch`, cycle 192),
   and differential-verification suites with
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  95.0086% (cycle 230, 2026-11-04)**. The gate compares the
+  94.9782% (cycle 231, 2026-11-04)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+0.509) is auditable rather than inferred from the display.
+  (+0.478) is auditable rather than inferred from the display.
+  Cycle 231 moves both figures: the compatibility-form feature
+  added 1,132 statements (39,176 → 40,308) and 1,084 covered
+  statements (37,685 → 38,769). The new module measures
+  95.98% — its only missing lines are eleven guards
+  unreachable by construction, left in place as defence in
+  depth (the standing class documented in cycle 224's entry):
+  the validate_case screens over regenerated content
+  (fact/question ASCII, kana confinement, the newline and
+  arithmetic screens, the Roman first-token and regnal-prefix
+  screens, and the two dose returns — all subsumed by the
+  table and membership checks above them); the two
+  `_member_satisfies` returns for NFC/NFD-unstable and
+  NFKC-fixed compatibility-tagged characters, which an
+  exhaustive scan over all 0x110000 code points shows no real
+  character can reach; and the aggregate's paired-cell
+  continue over a list pre-filtered to records whose headline
+  cells are present. Two host notes, recorded rather than
+  hidden: this machine restarted three times during the
+  cycle's evening gate runs, killing three coverage attempts
+  mid-run (each followed by the interrupted-run blob audit —
+  the tree differed from the last green head in exactly the
+  cycle's own files every time); and the two pre-existing
+  cycle-89 SIGINT subprocess tests failed in the long
+  unittest legs on this host (a signal-delivery race against
+  a ~9000-command script in a long-lived runner process) —
+  the pair passes isolated under unittest, pytest and
+  coverage, passed the cycle's first full coverage leg, and
+  the full pytest leg is green (9,296 passed, 7 skipped);
+  the coverage measurement reported here completed in full.
   Cycle 230 moves both figures slightly: the DeepSource wave-2
   fix-down added three statements net (39,173 → 39,176) and one
   covered statement (37,684 → 37,685) — one covered statement
@@ -161,10 +191,10 @@ doctor's resource fallbacks degrade there.
   negation feature added 393 statements, 32,655 → 33,048.)
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (321 files in that CI scope; the repo-root scope counts more.
+  (323 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
-- `mypy model_protocol_lab` — clean (71 source files).
+- `mypy model_protocol_lab` — clean (72 source files).
 - `bandit -r model_protocol_lab` — **no issues identified** at any
   severity/confidence (the targeted `# nosec B105` suppressions on
   report-schema fields carry justifications).

@@ -11258,3 +11258,180 @@ standing 911-occurrence backlog at the cycle-227 head is
 unchanged by anything measurable here, and the cycle-227
 changed-files diff remains an open item carried forward, not a
 verified zero.
+
+## Cycle 231 — compatibility-form substitution probe: one frozen compatibility character in a marker sentence (2026-11-04)
+
+- **What shipped:** `run --compatibility-form`
+  (`model_protocol_lab/compatibilityform.py`, the
+  package's 72nd source file): a generated 24-case
+  fact-recall panel (frozen topics, a word-number
+  inspection code over a frozen 24-word list, two neutral
+  carrier sentences, a frozen six-field marker sentence,
+  a question), each case rendered verbatim and with
+  exactly one frozen compatibility character substituted
+  positionally into its own class's marker field —
+  `ligature`, `enclosed`, `fraction`, `superscript`,
+  `roman`, `katakana`. The population is frozen from
+  UnicodeData.txt pinned to Unicode 15.0.0 — the local
+  interpreter's UCD version, so the derivation is
+  single-version — with the data file's SHA-256 and the
+  derived table's own digest frozen in the module: 117
+  characters whose decomposition is tagged compatibility
+  (the `<wide>` tag excluded), whose NFC and NFD forms
+  are themselves, and whose NFKC fold differs — 7
+  ligatures, 10 enclosed alphanumerics, 19 vulgar
+  fractions, 10 superscript digits, 16 Roman numerals,
+  55 halfwidth katakana. Readings are the NFKC fold,
+  with the one disclosed transcription that the fraction
+  solidus is written U+002F, not the fold's U+2044; the
+  katakana readings are fullwidth kana and live only in
+  the marker's kana field, and every expected value is
+  pure ASCII. The readout is a guarded classification
+  per candidate and arm over the id-divergent paired
+  population (floors D ≥ 10 control passes and J ≥ 6
+  wrong-value discordants, both derived under the
+  instrument's own null; acquittals issue only when
+  stable under the worst-case completion of the arm's
+  incomplete id-divergent pairs; every label is withheld
+  above 6 incomplete in the domain; the arm's
+  divergent-domain size M is printed beside every
+  label), with a total six-class decomposition of
+  completed cells (pass, boundary-only, wrong-value in
+  the frozen grammar, echo-compat — decidable only
+  against the arm's own frozen class table, the control
+  arm's table being empty — form-only, non-answer, an
+  ordered decision list), the per-arm token-ID report as
+  the regime gate, the per-arm dose deltas, and the
+  exact operating characteristics printed beside the
+  licence (competent-null fire 0.017274 under
+  independence, 0.004442 under the exact paired
+  computation; power 0.815868 at a 25-point drop at base
+  .90, paired 0.698078; the family-wise expectation
+  2.4875 false labels independent and 0.6397 paired over
+  the 144 labelled comparisons, with probability 0.9187
+  of at least one false label under the competent
+  null). The wave-12 round-3 fresh review's nine binding
+  amendments are all implemented and each carries named
+  test evidence: the M-conditioned operating
+  characteristics are printed and the acquittal caveat is
+  conditioned on M, with labels issuing at paired counts
+  down to M−6 (A1); the screen-failure detail is
+  `compatibility_form_screen_failed` everywhere and the
+  redraw give-up counting (counter increments per
+  colliding redraw, exhaustion above 1000) is pinned by
+  a forced-collision test (A2); the control arm's echo
+  table is the empty set, with a battery witness (A3);
+  the staged population counts carry their universe and
+  operator (A4); the decomposition battery, the
+  precedence witnesses, and the exhaustive echo
+  reachability search over all 216,000 expected values
+  (echo_compat is reachable only for the enclosed and
+  superscript arms) are executed (A5); the excluded
+  mirror families — subscript digits, parenthesized
+  digits, circled numbers — are disclosed with their
+  reasons and the population does not move (A6); the
+  arithmetic screen's operator set is pinned to `+`, `*`
+  and the six words, the fraction solidus disclosed as a
+  transcription character, not an operator (A7); the
+  falsification gloss carries the fraction third-form
+  clause — under an NFKC-class normalizer the
+  model-facing fraction form is the pipeline's rewritten
+  form with U+2044, and a fire is attributable to that
+  rewritten form against the ASCII reading (A8); the
+  design doc's neighbour register is scoped to classified
+  instruments over non-`<wide>` populations and carries
+  the template surface-noise disposition (A9).
+- **Why this shape (utility):** anyone pasting typeset
+  text into a local model, and platform teams deciding
+  whether an ingest NFKC pass is worth its cost, get,
+  per template family and per compatibility class, a
+  measured answer on whether one compatibility-form
+  field in carrier text changes this checkpoint's
+  answers — and the probe's own regime gate makes the
+  ids-identical outcome (a normalizing tokenizer) a
+  first-class reported result, not a null. The prior is
+  stated plainly in the design doc: no direct LLM prior
+  exists, and the null is a legitimate pre-registered
+  outcome.
+- **Uniqueness (the combination, never "first"):**
+  one-code-point compatibility-class substitution as a
+  labelled, dose-exact independent variable on a
+  generated fact-recall panel (control plus six class
+  arms, substitution positional at a frozen marker field
+  with the dose printed beside the arm, the six drawn
+  members recorded per case as code points), under an
+  exact-match scorer with a completion-guarded
+  classification whose floors are derived under its own
+  null and whose divergent-domain size is printed beside
+  the licence, against primary sources each resolved in
+  full: UAX #15 rev. 58 (the compatibility decomposition
+  and NFKC definitions the population and readings are
+  derived from); the SentencePiece normalization
+  documentation (the default `nmt_nfkc` rules applied
+  before tokenization, the `identity` alternative, and
+  its own statement that it does not implement the
+  entirety of Unicode NFKC — the instrument's regime
+  gate exists because of exactly this gap); Boucher et
+  al. (arXiv:2106.09898, supporting only — invisible and
+  confusable text perturbations as an attack surface,
+  not this instrument); Hua et al. (arXiv:2509.01790)
+  and Pecher et al. (arXiv:2602.04297) as the nearest
+  measured neighbours, each delimited in the design
+  doc's register. The claim made is the combination, in
+  `docs/COMPATIBILITYFORM_DESIGN.md`.
+- **Naming audit (executed by parser instantiation of
+  `cli.build_parser()` at build time).** The design
+  round recorded 82 distinct long options pre-build;
+  the build-time census executed against the current
+  tree found 83 — the tree had gained one option since
+  adjudication, recorded as a reality-wins conflict in
+  the cycle work log, with the shipped design doc
+  carrying the executed count. `--compatibility-form`
+  was absent (census- and grep-verified). Post-build
+  census: 84 distinct long options. The coinage was free
+  under every counting method, and the name's plain
+  reading is accurate — the probe varies the
+  compatibility form of one character in the prompt
+  text.
+- **Honest limits, printed in the report itself:** the
+  claim is per candidate and per arm over this generated
+  population on this checkpoint — a fire proves only
+  that this class's form moved this checkpoint's answers
+  to wrong values inside the frozen grammar, never a
+  claim about weights, attacks, or characters outside
+  the frozen population; no dose escalation and no
+  population edit is licensed in response to a null (the
+  design doc's R1); the fraction arm's model-facing form
+  under a normalizing pipeline is the rewritten U+2044
+  form, and its fire reads against that form, not
+  against the frozen character as pasted.
+- **Adversarial audit (same cycle, pre-push):** an
+  isolated-copy red-team audit of this build verified the
+  member set exactly (independent derivation from the
+  pinned file reproduces the census, all six classes and
+  both shipped tables) and returned six findings, each
+  reproduced by the coordinator's own execution before
+  fixing: the value grammar admitted a trailing newline
+  into `wrong_value` in the producer and the mirror
+  (F1, high — the identical defect was live in the
+  confusable-skeleton and invisible-characters probes
+  and is fixed there too, producers, mirrors, oracles
+  and batteries; record-notation's, confidence's and
+  dateline's uses of anchored grammars are not
+  answer-classification fire channels and are
+  unchanged); the diff validator raised
+  `UnicodeEncodeError` on a lone-surrogate `answer_text`
+  instead of rejecting (F2, high — the sibling sweep
+  found the same unguarded digest in the confusable,
+  invisible-characters and record-notation mirrors; all
+  four now use the cycle-190 guarded text digest); one
+  shipped test pinned the host Unicode version and
+  failed under CPython 3.11 and 3.13 on a correct build
+  (F3 — the cycle-224 host-pinning pattern recurring;
+  the probe's suite now passes under 3.11.18, 3.12.3
+  and 3.13.18 by execution); `decompose_cell` raised on
+  an unknown arm (F4) and the producer aggregate on a
+  verdict-less cell (F5) — both now total, matching the
+  mirror; `arm_content` silently rendered the control
+  content for an unknown arm and now raises (F6; seed
+  leniency has sibling parity and is unchanged).

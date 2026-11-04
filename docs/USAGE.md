@@ -3343,6 +3343,104 @@ each record carries the frozen-table version pin.
 Informational only: the probe never affects selection,
 and the stage never fails the run.
 
+### 8.62 Compatibility form (`run --compatibility-form`)
+
+```sh
+model-protocol-lab run ... --compatibility-form
+```
+
+This probe renders a generated marker sentence once
+with every compatibility field in its canonical reading
+and once per class with that field's frozen
+compatibility character in its place, and reports
+whether the form alone moves the model's answers to
+wrong values. It answers, for anyone pasting typeset
+text into a local model, and for platform teams deciding
+whether an ingest NFKC pass is worth its cost, whether
+one compatibility-form field in carrier text changes
+answers on this checkpoint, per template family and per
+compatibility class. The prior is stated plainly in the
+design doc: no direct LLM prior exists, and a null is a
+legitimate pre-registered outcome.
+
+The panel is generated, not read from the run's
+fixtures: 24 cases, each a fact-recall item (a frozen
+topic, a `word-number` inspection code from a frozen
+24-word pool over a 9,000 number space, two neutral
+carrier sentences, a frozen marker sentence, a question),
+drawn by a frozen seeded generator (SHA-256 derivations
+with the digest-to-integer conversion pinned in the
+design doc; values distinct across the panel by redraw).
+The marker sentence carries six fields -- script,
+circle, share, power, regnal, kana -- one per
+compatibility class, each rendered in its canonical
+reading in the control arm. Seven arms per case: the
+verbatim `control` and six treated arms (`ligature`,
+`enclosed`, `fraction`, `superscript`, `roman`,
+`katakana`), each substituting exactly one frozen code
+point into exactly its own class's marker field
+(positionally, never by search-replace); everything else
+in the content is byte-identical across arms. The
+population is frozen from UnicodeData.txt pinned to
+Unicode 15.0.0 (SHA-256 pinned in the module and in
+every record): 117 characters with a tagged
+compatibility decomposition whose NFC and NFD forms are
+themselves and whose NFKC fold differs, the `<wide>` tag
+excluded -- 7 ligatures, 10 enclosed alphanumerics, 19
+vulgar fractions, 10 superscript digits, 16 Roman
+numerals, 55 halfwidth katakana. Readings are the NFKC
+fold, with one disclosed transcription: the fraction
+solidus is written U+002F, not the fold's U+2044, so
+under an NFKC-class normalizer the model-facing fraction
+form is the pipeline's rewritten form (U+2044), and a
+fraction fire is attributable to that rewritten form
+against the ASCII reading. The katakana reading is
+fullwidth kana and lives only in the marker's kana
+field; every expected value is pure ASCII. The scorer
+is the run's own verdict -- byte-exact answer conjoined
+with boundary presence -- per cell.
+
+The readout is a guarded classification per candidate
+and per treated arm over the token-id-divergent paired
+population (cases completed in both control and arm
+whose renders differ in token ids for that arm;
+ids-identical arms are reported instrument-inapplicable
+for that family, never as passes): `insufficient`,
+`no_discordance_observed`, `discordant_asymmetric` (the
+fire), `below_threshold`, from D (control passes in the
+population) and J (in-grammar wrong-value discordants
+among them), floors D >= 10 and J >= 6, reverse
+discordants counted beside every label and never pooled.
+Every report prints the arm's divergent-domain size M
+beside its label. The completion guard closes the
+incompletion channel: fires issue on observed counts;
+acquittal labels issue only when stable under the
+worst-case completion of the incomplete id-divergent
+cases; every label is withheld above 6 incomplete in
+the domain. Each completed cell decomposes (pass /
+boundary-only / wrong-value / echo-compat / form-only /
+non-answer -- an ordered decision list whose echo class
+tests the answer against the arm's own frozen class
+table; the control arm's table is empty, so a folded
+control answer classifies form-only) and the report
+prints the operating characteristics beside the licence
+(competent-null fire 0.0173 by exact independent
+enumeration, 0.0044 by the exact paired computation;
+25-point-drop power 0.8159, paired 0.6981; family-wise
+over the 144 labelled comparisons the competent
+expectation is 2.4875 false labels with probability
+0.9187 of at least one, paired expectation 0.6397). The
+full contract is in `docs/COMPATIBILITYFORM_DESIGN.md`.
+Costs 168 generations per candidate (4,032 at the legal
+maximum: 24 candidates x 24 cases x 7 arms), spent only
+when the flag is passed. Records carry digests, plus
+each cell's answer text bound by its digest, each
+record's six drawn members as code points, and the
+frozen-table version pin (UnicodeData 15.0.0, the data
+file's SHA-256, and the derived table's own digest).
+Informational only: the probe never affects selection,
+and the stage never fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out
