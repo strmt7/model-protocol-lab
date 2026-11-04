@@ -1981,6 +1981,17 @@ def _o_scorerlens(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_cell(records: list, fixture: str) -> dict:
+    """Oracle cohort cell lookup, mirroring the producer's guard."""
+    cell = next(
+        (r for r in records if r["evaluable"] and r["fixture"] == fixture),
+        None,
+    )
+    if cell is None:  # cohort members share one evaluable fixture set
+        raise ValueError("cohort member lacks an evaluable record for a cohort fixture")
+    return cell
+
+
 def _o_aliasing_recompute(value: dict) -> dict | None:
     """Oracle aliasing recompute: cohorts/classes/counts/flag from records."""
     candidates = value.get("candidates")
@@ -2106,12 +2117,7 @@ def _o_aliasing_recompute(value: dict) -> dict | None:
     red_m = 0
     red_r = 0
     for fixture in fixtures_sorted:
-        cells = {
-            str(e.get("candidate")): next(
-                r for r in e["records"] if r["evaluable"] and r["fixture"] == fixture
-            )
-            for e in primary
-        }
+        cells = {str(e.get("candidate")): _o_cell(e["records"], fixture) for e in primary}
         boundaries = {str(e.get("candidate")): tuple(e["boundary_token_ids"]) for e in primary}
         red_m += len(primary) - len({(c["input_sha256"], boundaries[n]) for n, c in cells.items()})
         red_r += len(primary) - len({c["input_sha256"] for c in cells.values()})
@@ -2121,10 +2127,7 @@ def _o_aliasing_recompute(value: dict) -> dict | None:
         if len(names) < 2:
             continue
         for fixture in fixtures_sorted:
-            cells = [
-                next(r for r in by_name[n]["records"] if r["evaluable"] and r["fixture"] == fixture)
-                for n in names
-            ]
+            cells = [_o_cell(by_name[n]["records"], fixture) for n in names]
             out_bad = len({c["output_sha256"] for c in cells}) > 1
             oc_bad = (
                 len(
@@ -13371,6 +13374,14 @@ def _o_choiceaudit(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_expected_of(records: list, candidate: str, fixture: str) -> str:
+    """Oracle expected-digest lookup, mirroring precision._expected_of."""
+    for r in records:
+        if r["candidate"] == candidate and r["fixture"] == fixture:
+            return str(r["expected_digest"])
+    raise KeyError((candidate, fixture))
+
+
 def _o_precision_recompute(value: Any) -> dict[str, Any] | None:
     """Oracle precision recompute: mirrors
     diffreports._precision_recompute. The protocol digest is
@@ -13666,13 +13677,7 @@ def _o_precision_recompute(value: Any) -> dict[str, Any] | None:
             all_pass[cand] = all(
                 precision.cell_verdict(
                     cells_by_fixture[f],
-                    str(
-                        next(
-                            r["expected_digest"]
-                            for r in records
-                            if r["candidate"] == cand and r["fixture"] == f
-                        )
-                    ),
+                    _o_expected_of(records, cand, f),
                 )
                 for f in completed
             )
