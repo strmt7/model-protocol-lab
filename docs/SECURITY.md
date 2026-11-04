@@ -661,7 +661,9 @@ failure directions of the original unpack. In shipped code, the two
 `aliasing.py` lookups gained an explicit cohort-invariant error (the
 cohort construction proves the record exists), `density.py` consumes
 its by-construction pools with `pop(0)` instead of iterators, and
-`leading.py`'s provable donor lookup asserts its invariant.
+`leading.py`'s donor lookup resolves through a `by_id` map built
+for the call, whose keys are the call's own case ids, so the
+lookup cannot miss.
 
 Fixed in code in the following push: PYL-W0404 ×90 (the redundant
 class: function-local imports that rebind, unaliased, the identical
@@ -755,6 +757,130 @@ change — scoped to a later wave rather than bundled here. The
 ninth, `tests/test_cycle217_deepsource_inventory.py:90`, is not
 a defect: exhaustion there is the asserted failure path,
 converted to a test failure with its own message.
+
+### DeepSource fix-down, wave 2 (cycle 230)
+
+Cycle 230 works the derived remainder of the standing inventory
+(393 at the cycle-229 close) down under the same rule: fixed in
+code, or standing open and enumerated here. Nothing is dismissed,
+ignored, or annotated.
+
+Item 0 remains open. Five further capture attempts in this cycle
+(25–29 across cycles 227–230, the last at head `0ee5b308`) again
+returned GraphQL errors with `complete=false`, so — as in wave 1 —
+every count below is a derivation from the cycle-226 capture (911
+standing open), with the fixed column verified locally per class
+(proxy analyzers, whole-tree rescans, and execution). No
+DeepSource number is claimed for any cycle-230 head.
+
+Fixed in code in this wave (41 occurrences):
+
+- Push 1 (test-file classes): PYL-W0231 ×1 (a test double's
+  `__init__` now calls `super().__init__()` before re-asserting
+  its own fingerprint), PYL-E1132 ×1 (a pop-then-splat argument
+  overlap removed), PYL-E1125 ×3 rows (helper signatures made
+  explicit instead of colliding with `**kwargs` forwarding),
+  PTC-W0043 ×1 (a dead alias assignment and its `del` removed),
+  PYL-W0102 ×2 (loop-capture defaults replaced by factories that
+  bind the iteration values as parameters), PYL-W0603 ×3 (module
+  `global` writes replaced by a dict box, a `sys.path` membership
+  guard, and an `itertools.count`), PY-W0070 ×1 (an append-built
+  mutant list converted to one literal, output proven identical),
+  PTC-W0050 ×1 (a set
+  built from a value-hash-distinct copy, strengthening the
+  assertion), PTC-W0047 ×1 (a busy-wait burn loop given a real
+  body), PYL-W0640 ×1 of 3 (a loop-closure maximum rewritten as
+  `values.index(max(values))`, first-maximum semantics
+  unchanged), PYL-W0122 ×1 of 5 (a star-import `exec` replaced
+  by executing a real probe module file through the file's own
+  fresh-load mechanism).
+- Push 2: PTC-W0046 ×9 (shared test bases that contain no test
+  methods no longer inherit `unittest.TestCase`; each concrete
+  subclass gains it as a second base, so the flagged pattern no
+  longer exists. Per-file collection counts are identical
+  before and after, and the finding's own text — a class
+  overriding `TestCase` that runs no tests — no longer applies
+  to any of the nine).
+- Push 3: PYL-W0212 ×4 (the redraw-exhaustion exception is the
+  cross-module contract `experiments.py` catches, so the
+  private name was the defect: `_RedrawExhausted` is renamed
+  `RedrawExhausted` in both home modules, all four catch sites,
+  and the two test files that raise it in doubles),
+  PYL-W0640 ×2 (the diffreports multiturn mirror takes the same
+  `values.index(max(values))` shape as its producer; the
+  cocoindex tool's sentinel-iterator read loop becomes an
+  explicit read-until-empty loop with identical short-read
+  behaviour), PTC-W0043 ×1 (`run_fixtures_fuzz`'s unused
+  `parser` parameter renamed `_parser` and its `del` removed;
+  both callers pass it positionally), PY-W0072 ×1 (the
+  agent-context read result is built in one dict literal, key
+  order preserved).
+- Push 4: PTC-W0063 ×8 — the mirror sites left open in wave 1,
+  moved in one change as that section required. The diffreports
+  aliasing recompute adopts the producer's cohort guard
+  (`next(..., None)` plus the cohort-invariant `ValueError`);
+  the density mirror's pools take the producer's own
+  list/`pop(0)` shape instead of iterators; the cycle-67 oracle
+  gains matching named helpers (`_o_cell`, `_o_expected_of`,
+  the second mirroring `precision._expected_of`'s loop and
+  `KeyError`). The flip-identical gate anchor does not span
+  these regions (verified by a literal scan) and its mutant
+  test passes unchanged. The mirror guard lines are unreachable
+  by construction — the recompute groups its cohort by the
+  evaluable-fixture set the lookups range over — and stand
+  uncovered as defensive lines, the same status as their
+  producer twins' contract; the density mirror's output was
+  verified byte-identical to the producer's generator over the
+  probed seeds.
+
+Standing open after wave 2 (derived remaining total 352):
+
+| code | count | why it stands |
+|---|---|---|
+| PY-R1000 | 326 | adjudicated per cluster below |
+| FLK-E402 | 7 | the examples script's one-line `sys.path` bootstrap for bare checkouts; imports follow contiguously (cycle-225 adjudication) |
+| PYL-W1114 | 4 | deliberate reverse-direction `diff_X(new, old)` calls; the variable names state the true provenance (cycle-225 adjudication) |
+| PYL-W0122 | 4 | mutation gates `exec` this repo's own source mutated in memory; no import can load in-memory mutated text — the gate mechanism itself |
+| PYL-E0202 | 3 | the attribute assignment in `__init__` is the simulated protocol condition under test (present-but-`None` vs missing is the tested distinction) |
+| PYL-R0401 | 3 rows / 2 cycles | the import cycles close only through deferred function-level imports; the module-level graph is acyclic (AST-verified), and restructuring would damage the lazy design |
+| PYL-W0622 | 2 | a fake `__import__`'s parameters carry `__import__`'s own protocol names (mirror adjudication, cycles 222/225) |
+| PY-W0800 | 1 | premise false positive: the rule is a SQLAlchemy where-clause check; no SQLAlchemy exists in this repo |
+| SCT-A000 | 1 | prose false positive in this file; the record is not edited to dodge the scanner |
+| PTC-W0063 | 1 | `tests/test_cycle217_deepsource_inventory.py:90` — exhaustion is the asserted failure path there |
+
+PY-R1000 adjudication (326, all standing open). The occurrence
+is cyclomatic complexity ≥ 16 as computed by the analyzer
+(bands from the capture: high 16–25 ×172, very-high 26–49 ×122,
+critical ≥ 51 ×32). In this codebase the branch count of the
+flagged functions is the size of the contract they enumerate —
+a validator's field rules, a probe's registered arms and
+abstention paths, a section composer's variants, a test
+oracle's case table — and the diff-reports mirrors are pinned
+by mutation gates that flip individual branches. Splitting
+such a function at an arbitrary point relocates the count
+without reducing the computation, and table-driving a mirror's
+checks would hide exactly the branches the gates pin; both are
+score-gaming, not fixes. Clusters: reporting/diff section
+composers and renderers ×58; probe entry/stage/profile
+functions and diff validators ×73; fail-closed validators
+×17; test oracles ×47 (an oracle's flatness is the measured
+property — factoring it like the producer would degenerate
+the differential into a self-comparison); test doubles, fuzz
+builders and scenario helpers ×31; probe cell functions and
+parsers ×89 (arm/outcome/grammar case tables); central
+dispatch and orchestration ×11 (`cli.main`'s branches are the
+~40-subcommand argparse surface, pinned by the dispatch
+end-to-end tests; per-subcommand handler extraction is an
+architecture change, not a metric fix). The four smallest,
+most plausible candidates were read in full and adjudicated
+individually (`deliforge.flip_rates`, `distraction.
+planted_answer`, `scoring.score_span_from_logits`,
+`templateprobe.role_arm_facts`): each one's branches are its
+documented contract — an exact-type validation table, a
+frozen digit-rule case table, a fixed rejection-code table,
+three labelled fact derivations — and none contains a real
+sub-decision whose extraction would be an improvement rather
+than a relocation. They stand open with the rest.
 
 ### Dependabot: filelock in the cocoindex tool lock (cycle 228)
 
