@@ -4310,7 +4310,12 @@ def _aliasing_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         m_tuples: set[tuple[Any, ...]] = set()
         r_tuples: set[Any] = set()
         for entry in primary:
-            cell = next(r for r in entry["records"] if r["evaluable"] and r["fixture"] == fixture)
+            cell = next(
+                (r for r in entry["records"] if r["evaluable"] and r["fixture"] == fixture),
+                None,
+            )
+            if cell is None:  # cohort members share one evaluable fixture set
+                raise ValueError("cohort member lacks an evaluable record for a cohort fixture")
             r_tuples.add(cell["input_sha256"])
             m_tuples.add((cell["input_sha256"], tuple(entry["boundary_token_ids"])))
         redundant_measurement += len(primary) - len(m_tuples)
@@ -4325,10 +4330,15 @@ def _aliasing_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             outcomes: set[tuple[Any, ...]] = set()
             for name in names:
                 cell = next(
-                    r
-                    for r in by_name[name]["records"]
-                    if r["evaluable"] and r["fixture"] == fixture
+                    (
+                        r
+                        for r in by_name[name]["records"]
+                        if r["evaluable"] and r["fixture"] == fixture
+                    ),
+                    None,
                 )
+                if cell is None:  # cohort members share one evaluable fixture set
+                    raise ValueError("cohort member lacks an evaluable record for a cohort fixture")
                 outputs.add(cell["output_sha256"])
                 outcomes.add(
                     (
@@ -19078,25 +19088,25 @@ def _density_generate(seed: int) -> list[dict[str, Any]]:
             pick = _density_derive(seed, index, slot, 0) % len(limit_pool)
             count_limits.append(limit_pool.pop(pick))
         constraints: list[dict[str, Any]] = []
-        pools = {
-            "include": iter(include_targets),
-            "start": iter([start_target] * 4),
-            "end": iter([end_target] * 4),
-            "count": iter(count_limits),
+        pools: dict[str, list[Any]] = {
+            "include": include_targets,
+            "start": [start_target] * 4,
+            "end": [end_target] * 4,
+            "count": count_limits,
         }
         for position in range(1, _DENSITY_CONSTRAINT_COUNT + 1):
             kind = _density_kind_at(index, position)
             if kind == "count":
                 constraints.append(
-                    {"position": position, "kind": kind, "limit": next(pools["count"])}
+                    {"position": position, "kind": kind, "limit": pools["count"].pop(0)}
                 )
             elif kind == "include":
                 constraints.append(
-                    {"position": position, "kind": kind, "target": next(pools["include"])}
+                    {"position": position, "kind": kind, "target": pools["include"].pop(0)}
                 )
             else:
                 constraints.append(
-                    {"position": position, "kind": kind, "target": next(pools[kind])}
+                    {"position": position, "kind": kind, "target": pools[kind].pop(0)}
                 )
         cases.append(
             {
