@@ -11604,7 +11604,7 @@ def invisible_chars_stage(
     try:
         protocol: dict[str, Any] = dict(_ic.protocol_object(seed, _backend_fingerprint(backend)))
         protocol["fingerprint"] = _ic.protocol_fingerprint(seed, _backend_fingerprint(backend))
-    except _ic._RedrawExhausted:
+    except _ic.RedrawExhausted:
         # The protocol's ground hash itself regenerates the
         # panel, so exhaustion can surface here first; it is
         # the same fail-closed screen outcome, with no
@@ -11637,7 +11637,7 @@ def invisible_chars_stage(
         }
     try:
         cases = _ic.generate_cases(seed)
-    except _ic._RedrawExhausted:
+    except _ic.RedrawExhausted:
         return {
             "available": False,
             "detail": "invisible_chars_screen_failed",
@@ -11966,7 +11966,7 @@ def confusable_skeleton_stage(
     try:
         protocol: dict[str, Any] = dict(_cs.protocol_object(seed, _backend_fingerprint(backend)))
         protocol["fingerprint"] = _cs.protocol_fingerprint(seed, _backend_fingerprint(backend))
-    except _cs._RedrawExhausted:
+    except _cs.RedrawExhausted:
         # The protocol's ground hash itself regenerates the
         # panel, so exhaustion can surface here first; it is
         # the same fail-closed screen outcome, with no
@@ -11999,7 +11999,7 @@ def confusable_skeleton_stage(
         }
     try:
         cases = _cs.generate_cases(seed)
-    except _cs._RedrawExhausted:
+    except _cs.RedrawExhausted:
         return {
             "available": False,
             "detail": "confusable_skeleton_screen_failed",

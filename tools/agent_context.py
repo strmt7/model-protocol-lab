@@ -234,9 +234,9 @@ def read_window(root: Path, args: argparse.Namespace) -> dict[str, Any]:
         **record,
         "status": "complete" if complete else "partial",
         "content": "".join(emitted),
+        "unread": None if complete else {"start": start + len(emitted), "end": end},
+        "content_chars": used,
     }
-    result["unread"] = None if complete else {"start": start + len(emitted), "end": end}
-    result["content_chars"] = used
     if cache_name and complete:
         reads = state.setdefault("reads", [])
         if record not in reads:

@@ -236,7 +236,7 @@ class TestGeneratorFreeze(unittest.TestCase):
         """Redraw exhaustion."""
         with (
             mock.patch.object(ic, "_derive", lambda *args: 7),
-            self.assertRaises(ic._RedrawExhausted),
+            self.assertRaises(ic.RedrawExhausted),
         ):
             ic.generate_cases(0)
 
@@ -1325,7 +1325,7 @@ class TestCoverageGaps(unittest.TestCase):
             """Flaky."""
             calls["n"] += 1
             if calls["n"] > 2:
-                raise ic._RedrawExhausted("second")
+                raise ic.RedrawExhausted("second")
             return real_generate(seed)
 
         with mock.patch.object(ic, "generate_cases", side_effect=flaky_generate):
@@ -1333,7 +1333,7 @@ class TestCoverageGaps(unittest.TestCase):
                 backend, (_CHATML,), boundary=(1,), max_context=8192
             )
         self.assertEqual(stage["audit"]["by_reason"], {"redraw_exhausted": 1})
-        with mock.patch.object(ic, "protocol_object", side_effect=ic._RedrawExhausted("x")):
+        with mock.patch.object(ic, "protocol_object", side_effect=ic.RedrawExhausted("x")):
             stage = experiments.invisible_chars_stage(
                 backend, (_CHATML,), boundary=(1,), max_context=8192
             )

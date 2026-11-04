@@ -8472,9 +8472,7 @@ def _multiturn_generate(seed: int) -> list[dict[str, Any]]:
                 if family == "ledger":
                     expected = str(sum(values))
                 else:
-                    expected = _MULTITURN_LABELS[
-                        max(range(len(values)), key=lambda slot: values[slot])
-                    ]
+                    expected = _MULTITURN_LABELS[values.index(max(values))]
                 fixtures.append(
                     {
                         "fixture_id": f"mt-{family}-{depth}-{index:02d}",

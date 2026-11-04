@@ -268,7 +268,7 @@ class TestGeneratorFreeze(unittest.TestCase):
         """Redraw exhaustion fails closed."""
         with (
             mock.patch.object(cs, "_derive", lambda *args: 7),
-            self.assertRaises(cs._RedrawExhausted),
+            self.assertRaises(cs.RedrawExhausted),
         ):
             cs.generate_cases(0)
 
@@ -1771,7 +1771,7 @@ class TestGapPassStage(unittest.TestCase):
             calls["n"] += 1
             if calls["n"] <= 2:
                 return real_cases
-            raise cs._RedrawExhausted("forced")
+            raise cs.RedrawExhausted("forced")
 
         with mock.patch.object(cs, "generate_cases", flaky):
             stage = experiments.confusable_skeleton_stage(

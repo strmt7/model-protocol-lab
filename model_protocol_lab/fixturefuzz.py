@@ -412,14 +412,15 @@ def run_fuzz(seed: int = 0) -> FuzzReport:
     return FuzzReport(seed=seed, digest=corpus_digest(cases), results=results)
 
 
-def run_fixtures_fuzz(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+def run_fixtures_fuzz(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
     """Implement ``model-protocol-lab fixtures fuzz``; returns the exit code.
 
     The JSON report goes to stdout and a one-line summary to stderr
     (the doctor/pack convention). Exit 0 when every case conforms,
-    1 on any finding.
+    1 on any finding. The parser argument is accepted for dispatch
+    uniformity and is unused: this subcommand takes no parser-level
+    validation.
     """
-    del parser  # the subcommand takes no parser-level validation
     seed = int(args.seed)
     report = run_fuzz(seed)
     print(json.dumps(report.to_dict(), indent=2))
