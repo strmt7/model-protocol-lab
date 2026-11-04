@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–229 (executed 2026-10-14 → 2026-11-03, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–230 (executed 2026-10-14 → 2026-11-04, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -14,7 +14,7 @@ the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
 - `python -m pytest -q -p no:cacheprovider` — **9198 tests collected**
-  (cycle 229, 2026-11-03). Subtests numbered in the 72k+
+  (cycle 230, 2026-11-04). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -57,10 +57,21 @@ doctor's resource fallbacks degrade there.
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  95.0148% (cycle 229, 2026-11-03)**. The gate compares the
+  95.0086% (cycle 230, 2026-11-04)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+0.496) is auditable rather than inferred from the display.
+  (+0.509) is auditable rather than inferred from the display.
+  Cycle 230 moves both figures slightly: the DeepSource wave-2
+  fix-down added three statements net (39,173 → 39,176) and one
+  covered statement (37,684 → 37,685) — one covered statement
+  deleted with `run_fixtures_fuzz`'s `del` line, and the
+  diffreports aliasing mirror's two cohort-invariant guards
+  added in the wave's final fix push, whose raise lines are
+  unreachable by construction (the recompute groups its cohort
+  by the evaluable-fixture set the lookups range over) and
+  stand uncovered as defence in depth, the standing class
+  documented in cycle 224's entry; no feature surface was
+  added.
   Cycle 228's release-machinery and tooling-lock pushes leave both
   totals unchanged (39,260 statements, 37,755 covered): those
   changes live in tools/, the workflows and tests, not in the
