@@ -689,7 +689,7 @@ def _derive(seed: int, index: int, slot: int, counter: int) -> int:
     return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
 
 
-class _RedrawExhausted(Exception):
+class RedrawExhausted(Exception):
     """Internal: the frozen redraw give-up bound was reached
     for one case, so generation fails and the stage fails
     closed. Unreachable under the frozen derivation; it makes
@@ -719,7 +719,7 @@ def generate_cases(seed: int) -> tuple[dict[str, Any], ...]:
                 break
             counter += 1
             if counter > REDRAW_LIMIT:
-                raise _RedrawExhausted(f"redraw bound exhausted at case {index}")
+                raise RedrawExhausted(f"redraw bound exhausted at case {index}")
         seen.add(value)
         first = _derive(seed, index, 2, 0) % len(NEUTRAL_STATEMENTS)
         second = _derive(seed, index, 3, 0) % len(NEUTRAL_STATEMENTS)
