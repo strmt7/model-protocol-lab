@@ -354,6 +354,19 @@ class TestDecomposition(unittest.TestCase):
         cell = _cell(text="cedar-5678")
         self.assertEqual(ic.decompose_cell(cell, _EXPECTED0, _DIGEST0, "zwsp"), "wrong_value")
 
+    def test_trailing_newline_is_non_answer(self):
+        """Cycle-231 audit F1 sibling sweep: the grammar
+        applies with fullmatch semantics -- a trailing
+        newline never makes an answer in-grammar (under
+        re.match the `$` anchor matches before a final
+        newline, so the expected value plus newline
+        classified wrong_value and counted toward J).
+        """
+        cell = _cell(text="cedar-5678\n")
+        self.assertEqual(ic.decompose_cell(cell, _EXPECTED0, _DIGEST0, "zwsp"), "non_answer")
+        cell = _cell(text="vale-9999\n")
+        self.assertEqual(ic.decompose_cell(cell, _EXPECTED0, _DIGEST0, "zwsp"), "non_answer")
+
     def test_wrong_value_same_word_other_number(self):
         """Wrong value same word other number."""
         cell = _cell(text="vale-9999")
@@ -1009,6 +1022,16 @@ class TestMirrorValidation(unittest.TestCase):
         payload = copy.deepcopy(self.payload)
         record = payload["candidates"]["chatml"]["records"][0]
         record["cells"]["control"]["answer_text"] = "cedar-5678"
+        self.assertFalse(diffreports._valid_invisible_chars(payload))
+
+    def test_surrogate_answer_text_rejected_without_raising(self):
+        """Cycle-231 audit F2 sibling sweep: a lone
+        surrogate answer_text is a validation failure,
+        never an exception.
+        """
+        payload = copy.deepcopy(self.payload)
+        record = payload["candidates"]["chatml"]["records"][0]
+        record["cells"]["control"]["answer_text"] = "cedar-8160\ud800"
         self.assertFalse(diffreports._valid_invisible_chars(payload))
 
     def test_input_tokens_tamper_rejected(self):

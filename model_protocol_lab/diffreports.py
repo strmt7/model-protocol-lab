@@ -766,6 +766,9 @@ def diff_reports(
     confusable_skeleton_diff = diff_confusable_skeleton(
         old.get("confusable_skeleton"), new.get("confusable_skeleton")
     )
+    compatibility_form_diff = diff_compatibility_form(
+        old.get("compatibility_form"), new.get("compatibility_form")
+    )
     choiceaudit_diff = diff_choiceaudit(old.get("choice_audit"), new.get("choice_audit"))
     precision_diff = diff_precision(old.get("precision"), new.get("precision"))
     confidence_diff = diff_confidence(old.get("confidence"), new.get("confidence"))
@@ -876,6 +879,10 @@ def diff_reports(
         "neither",
     )
     confusable_skeleton_asymmetric = confusable_skeleton_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    compatibility_form_asymmetric = compatibility_form_diff["available"] not in (
         "both",
         "neither",
     )
@@ -1008,6 +1015,8 @@ def diff_reports(
         and not invisible_chars_asymmetric
         and not confusable_skeleton_diff["changed"]
         and not confusable_skeleton_asymmetric
+        and not compatibility_form_diff["changed"]
+        and not compatibility_form_asymmetric
         and not choiceaudit_diff["changed"]
         and not choiceaudit_asymmetric
         and not precision_diff["changed"]
@@ -1118,6 +1127,8 @@ def diff_reports(
         "invisible_chars_asymmetric": invisible_chars_asymmetric,
         "confusable_skeleton_changed": confusable_skeleton_diff["changed"],
         "confusable_skeleton_asymmetric": confusable_skeleton_asymmetric,
+        "compatibility_form_changed": compatibility_form_diff["changed"],
+        "compatibility_form_asymmetric": compatibility_form_asymmetric,
         "choice_audit_changed": choiceaudit_diff["changed"],
         "choice_audit_asymmetric": choiceaudit_asymmetric,
         "precision_changed": precision_diff["changed"],
@@ -1178,6 +1189,7 @@ def diff_reports(
         "record_notation": record_notation_diff,
         "invisible_chars": invisible_chars_diff,
         "confusable_skeleton": confusable_skeleton_diff,
+        "compatibility_form": compatibility_form_diff,
         "choice_audit": choiceaudit_diff,
         "precision": precision_diff,
         "confidence": confidence_diff,
@@ -14589,6 +14601,19 @@ def _recordnotation_digest(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _recordnotation_text_digest(text: str) -> str | None:
+    """SHA-256 of the UTF-8 encoding, or None when the
+    text cannot be encoded (a lone-surrogate answer_text
+    is a validation failure, never an exception — the
+    cycle-190 A3 pattern, applied per cycle-231 audit F2
+    sibling sweep).
+    """
+    try:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    except UnicodeEncodeError:
+        return None
+
+
 def _recordnotation_digest_ok(value: Any) -> bool:
     """Whether a stored digest is a well-formed SHA-256 hex
     digest.
@@ -15090,7 +15115,7 @@ def _recordnotation_cell_ok(cell: Any, expected_digest: str, headline: bool) -> 
         if text is None:
             if digest is not None:
                 return False
-        elif type(text) is not str or _recordnotation_digest(text) != digest:
+        elif type(text) is not str or _recordnotation_text_digest(text) != digest:
             return False
     verdict = (digest == expected_digest) and cell["boundary_found"]
     return bool(cell["verdict"] == verdict)
@@ -15660,6 +15685,19 @@ def _invisiblechars_digest(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _invisiblechars_text_digest(text: str) -> str | None:
+    """SHA-256 of the UTF-8 encoding, or None when the
+    text cannot be encoded (a lone-surrogate answer_text
+    is a validation failure, never an exception — the
+    cycle-190 A3 pattern, applied per cycle-231 audit F2
+    sibling sweep).
+    """
+    try:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    except UnicodeEncodeError:
+        return None
+
+
 def _invisiblechars_digest_ok(value: Any) -> bool:
     """Whether a stored digest is a well-formed SHA-256 hex
     digest.
@@ -15901,7 +15939,7 @@ def _invisiblechars_decompose_cell(
     text = cell.get("answer_text")
     if type(text) is not str:
         return "non_answer"
-    if text != expected and re.match(r"^[a-z]+-[0-9]{4}$", text):
+    if text != expected and re.fullmatch(r"^[a-z]+-[0-9]{4}$", text):
         word, _, number = text.partition("-")
         if word in _INVISIBLECHARS_WORDS and 1000 <= int(number) <= 9999:
             return "wrong_value"
@@ -16006,7 +16044,7 @@ def _invisiblechars_aggregate(
                 if (
                     control_cell is not None
                     and arm_cell is not None
-                    and control_cell["verdict"] != arm_cell["verdict"]
+                    and (control_cell.get("verdict") is True) != (arm_cell.get("verdict") is True)
                 ):
                     n_same_ids_flips += 1
         ids[arm] = {
@@ -16110,7 +16148,7 @@ def _invisiblechars_cell_ok(cell: Any, expected_digest: str) -> bool:
     if text is None:
         if digest is not None:
             return False
-    elif type(text) is not str or _invisiblechars_digest(text) != digest:
+    elif type(text) is not str or _invisiblechars_text_digest(text) != digest:
         return False
     verdict = (digest == expected_digest) and cell["boundary_found"]
     return bool(cell["verdict"] == verdict)
@@ -16737,6 +16775,19 @@ def _confusableskeleton_digest(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _confusableskeleton_text_digest(text: str) -> str | None:
+    """SHA-256 of the UTF-8 encoding, or None when the
+    text cannot be encoded (a lone-surrogate answer_text
+    is a validation failure, never an exception — the
+    cycle-190 A3 pattern, applied per cycle-231 audit F2
+    sibling sweep).
+    """
+    try:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    except UnicodeEncodeError:
+        return None
+
+
 def _confusableskeleton_digest_ok(value: Any) -> bool:
     """Whether a stored digest is a well-formed SHA-256 hex
     digest.
@@ -17133,7 +17184,7 @@ def _confusableskeleton_decompose_cell(
     text = cell.get("answer_text")
     if type(text) is not str:
         return "non_answer"
-    if text != expected and re.match(r"^[a-z]+-[0-9]{4}$", text):
+    if text != expected and re.fullmatch(r"^[a-z]+-[0-9]{4}$", text):
         word, _, number = text.partition("-")
         if word in _CONFUSABLESKELETON_WORDS and 1000 <= int(number) <= 9999:
             return "wrong_value"
@@ -17259,7 +17310,7 @@ def _confusableskeleton_aggregate(
                 if (
                     control_cell is not None
                     and arm_cell is not None
-                    and control_cell["verdict"] != arm_cell["verdict"]
+                    and (control_cell.get("verdict") is True) != (arm_cell.get("verdict") is True)
                 ):
                     n_same_ids_flips += 1
         ids[arm] = {
@@ -17383,7 +17434,7 @@ def _confusableskeleton_cell_ok(cell: Any, expected_digest: str) -> bool:
     if text is None:
         if digest is not None:
             return False
-    elif type(text) is not str or _confusableskeleton_digest(text) != digest:
+    elif type(text) is not str or _confusableskeleton_text_digest(text) != digest:
         return False
     verdict = (digest == expected_digest) and cell["boundary_found"]
     return bool(cell["verdict"] == verdict)
@@ -17762,6 +17813,1344 @@ def diff_confusable_skeleton(old: Any, new: Any) -> dict[str, Any]:
         or cs_protocol_drift
         or cs_generator_drift
         or cs_backend_drift
+    )
+    return result
+
+
+_COMPATIBILITYFORM_TOPICS = (
+    "harbor",
+    "summit",
+    "quarry",
+    "tundra",
+    "granite",
+    "willow",
+    "copper",
+    "saddle",
+    "walnut",
+    "velvet",
+    "cobalt",
+    "marble",
+    "cinder",
+    "falcon",
+    "garnet",
+    "saffron",
+    "indigo",
+    "juniper",
+    "lagoon",
+    "magnet",
+    "nickel",
+    "pepper",
+    "quartz",
+    "birch",
+)
+_COMPATIBILITYFORM_WORDS = (
+    "alder",
+    "basalt",
+    "cedar",
+    "drift",
+    "elm",
+    "fern",
+    "glade",
+    "heath",
+    "iris",
+    "jade",
+    "kelp",
+    "loom",
+    "moss",
+    "nova",
+    "ochre",
+    "pine",
+    "quill",
+    "reed",
+    "sage",
+    "tide",
+    "urn",
+    "vale",
+    "wren",
+    "yew",
+)
+_COMPATIBILITYFORM_NEUTRAL_STATEMENTS = (
+    "The weather changed slowly during the afternoon hours.",
+    "A wooden fence runs along the edge of the property.",
+    "She placed the documents inside a plain folder yesterday.",
+    "The train arrived later than the schedule suggested.",
+    "Fresh bread was cooling on the counter near the sink.",
+    "He repaired the bicycle with tools from the garage.",
+    "The bookshop extends its opening hours during summer.",
+    "Several chairs were arranged around the long table.",
+    "The recipe calls for a pinch of salt and herbs.",
+    "They walked along the path beside the lake at dawn.",
+    "The committee postponed its decision until next week.",
+    "A thick layer of dust covered the old furniture.",
+    "The children played quietly in the courtyard after lunch.",
+    "His handwriting was difficult to read in places.",
+    "The farmer harvested the fields before the rain came.",
+    "An old map hung framed on the wall of the hallway.",
+    "The accountant reviewed the figures a second time.",
+    "Birds gathered on the rooftops as the sun went down.",
+    "The mechanic inspected the engine and changed the oil.",
+    "A narrow staircase led up to the attic.",
+    "The orchestra rehearsed the piece several times over.",
+    "Someone left a bicycle leaning against the railing.",
+    "The soup simmered gently on the stove all morning.",
+    "Visitors signed the guest book near the entrance.",
+)
+_COMPATIBILITYFORM_CLASS_TABLES: dict[str, tuple[tuple[str, str], ...]] = {
+    "ligature": (
+        ("ĳ", "ij"),
+        ("ﬀ", "ff"),
+        ("ﬁ", "fi"),
+        ("ﬂ", "fl"),
+        ("ﬃ", "ffi"),
+        ("ﬄ", "ffl"),
+        ("ﬆ", "st"),
+    ),
+    "enclosed": (
+        ("①", "1"),
+        ("②", "2"),
+        ("③", "3"),
+        ("④", "4"),
+        ("⑤", "5"),
+        ("⑥", "6"),
+        ("⑦", "7"),
+        ("⑧", "8"),
+        ("⑨", "9"),
+        ("⓪", "0"),
+    ),
+    "fraction": (
+        ("¼", "1/4"),
+        ("½", "1/2"),
+        ("¾", "3/4"),
+        ("⅐", "1/7"),
+        ("⅑", "1/9"),
+        ("⅒", "1/10"),
+        ("⅓", "1/3"),
+        ("⅔", "2/3"),
+        ("⅕", "1/5"),
+        ("⅖", "2/5"),
+        ("⅗", "3/5"),
+        ("⅘", "4/5"),
+        ("⅙", "1/6"),
+        ("⅚", "5/6"),
+        ("⅛", "1/8"),
+        ("⅜", "3/8"),
+        ("⅝", "5/8"),
+        ("⅞", "7/8"),
+        ("↉", "0/3"),
+    ),
+    "superscript": (
+        ("²", "2"),
+        ("³", "3"),
+        ("¹", "1"),
+        ("⁰", "0"),
+        ("⁴", "4"),
+        ("⁵", "5"),
+        ("⁶", "6"),
+        ("⁷", "7"),
+        ("⁸", "8"),
+        ("⁹", "9"),
+    ),
+    "roman": (
+        ("Ⅰ", "I"),
+        ("Ⅱ", "II"),
+        ("Ⅲ", "III"),
+        ("Ⅳ", "IV"),
+        ("Ⅴ", "V"),
+        ("Ⅵ", "VI"),
+        ("Ⅶ", "VII"),
+        ("Ⅷ", "VIII"),
+        ("Ⅸ", "IX"),
+        ("Ⅹ", "X"),
+        ("Ⅺ", "XI"),
+        ("Ⅻ", "XII"),
+        ("Ⅼ", "L"),
+        ("Ⅽ", "C"),
+        ("Ⅾ", "D"),
+        ("Ⅿ", "M"),
+    ),
+    "katakana": (
+        ("ｦ", "ヲ"),
+        ("ｧ", "ァ"),
+        ("ｨ", "ィ"),
+        ("ｩ", "ゥ"),
+        ("ｪ", "ェ"),
+        ("ｫ", "ォ"),
+        ("ｬ", "ャ"),
+        ("ｭ", "ュ"),
+        ("ｮ", "ョ"),
+        ("ｯ", "ッ"),
+        ("ｱ", "ア"),
+        ("ｲ", "イ"),
+        ("ｳ", "ウ"),
+        ("ｴ", "エ"),
+        ("ｵ", "オ"),
+        ("ｶ", "カ"),
+        ("ｷ", "キ"),
+        ("ｸ", "ク"),
+        ("ｹ", "ケ"),
+        ("ｺ", "コ"),
+        ("ｻ", "サ"),
+        ("ｼ", "シ"),
+        ("ｽ", "ス"),
+        ("ｾ", "セ"),
+        ("ｿ", "ソ"),
+        ("ﾀ", "タ"),
+        ("ﾁ", "チ"),
+        ("ﾂ", "ツ"),
+        ("ﾃ", "テ"),
+        ("ﾄ", "ト"),
+        ("ﾅ", "ナ"),
+        ("ﾆ", "ニ"),
+        ("ﾇ", "ヌ"),
+        ("ﾈ", "ネ"),
+        ("ﾉ", "ノ"),
+        ("ﾊ", "ハ"),
+        ("ﾋ", "ヒ"),
+        ("ﾌ", "フ"),
+        ("ﾍ", "ヘ"),
+        ("ﾎ", "ホ"),
+        ("ﾏ", "マ"),
+        ("ﾐ", "ミ"),
+        ("ﾑ", "ム"),
+        ("ﾒ", "メ"),
+        ("ﾓ", "モ"),
+        ("ﾔ", "ヤ"),
+        ("ﾕ", "ユ"),
+        ("ﾖ", "ヨ"),
+        ("ﾗ", "ラ"),
+        ("ﾘ", "リ"),
+        ("ﾙ", "ル"),
+        ("ﾚ", "レ"),
+        ("ﾛ", "ロ"),
+        ("ﾜ", "ワ"),
+        ("ﾝ", "ン"),
+    ),
+}
+_COMPATIBILITYFORM_CLASS_ORDER = tuple(_COMPATIBILITYFORM_CLASS_TABLES)
+_COMPATIBILITYFORM_ARM_KEYS = ("control", *_COMPATIBILITYFORM_CLASS_ORDER)
+_COMPATIBILITYFORM_TREATED_ARMS = _COMPATIBILITYFORM_ARM_KEYS[1:]
+_COMPATIBILITYFORM_READING_BY_CP: dict[str, dict[int, str]] = {
+    name: {ord(char): reading for char, reading in table}
+    for name, table in _COMPATIBILITYFORM_CLASS_TABLES.items()
+}
+_COMPATIBILITYFORM_CHAR_BY_CP: dict[str, dict[int, str]] = {
+    name: {ord(char): char for char, _reading in table}
+    for name, table in _COMPATIBILITYFORM_CLASS_TABLES.items()
+}
+_COMPATIBILITYFORM_CLASS_CHARS: dict[str, frozenset[str]] = {
+    arm: frozenset(char for char, _reading in _COMPATIBILITYFORM_CLASS_TABLES[arm])
+    if arm != "control"
+    else frozenset()
+    for arm in _COMPATIBILITYFORM_ARM_KEYS
+}
+_COMPATIBILITYFORM_UNICODE_VERSION = "15.0.0"
+_COMPATIBILITYFORM_UNICODEDATA_SHA256 = (
+    "806e9aed65037197f1ec85e12be6e8cd870fc5608b4de0fffd990f689f376a73"
+)
+_COMPATIBILITYFORM_MARKER_TEMPLATE = (
+    "The marker line reads script {f0}, circle {f1}, share {f2}, "
+    "power {f3}, regnal Henry {f4}, kana {f5}."
+)
+_COMPATIBILITYFORM_CASE_COUNT = 24
+_COMPATIBILITYFORM_MIN_D = 10
+_COMPATIBILITYFORM_MIN_J = 6
+_COMPATIBILITYFORM_MAX_INCOMPLETE = 6
+_COMPATIBILITYFORM_REDRAW_LIMIT = 1000
+_COMPATIBILITYFORM_GENERATOR_SPEC = (
+    "draw(seed, index, slot, counter) = int.from_bytes("
+    "sha256(f'{seed}|compatfold|{index}|{slot}|{counter}')"
+    ".digest()[:8], 'big'); slot 0: word = WORDS[draw % len(WORDS)]; "
+    "slot 1: number = 1000 + draw % 9000; a value colliding with an "
+    "earlier case redraws slots 0 and 1 only at counter+1 (slots 2-9 "
+    "stay at counter 0), the counter incrementing once per colliding "
+    "redraw and giving up when it exceeds 1000 (the stage fails "
+    "closed); slots 2/3: neutral indices = draw % "
+    "len(NEUTRAL_STATEMENTS), the second advancing +1 on collision; "
+    "slot 4: ligature; slot 5: enclosed; slot 6: fraction; slot 7: "
+    "superscript; slot 8: roman; slot 9: katakana, each draw % "
+    "len(class table) over the codepoint-sorted frozen tables"
+)
+_COMPATIBILITYFORM_MAX_CANDIDATES = 24
+_COMPATIBILITYFORM_MAX_GROUND_RECORDS = (
+    _COMPATIBILITYFORM_MAX_CANDIDATES * _COMPATIBILITYFORM_CASE_COUNT
+)
+_COMPATIBILITYFORM_GENERATION_BUDGET = (
+    len(_COMPATIBILITYFORM_ARM_KEYS) * _COMPATIBILITYFORM_MAX_GROUND_RECORDS
+)
+_COMPATIBILITYFORM_MAX_RECORDS_BYTES = 12 * 1024 * 1024
+_COMPATIBILITYFORM_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+    "answer_text",
+}
+_COMPATIBILITYFORM_DETAILS = ("arm_context_exceeded", "arm_evaluation_failed")
+_COMPATIBILITYFORM_CELL_CLASSES = (
+    "pass",
+    "boundary_only",
+    "wrong_value",
+    "echo_compat",
+    "form_only",
+    "non_answer",
+)
+_COMPATIBILITYFORM_PAIR_CLASSES = ("exact_only", "boundary_only", "mixed")
+_COMPATIBILITYFORM_OPERATING_CHARACTERISTICS: dict[str, Any] = {
+    "fire_competent_independent": 0.0173,
+    "fire_competent_paired": 0.0044,
+    "fire_weak_independent": 0.1743,
+    "fire_random_independent": 0.5503,
+    "power_drop10_base90": 0.2542,
+    "power_drop25_base90": 0.8159,
+    "power_drop25_base85": 0.8761,
+    "power_drop25_paired": 0.6981,
+    "power_drop50_base90": 0.999,
+    "sensitivity18_drop25": 0.5214,
+    "sensitivity18_competent": 0.0038,
+    "panel_sweep_16_drop25": 0.3904,
+    "panel_sweep_20_drop25": 0.6395,
+    "transplant_fire_competent_independent": 0.8897,
+    "familywise_competent_expected_144": 2.4875,
+    "familywise_competent_any_144": 0.9187,
+    "familywise_paired_expected_144": 0.6397,
+    "familywise_paired_any_144": 0.4733,
+    "familywise_random_expected_144": 79.2441,
+    "world_a_guarded_fire": 0.0037,
+    "world_a_unguarded_fire": 0.0069,
+    "world_a_guarded_insufficient": 0.9765,
+    "world_b_unguarded_below_threshold": 0.7231,
+    "world_b_guarded_below_threshold": 0.0763,
+    "world_b_guarded_fire": 0.1046,
+    "world_c_guarded_fire": 0.7719,
+    "world_c_unguarded_fire": 0.7824,
+    "m20_drop25": 0.6395,
+    "m20_drop10": 0.1356,
+    "m20_competent": 0.0068,
+    "m18_drop25": 0.5214,
+    "m18_drop10": 0.0889,
+    "m18_competent": 0.0038,
+    "m16_drop25": 0.3904,
+    "m16_drop10": 0.0527,
+    "m16_competent": 0.0019,
+    "m12_drop25": 0.1379,
+    "m12_drop10": 0.0113,
+    "m12_competent": 0.0003,
+    "m10_drop25": 0.0331,
+    "m10_drop10": 0.0022,
+    "m10_competent": 0.0001,
+}
+_COMPATIBILITYFORM_AGGREGATE_KEYS = {
+    "arms",
+    "ids",
+    "dose",
+    "headline",
+    "operating_characteristics",
+    "n_cases",
+    "n_incomplete",
+}
+
+
+def _compatibilityform_digest(text: str) -> str:
+    """SHA-256 hex digest (local copy; no imports from
+    compatibilityform.py anywhere in this mirror).
+    """
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _compatibilityform_text_digest(text: str) -> str | None:
+    """SHA-256 of the UTF-8 encoding, or None when the
+    text cannot be encoded (a lone-surrogate answer_text
+    is a validation failure, never an exception — the
+    cycle-190 A3 pattern, applied per audit F2).
+    """
+    try:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    except UnicodeEncodeError:
+        return None
+
+
+def _compatibilityform_digest_ok(value: Any) -> bool:
+    """Whether a stored digest is a well-formed SHA-256 hex
+    digest.
+    """
+    if type(value) is not str or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in value)
+
+
+def _compatibilityform_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    """Mirror of compatibilityform._derive (the draw
+    conversion pinned by the design's generator spec).
+    """
+
+    material = f"{seed}|compatfold|{index}|{slot}|{counter}"
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+
+
+class _CompatibilityFormMirrorExhausted(Exception):
+    """Mirror-internal: the redraw give-up bound was reached
+    during regeneration, so the payload cannot be recomputed
+    and validates false.
+    """
+
+
+def _compatibilityform_generate(seed: int) -> list[dict[str, Any]]:
+    """Mirror of compatibilityform.generate_cases: the
+    frozen SHA-256 derivation with panel-wide value
+    distinctness by redraw.
+    """
+    cases: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index in range(_COMPATIBILITYFORM_CASE_COUNT):
+        counter = 0
+        while True:
+            word = _COMPATIBILITYFORM_WORDS[
+                _compatibilityform_derive(seed, index, 0, counter) % len(_COMPATIBILITYFORM_WORDS)
+            ]
+            number = 1000 + _compatibilityform_derive(seed, index, 1, counter) % 9000
+            value = f"{word}-{number}"
+            if value not in seen:
+                break
+            counter += 1
+            if counter > _COMPATIBILITYFORM_REDRAW_LIMIT:
+                raise _CompatibilityFormMirrorExhausted
+        seen.add(value)
+        first = _compatibilityform_derive(seed, index, 2, 0) % len(
+            _COMPATIBILITYFORM_NEUTRAL_STATEMENTS
+        )
+        second = _compatibilityform_derive(seed, index, 3, 0) % len(
+            _COMPATIBILITYFORM_NEUTRAL_STATEMENTS
+        )
+        if second == first:
+            second = (first + 1) % len(_COMPATIBILITYFORM_NEUTRAL_STATEMENTS)
+        members: dict[str, int] = {}
+        for offset, name in enumerate(_COMPATIBILITYFORM_CLASS_ORDER):
+            table = _COMPATIBILITYFORM_CLASS_TABLES[name]
+            drawn = table[_compatibilityform_derive(seed, index, 4 + offset, 0) % len(table)]
+            members[name] = ord(drawn[0])
+        cases.append(
+            {
+                "fixture_id": f"compatibilityform-{index:02d}",
+                "topic": _COMPATIBILITYFORM_TOPICS[index],
+                "value": value,
+                "expected": value,
+                "neutral_indices": [first, second],
+                "members": members,
+            }
+        )
+    return cases
+
+
+def _compatibilityform_fact(case: dict[str, Any]) -> str:
+    """Mirror of compatibilityform.fact_sentence."""
+    return f"The {case['topic']} inspection code is {case['value']}."
+
+
+def _compatibilityform_question(case: dict[str, Any]) -> str:
+    """Mirror of compatibilityform.question_text."""
+    return f"What is the {case['topic']} inspection code?"
+
+
+def _compatibilityform_marker_fields(case: dict[str, Any], arm: str) -> list[str]:
+    """Mirror of compatibilityform.marker_fields."""
+    members = case["members"]
+    fields: list[str] = []
+    for name in _COMPATIBILITYFORM_CLASS_ORDER:
+        codepoint = int(members[name])
+        reading = _COMPATIBILITYFORM_READING_BY_CP[name][codepoint]
+        if arm == name:
+            form = _COMPATIBILITYFORM_CHAR_BY_CP[name][codepoint]
+            fields.append(f"x{form}" if name == "superscript" else form)
+        else:
+            fields.append(f"x{reading}" if name == "superscript" else reading)
+    return fields
+
+
+def _compatibilityform_marker_sentence(case: dict[str, Any], arm: str) -> str:
+    """Mirror of compatibilityform.marker_sentence."""
+    fields = _compatibilityform_marker_fields(case, arm)
+    return _COMPATIBILITYFORM_MARKER_TEMPLATE.format(
+        **{f"f{position}": field for position, field in enumerate(fields)}
+    )
+
+
+def _compatibilityform_arm_content(case: dict[str, Any], arm: str) -> str:
+    """Mirror of compatibilityform.arm_content."""
+    if arm not in _COMPATIBILITYFORM_ARM_KEYS:
+        raise ValueError(f"unknown compatibility-form arm: {arm!r}")
+    first, second = (int(i) for i in case["neutral_indices"])
+    return (
+        f"{_COMPATIBILITYFORM_NEUTRAL_STATEMENTS[first]} "
+        f"{_compatibilityform_fact(case)} "
+        f"{_compatibilityform_marker_sentence(case, arm)} "
+        f"{_COMPATIBILITYFORM_NEUTRAL_STATEMENTS[second]} "
+        f"{_compatibilityform_question(case)}"
+    )
+
+
+def _compatibilityform_member_satisfies(name: str, char: str, reading: str) -> bool:
+    """Mirror of compatibilityform._member_satisfies."""
+    import unicodedata as _unicodedata
+
+    decomposition = _unicodedata.decomposition(char)
+    parts = decomposition.split()
+    if not parts or not parts[0].startswith("<") or parts[0] == "<wide>":
+        return False
+    if _unicodedata.normalize("NFC", char) != char or _unicodedata.normalize("NFD", char) != char:
+        return False
+    folded = _unicodedata.normalize("NFKC", char)
+    if folded == char:
+        return False
+    member_name = _unicodedata.name(char, "")
+    if name == "ligature":
+        targets = "".join(chr(int(token, 16)) for token in parts[1:])
+        return (
+            member_name.startswith("LATIN SMALL LIGATURE")
+            and targets.isascii()
+            and reading == folded == targets
+        )
+    if name == "enclosed":
+        return member_name.startswith("CIRCLED DIGIT") and reading == folded
+    if name == "fraction":
+        return member_name.startswith("VULGAR FRACTION") and reading == folded.replace(
+            "\u2044", "/"
+        )
+    if name == "superscript":
+        return (
+            parts[0] == "<super>"
+            and len(parts) == 2
+            and reading == folded
+            and reading in "0123456789"
+        )
+    if name == "roman":
+        return member_name.startswith("ROMAN NUMERAL") and reading == folded
+    if name == "katakana":
+        return member_name.startswith("HALFWIDTH KATAKANA LETTER") and reading == folded
+    return False
+
+
+def _compatibilityform_population_audit() -> dict[str, Any]:
+    """Mirror of compatibilityform.audit_population."""
+    import unicodedata as _unicodedata
+
+    classes: dict[str, Any] = {}
+    seen: set[str] = set()
+    ok = True
+    for name in _COMPATIBILITYFORM_CLASS_ORDER:
+        table = _COMPATIBILITYFORM_CLASS_TABLES[name]
+        codepoints = [ord(char) for char, _reading in table]
+        members_ok = all(
+            _compatibilityform_member_satisfies(name, char, reading) for char, reading in table
+        )
+        disjoint = not any(char in seen for char, _reading in table)
+        seen.update(char for char, _reading in table)
+        entry_ok = (
+            members_ok
+            and disjoint
+            and codepoints == sorted(codepoints)
+            and all("-" not in reading for _char, reading in table)
+        )
+        if name != "katakana":
+            entry_ok = entry_ok and all(reading.isascii() for _char, reading in table)
+        else:
+            entry_ok = entry_ok and all(
+                len(reading) == 1 and not reading.isascii() for _char, reading in table
+            )
+        ok = ok and entry_ok
+        classes[name] = {
+            "count": len(table),
+            "members": [f"U+{codepoint:04X}" for codepoint in codepoints],
+            "satisfies": entry_ok,
+        }
+    return {
+        "classes": classes,
+        "total": sum(
+            len(_COMPATIBILITYFORM_CLASS_TABLES[name]) for name in _COMPATIBILITYFORM_CLASS_ORDER
+        ),
+        "pairwise_disjoint": len(seen)
+        == sum(
+            len(_COMPATIBILITYFORM_CLASS_TABLES[name]) for name in _COMPATIBILITYFORM_CLASS_ORDER
+        ),
+        "ok": ok,
+        "unicode_version": _unicodedata.unidata_version,
+        "unicodedata_version": _COMPATIBILITYFORM_UNICODE_VERSION,
+        "unicodedata_sha256": _COMPATIBILITYFORM_UNICODEDATA_SHA256,
+    }
+
+
+def _compatibilityform_table_sha256() -> str:
+    """Mirror of compatibilityform.table_sha256."""
+
+    material = {
+        "classes": {
+            name: [[char, reading] for char, reading in _COMPATIBILITYFORM_CLASS_TABLES[name]]
+            for name in _COMPATIBILITYFORM_CLASS_ORDER
+        },
+        "unicode_version": _COMPATIBILITYFORM_UNICODE_VERSION,
+        "unicodedata_sha256": _COMPATIBILITYFORM_UNICODEDATA_SHA256,
+    }
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return _compatibilityform_digest(canonical)
+
+
+def _compatibilityform_case_material_sha256() -> str:
+    """Mirror of compatibilityform.case_material_sha256."""
+
+    material = {
+        "topics": list(_COMPATIBILITYFORM_TOPICS),
+        "words": list(_COMPATIBILITYFORM_WORDS),
+        "neutral_statements": list(_COMPATIBILITYFORM_NEUTRAL_STATEMENTS),
+        "arm_keys": list(_COMPATIBILITYFORM_ARM_KEYS),
+        "marker_template": _COMPATIBILITYFORM_MARKER_TEMPLATE,
+        "generator_spec": _COMPATIBILITYFORM_GENERATOR_SPEC,
+        "case_count": _COMPATIBILITYFORM_CASE_COUNT,
+        "table_sha256": _compatibilityform_table_sha256(),
+        "min_d": _COMPATIBILITYFORM_MIN_D,
+        "min_j": _COMPATIBILITYFORM_MIN_J,
+        "max_incomplete": _COMPATIBILITYFORM_MAX_INCOMPLETE,
+        "redraw_limit": _COMPATIBILITYFORM_REDRAW_LIMIT,
+        "population_audit": _compatibilityform_population_audit(),
+    }
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return _compatibilityform_digest(canonical)
+
+
+def _compatibilityform_ground_sha256(seed: int) -> str:
+    """Mirror of compatibilityform.ground_sha256."""
+
+    rows = [
+        [
+            case["fixture_id"],
+            case["topic"],
+            case["value"],
+            list(case["neutral_indices"]),
+            [int(case["members"][name]) for name in _COMPATIBILITYFORM_CLASS_ORDER],
+        ]
+        for case in _compatibilityform_generate(seed)
+    ]
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _compatibilityform_digest(canonical)
+
+
+def _compatibilityform_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    """The compatibility-form protocol rebuilt from this
+    module's own literals, fingerprint included (compared
+    whole).
+    """
+
+    protocol: dict[str, Any] = {
+        "version": 1,
+        "arm_keys": list(_COMPATIBILITYFORM_ARM_KEYS),
+        "treated_arms": list(_COMPATIBILITYFORM_TREATED_ARMS),
+        "case_count": _COMPATIBILITYFORM_CASE_COUNT,
+        "min_d": _COMPATIBILITYFORM_MIN_D,
+        "min_j": _COMPATIBILITYFORM_MIN_J,
+        "max_incomplete": _COMPATIBILITYFORM_MAX_INCOMPLETE,
+        "case_material_sha256": _compatibilityform_case_material_sha256(),
+        "ground_sha256": _compatibilityform_ground_sha256(seed),
+        "table_sha256": _compatibilityform_table_sha256(),
+        "unicode_version": _COMPATIBILITYFORM_UNICODE_VERSION,
+        "unicodedata_sha256": _COMPATIBILITYFORM_UNICODEDATA_SHA256,
+        "population_audit": _compatibilityform_population_audit(),
+        "generation_budget": _COMPATIBILITYFORM_GENERATION_BUDGET,
+        "max_ground_records": _COMPATIBILITYFORM_MAX_GROUND_RECORDS,
+        "max_records_bytes": _COMPATIBILITYFORM_MAX_RECORDS_BYTES,
+        "max_candidates": _COMPATIBILITYFORM_MAX_CANDIDATES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _compatibilityform_digest(canonical)
+    return protocol
+
+
+def _compatibilityform_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the compatibilityform cell get."""
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(key)
+    return cell if isinstance(cell, dict) else None
+
+
+def _compatibilityform_detail_get(record: dict[str, Any], key: str) -> str:
+    """Return the compatibilityform detail get."""
+    details = record.get("cell_details")
+    if not isinstance(details, dict):
+        return ""
+    detail = details.get(key, "")
+    return detail if type(detail) is str else ""
+
+
+def _compatibilityform_verdict(record: dict[str, Any], key: str) -> bool:
+    """Return the compatibilityform verdict."""
+    cell = _compatibilityform_cell_get(record, key)
+    return bool(cell is not None and cell.get("verdict") is True)
+
+
+def _compatibilityform_ids_identical(record: dict[str, Any], arm: str) -> bool:
+    """Mirror of compatibilityform._ids_identical: derived
+    from the recorded id digests alone.
+    """
+    digests = record.get("id_digests")
+    if not isinstance(digests, dict):
+        return False
+    control = digests.get("control")
+    return type(control) is str and control != "" and control == digests.get(arm)
+
+
+def _compatibilityform_decompose_cell(
+    cell: dict[str, Any], expected: str, expected_digest: str, arm: str
+) -> str:
+    """Mirror of compatibilityform.decompose_cell (the
+    ordered decision list; the control arm's class-4 table
+    is the empty set, amendment A3).
+    """
+    import unicodedata as _unicodedata
+
+    if cell.get("verdict") is True:
+        return "pass"
+    digest = cell.get("answer_digest")
+    if digest is not None and digest == expected_digest:
+        return "boundary_only"
+    text = cell.get("answer_text")
+    if type(text) is not str:
+        return "non_answer"
+    if text != expected and re.fullmatch(r"^[a-z]+-[0-9]{4}$", text):
+        word, _, number = text.partition("-")
+        if word in _COMPATIBILITYFORM_WORDS and 1000 <= int(number) <= 9999:
+            return "wrong_value"
+    if text != expected and _unicodedata.normalize("NFKC", text) == expected:
+        if any(char in _COMPATIBILITYFORM_CLASS_CHARS.get(arm, frozenset()) for char in text):
+            return "echo_compat"
+        return "form_only"
+    return "non_answer"
+
+
+def _compatibilityform_decompose_pair(
+    control_cell: dict[str, Any], arm_cell: dict[str, Any]
+) -> str:
+    """Mirror of compatibilityform.decompose_pair."""
+    if control_cell.get("answer_digest") == arm_cell.get("answer_digest"):
+        return "boundary_only"
+    if control_cell.get("boundary_found") and arm_cell.get("boundary_found"):
+        return "exact_only"
+    return "mixed"
+
+
+def _compatibilityform_classify(control_passes: int, wrong_values: int, n_incomplete: int) -> str:
+    """Mirror of compatibilityform.classify_headline."""
+    if n_incomplete > _COMPATIBILITYFORM_MAX_INCOMPLETE:
+        return "insufficient"
+    if control_passes < _COMPATIBILITYFORM_MIN_D:
+        return "insufficient"
+    if wrong_values >= _COMPATIBILITYFORM_MIN_J:
+        return "discordant_asymmetric"
+    if wrong_values == 0:
+        return "no_discordance_observed" if n_incomplete == 0 else "insufficient"
+    return (
+        "below_threshold"
+        if wrong_values + n_incomplete < _COMPATIBILITYFORM_MIN_J
+        else "insufficient"
+    )
+
+
+def _compatibilityform_rate(numerator: int, denominator: int) -> float | None:
+    """Return the compatibilityform rate."""
+    return (numerator / denominator) if denominator else None
+
+
+def _compatibilityform_aggregate(
+    records: list[dict[str, Any]], cases: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Mirror of compatibilityform.aggregate_candidate."""
+    expected_by_fixture = {str(case["fixture_id"]): str(case["expected"]) for case in cases}
+    arms: dict[str, Any] = {}
+    for key in _COMPATIBILITYFORM_ARM_KEYS:
+        n_completed = 0
+        n_pass = 0
+        n_context = 0
+        n_failed = 0
+        decomposition = dict.fromkeys(_COMPATIBILITYFORM_CELL_CLASSES, 0)
+        for record in records:
+            detail = _compatibilityform_detail_get(record, key)
+            if detail == "arm_context_exceeded":
+                n_context += 1
+            elif detail == "arm_evaluation_failed":
+                n_failed += 1
+            cell = _compatibilityform_cell_get(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell.get("verdict") is True:
+                n_pass += 1
+            decomposition[
+                _compatibilityform_decompose_cell(
+                    cell,
+                    expected_by_fixture.get(str(record.get("fixture", "")), ""),
+                    str(record.get("expected_digest", "")),
+                    key,
+                )
+            ] += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": _compatibilityform_rate(n_pass, n_completed),
+            "n_context_exceeded": n_context,
+            "n_evaluation_failed": n_failed,
+            "decomposition": decomposition,
+        }
+    ids: dict[str, Any] = {}
+    for arm in _COMPATIBILITYFORM_TREATED_ARMS:
+        deltas: list[int] = []
+        n_ids_identical = 0
+        n_same_ids_flips = 0
+        for record in records:
+            tokens = record.get("arm_tokens")
+            tokens = tokens if isinstance(tokens, dict) else {}
+            treated = tokens.get(arm)
+            baseline = tokens.get("control")
+            if type(treated) is int and type(baseline) is int:
+                deltas.append(treated - baseline)
+            else:
+                deltas.append(0)
+            if _compatibilityform_ids_identical(record, arm):
+                n_ids_identical += 1
+                control_cell = _compatibilityform_cell_get(record, "control")
+                arm_cell = _compatibilityform_cell_get(record, arm)
+                if (
+                    control_cell is not None
+                    and arm_cell is not None
+                    and (control_cell.get("verdict") is True) != (arm_cell.get("verdict") is True)
+                ):
+                    n_same_ids_flips += 1
+        ids[arm] = {
+            "n_ids_identical": n_ids_identical,
+            "n_ids_divergent": len(records) - n_ids_identical,
+            "id_length_delta": deltas,
+            "max_abs_id_delta": max((abs(delta) for delta in deltas), default=0),
+            "n_same_ids_verdict_flips": n_same_ids_flips,
+        }
+    dose: dict[str, Any] = {}
+    for arm in _COMPATIBILITYFORM_TREATED_ARMS:
+        codepoint_deltas: list[int] = []
+        byte_deltas: list[int] = []
+        for case in cases:
+            treated = _compatibilityform_arm_content(case, arm)
+            control = _compatibilityform_arm_content(case, "control")
+            codepoint_deltas.append(len(treated) - len(control))
+            byte_deltas.append(len(treated.encode("utf-8")) - len(control.encode("utf-8")))
+        dose[arm] = {
+            "codepoint_delta_min": min(codepoint_deltas, default=0),
+            "codepoint_delta_max": max(codepoint_deltas, default=0),
+            "byte_delta_min": min(byte_deltas, default=0),
+            "byte_delta_max": max(byte_deltas, default=0),
+        }
+    headline: dict[str, Any] = {}
+    for arm in _COMPATIBILITYFORM_TREATED_ARMS:
+        domain = [record for record in records if not _compatibilityform_ids_identical(record, arm)]
+        paired = [
+            record
+            for record in domain
+            if _compatibilityform_cell_get(record, "control") is not None
+            and _compatibilityform_cell_get(record, arm) is not None
+        ]
+        n_incomplete = len(domain) - len(paired)
+        control_passes = 0
+        wrong_values = 0
+        reverse = 0
+        non_answer = 0
+        pair_decomposition = dict.fromkeys(_COMPATIBILITYFORM_PAIR_CLASSES, 0)
+        failing_classes = dict.fromkeys(_COMPATIBILITYFORM_CELL_CLASSES, 0)
+        for record in paired:
+            control_cell = _compatibilityform_cell_get(record, "control")
+            arm_cell = _compatibilityform_cell_get(record, arm)
+            if control_cell is None or arm_cell is None:
+                continue
+            expected = expected_by_fixture.get(str(record.get("fixture", "")), "")
+            expected_digest = str(record.get("expected_digest", ""))
+            arm_class = _compatibilityform_decompose_cell(arm_cell, expected, expected_digest, arm)
+            if arm_class == "non_answer":
+                non_answer += 1
+            control_verdict = control_cell.get("verdict") is True
+            arm_verdict = arm_cell.get("verdict") is True
+            if control_verdict:
+                control_passes += 1
+                if arm_class == "wrong_value":
+                    wrong_values += 1
+            elif arm_verdict:
+                reverse += 1
+            if control_verdict != arm_verdict:
+                pair_decomposition[_compatibilityform_decompose_pair(control_cell, arm_cell)] += 1
+                failing = arm_cell if control_verdict else control_cell
+                failing_arm = arm if control_verdict else "control"
+                failing_classes[
+                    _compatibilityform_decompose_cell(
+                        failing, expected, expected_digest, failing_arm
+                    )
+                ] += 1
+        headline[arm] = {
+            "label": _compatibilityform_classify(control_passes, wrong_values, n_incomplete),
+            "n_population": len(paired),
+            "n_incomplete": n_incomplete,
+            "n_ids_divergent": len(domain),
+            "control_passes": control_passes,
+            "wrong_values": wrong_values,
+            "n_reverse": reverse,
+            "control_rate": _compatibilityform_rate(control_passes, len(paired)),
+            "arm_rate": _compatibilityform_rate(
+                sum(1 for record in paired if _compatibilityform_verdict(record, arm)),
+                len(paired),
+            ),
+            "n_non_answer": non_answer,
+            "pair_decomposition": pair_decomposition,
+            "failing_classes": failing_classes,
+        }
+    return {
+        "arms": arms,
+        "ids": ids,
+        "dose": dose,
+        "headline": headline,
+        "operating_characteristics": dict(_COMPATIBILITYFORM_OPERATING_CHARACTERISTICS),
+        "n_cases": len(records),
+        "n_incomplete": sum(
+            1
+            for record in records
+            if any(
+                _compatibilityform_cell_get(record, arm) is None
+                for arm in _COMPATIBILITYFORM_ARM_KEYS
+            )
+        ),
+    }
+
+
+def _compatibilityform_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """One cell's shape and bindings: the exact field set;
+    the verdict binding ``verdict == (answer_digest ==
+    expected_digest) and boundary_found``; the carried
+    ``answer_text`` must hash to its ``answer_digest`` (the
+    cycle-190 binding); the input-token binding to the
+    record's arm token count is checked by the caller.
+    """
+    if type(cell) is not dict or set(cell) != _COMPATIBILITYFORM_CELL_FIELDS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    digest = cell["answer_digest"]
+    if digest is not None and not _compatibilityform_digest_ok(digest):
+        return False
+    text = cell["answer_text"]
+    if text is None:
+        if digest is not None:
+            return False
+    elif type(text) is not str or _compatibilityform_text_digest(text) != digest:
+        return False
+    verdict = (digest == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _compatibilityform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a compatibility-form payload from its
+    ground records.
+
+    The validator carries its own generator mirror with the
+    frozen SHA-256 derivation, the frozen class tables, the
+    population audit, and the aggregators (no imports from
+    compatibilityform.py): the protocol is rebuilt from
+    frozen literals plus the payload's seed and backend
+    fingerprint and compared whole; the case set is
+    regenerated from the seed and every record is checked
+    against it in protocol order; every record's per-arm
+    content digests are rebound to the regenerated arm
+    contents, so the treatment itself is committed; every
+    record's drawn members are rebound to the regenerated
+    case's members; every record's frozen-table pin is
+    rebound to the mirror's own table digest and data-file
+    digest; the record's ids_identical flags and
+    id_length_delta values must equal the derivations from
+    its recorded digests and token counts; every cell's
+    answer_text is verified against its answer_digest, its
+    verdict is re-derived from its digest identity, and its
+    input_tokens are bound to the record's arm token count;
+    the decompositions, id report, dose, and guarded
+    headlines are recomputed from the records and the
+    regenerated expected values under the pinned completion
+    domain; the aggregates are recomputed and compared.
+    Cells exist only from aggregate-eligible reports, so a
+    non-null cell certifies a completed evaluation and the
+    verdict's status conjunct is discharged structurally.
+    """
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
+        return None
+    try:
+        expected_protocol = _compatibilityform_protocol(seed, backend_fingerprint)
+    except _CompatibilityFormMirrorExhausted:
+        return None
+    if not _recomputed_equal(protocol, expected_protocol):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    if len(candidates) > _COMPATIBILITYFORM_MAX_CANDIDATES:
+        return None
+    try:
+        generated = _compatibilityform_generate(seed)
+    except _CompatibilityFormMirrorExhausted:
+        return None
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _COMPATIBILITYFORM_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _COMPATIBILITYFORM_MAX_RECORDS_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "content_digests",
+                "arm_tokens",
+                "id_digests",
+                "ids_identical",
+                "id_length_delta",
+                "table_pin",
+                "members",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"]:
+                return None
+            if record["topic"] != case["topic"]:
+                return None
+            expected_digest = _compatibilityform_digest(str(case["expected"]))
+            if record["expected_digest"] != expected_digest:
+                return None
+            if record["members"] != case["members"]:
+                return None
+            table_pin = record["table_pin"]
+            if type(table_pin) is not dict or set(table_pin) != {
+                "version",
+                "unicodedata_sha256",
+                "table_sha256",
+            }:
+                return None
+            if table_pin["version"] != _COMPATIBILITYFORM_UNICODE_VERSION:
+                return None
+            if table_pin["unicodedata_sha256"] != _COMPATIBILITYFORM_UNICODEDATA_SHA256:
+                return None
+            if table_pin["table_sha256"] != _compatibilityform_table_sha256():
+                return None
+            arm_tokens = record["arm_tokens"]
+            id_digests = record["id_digests"]
+            content_digests = record["content_digests"]
+            ids_identical = record["ids_identical"]
+            id_length_delta = record["id_length_delta"]
+            cells = record["cells"]
+            details = record["cell_details"]
+            for mapping in (arm_tokens, id_digests, content_digests, cells, details):
+                if type(mapping) is not dict or set(mapping) != set(_COMPATIBILITYFORM_ARM_KEYS):
+                    return None
+            for mapping in (ids_identical, id_length_delta):
+                if type(mapping) is not dict or set(mapping) != set(
+                    _COMPATIBILITYFORM_TREATED_ARMS
+                ):
+                    return None
+            # Validate every arm_tokens value BEFORE any arithmetic on
+            # them, exactly as in _invisiblechars_recompute: a
+            # type-confused value escaped as a raw TypeError while the
+            # type check sat in the later per-arm loop (bug-hunt
+            # wave 2, BH2B-02).
+            for arm in _COMPATIBILITYFORM_ARM_KEYS:
+                tokens = arm_tokens[arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                    return None
+            for arm in _COMPATIBILITYFORM_TREATED_ARMS:
+                if ids_identical[arm] is not (id_digests[arm] == id_digests["control"]):
+                    return None
+                if id_length_delta[arm] != arm_tokens[arm] - arm_tokens["control"]:
+                    return None
+            for arm in _COMPATIBILITYFORM_ARM_KEYS:
+                tokens = arm_tokens[arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                    return None
+                if not _compatibilityform_digest_ok(id_digests[arm]):
+                    return None
+                if content_digests[arm] != _compatibilityform_digest(
+                    _compatibilityform_arm_content(case, arm)
+                ):
+                    return None
+                cell = cells[arm]
+                detail = details[arm]
+                if detail not in ("", *_COMPATIBILITYFORM_DETAILS):
+                    return None
+                if cell is None:
+                    if detail == "":
+                        return None
+                    continue
+                if detail != "":
+                    return None
+                if not _compatibilityform_cell_ok(cell, expected_digest):
+                    return None
+                if cell["input_tokens"] != tokens:
+                    return None
+        aggregates[name] = _compatibilityform_aggregate(records, generated)
+    if total_records > _COMPATIBILITYFORM_MAX_GROUND_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    return {
+        "aggregates": aggregates,
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _valid_compatibility_form(payload: Any) -> bool:
+    """Structural check for a ``compatibility_form`` payload
+    (recompute standard). The audit block is shape-checked
+    only: its counts are stage observations (special-token
+    findings against the run's own formats), not recomputable
+    from records.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    audit = payload.get("audit")
+    if type(audit) is not dict or set(audit) != {
+        "n_audit_excluded",
+        "by_reason",
+        "special_token_findings",
+    }:
+        return False
+    if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+        return False
+    if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+        return False
+    by_reason = audit["by_reason"]
+    if type(by_reason) is not dict:
+        return False
+    for key, count in by_reason.items():
+        if type(key) is not str or type(count) is not int or count < 0:
+            return False
+    recomputed = _compatibilityform_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, value in expected.items():
+            if not _recomputed_equal(entry.get(key), value):
+                return False
+    if not _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
+        return False
+    return _recomputed_equal(payload.get("n_cases"), recomputed["n_cases"])
+
+
+def diff_compatibility_form(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``compatibility_form`` probe payloads;
+    deterministic.
+
+    Answers "did the compatibility-form story change between
+    runs?": per candidate and treated arm, drift in the
+    guarded label with the D / J counts that carry it, the
+    divergent-domain size M, the reverse and non-answer
+    counts, the paired population and its incompletion, the
+    id report, the per-arm dose deltas, and the pair
+    decomposition; candidates added/removed; and protocol /
+    generator / backend drift (any of which marks the
+    comparison not comparable, with the drift still listed
+    -- the generated panel is the treatment, so a changed
+    generator is protocol drift). A side without a valid
+    payload is reported plainly.
+    """
+    old_ok = _valid_compatibility_form(old)
+    new_ok = _valid_compatibility_form(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    cf_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    cf_generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    ) or old["protocol"].get("case_material_sha256") != new["protocol"].get("case_material_sha256")
+    cf_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    cf_comparable = not cf_protocol_drift and not cf_generator_drift and not cf_backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    cf_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    cf_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    cf_candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                cf_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        cf_metrics: list[tuple[str, Any, Any]] = []
+        for arm in _COMPATIBILITYFORM_ARM_KEYS:
+            cf_metrics.append(
+                (f"{arm}_rate", old_entry["arms"][arm]["rate"], new_entry["arms"][arm]["rate"])
+            )
+        for arm in _COMPATIBILITYFORM_TREATED_ARMS:
+            cf_metrics.extend(
+                [
+                    (
+                        f"{arm}_dose_codepoint_min",
+                        old_entry["dose"][arm]["codepoint_delta_min"],
+                        new_entry["dose"][arm]["codepoint_delta_min"],
+                    ),
+                    (
+                        f"{arm}_dose_codepoint_max",
+                        old_entry["dose"][arm]["codepoint_delta_max"],
+                        new_entry["dose"][arm]["codepoint_delta_max"],
+                    ),
+                    (
+                        f"{arm}_dose_byte_min",
+                        old_entry["dose"][arm]["byte_delta_min"],
+                        new_entry["dose"][arm]["byte_delta_min"],
+                    ),
+                    (
+                        f"{arm}_dose_byte_max",
+                        old_entry["dose"][arm]["byte_delta_max"],
+                        new_entry["dose"][arm]["byte_delta_max"],
+                    ),
+                ]
+            )
+        for arm in _COMPATIBILITYFORM_TREATED_ARMS:
+            old_head = old_entry["headline"][arm]
+            new_head = new_entry["headline"][arm]
+            old_ids = old_entry["ids"][arm]
+            new_ids = new_entry["ids"][arm]
+            cf_metrics.extend(
+                [
+                    (f"{arm}_label", old_head["label"], new_head["label"]),
+                    (
+                        f"{arm}_control_passes",
+                        old_head["control_passes"],
+                        new_head["control_passes"],
+                    ),
+                    (f"{arm}_wrong_values", old_head["wrong_values"], new_head["wrong_values"]),
+                    (f"{arm}_n_reverse", old_head["n_reverse"], new_head["n_reverse"]),
+                    (f"{arm}_n_population", old_head["n_population"], new_head["n_population"]),
+                    (f"{arm}_n_incomplete", old_head["n_incomplete"], new_head["n_incomplete"]),
+                    (
+                        f"{arm}_n_ids_divergent",
+                        old_head["n_ids_divergent"],
+                        new_head["n_ids_divergent"],
+                    ),
+                    (f"{arm}_n_non_answer", old_head["n_non_answer"], new_head["n_non_answer"]),
+                    (f"{arm}_control_rate", old_head["control_rate"], new_head["control_rate"]),
+                    (f"{arm}_arm_rate", old_head["arm_rate"], new_head["arm_rate"]),
+                    (
+                        f"{arm}_pair_exact_only",
+                        old_head["pair_decomposition"]["exact_only"],
+                        new_head["pair_decomposition"]["exact_only"],
+                    ),
+                    (
+                        f"{arm}_pair_boundary_only",
+                        old_head["pair_decomposition"]["boundary_only"],
+                        new_head["pair_decomposition"]["boundary_only"],
+                    ),
+                    (
+                        f"{arm}_pair_mixed",
+                        old_head["pair_decomposition"]["mixed"],
+                        new_head["pair_decomposition"]["mixed"],
+                    ),
+                    (
+                        f"{arm}_n_ids_identical",
+                        old_ids["n_ids_identical"],
+                        new_ids["n_ids_identical"],
+                    ),
+                    (
+                        f"{arm}_max_abs_id_delta",
+                        old_ids["max_abs_id_delta"],
+                        new_ids["max_abs_id_delta"],
+                    ),
+                    (
+                        f"{arm}_n_same_ids_verdict_flips",
+                        old_ids["n_same_ids_verdict_flips"],
+                        new_ids["n_same_ids_verdict_flips"],
+                    ),
+                ]
+            )
+        for metric, old_value, new_value in cf_metrics:
+            if old_value != new_value:
+                cf_candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    result["candidate_drift"] = cf_candidate_drift
+    result["candidates_added"] = cf_candidates_added
+    result["candidates_removed"] = cf_candidates_removed
+    result["protocol_drift"] = cf_protocol_drift
+    result["generator_drift"] = cf_generator_drift
+    result["backend_drift"] = cf_backend_drift
+    result["comparable"] = cf_comparable
+    result["changed"] = bool(
+        cf_candidate_drift
+        or cf_candidates_added
+        or cf_candidates_removed
+        or cf_protocol_drift
+        or cf_generator_drift
+        or cf_backend_drift
     )
     return result
 

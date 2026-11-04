@@ -87,6 +87,7 @@ RUN_PROBE_FLAGS = [
     "--record-notation",
     "--invisible-chars",
     "--confusable-skeleton",
+    "--compatibility-form",
 ]
 
 
@@ -162,7 +163,7 @@ class DocsCurrencyTests(unittest.TestCase):
         # 229 -> 230 in cycle 230).
         """Validation header covers latest cycle."""
         top = VALIDATION.split("\n## ")[1]
-        self.assertIn("cycles 10–230", top)
+        self.assertIn("cycles 10–231", top)
 
 
 class ValidationRuffCountPinTests(unittest.TestCase):

@@ -1037,6 +1037,20 @@ class ValidatorTests(unittest.TestCase):
         self.assertFalse(diff["changed"])
         self.assertTrue(diff["comparable"])
 
+    def test_surrogate_answer_text_rejected_without_raising(self):
+        """Cycle-231 audit F2 sibling sweep: a lone
+        surrogate answer_text is a validation failure,
+        never an exception.
+        """
+
+        def surrogate(payload):
+            """Surrogate."""
+            payload["candidates"]["chatml"]["records"][0]["cells"]["prose"]["answer_text"] = (
+                "cedar-8160\ud800"
+            )
+
+        self.assertFalse(diffreports._valid_record_notation(self._tampered(surrogate)))
+
     def _tampered(self, mutate):
         """Tampered."""
         payload = copy.deepcopy(self.payload)

@@ -792,7 +792,7 @@ def validate_case(case: dict[str, Any], seed: int) -> bool:
         value = str(case["value"])
         if topic != TOPICS[index] or case["expected"] != value:
             return False
-        if not _VALUE_RE.match(value):
+        if not _VALUE_RE.fullmatch(value):
             return False
         word, _, number = value.partition("-")
         if word not in WORDS or not 1000 <= int(number) <= 9999:
@@ -859,7 +859,7 @@ def decompose_cell(cell: dict[str, Any], expected: str, expected_digest: str, ar
     text = cell.get("answer_text")
     if type(text) is not str:
         return "non_answer"
-    if text != expected and _VALUE_RE.match(text):
+    if text != expected and _VALUE_RE.fullmatch(text):
         word, _, number = text.partition("-")
         if word in WORDS and 1000 <= int(number) <= 9999:
             return "wrong_value"

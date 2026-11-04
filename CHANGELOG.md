@@ -6,6 +6,85 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 231 — compatibility-form substitution probe, 2026-11-04)
+
+- A compatibility-form substitution probe
+  (`run --compatibility-form`,
+  `model_protocol_lab/compatibilityform.py`): a
+  generated panel of 24 fact-recall cases (frozen topics,
+  a word-number inspection code, two neutral carrier
+  sentences, a frozen six-field marker sentence, a
+  question) is rendered verbatim and with exactly one
+  frozen compatibility character substituted into its
+  own class's marker field — `ligature`, `enclosed`,
+  `fraction`, `superscript`, `roman`, `katakana`. The
+  population is frozen from UnicodeData.txt pinned to
+  Unicode 15.0.0 (117 characters with a tagged
+  compatibility decomposition, NFC and NFD fixed, NFKC
+  fold distinct, `<wide>` excluded; the data file's
+  SHA-256 and the derived table's own digest are frozen
+  in the module, and every record carries the
+  frozen-table version pin and its six drawn members as
+  code points). Readings are the NFKC fold, with the one
+  disclosed transcription that the fraction solidus is
+  written U+002F rather than the fold's U+2044. The
+  readout is a guarded classification per candidate and
+  arm over the id-divergent paired population (at least
+  10 control passes, at least 6 wrong-value discordants,
+  acquittals stable under worst-case completion of the
+  missing pairs, labels withheld above 6 incomplete
+  divergent cases), with the arm's divergent-domain size
+  printed beside every label, a total six-class
+  decomposition of completed cells, the per-arm dose
+  deltas and token-ID report, and the exact operating
+  characteristics (competent-null fire 0.0173
+  independent / 0.0044 paired exact; family-wise
+  expectation 2.4875 false labels over 144 comparisons,
+  paired 0.6397) printed beside the licence. Records
+  carry digest-bound answer text on every cell. Design:
+  `docs/COMPATIBILITYFORM_DESIGN.md`, built as amended
+  (A1–A9) after the wave-12 round-3 fresh review.
+
+### Fixed (cycle 231 — adversarial-audit findings F1–F6, 2026-11-04)
+
+- The frozen value grammar in the compatibility-form,
+  confusable-skeleton and invisible-characters probes is
+  now applied with fullmatch semantics in the producers,
+  the diff-reports mirrors and the test oracles: under a
+  plain `re.match` the `$` anchor also matches before a
+  trailing newline, so an answer equal to the expected
+  value plus a newline classified `wrong_value` and
+  counted toward the headline J — six such artefacts at
+  D ≥ 10 would have manufactured a
+  `discordant_asymmetric` fire (audit F1, found by the
+  cycle-231 adversarial audit and reproduced by
+  execution before fixing; each probe's battery carries
+  the trailing-newline witness).
+- The diff-reports validators for compatibility form,
+  confusable skeleton, invisible characters and record
+  notation no longer raise `UnicodeEncodeError` on a
+  cell `answer_text` containing a lone surrogate: the
+  digest binding now uses a guarded text digest (the
+  cycle-190 A3 pattern), so the payload is rejected
+  instead of crashing the whole diff (audit F2 and its
+  sibling sweep).
+- The producer aggregate of the compatibility-form
+  probe reads cell verdicts through the safe accessor,
+  matching its mirror (audit F5); `decompose_cell` is
+  total in the arm argument (an unknown arm has no
+  class table, so the echo class cannot fire — audit
+  F4); `arm_content` raises on an unknown arm instead
+  of silently rendering the control content (audit F6).
+- One shipped test pinned the host interpreter's
+  Unicode version (`POPULATION_AUDIT["unicode_version"]
+  == "15.0.0"`), which fails on CPython 3.11 (UCD
+  14.0.0) and 3.13 (UCD 15.1.0) on an otherwise-correct
+  build; it now pins the frozen data (the pinned file
+  digest, the table digest, the data-version field) and
+  checks the host field only against the host's own
+  reported version (audit F3; the test suite for the
+  probe passes under all three interpreters).
+
 ### Security (cycle 228 — Dependabot filelock alerts, 2026-11-02)
 
 - The new cocoindex tool lock surfaced 13 Dependabot alerts
