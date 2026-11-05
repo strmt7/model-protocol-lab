@@ -3441,6 +3441,93 @@ file's SHA-256, and the derived table's own digest).
 Informational only: the probe never affects selection,
 and the stage never fails the run.
 
+### 8.63 Enumeration convention (`run --enumeration-convention`)
+
+```sh
+model-protocol-lab run ... --enumeration-convention
+```
+
+This probe renders a frozen nine-item list under six
+enumeration conventions and reports whether the marker
+convention alone moves the model's answers to wrong
+values. It answers, for anyone rendering numbered or
+bulleted lists for a local model, and for platform teams
+publishing prompt-format guidance, whether the
+enumeration convention changes answers on this
+checkpoint, per template family and per marker system.
+The prior is Sclar et al.'s enumeration grammar
+(arXiv:2310.11324, design doc section 2): the indexing
+dimension separates tasks (45% weak / 10% strong) where
+the wrapper dimension never does (0% / 0%), and every
+arm's hypothesis is direction-free.
+
+The panel is generated, not read from the run's
+fixtures: 24 cases, each a fact-recall item (a nine-item
+list of `word-number` inspection codes under a frozen
+intro line, two neutral carrier sentences, a question),
+drawn by a frozen seeded generator (SHA-256 derivations
+with the draw order, slot order, and redraw semantics
+pinned in the design doc; values distinct across the
+whole panel by redraw). The pools are pinned by content
+digest in the design doc. Six arms per case: the arabic
+`control_arabic` (`1.` to `9.`) and five treated arms --
+`alpha_upper` (`A.` to `I.`), `alpha_lower` (`a.` to
+`i.`), `roman` (`I.` to `IX.`), `wrapper` (`(1)` to
+`(9)`, the expected-null wrapper arm), and `bullet`
+(the same bullet glyph at every position, index-free,
+the expected-null gap-filling arm). Only the markers
+differ: the items, their order, the question, and the
+carriers are byte-identical across arms, and the count
+is never stated anywhere in the content, so the answer
+can only be found by enumerating the list. The scorer
+is the run's own verdict -- byte-exact answer conjoined
+with boundary presence -- per cell.
+
+The readout is a guarded classification per candidate
+and per treated arm over the token-id-divergent paired
+population (cases completed in both control and arm
+whose renders differ in token ids for that arm;
+ids-identical arms are reported instrument-inapplicable
+for that family, never as passes): `insufficient`,
+`no_discordance_observed`, `discordant_asymmetric` (the
+fire), `below_threshold`, from D (control passes in the
+population) and J (in-grammar wrong-value discordants
+among them), floors D >= 10 and J >= 6, reverse
+discordants counted beside every label and never
+pooled. Every report prints the arm's divergent-domain
+size M beside its label. The completion guard closes
+the incompletion channel: fires issue on observed
+counts; acquittal labels issue only when stable under
+the worst-case completion of the incomplete
+id-divergent cases; every label is withheld above 6
+incomplete in the domain. Each completed cell
+decomposes (pass / boundary-only / wrong-value / echo /
+form-only / non-answer -- an ordered decision list,
+arm-relative and ASCII-pinned, in which a wrong value
+wearing exactly one marker-shaped prefix or suffix
+counts as a wrong value, and an answer repeating the
+arm's own marker with the expected value intact is an
+echo, never a value change) and the report prints the
+operating characteristics beside the licence
+(competent-null fire 0.0173 by exact independent
+enumeration, 0.0044 by the exact paired computation;
+25-point-drop power 0.8159, paired 0.6981; a 10-point
+drop fires only 0.2542 of the time, so an acquittal is
+never a few-point null; family-wise over the 120
+labelled comparisons the competent expectation is
+2.0729 false labels with probability 0.8764 of at least
+one, paired expectation 0.5331), plus the mean
+id-length delta by target position beside the
+by-position counts, so a token-length explanation is
+checkable against the label. The full contract is in
+`docs/ENUMERATION_DESIGN.md`. Costs 144 generations per
+candidate (3,456 at the legal maximum: 24 candidates x
+24 cases x 6 arms), spent only when the flag is passed.
+Records carry digests, plus each cell's answer text
+bound by its digest. Informational only: the probe
+never affects selection, and the stage never fails the
+run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

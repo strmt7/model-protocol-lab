@@ -302,6 +302,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "invisible_chars": {"available": "neither", "changed": False},
         "confusable_skeleton": {"available": "neither", "changed": False},
         "compatibility_form": {"available": "neither", "changed": False},
+        "enumeration_convention": {"available": "neither", "changed": False},
         "choice_audit": {"available": "neither", "changed": False},
         "precision": {"available": "neither", "changed": False},
         "confidence": {"available": "neither", "changed": False},
@@ -411,6 +412,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "confusable_skeleton_asymmetric": False,
             "compatibility_form_changed": False,
             "compatibility_form_asymmetric": False,
+            "enumeration_convention_changed": False,
+            "enumeration_convention_asymmetric": False,
             "choice_audit_changed": False,
             "choice_audit_asymmetric": False,
             "precision_changed": False,
@@ -13327,6 +13330,1266 @@ def _o_compatibilityform(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool
     return diff, changed, asymmetric
 
 
+# diffreports._valid_enumeration_convention /
+# diff_enumeration_convention, re-implemented from
+# docs/ENUMERATION_DESIGN.md as amended (A1-A9). The
+# panel is frozen generated material (24 cases, nine-item
+# lists, six marker systems); the decomposition is the
+# six-class ordered decision list as amended -- A1
+# (marker-prefixed wrong values count toward J), A2
+# (glyphs ASCII-pinned, total), A3 (echo is string
+# identity with the arm's own marker); the headline is
+# the guarded classification over the id-divergent
+# paired population with the divergent-domain size M
+# beside the label and the by-position length join (A5).
+
+_O_EC_TOPICS = (
+    "harbor",
+    "summit",
+    "quarry",
+    "tundra",
+    "granite",
+    "willow",
+    "copper",
+    "saddle",
+    "walnut",
+    "velvet",
+    "cobalt",
+    "marble",
+    "cinder",
+    "falcon",
+    "garnet",
+    "saffron",
+    "indigo",
+    "juniper",
+    "lagoon",
+    "magnet",
+    "nickel",
+    "pepper",
+    "quartz",
+    "birch",
+)
+
+_O_EC_WORDS = (
+    "alder",
+    "basalt",
+    "cedar",
+    "drift",
+    "elm",
+    "fern",
+    "glade",
+    "heath",
+    "iris",
+    "jade",
+    "kelp",
+    "loom",
+    "moss",
+    "nova",
+    "ochre",
+    "pine",
+    "quill",
+    "reed",
+    "sage",
+    "tide",
+    "urn",
+    "vale",
+    "wren",
+    "yew",
+)
+
+_O_EC_NEUTRAL_STATEMENTS = (
+    "The weather changed slowly during the afternoon hours.",
+    "A wooden fence runs along the edge of the property.",
+    "She placed the documents inside a plain folder yesterday.",
+    "The train arrived later than the schedule suggested.",
+    "Fresh bread was cooling on the counter near the sink.",
+    "He repaired the bicycle with tools from the garage.",
+    "The bookshop extends its opening hours during summer.",
+    "Several chairs were arranged around the long table.",
+    "The recipe calls for a pinch of salt and herbs.",
+    "They walked along the path beside the lake at dawn.",
+    "The committee postponed its decision until next week.",
+    "A thick layer of dust covered the old furniture.",
+    "The children played quietly in the courtyard after lunch.",
+    "His handwriting was difficult to read in places.",
+    "The farmer harvested the fields before the rain came.",
+    "An old map hung framed on the wall of the hallway.",
+    "The accountant reviewed the figures a second time.",
+    "Birds gathered on the rooftops as the sun went down.",
+    "The mechanic inspected the engine and changed the oil.",
+    "A narrow staircase led up to the attic.",
+    "The orchestra rehearsed the piece several times over.",
+    "Someone left a bicycle leaning against the railing.",
+    "The soup simmered gently on the stove all morning.",
+    "Visitors signed the guest book near the entrance.",
+)
+
+_O_EC_MARKER_TABLE = {
+    "control_arabic": ("1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9."),
+    "alpha_upper": ("A.", "B.", "C.", "D.", "E.", "F.", "G.", "H.", "I."),
+    "alpha_lower": ("a.", "b.", "c.", "d.", "e.", "f.", "g.", "h.", "i."),
+    "roman": ("I.", "II.", "III.", "IV.", "V.", "VI.", "VII.", "VIII.", "IX."),
+    "wrapper": ("(1)", "(2)", "(3)", "(4)", "(5)", "(6)", "(7)", "(8)", "(9)"),
+    "bullet": ("•", "•", "•", "•", "•", "•", "•", "•", "•"),
+}
+
+_O_EC_ARM_KEYS = ("control_arabic", "alpha_upper", "alpha_lower", "roman", "wrapper", "bullet")
+_O_EC_TREATED_ARMS = _O_EC_ARM_KEYS[1:]
+_O_EC_INDICES = tuple(range(1, 10))
+_O_EC_STRIDE = 5
+_O_EC_BULLET = "\u2022"
+_O_EC_INTRO = "Inspection codes:"
+_O_EC_CASE_COUNT = 24
+_O_EC_MIN_D = 10
+_O_EC_MIN_J = 6
+_O_EC_MAX_INCOMPLETE = 6
+_O_EC_REDRAW_LIMIT = 1000
+_O_EC_GENERATOR_SPEC = (
+    "draw(seed, index, slot, counter) = "
+    "int.from_bytes(sha256(f'{seed}|enumerationconvention|{index}|{slot}|{counter}').digest()[:8], "
+    "'big'); the material index is the 0-based case number; slots 2 and 3 at counter 0: "
+    "neutral indices = draw % len(NEUTRAL_STATEMENTS) (slot 2 is the first neutral, slot 3 "
+    "the second; the second advances +1 mod len on collision); slot 20 at counter 0: target "
+    "position = 1 + draw % len(INDICES); list topics are the stride-5 base sequence B_j = "
+    "TOPICS[(index + 5*j) % len(TOPICS)] for j = 0..8 with the target B_0 placed at the drawn "
+    "position and B_1..B_8 in order at the remaining positions; item values are drawn per "
+    "position t = 1..9 in order (word slot 30 + (t-1): WORDS[draw % len(WORDS)]; number slot "
+    "40 + (t-1): 1000 + draw % 9000) with panel traversal in case-then-position order; a "
+    "value colliding with any earlier value in the panel redraws that item's two slots "
+    "together -- the item's word and number slots share one redraw counter -- and give-up "
+    "raises when the counter exceeds 1000 (the stage fails closed)"
+)
+_O_EC_MAX_CANDIDATES = 24
+_O_EC_MAX_GROUND_RECORDS = _O_EC_MAX_CANDIDATES * _O_EC_CASE_COUNT
+_O_EC_GENERATION_BUDGET = len(_O_EC_ARM_KEYS) * _O_EC_MAX_GROUND_RECORDS
+_O_EC_MAX_RECORDS_BYTES = 12 * 1024 * 1024
+_O_EC_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+    "answer_text",
+}
+_O_EC_DETAILS = ("arm_context_exceeded", "arm_evaluation_failed")
+_O_EC_CELL_CLASSES = (
+    "pass",
+    "boundary_only",
+    "wrong_value",
+    "echo",
+    "form_only",
+    "non_answer",
+)
+_O_EC_PAIR_CLASSES = ("exact_only", "boundary_only", "mixed")
+_O_EC_AGGREGATE_KEYS = {
+    "arms",
+    "ids",
+    "positions",
+    "headline",
+    "operating_characteristics",
+    "n_cases",
+    "n_incomplete",
+}
+_O_EC_OC = {
+    "fire_competent_independent": 0.0173,
+    "fire_competent_paired": 0.0044,
+    "fire_weak_independent": 0.1743,
+    "fire_random_independent": 0.5503,
+    "power_drop5_base90": 0.0947,
+    "power_drop10_base90": 0.2542,
+    "power_drop25_base90": 0.8159,
+    "power_drop25_base85": 0.8761,
+    "power_drop25_paired": 0.6981,
+    "power_drop50_base90": 0.999,
+    "sensitivity18_drop25": 0.5214,
+    "sensitivity18_competent": 0.0038,
+    "sensitivity12_drop25": 0.1379,
+    "sensitivity12_competent": 0.0003,
+    "transplant_fire_competent_independent": 0.8897,
+    "familywise_competent_expected_120": 2.0729,
+    "familywise_competent_any_120": 0.8764,
+    "familywise_paired_expected_120": 0.5331,
+    "familywise_paired_any_120": 0.4139,
+    "familywise_random_expected_120": 66.0368,
+    "familywise_random_any_120": 1.0,
+    "world_a1_guarded_fire": 0.0055,
+    "world_a1_unguarded_fire": 0.0186,
+    "world_a1_guarded_insufficient": 0.9923,
+    "world_a2_guarded_fire": 0.0173,
+    "world_a2_unguarded_fire": 0.0173,
+    "world_a2_guarded_insufficient": 0.2897,
+    "world_b_unguarded_fire": 0.2551,
+    "world_b_unguarded_below_threshold": 0.7277,
+    "world_b_guarded_fire": 0.1731,
+    "world_b_guarded_below_threshold": 0.0117,
+    "world_b_guarded_insufficient": 0.8152,
+    "world_b777_guarded_below_threshold": 0.011,
+    "world_c_guarded_fire": 0.8893,
+    "world_c_unguarded_fire": 0.9399,
+    "world_c_guarded_below_threshold": 0.0016,
+    "required_n_smallest": 117,
+    "required_n_min_d": 0,
+    "required_n_min_j": 18,
+    "required_n_null": 0.0172,
+    "required_n_power10": 0.8023,
+    "required_n_grid120_power10": 0.7657,
+    "required_n_grid126_power10": 0.8336,
+    "required_n_grid132_power10": 0.8325,
+    "required_n_cost": 16848,
+}
+_O_EC_ROMAN_RE = re.compile(r"M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})")
+_O_EC_ROMAN_VAL = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+_O_EC_ROMAN_TABLE = {
+    1: "I",
+    2: "II",
+    3: "III",
+    4: "IV",
+    5: "V",
+    6: "VI",
+    7: "VII",
+    8: "VIII",
+    9: "IX",
+}
+
+
+def _o_ec_sha(text: str) -> str:
+    """Oracle sha256 hex digest."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _o_ec_text_sha(text: str):
+    """Oracle surrogate-safe digest; None for non-str."""
+    if type(text) is not str:
+        return None
+    try:
+        return _o_ec_sha(text)
+    except UnicodeEncodeError:
+        return None
+
+
+def _o_ec_digest_ok(value: Any) -> bool:
+    """Oracle digest-shape check."""
+    return (
+        type(value) is str
+        and len(value) == 64
+        and all(char in "0123456789abcdef" for char in value)
+    )
+
+
+class _OecExhausted(ValueError):
+    """Oracle redraw-limit signal."""
+
+
+def _o_ec_pool_digests() -> dict[str, str]:
+    """Oracle pool digests over the newline-joined pools."""
+    return {
+        "topics_sha256": _o_ec_sha("\n".join(_O_EC_TOPICS)),
+        "words_sha256": _o_ec_sha("\n".join(_O_EC_WORDS)),
+        "neutral_statements_sha256": _o_ec_sha("\n".join(_O_EC_NEUTRAL_STATEMENTS)),
+    }
+
+
+def _o_ec_sha(text: str) -> str:
+    """SHA-256 hex digest (local copy; no imports from
+    enumerationconvention.py anywhere in this mirror).
+    """
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _o_ec_text_sha(text: str) -> str | None:
+    """SHA-256 of the UTF-8 encoding, or None when the
+    text cannot be encoded (a lone-surrogate answer_text
+    is a validation failure, never an exception — the
+    cycle-190 A3 pattern, applied per audit F2).
+    """
+    try:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    except UnicodeEncodeError:
+        return None
+
+
+def _o_ec_digest_ok(value: Any) -> bool:
+    """Whether a stored digest is a well-formed SHA-256 hex
+    digest.
+    """
+    if type(value) is not str or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in value)
+
+
+def _o_ec_pool_digests() -> dict[str, str]:
+    """The pool digests recomputed from this mirror's own
+    literal pools.
+    """
+    return {
+        "topics": _o_ec_sha("\n".join(_O_EC_TOPICS)),
+        "words": _o_ec_sha("\n".join(_O_EC_WORDS)),
+        "neutral_statements": _o_ec_sha("\n".join(_O_EC_NEUTRAL_STATEMENTS)),
+    }
+
+
+def _o_ec_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    """Mirror of enumerationconvention._derive (the draw
+    conversion pinned by the design's generator spec).
+    """
+
+    material = f"{seed}|enumerationconvention|{index}|{slot}|{counter}"
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+
+
+class _OecExhausted(Exception):
+    """Mirror-internal: the redraw give-up bound was reached
+    during regeneration, so the payload cannot be recomputed
+    and validates false.
+    """
+
+
+def _o_ec_generate(seed: int) -> list[dict[str, Any]]:
+    """Mirror of enumerationconvention.generate_cases: the
+    frozen SHA-256 derivation with panel-wide value
+    distinctness by redraw.
+    """
+    cases: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index in range(_O_EC_CASE_COUNT):
+        first = _o_ec_derive(seed, index, 2, 0) % len(_O_EC_NEUTRAL_STATEMENTS)
+        second = _o_ec_derive(seed, index, 3, 0) % len(_O_EC_NEUTRAL_STATEMENTS)
+        if second == first:
+            second = (first + 1) % len(_O_EC_NEUTRAL_STATEMENTS)
+        position = 1 + _o_ec_derive(seed, index, 20, 0) % len(_O_EC_INDICES)
+        base = [
+            _O_EC_TOPICS[(index + _O_EC_STRIDE * j) % len(_O_EC_TOPICS)]
+            for j in range(len(_O_EC_INDICES))
+        ]
+        topics: list[str] = []
+        rest = iter(base[1:])
+        for t in _O_EC_INDICES:
+            topics.append(base[0] if t == position else next(rest))
+        values: list[str] = []
+        for t in _O_EC_INDICES:
+            counter = 0
+            while True:
+                word = _O_EC_WORDS[
+                    _o_ec_derive(seed, index, 30 + (t - 1), counter) % len(_O_EC_WORDS)
+                ]
+                number = 1000 + _o_ec_derive(seed, index, 40 + (t - 1), counter) % 9000
+                value = f"{word}-{number}"
+                if value not in seen:
+                    break
+                counter += 1
+                if counter > _O_EC_REDRAW_LIMIT:
+                    raise _OecExhausted
+            seen.add(value)
+            values.append(value)
+        cases.append(
+            {
+                "fixture_id": f"enumerationconvention-{index:02d}",
+                "index": index,
+                "topic": _O_EC_TOPICS[index],
+                "position": position,
+                "topics": topics,
+                "values": values,
+                "expected": values[position - 1],
+                "question": (f"What is the {_O_EC_TOPICS[index]} inspection code?"),
+                "neutral_indices": [first, second],
+            }
+        )
+    return cases
+
+
+def _o_ec_item_sentence(topic: str, value: str) -> str:
+    """Mirror of enumerationconvention.item_sentence."""
+    return f"The {topic} inspection code is {value}."
+
+
+def _o_ec_question(case: dict[str, Any]) -> str:
+    """Mirror of enumerationconvention.question_text."""
+    return f"What is the {case['topic']} inspection code?"
+
+
+def _o_ec_list_block(case: dict[str, Any], arm: str) -> str:
+    """Mirror of enumerationconvention.list_block."""
+    if arm not in _O_EC_MARKER_TABLE:
+        raise ValueError(f"unknown enumeration-convention arm: {arm!r}")
+    lines = [
+        f"{_O_EC_MARKER_TABLE[arm][t - 1]} "
+        f"{_o_ec_item_sentence(case['topics'][t - 1], case['values'][t - 1])}"
+        for t in _O_EC_INDICES
+    ]
+    return _O_EC_INTRO + "\n" + "\n".join(lines)
+
+
+def _o_ec_arm_content(case: dict[str, Any], arm: str) -> str:
+    """Mirror of enumerationconvention.arm_content."""
+    if arm not in _O_EC_MARKER_TABLE:
+        raise ValueError(f"unknown enumeration-convention arm: {arm!r}")
+    first, second = (int(i) for i in case["neutral_indices"])
+    return (
+        f"{_O_EC_NEUTRAL_STATEMENTS[first]} "
+        f"{_o_ec_list_block(case, arm)} "
+        f"{_O_EC_NEUTRAL_STATEMENTS[second]} "
+        f"{_o_ec_question(case)}"
+    )
+
+
+def _o_ec_case_material_sha256() -> str:
+    """Mirror of enumerationconvention.case_material_sha256."""
+
+    material = {
+        "topics": list(_O_EC_TOPICS),
+        "words": list(_O_EC_WORDS),
+        "neutral_statements": list(_O_EC_NEUTRAL_STATEMENTS),
+        "arm_keys": list(_O_EC_ARM_KEYS),
+        "marker_table": {arm: list(_O_EC_MARKER_TABLE[arm]) for arm in _O_EC_ARM_KEYS},
+        "generator_spec": _O_EC_GENERATOR_SPEC,
+        "case_count": _O_EC_CASE_COUNT,
+        "indices": list(_O_EC_INDICES),
+        "stride": _O_EC_STRIDE,
+        "pool_digests": _o_ec_pool_digests(),
+        "min_d": _O_EC_MIN_D,
+        "min_j": _O_EC_MIN_J,
+        "max_incomplete": _O_EC_MAX_INCOMPLETE,
+        "redraw_limit": _O_EC_REDRAW_LIMIT,
+    }
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return _o_ec_sha(canonical)
+
+
+def _o_ec_ground_sha256(seed: int) -> str:
+    """Mirror of enumerationconvention.ground_sha256."""
+
+    rows = [
+        [
+            case["fixture_id"],
+            case["topic"],
+            case["position"],
+            list(case["topics"]),
+            list(case["values"]),
+            list(case["neutral_indices"]),
+        ]
+        for case in _o_ec_generate(seed)
+    ]
+    canonical = json.dumps(rows, separators=(",", ":"), ensure_ascii=True)
+    return _o_ec_sha(canonical)
+
+
+def _o_ec_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    """The enumeration-convention protocol rebuilt from
+    this module's own literals, fingerprint included
+    (compared whole).
+    """
+
+    protocol: dict[str, Any] = {
+        "version": 1,
+        "arm_keys": list(_O_EC_ARM_KEYS),
+        "treated_arms": list(_O_EC_TREATED_ARMS),
+        "case_count": _O_EC_CASE_COUNT,
+        "min_d": _O_EC_MIN_D,
+        "min_j": _O_EC_MIN_J,
+        "max_incomplete": _O_EC_MAX_INCOMPLETE,
+        "case_material_sha256": _o_ec_case_material_sha256(),
+        "ground_sha256": _o_ec_ground_sha256(seed),
+        "pool_digests": _o_ec_pool_digests(),
+        "generation_budget": _O_EC_GENERATION_BUDGET,
+        "max_ground_records": _O_EC_MAX_GROUND_RECORDS,
+        "max_records_bytes": _O_EC_MAX_RECORDS_BYTES,
+        "max_candidates": _O_EC_MAX_CANDIDATES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _o_ec_sha(canonical)
+    return protocol
+
+
+def _o_ec_cell(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the enumerationconvention cell get."""
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(key)
+    return cell if isinstance(cell, dict) else None
+
+
+def _o_ec_detail(record: dict[str, Any], key: str) -> str:
+    """Return the enumerationconvention detail get."""
+    details = record.get("cell_details")
+    if not isinstance(details, dict):
+        return ""
+    detail = details.get(key, "")
+    return detail if type(detail) is str else ""
+
+
+def _o_ec_verdict(record: dict[str, Any], key: str) -> bool:
+    """Return the enumerationconvention verdict."""
+    cell = _o_ec_cell(record, key)
+    return bool(cell is not None and cell.get("verdict") is True)
+
+
+def _o_ec_ids_identical(record: dict[str, Any], arm: str) -> bool:
+    """Mirror of enumerationconvention._ids_identical:
+    derived from the recorded id digests alone.
+    """
+    digests = record.get("id_digests")
+    if not isinstance(digests, dict):
+        return False
+    control = digests.get("control_arabic")
+    return type(control) is str and control != "" and control == digests.get(arm)
+
+
+def _o_ec_value_ok(value: Any) -> bool:
+    """The frozen value grammar, fullmatch semantics
+    (mirror of enumerationconvention._value_grammar_ok).
+    """
+    if type(value) is not str or not re.fullmatch(r"[a-z]+-[0-9]{4}", value):
+        return False
+    word, _, number = value.partition("-")
+    return word in _O_EC_WORDS and 1000 <= int(number) <= 9999
+
+
+def _o_ec_is_ascii_digits(text: str) -> bool:
+    """Whether every character is an ASCII digit (never
+    Unicode-lenient: amendment A2).
+    """
+    return bool(text) and all("0" <= char <= "9" for char in text)
+
+
+def _o_ec_is_ascii_letters(text: str) -> bool:
+    """Whether every character is an ASCII letter."""
+    return bool(text) and all("A" <= char <= "Z" or "a" <= char <= "z" for char in text)
+
+
+def _o_ec_parse_roman(glyph: str) -> int | None:
+    """Mirror of enumerationconvention.parse_roman:
+    subtractive parse of a canonical Roman numeral, or
+    None. ASCII-pinned (amendment A2).
+    """
+    if not glyph or not _o_ec_is_ascii_letters(glyph):
+        return None
+    if glyph.upper() != glyph and glyph.lower() != glyph:
+        return None  # mixed case is not a canonical rendering
+    upper = glyph.upper()
+    if any(char not in _O_EC_ROMAN_VAL for char in upper):
+        return None
+    if not _O_EC_ROMAN_RE.fullmatch(upper):
+        return None
+    total, prev = 0, 0
+    for char in reversed(upper):
+        value = _O_EC_ROMAN_VAL[char]
+        total += -value if value < prev else value
+        prev = max(prev, value)
+    return total
+
+
+def _o_ec_glyph_ok(glyph: str) -> bool:
+    """Mirror of enumerationconvention.glyph_ok."""
+    if _o_ec_is_ascii_digits(glyph):
+        return len(glyph) <= 2
+    if not _o_ec_is_ascii_letters(glyph):
+        return False
+    if len(glyph) == 1:
+        return True
+    if glyph.upper() != glyph and glyph.lower() != glyph:
+        return False  # mixed case is not a canonical rendering
+    return _o_ec_parse_roman(glyph) is not None
+
+
+def _o_ec_split_token(head: str) -> tuple[str, str] | None:
+    """Mirror of enumerationconvention.split_token.
+    Digit tests are ASCII-only (amendment A2).
+    """
+    if head == _O_EC_BULLET:
+        return ("bullet", _O_EC_BULLET)
+    match = re.fullmatch(r"\(([0-9]{1,2})\)", head)
+    if match:
+        return ("wrapper-parens", match.group(1))
+    match = re.fullmatch(r"\[([^\]]{1,6})\]", head)
+    if match and _o_ec_glyph_ok(match.group(1)):
+        return ("bracket", match.group(1))
+    match = re.fullmatch(r"(.{1,6})([.)])", head)
+    if match and _o_ec_glyph_ok(match.group(1)):
+        return ("close-paren" if match.group(2) == ")" else "dotted", match.group(1))
+    return None
+
+
+def _o_ec_is_echo(head: str, arm: str, target: int) -> bool:
+    """Mirror of enumerationconvention.is_echo: string
+    identity with the arm's own marker (amendment A3).
+    """
+    if arm not in _O_EC_MARKER_TABLE or (target not in _O_EC_INDICES):
+        return False
+    marker = _O_EC_MARKER_TABLE[arm][target - 1]
+    if arm == "roman":
+        return head in (marker, _O_EC_ROMAN_TABLE[target].lower() + ".")
+    return head == marker
+
+
+def _o_ec_strip_one(text: str, where: str) -> str | None:
+    """Mirror of enumerationconvention.strip_one."""
+    if where == "lead":
+        if " " not in text:
+            return None
+        head, tail = text.split(" ", 1)
+        return tail if _o_ec_split_token(head) is not None else None
+    if " " not in text:
+        return None
+    body, tail = text.rsplit(" ", 1)
+    return body if _o_ec_split_token(tail) is not None else None
+
+
+def _o_ec_decompose_cell(
+    cell: dict[str, Any], expected: str, expected_digest: str, arm: str, target: int
+) -> str:
+    """Mirror of enumerationconvention.decompose_cell (the
+    ordered decision list, amendments A1-A3 included).
+    """
+    if cell.get("verdict") is True:
+        return "pass"
+    digest = cell.get("answer_digest")
+    if digest is not None and digest == expected_digest:
+        return "boundary_only"
+    text = cell.get("answer_text")
+    if type(text) is not str:
+        return "non_answer"
+    if text != expected:
+        if _o_ec_value_ok(text):
+            return "wrong_value"
+        for where in ("lead", "trail"):
+            remainder = _o_ec_strip_one(text, where)
+            if remainder is not None and remainder != expected and _o_ec_value_ok(remainder):
+                return "wrong_value"
+    lead = _o_ec_strip_one(text, "lead")
+    if lead is not None and lead == expected:
+        head = text.split(" ", 1)[0]
+        return "echo" if _o_ec_is_echo(head, arm, target) else "form_only"
+    if _o_ec_strip_one(text, "trail") == expected:
+        return "form_only"  # trailing placement is never the arm marker
+    return "non_answer"
+
+
+def _o_ec_decompose_pair(control_cell: dict[str, Any], arm_cell: dict[str, Any]) -> str:
+    """Mirror of enumerationconvention.decompose_pair."""
+    if control_cell.get("answer_digest") == arm_cell.get("answer_digest"):
+        return "boundary_only"
+    if control_cell.get("boundary_found") and arm_cell.get("boundary_found"):
+        return "exact_only"
+    return "mixed"
+
+
+def _o_ec_classify(control_passes: int, wrong_values: int, n_incomplete: int) -> str:
+    """Mirror of enumerationconvention.classify_headline."""
+    if n_incomplete > _O_EC_MAX_INCOMPLETE:
+        return "insufficient"
+    if control_passes < _O_EC_MIN_D:
+        return "insufficient"
+    if wrong_values >= _O_EC_MIN_J:
+        return "discordant_asymmetric"
+    if wrong_values == 0:
+        return "no_discordance_observed" if n_incomplete == 0 else "insufficient"
+    return "below_threshold" if wrong_values + n_incomplete < _O_EC_MIN_J else "insufficient"
+
+
+def _o_ec_rate(numerator: int, denominator: int) -> float | None:
+    """Return the enumerationconvention rate."""
+    return (numerator / denominator) if denominator else None
+
+
+def _o_ec_aggregate(records: list[dict[str, Any]], cases: list[dict[str, Any]]) -> dict[str, Any]:
+    """Mirror of enumerationconvention.aggregate_candidate."""
+    case_by_fixture = {str(case["fixture_id"]): case for case in cases}
+    expected_by_fixture = {
+        fixture: str(case["expected"]) for fixture, case in case_by_fixture.items()
+    }
+    arms: dict[str, Any] = {}
+    for key in _O_EC_ARM_KEYS:
+        n_completed = 0
+        n_pass = 0
+        n_context = 0
+        n_failed = 0
+        decomposition = dict.fromkeys(_O_EC_CELL_CLASSES, 0)
+        for record in records:
+            detail = _o_ec_detail(record, key)
+            if detail == "arm_context_exceeded":
+                n_context += 1
+            elif detail == "arm_evaluation_failed":
+                n_failed += 1
+            cell = _o_ec_cell(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell.get("verdict") is True:
+                n_pass += 1
+            case = case_by_fixture.get(str(record.get("fixture", "")))
+            target = int(case["position"]) if case is not None else 0
+            decomposition[
+                _o_ec_decompose_cell(
+                    cell,
+                    expected_by_fixture.get(str(record.get("fixture", "")), ""),
+                    str(record.get("expected_digest", "")),
+                    key,
+                    target,
+                )
+            ] += 1
+        arms[key] = {
+            "n_completed": n_completed,
+            "n_pass": n_pass,
+            "rate": _o_ec_rate(n_pass, n_completed),
+            "n_context_exceeded": n_context,
+            "n_evaluation_failed": n_failed,
+            "decomposition": decomposition,
+        }
+    ids: dict[str, Any] = {}
+    for arm in _O_EC_TREATED_ARMS:
+        deltas: list[int] = []
+        n_ids_identical = 0
+        n_same_ids_flips = 0
+        for record in records:
+            tokens = record.get("arm_tokens")
+            tokens = tokens if isinstance(tokens, dict) else {}
+            treated = tokens.get(arm)
+            baseline = tokens.get("control_arabic")
+            if type(treated) is int and type(baseline) is int:
+                deltas.append(treated - baseline)
+            else:
+                deltas.append(0)
+            if _o_ec_ids_identical(record, arm):
+                n_ids_identical += 1
+                control_cell = _o_ec_cell(record, "control_arabic")
+                arm_cell = _o_ec_cell(record, arm)
+                if (
+                    control_cell is not None
+                    and arm_cell is not None
+                    and (control_cell.get("verdict") is True) != (arm_cell.get("verdict") is True)
+                ):
+                    n_same_ids_flips += 1
+        ids[arm] = {
+            "n_ids_identical": n_ids_identical,
+            "n_ids_divergent": len(records) - n_ids_identical,
+            "id_length_delta": deltas,
+            "max_abs_id_delta": max((abs(delta) for delta in deltas), default=0),
+            "n_same_ids_verdict_flips": n_same_ids_flips,
+        }
+    headline: dict[str, Any] = {}
+    positions: dict[str, Any] = {}
+    for arm in _O_EC_TREATED_ARMS:
+        domain = [record for record in records if not _o_ec_ids_identical(record, arm)]
+        paired = [
+            record
+            for record in domain
+            if _o_ec_cell(record, "control_arabic") is not None
+            and _o_ec_cell(record, arm) is not None
+        ]
+        n_incomplete = len(domain) - len(paired)
+        control_passes = 0
+        wrong_values = 0
+        reverse = 0
+        non_answer = 0
+        pair_decomposition = dict.fromkeys(_O_EC_PAIR_CLASSES, 0)
+        failing_classes = dict.fromkeys(_O_EC_CELL_CLASSES, 0)
+        by_position: dict[int, dict[str, Any]] = {
+            t: {"n_population": 0, "control_passes": 0, "wrong_values": 0, "deltas": []}
+            for t in _O_EC_INDICES
+        }
+        for record in paired:
+            control_cell = _o_ec_cell(record, "control_arabic")
+            arm_cell = _o_ec_cell(record, arm)
+            if control_cell is None or arm_cell is None:
+                continue
+            case = case_by_fixture.get(str(record.get("fixture", "")))
+            target = int(case["position"]) if case is not None else 0
+            expected = expected_by_fixture.get(str(record.get("fixture", "")), "")
+            expected_digest = str(record.get("expected_digest", ""))
+            arm_class = _o_ec_decompose_cell(arm_cell, expected, expected_digest, arm, target)
+            if arm_class == "non_answer":
+                non_answer += 1
+            control_verdict = control_cell.get("verdict") is True
+            arm_verdict = arm_cell.get("verdict") is True
+            slot = by_position.get(target)
+            if slot is not None:
+                slot["n_population"] += 1
+                tokens = record.get("arm_tokens")
+                tokens = tokens if isinstance(tokens, dict) else {}
+                treated_tokens = tokens.get(arm)
+                baseline_tokens = tokens.get("control_arabic")
+                if type(treated_tokens) is int and type(baseline_tokens) is int:
+                    slot["deltas"].append(treated_tokens - baseline_tokens)
+                if control_verdict:
+                    slot["control_passes"] += 1
+                    if arm_class == "wrong_value":
+                        slot["wrong_values"] += 1
+            if control_verdict:
+                control_passes += 1
+                if arm_class == "wrong_value":
+                    wrong_values += 1
+            elif arm_verdict:
+                reverse += 1
+            if control_verdict != arm_verdict:
+                pair_decomposition[_o_ec_decompose_pair(control_cell, arm_cell)] += 1
+                failing = arm_cell if control_verdict else control_cell
+                failing_arm = arm if control_verdict else "control_arabic"
+                failing_classes[
+                    _o_ec_decompose_cell(failing, expected, expected_digest, failing_arm, target)
+                ] += 1
+        headline[arm] = {
+            "label": _o_ec_classify(control_passes, wrong_values, n_incomplete),
+            "n_population": len(paired),
+            "n_incomplete": n_incomplete,
+            "n_ids_divergent": len(domain),
+            "control_passes": control_passes,
+            "wrong_values": wrong_values,
+            "n_reverse": reverse,
+            "control_rate": _o_ec_rate(control_passes, len(paired)),
+            "arm_rate": _o_ec_rate(
+                sum(1 for record in paired if _o_ec_verdict(record, arm)),
+                len(paired),
+            ),
+            "n_non_answer": non_answer,
+            "pair_decomposition": pair_decomposition,
+            "failing_classes": failing_classes,
+        }
+        positions[arm] = [
+            {
+                "position": t,
+                "n_population": by_position[t]["n_population"],
+                "control_passes": by_position[t]["control_passes"],
+                "wrong_values": by_position[t]["wrong_values"],
+                "mean_id_length_delta": _o_ec_rate(
+                    sum(by_position[t]["deltas"]), len(by_position[t]["deltas"])
+                ),
+            }
+            for t in _O_EC_INDICES
+        ]
+    return {
+        "arms": arms,
+        "ids": ids,
+        "positions": positions,
+        "headline": headline,
+        "operating_characteristics": dict(_O_EC_OC),
+        "n_cases": len(records),
+        "n_incomplete": sum(
+            1
+            for record in records
+            if any(_o_ec_cell(record, arm) is None for arm in _O_EC_ARM_KEYS)
+        ),
+    }
+
+
+def _o_ec_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """One cell's shape and bindings: the exact field set;
+    the verdict binding ``verdict == (answer_digest ==
+    expected_digest) and boundary_found``; the carried
+    ``answer_text`` must hash to its ``answer_digest`` (the
+    cycle-190 binding); the input-token binding to the
+    record's arm token count is checked by the caller.
+    """
+    if type(cell) is not dict or set(cell) != _O_EC_CELL_FIELDS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    digest = cell["answer_digest"]
+    if digest is not None and not _o_ec_digest_ok(digest):
+        return False
+    text = cell["answer_text"]
+    if text is None:
+        if digest is not None:
+            return False
+    elif type(text) is not str or _o_ec_text_sha(text) != digest:
+        return False
+    verdict = (digest == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _o_ec_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute an enumeration-convention payload from its
+    ground records.
+
+    The validator carries its own generator mirror with the
+    frozen SHA-256 derivation, the frozen marker table, and
+    the aggregators (no imports from
+    enumerationconvention.py): the protocol is rebuilt from
+    frozen literals plus the payload's seed and backend
+    fingerprint and compared whole; the case set is
+    regenerated from the seed and every record is checked
+    against it in protocol order; every record's per-arm
+    content digests are rebound to the regenerated arm
+    contents, so the treatment itself is committed; every
+    record's target position is rebound to the regenerated
+    case's drawn position; the record's ids_identical flags
+    and id_length_delta values must equal the derivations
+    from its recorded digests and token counts; every cell's
+    answer_text is verified against its answer_digest, its
+    verdict is re-derived from its digest identity, and its
+    input_tokens are bound to the record's arm token count;
+    the decompositions, id report, per-position join, and
+    guarded headlines are recomputed from the records and
+    the regenerated expected values under the pinned
+    completion domain; the aggregates are recomputed and
+    compared. Cells exist only from aggregate-eligible
+    reports, so a non-null cell certifies a completed
+    evaluation and the verdict's status conjunct is
+    discharged structurally.
+    """
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
+        return None
+    try:
+        expected_protocol = _o_ec_protocol(seed, backend_fingerprint)
+    except _OecExhausted:
+        return None
+    if not _o_recomputed_equal(protocol, expected_protocol):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    if len(candidates) > _O_EC_MAX_CANDIDATES:
+        return None
+    try:
+        generated = _o_ec_generate(seed)
+    except _OecExhausted:
+        return None
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _O_EC_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _O_EC_MAX_RECORDS_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "target_position",
+                "expected_digest",
+                "content_digests",
+                "arm_tokens",
+                "id_digests",
+                "ids_identical",
+                "id_length_delta",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"]:
+                return None
+            if record["topic"] != case["topic"]:
+                return None
+            if record["target_position"] != case["position"]:
+                return None
+            expected_digest = _o_ec_sha(str(case["expected"]))
+            if record["expected_digest"] != expected_digest:
+                return None
+            arm_tokens = record["arm_tokens"]
+            id_digests = record["id_digests"]
+            content_digests = record["content_digests"]
+            ids_identical = record["ids_identical"]
+            id_length_delta = record["id_length_delta"]
+            cells = record["cells"]
+            details = record["cell_details"]
+            for mapping in (arm_tokens, id_digests, content_digests, cells, details):
+                if type(mapping) is not dict or set(mapping) != set(_O_EC_ARM_KEYS):
+                    return None
+            for mapping in (ids_identical, id_length_delta):
+                if type(mapping) is not dict or set(mapping) != set(_O_EC_TREATED_ARMS):
+                    return None
+            # Validate every arm_tokens value BEFORE any arithmetic on
+            # them, exactly as in _invisiblechars_recompute: a
+            # type-confused value escaped as a raw TypeError while the
+            # type check sat in the later per-arm loop (bug-hunt
+            # wave 2, BH2B-02).
+            for arm in _O_EC_ARM_KEYS:
+                tokens = arm_tokens[arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                    return None
+            for arm in _O_EC_TREATED_ARMS:
+                if ids_identical[arm] is not (id_digests[arm] == id_digests["control_arabic"]):
+                    return None
+                if id_length_delta[arm] != arm_tokens[arm] - arm_tokens["control_arabic"]:
+                    return None
+            for arm in _O_EC_ARM_KEYS:
+                tokens = arm_tokens[arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                    return None
+                if not _o_ec_digest_ok(id_digests[arm]):
+                    return None
+                if content_digests[arm] != _o_ec_sha(_o_ec_arm_content(case, arm)):
+                    return None
+                cell = cells[arm]
+                detail = details[arm]
+                if detail not in ("", *_O_EC_DETAILS):
+                    return None
+                if cell is None:
+                    if detail == "":
+                        return None
+                    continue
+                if detail != "":
+                    return None
+                if not _o_ec_cell_ok(cell, expected_digest):
+                    return None
+                if cell["input_tokens"] != tokens:
+                    return None
+        aggregates[name] = _o_ec_aggregate(records, generated)
+    if total_records > _O_EC_MAX_GROUND_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    return {
+        "aggregates": aggregates,
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _o_enumerationconvention_valid(payload: Any) -> bool:
+    """Structural check for an ``enumeration_convention``
+    payload (recompute standard). The audit block is
+    shape-checked only: its counts are stage observations
+    (special-token findings against the run's own formats),
+    not recomputable from records.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    audit = payload.get("audit")
+    if type(audit) is not dict or set(audit) != {
+        "n_audit_excluded",
+        "by_reason",
+        "special_token_findings",
+    }:
+        return False
+    if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+        return False
+    if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+        return False
+    by_reason = audit["by_reason"]
+    if type(by_reason) is not dict:
+        return False
+    for key, count in by_reason.items():
+        if type(key) is not str or type(count) is not int or count < 0:
+            return False
+    recomputed = _o_ec_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, value in expected.items():
+            if not _o_recomputed_equal(entry.get(key), value):
+                return False
+    if not _o_recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
+        return False
+    return _o_recomputed_equal(payload.get("n_cases"), recomputed["n_cases"])
+
+
+def _o_ec_diff(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``enumeration_convention`` probe payloads;
+    deterministic.
+
+    Answers "did the enumeration-convention story change
+    between runs?": per candidate and treated arm, drift in
+    the guarded label with the D / J counts that carry it,
+    the divergent-domain size M, the reverse and non-answer
+    counts, the paired population and its incompletion, the
+    id report, the per-position counts and mean length
+    deltas, and the pair decomposition; candidates
+    added/removed; and protocol / generator / backend drift
+    (any of which marks the comparison not comparable, with
+    the drift still listed -- the generated panel is the
+    treatment, so a changed generator is protocol drift). A
+    side without a valid payload is reported plainly.
+    """
+    old_ok = _o_enumerationconvention_valid(old)
+    new_ok = _o_enumerationconvention_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    ec_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    ec_generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    ) or old["protocol"].get("case_material_sha256") != new["protocol"].get("case_material_sha256")
+    ec_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    ec_comparable = not ec_protocol_drift and not ec_generator_drift and not ec_backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    ec_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    ec_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    ec_candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                ec_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        ec_metrics: list[tuple[str, Any, Any]] = []
+        for arm in _O_EC_ARM_KEYS:
+            ec_metrics.append(
+                (f"{arm}_rate", old_entry["arms"][arm]["rate"], new_entry["arms"][arm]["rate"])
+            )
+        for arm in _O_EC_TREATED_ARMS:
+            old_head = old_entry["headline"][arm]
+            new_head = new_entry["headline"][arm]
+            old_ids = old_entry["ids"][arm]
+            new_ids = new_entry["ids"][arm]
+            ec_metrics.extend(
+                [
+                    (f"{arm}_label", old_head["label"], new_head["label"]),
+                    (
+                        f"{arm}_control_passes",
+                        old_head["control_passes"],
+                        new_head["control_passes"],
+                    ),
+                    (f"{arm}_wrong_values", old_head["wrong_values"], new_head["wrong_values"]),
+                    (f"{arm}_n_reverse", old_head["n_reverse"], new_head["n_reverse"]),
+                    (f"{arm}_n_population", old_head["n_population"], new_head["n_population"]),
+                    (f"{arm}_n_incomplete", old_head["n_incomplete"], new_head["n_incomplete"]),
+                    (
+                        f"{arm}_n_ids_divergent",
+                        old_head["n_ids_divergent"],
+                        new_head["n_ids_divergent"],
+                    ),
+                    (f"{arm}_n_non_answer", old_head["n_non_answer"], new_head["n_non_answer"]),
+                    (f"{arm}_control_rate", old_head["control_rate"], new_head["control_rate"]),
+                    (f"{arm}_arm_rate", old_head["arm_rate"], new_head["arm_rate"]),
+                    (
+                        f"{arm}_pair_exact_only",
+                        old_head["pair_decomposition"]["exact_only"],
+                        new_head["pair_decomposition"]["exact_only"],
+                    ),
+                    (
+                        f"{arm}_pair_boundary_only",
+                        old_head["pair_decomposition"]["boundary_only"],
+                        new_head["pair_decomposition"]["boundary_only"],
+                    ),
+                    (
+                        f"{arm}_pair_mixed",
+                        old_head["pair_decomposition"]["mixed"],
+                        new_head["pair_decomposition"]["mixed"],
+                    ),
+                    (
+                        f"{arm}_n_ids_identical",
+                        old_ids["n_ids_identical"],
+                        new_ids["n_ids_identical"],
+                    ),
+                    (
+                        f"{arm}_max_abs_id_delta",
+                        old_ids["max_abs_id_delta"],
+                        new_ids["max_abs_id_delta"],
+                    ),
+                    (
+                        f"{arm}_n_same_ids_verdict_flips",
+                        old_ids["n_same_ids_verdict_flips"],
+                        new_ids["n_same_ids_verdict_flips"],
+                    ),
+                ]
+            )
+            old_positions = {row["position"]: row for row in old_entry["positions"][arm]}
+            new_positions = {row["position"]: row for row in new_entry["positions"][arm]}
+            for t in _O_EC_INDICES:
+                ec_metrics.extend(
+                    [
+                        (
+                            f"{arm}_pos{t}_control_passes",
+                            old_positions[t]["control_passes"],
+                            new_positions[t]["control_passes"],
+                        ),
+                        (
+                            f"{arm}_pos{t}_wrong_values",
+                            old_positions[t]["wrong_values"],
+                            new_positions[t]["wrong_values"],
+                        ),
+                        (
+                            f"{arm}_pos{t}_mean_delta",
+                            old_positions[t]["mean_id_length_delta"],
+                            new_positions[t]["mean_id_length_delta"],
+                        ),
+                    ]
+                )
+        for metric, old_value, new_value in ec_metrics:
+            if old_value != new_value:
+                ec_candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    result["candidate_drift"] = ec_candidate_drift
+    result["candidates_added"] = ec_candidates_added
+    result["candidates_removed"] = ec_candidates_removed
+    result["protocol_drift"] = ec_protocol_drift
+    result["generator_drift"] = ec_generator_drift
+    result["backend_drift"] = ec_backend_drift
+    result["comparable"] = ec_comparable
+    result["changed"] = bool(
+        ec_candidate_drift
+        or ec_candidates_added
+        or ec_candidates_removed
+        or ec_protocol_drift
+        or ec_generator_drift
+        or ec_backend_drift
+    )
+    return result
+
+
+def _o_enumerationconvention(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle enumeration-convention section: mirrors
+    diffreports.diff_enumeration_convention.
+    """
+    diff = _o_ec_diff(old, new)
+    return diff, bool(diff["changed"]), diff["available"] not in ("both", "neither")
+
+
 def _o_rotation_digest_ok(item: Any) -> bool:
     """O rotation digest ok."""
     if item is None:
@@ -17674,6 +18937,9 @@ def _oracle_diff(
     o_cxf, o_cxf_changed, o_cxf_asymmetric = _o_compatibilityform(
         old.get("compatibility_form"), new.get("compatibility_form")
     )
+    o_ec, o_ec_changed, o_ec_asymmetric = _o_enumerationconvention(
+        old.get("enumeration_convention"), new.get("enumeration_convention")
+    )
     o_ca, o_ca_changed, o_ca_asymmetric = _o_choiceaudit(
         old.get("choice_audit"), new.get("choice_audit")
     )
@@ -17786,6 +19052,8 @@ def _oracle_diff(
         and not o_ic_asymmetric
         and not o_cs_changed
         and not o_cs_asymmetric
+        and not o_ec_changed
+        and not o_ec_asymmetric
         and not o_ca_changed
         and not o_ca_asymmetric
         and not o_pr_changed
@@ -17856,6 +19124,7 @@ def _oracle_diff(
         "invisible_chars": o_ic,
         "confusable_skeleton": o_cs,
         "compatibility_form": o_cxf,
+        "enumeration_convention": o_ec,
         "choice_audit": o_ca,
         "precision": o_pr,
         "confidence": o_cfd,
@@ -17961,6 +19230,8 @@ def _oracle_diff(
             "confusable_skeleton_asymmetric": o_cs_asymmetric,
             "compatibility_form_changed": o_cxf_changed,
             "compatibility_form_asymmetric": o_cxf_asymmetric,
+            "enumeration_convention_changed": o_ec_changed,
+            "enumeration_convention_asymmetric": o_ec_asymmetric,
             "choice_audit_changed": o_ca_changed,
             "choice_audit_asymmetric": o_ca_asymmetric,
             "precision_changed": o_pr_changed,
@@ -18943,6 +20214,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "confusable_skeleton_asymmetric": False,
                 "compatibility_form_changed": False,
                 "compatibility_form_asymmetric": False,
+                "enumeration_convention_changed": False,
+                "enumeration_convention_asymmetric": False,
                 "choice_audit_changed": False,
                 "choice_audit_asymmetric": False,
                 "precision_changed": False,
@@ -23045,6 +24318,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not confusable_skeleton_asymmetric\n"
             '        and not compatibility_form_diff["changed"]\n'
             "        and not compatibility_form_asymmetric\n"
+            '        and not enumeration_convention_diff["changed"]\n'
+            "        and not enumeration_convention_asymmetric\n"
             '        and not choiceaudit_diff["changed"]\n'
             "        and not choiceaudit_asymmetric\n"
             '        and not precision_diff["changed"]\n'
@@ -23157,6 +24432,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or confusable_skeleton_asymmetric\n"
             '        or compatibility_form_diff["changed"]\n'
             "        or compatibility_form_asymmetric\n"
+            '        or enumeration_convention_diff["changed"]\n'
+            "        or enumeration_convention_asymmetric\n"
             '        or choiceaudit_diff["changed"]\n'
             "        or choiceaudit_asymmetric\n"
             '        or precision_diff["changed"]\n'

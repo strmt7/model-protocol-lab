@@ -120,6 +120,7 @@ STAGE_FLAGS = [
     ("--invisible-chars", "invisible_chars", None),
     ("--confusable-skeleton", "confusable_skeleton", None),
     ("--compatibility-form", "compatibility_form", None),
+    ("--enumeration-convention", "enumeration_convention", None),
     ("--rotate", "rotate", None),
     ("--density", "density", None),
     ("--field-order", "field_order", None),
@@ -361,6 +362,12 @@ HELPER_DISPATCH = [
         "compatibility_form",
         "compatibility_form_unavailable",
         ["compatibility_form_stage", "compatibility_form_analysis"],
+    ),
+    (
+        "_run_enumeration_convention_probe",
+        "enumeration_convention",
+        "enumeration_convention_unavailable",
+        ["enumeration_convention_stage", "enumeration_convention_analysis"],
     ),
     (
         "_run_rotation_probe",

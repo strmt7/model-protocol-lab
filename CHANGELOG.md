@@ -6,6 +6,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 233 — enumeration-convention probe, 2026-11-05)
+
+- An enumeration-convention probe
+  (`run --enumeration-convention`,
+  `model_protocol_lab/enumerationconvention.py`): a
+  generated panel of 24 fact-recall cases (a frozen
+  nine-item list of word-number inspection codes, two
+  neutral carrier sentences, a question) is rendered
+  under six marker systems -- arabic control, upper
+  alpha, lower alpha, Roman, parenthesised wrapper
+  (expected-null), and the index-free bullet
+  (expected-null) -- with the items, order, question,
+  and carriers byte-identical across arms and the count
+  never stated, scored per candidate and arm by the
+  guarded id-divergent classification with the answer
+  decomposition (pass / boundary-only / wrong-value /
+  echo / form-only / non-answer; a wrong value wearing
+  one marker-shaped prefix or suffix counts toward the
+  alarm exactly as a bare one does), the by-position
+  length join, and the operating characteristics
+  printed beside the licence (full contract:
+  `docs/ENUMERATION_DESIGN.md`, wave-12 round 4 built
+  as amended A1-A9). Informational only; never affects
+  selection.
+
 ### Fixed (cycle 232 — docs truth-repair, R1 of the competitive research program, 2026-11-05)
 
 - The README's "How this differs from nearby tools" section was

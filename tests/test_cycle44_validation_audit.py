@@ -205,7 +205,7 @@ class ValidationToolchainTests(unittest.TestCase):
         self.assertGreater(int(match.group(1)), 66)
 
     def test_mypy_clean_58_source_files(self):
-        # Doc: "mypy model_protocol_lab -- clean (72 source files)".
+        # Doc: "mypy model_protocol_lab -- clean (73 source files)".
         # (50 through cycle 184; leading.py is the 51st, cycle 185;
         # numform.py is the 52nd, cycle 186; dateline.py is the
         # 53rd, cycle 188; multiturn.py is the 54th, cycle 189;
@@ -223,11 +223,12 @@ class ValidationToolchainTests(unittest.TestCase):
         # recordnotation.py is the 69th, cycle 221;
         # invisiblechars.py is the 70th, cycle 223;
         # confusableskeleton.py is the 71st, cycle 224;
-        # compatibilityform.py is the 72nd, cycle 231.)
+        # compatibilityform.py is the 72nd, cycle 231;
+        # enumerationconvention.py is the 73rd, cycle 233.)
         """Mypy clean 58 source files."""
         proc = run_tool("mypy", "model_protocol_lab", timeout=600)
         self.assertEqual(proc.returncode, 0, proc.stdout[-1000:])
-        self.assertIn("72 source files", proc.stdout)
+        self.assertIn("73 source files", proc.stdout)
 
     def test_bandit_zero_issues_at_any_severity(self):
         # Doc claims a remaining Low/Medium B105 false positive; actual:
