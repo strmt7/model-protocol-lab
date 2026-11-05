@@ -286,7 +286,7 @@ generator are exactly `different_length`, `same_length_early`,
 is a real class the classifier reports but the generator never
 emits, so a record carrying it fails validation, as does `equal`.
 
-### 2.4 Falsifiable claim (pre-registered, one-directional)
+### 2.4 Falsifiable claim (frozen in advance, one-directional)
 
 For one candidate, over the cases it completes in all three headline
 arms, let D be the cases it passes on the direct arm, and let J be
@@ -336,7 +336,7 @@ not a singleton, and the expected answer is underdetermined.
 | Variant | Status in v1 | Reason |
 |---|---|---|
 | Negated-alt phrasing "not smaller than the other" | Descriptive arm only, never a decision input, never pooled | Bounds phrasing awkwardness: a joint pattern reproducing on two negated phrasings is harder to dismiss as one phrasing's artefact; a pattern appearing on only one phrasing is labelled phrasing-dependent. Its wrong-label count on D and its alt-joint count are printed descriptively. It is frozen byte-for-byte in §2.2 or it does not ship. |
-| Negated-flipped "not the larger" (expected = smaller) | EXCLUDED from v1; named as the v2 2×2 factorial completion | Fourth cell of criterion {larger, smaller} × polarity {affirmative, negated}. Its expected answer coincides with the flipped arm's, inviting pooling error, and combining two negated contrasts needs its own pre-registered rule. A v2 factorial requires a rewritten claim and fresh review, not a column added at build time. |
+| Negated-flipped "not the larger" (expected = smaller) | EXCLUDED from v1; named as the v2 2×2 factorial completion | Fourth cell of criterion {larger, smaller} × polarity {affirmative, negated}. Its expected answer coincides with the flipped arm's, inviting pooling error, and combining two negated contrasts needs its own rule frozen in advance. A v2 factorial requires a rewritten claim and fresh review, not a column added at build time. |
 | Negated answer option ("reply with the word that is not first") | EXCLUDED | Changes the answer vocabulary and the scorer's target set at once; failure could be vocabulary confusion, not negation processing. |
 | Imperative negation ("Do not pick the smaller…") | EXCLUDED from v1 | Different speech act (prohibition vs interrogative definite description) and a different scope; a genuine second probe, closer to hierarchy territory, not a variant of this one. |
 | Scope variants "not larger" vs "not the larger" (bare vs article) | EXCLUDED as arms; REQUIRED as a design note | Without the article, "not larger" in open English means ≥, which coincides with the article reading on distinct pairs and diverges on equal pairs — precisely why §2.3's distinctness assert is load-bearing. The article is not decoration; it is the scope pin. |

@@ -554,7 +554,7 @@ settlement).** Two channels, two dispositions:
   (§5), **inside** the perimeter. They count as arm failures for
   rates, never toward J (they are not value changes), and they
   cannot hide: `n_non_answer` per arm is printed, and a
-  pre-registered reading (§9) governs high-non-answer discordance.
+  reading frozen in advance (§9) governs high-non-answer discordance.
 - *(b) Incompletion* — a generation producing **no
   boundary-delimited span at all** (or a missing cell) has no
   cell; the case leaves the paired population. This is the
@@ -710,7 +710,7 @@ settlement).** Two channels, two dispositions:
   itself the isolation grid (6 treated arms × candidates, each
   with its own label, D, J, `n_reverse`, `n_non_answer`).
 
-## 9. Risks and pre-registered readings
+## 9. Risks and readings frozen in advance
 
 - **R1 — Attack endpoints ≠ benign effect.** Boucher et al. and
   Gao et al. measure attacks (performance destruction on
@@ -718,7 +718,7 @@ settlement).** Two channels, two dispositions:
   of many selectors). This probe inserts **one code point per
   site, unoptimized, on benign recall tasks**. The benign effect
   size is genuinely unknown; a null result is a legitimate
-  pre-registered outcome — a replication-style null in the
+  outcome frozen in advance — a replication-style null in the
   tree's history-frame sense — and **dose escalation in response
   to a null is forbidden**: no "insert five and retry" inside
   this probe. A follow-up dose candidate is a new design.
@@ -738,7 +738,7 @@ settlement).** Two channels, two dispositions:
   the opposite masking: a model that goes silent (`non_answer`)
   under insertion cannot fire J. Mitigation is disclosure, not
   a rule change: `n_non_answer` discordance is printed per arm,
-  and a pre-registered reading states that an arm whose
+  and a reading frozen in advance states that an arm whose
   discordance is dominated by `non_answer` is reported as
   "insertion disrupts output form", a distinct finding from
   value change — never silently acquitted, never pooled into J.

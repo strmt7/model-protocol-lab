@@ -166,7 +166,7 @@ an allowlisted backend code, or `backend_reported_error`), and
 fixture for identity, and never the token IDs themselves — those live
 in the artifact; `cells_digest` binds them.
 
-## Falsifiable claims (pre-registered, cycle 173)
+## Falsifiable claims (frozen in advance, cycle 173)
 
 - **F1.** A deterministic scripted backend whose output is a pure
   function of `(input_ids, seed)` reproduces every recorded completed

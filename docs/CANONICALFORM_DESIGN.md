@@ -263,7 +263,7 @@ Generation budget: 24 cases × 2 arms × up to 24 candidates =
 1,152 generations worst case (placement's cap). Records bytes
 bounded by the house 12 MiB, as placement.
 
-## Risks, pre-registered readings
+## Risks, readings frozen in advance
 
 - R1 (tokenizer erasure): SentencePiece normalizes with an NFKC
   variant before tokenization by default (default rule `nmt_nfkc`),

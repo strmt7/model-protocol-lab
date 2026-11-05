@@ -339,7 +339,7 @@ any pooled cross-task total present at all.
   return the answer in this form, under byte-exact scoring" —
   the decomposition is what licenses any narrower arithmetic
   reading, and only from the value_fail class.
-- The pre-registered null: all paired deltas at
+- The null frozen in advance: all paired deltas at
   no_difference_observed / below_threshold across forms — a
   publishable "normalisation does not matter here" result.
 - Compare is a verbalisation-under-form measurement (Yuchi et

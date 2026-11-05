@@ -183,7 +183,7 @@ cross-turn rung
   threshold distance, or decay. The literature's "rapidly
   degrades" (LongIns, §10) is a claim about exam-task
   performance at 4K–16K tokens on API models; it is not a
-  design input and no shape is pre-registered.
+  design input and no shape is frozen in advance.
 - **The cross-turn arm is excluded, by name.** A scripted turn
   pair bundles turn boundary + assistant-turn presence + role
   alternation + token distance; it cannot sit on the

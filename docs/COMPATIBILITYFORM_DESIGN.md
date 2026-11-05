@@ -141,7 +141,7 @@ PDF-extracted text carries into prompts. Boucher et al.
 (arXiv:2106.09898) is supporting only — encoding-level
 perturbations change deployed NLP behaviour — and is
 never load-bearing here. **A null result is a legitimate
-pre-registered outcome** (§7 says so in advance; §9 R1
+outcome frozen in advance** (§7 says so in advance; §9 R1
 forbids dose escalation in response to one).
 
 Framing: this is canonical-form's (§8.54) missing third
@@ -653,8 +653,8 @@ dose, uniform across all six classes, which is what
 makes cross-arm comparisons dose-matched in count (their
 codepoint/byte deltas differ by class and are printed in
 §3). The treated field is one field of a carrier
-sentence, not the answer-bearing word: the pre-registered
-reading of a null is therefore "one compatibility-form
+sentence, not the answer-bearing word: the reading
+frozen in advance of a null is therefore "one compatibility-form
 field in the carrier sentence adjacent to the fact did
 not move code recall at the frozen floors" — not
 "compatibility forms in answer-bearing text are safe"
@@ -944,7 +944,7 @@ in the design-phase evidence itself:
   does not parse are completed cells, decomposed
   `non_answer` (§5), **inside** the perimeter;
   `n_non_answer` per arm is printed, and §9's
-  pre-registered reading governs high-non-answer
+  reading frozen in advance governs high-non-answer
   discordance. They never count toward J.
 - *(b) Incompletion* — a generation producing no
   boundary-delimited span at all (or a missing cell) has
@@ -1071,13 +1071,13 @@ in the design-phase evidence itself:
   that family, reported as such, never as passes. A run
   landing 100% ids-identical has measured the
   tokenizer's normalizer, full stop.
-- **No direction is pre-registered.** §1's prior is
+- **No direction is frozen in advance.** §1's prior is
   mechanics, not an effect: whether folding a field
   helps, hurts, or neither is the measurement, and the
   claim is two-sided in substance (the rule is
   one-directional by D-conditioning, with `n_reverse`
   printed — §6). A null result is a legitimate,
-  pre-registered outcome of this design, stated here in
+  outcome frozen in advance of this design, stated here in
   advance.
 - The claim is per-arm and per-candidate. **No pooled
   headline and no winner readout in v1** (sibling
@@ -1127,14 +1127,14 @@ in the design-phase evidence itself:
   D, J, `n_reverse`, `n_non_answer`) is itself the
   isolation grid.
 
-## 9. Risks and pre-registered readings
+## 9. Risks and readings frozen in advance
 
 - **R1 — No direct prior; benign effect genuinely
   unknown.** §1 states it: no published study measures
   LLM behaviour on NFKC-foldable characters. Boucher et
   al. measure *attacks* on vulnerable NLP systems;
   nothing here inherits an effect size from them. A null
-  is a legitimate pre-registered outcome — a
+  is a legitimate outcome frozen in advance — a
   replication-style null in the tree's history-frame
   sense — and **dose escalation in response to a null is
   forbidden**: no "treat all six fields at once and
@@ -1164,7 +1164,7 @@ in the design-phase evidence itself:
   capability change; with it, the headline counts only
   `wrong_value`. The residual risk is masking via
   silence (`non_answer`): printed per arm, with the
-  pre-registered reading that an arm whose discordance
+  reading frozen in advance that an arm whose discordance
   is dominated by `non_answer` is reported as "the
   class's forms disrupt output form", a distinct finding
   — never silently acquitted, never pooled into J.

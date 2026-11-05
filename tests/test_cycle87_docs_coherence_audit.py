@@ -76,6 +76,7 @@ AUDITED_DOCS = [
 ]
 
 _PATH_RE = re.compile(r"\b(?:examples|docs|model_protocol_lab|tests)/[\w\-\./]+\b")
+_URL_RE = re.compile(r"https?://\S+")
 _FLAG_RE = re.compile(r"--[a-z][a-z0-9\-]*")
 
 # Documented invocations (from the audited docs) paired with their subcommand.
@@ -176,7 +177,12 @@ class TestDocumentedPathsExist(unittest.TestCase):
         missing: list[str] = []
         checked = 0
         for doc in AUDITED_DOCS:
-            text = doc.read_text(encoding="utf-8")
+            # URLs are blanked token-wise before extraction: a path
+            # fragment inside a URL is not a repo-path claim, whatever
+            # the URL's length. (Cycle 232: the previous exemption used
+            # a fixed 40-character lookback for "://", which misread a
+            # long URL's fragment as a broken repo path.)
+            text = _URL_RE.sub(lambda m: " " * len(m.group(0)), doc.read_text(encoding="utf-8"))
             for match in _PATH_RE.finditer(text):
                 raw = match.group(0)
                 path = raw.rstrip(".")
@@ -184,9 +190,6 @@ class TestDocumentedPathsExist(unittest.TestCase):
                     continue  # glob pattern, not a concrete path claim
                 if text[match.end() : match.end() + 1] == "*":
                     continue  # regex stopped at the "*"; a glob prefix
-                before = text[max(0, match.start() - 40) : match.start()]
-                if "://" in before or re.search(r"[a-z0-9]\.[a-z]{2,}/$", before):
-                    continue  # path fragment inside a URL, not a repo path
                 target = REPO_ROOT / path
                 checked += 1
                 if not target.exists():
