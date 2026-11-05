@@ -128,7 +128,9 @@ this repository under [docs/](docs/index.md), starting from the
 remains the complete command reference. To build the site locally:
 `python -m pip install -r requirements-docs.txt`, then
 `mkdocs build --strict`. The build tooling is documentation-only —
-the package itself keeps zero runtime dependencies.
+the package itself keeps zero runtime dependencies in the core install;
+measuring a checkpoint requires the optional `hf` extra
+(torch/transformers/safetensors/jinja2).
 
 ## What the report looks like
 
@@ -216,7 +218,7 @@ raw prompts or generations.
 - Multi-turn drift (`run --multiturn`): tasks the probe generates itself from the run seed — ledger sums and shelf argmax over shards, at depths 2 and 3 — each run three ways: all shards in one message (`full`), one shard per turn with the model's own replies as the history (`sharded`), and the same turn structure with a frozen `Noted.` history (`scripted`). Only the final turn is scored. The headline is the self-history discordant pair over single-shot passers — sharded-only failures against scripted-only failures, always with denominators — which separates "its own words in the history hurt" from "any history hurts". A reply containing the template's own special-token literals ends its cell as screened, because forged turn structure is token-real; unbounded or empty intermediate replies become history and are flagged. There is no cross-depth recovery statistic, because depth changes the task set itself. Motivated by Laban et al. 2025 (arXiv:2505.06120), who found models lose 39% on average when the same task arrives sharded across turns instead of in one message.
 - Needle depth (`run --needle`): cases the probe generates itself from the run seed — one fact sentence with a unique synthetic code planted inside neutral filler at five depths (0/25/50/75/100%) of two filler doses (1024 and 4096 rendered tokens) — with a no-filler control, a needle-absent false-recall floor, and a duplicate-needle arm reported against its independence baseline. The prompt grows by exactly the dose in rendered tokens over the control render and each depth offset is verified on the candidate's own rendered tokens, so the recall-vs-depth curve compares template families, not tokenizers. Curves, the mid-depth deficit (edge mean minus middle, the *Lost in the Middle* functional form), and first-failure counts share one headline population per dose — the cases every candidate passed with no filler — and the filler is topically dissimilar prose, so the curves are a lower bound on position effects under realistic retrieval bulk.
 - Question/payload placement (`run --placement`): 24 generated cases, each a three-sentence payload with the one answer-bearing fact frozen in the middle sentence, asked four ways per template family — question before the payload, after it, twice around it (the sandwich control), and alone (the closed-book screen: a pass without the payload excludes the case for that candidate, with the exclusion counted). The headline is the directional split of discordant verdicts between the two single-question layouts; a directional placement effect is falsified when that discordance stays at or under the sandwich control's discordance on the same cases — a deliberately conservative bar that bounds what recency and exposure together produce without claiming to identify which one. Cases both layouts fail together are reported as joint collapse, never as placement evidence.
-- Context rotation (`run --rotate`): 20 generated cases, each a span of five fact-bearing blocks (one asked fact, four fact-shaped distractors) with the question pinned after the span, run in eleven arms per template family — the five cyclic rotations of the block order, four mirror arms (rotations of the reversed order: a generic-reordering control set that places the asked fact at the same slots as the rotations), a fact-absent arm (the false-recall floor), and a closed-book screen (question alone; a pass excludes the case for that candidate). A rotation only counts toward the headline when its rendered token inventory matches the unrotated arm's exactly, so the paired readouts run over token-exact rotations. The headline is verdict invariance across the five rotations under a pre-registered falsification rule; the pass-by-absolute-slot curve is printed as a cross-check against the needle probe's depth curve, not as a second measurement of it. If your retriever re-ranks the same five chunks into a different cyclic order, this is how you learn whether the template keeps the same verdict — and the same winner.
+- Context rotation (`run --rotate`): 20 generated cases, each a span of five fact-bearing blocks (one asked fact, four fact-shaped distractors) with the question pinned after the span, run in eleven arms per template family — the five cyclic rotations of the block order, four mirror arms (rotations of the reversed order: a generic-reordering control set that places the asked fact at the same slots as the rotations), a fact-absent arm (the false-recall floor), and a closed-book screen (question alone; a pass excludes the case for that candidate). A rotation only counts toward the headline when its rendered token inventory matches the unrotated arm's exactly, so the paired readouts run over token-exact rotations. The headline is verdict invariance across the five rotations under a falsification rule frozen in advance; the pass-by-absolute-slot curve is printed as a cross-check against the needle probe's depth curve, not as a second measurement of it. If your retriever re-ranks the same five chunks into a different cyclic order, this is how you learn whether the template keeps the same verdict — and the same winner.
 - Instruction density (`run --density`): 20 generated cases, each pairing a small fact-recall task with 16 simultaneously-satisfiable constraints (include a word, start with a word, end with a word, stay within a word limit — four of each, with shared start/end targets and word limits above the largest possible distinct-target count, so a perfect follower passes every arm by construction), run in 21 arms per template family — each constraint solo, the first 2/4/8/16 stacked, and a length-matched sham carrying only the first constraint. Answers are committed as ordered per-word hash lists and every satisfaction verdict is derived from the commitment, never stored. The headline is the solo-vs-full-density contrast, decided per case by an exact sign test with the verdict withheld as insufficient below six discordant cases. If your system prompt keeps growing, this is how you learn which of its instructions the template silently drops first — and at what stack depth.
 
 - Schema field order (`run --field-order`): 15 frozen flat-JSON specs — the shipped structured-output set plus six 3–4-field specs — each rendered in four field orders (canonical alphabetical, the designated answer field first, the answer field last, fully reversed), over the 10 specs whose answer is entailed by question and context. Answers are committed as per-field canonical values under the document digest, and every verdict — per-field correctness, schema adherence, the pairing — is derived from the commitment, never stored. The headline is the endpoint contrast on the answer field's accuracy, decided per candidate by an exact sign test over specs adherent in both endpoint arms, with the verdict withheld as insufficient below six discordant specs and the instrument's low power printed beside the numbers. If your structured-output schema puts the field you actually read last, this tells you whether that costs you accuracy.
@@ -256,41 +258,103 @@ The format catalog and model-loader support are different things. A Gemma-format
 
 This is not a benchmark suite and not an inference server. The distinctions
 below are verifiable design differences, grounded in the referenced sources
-(checked 2026-10-13; research log in `docs/RESEARCH_LOG.md`), not superiority claims.
+(checked 2026-11-04; research log in `docs/RESEARCH_LOG.md`), not superiority
+claims. Where a mechanism is established practice elsewhere, the text says so
+and claims only the combination this lab ships.
 
-**Exact token sequences in, exact token sequences out.** General harnesses take
-text strings and apply the checkpoint's own chat template: lm-eval renders via
-`tokenizer.apply_chat_template`
-([huggingface.py](https://raw.githubusercontent.com/EleutherAI/lm-evaluation-harness/main/lm_eval/models/huggingface.py));
-vLLM and llama.cpp render the model's Jinja template. This lab renders format
-hypotheses by hand and encodes with `add_special_tokens=False` — the workflow
-the HF docs bless for avoiding duplicated special tokens
-([chat_templating](https://huggingface.co/docs/transformers/main/en/chat_templating)) —
-so a checkpoint is measured on token sequences its own template would never
-produce. The question "weights or formatting?" cannot be answered by a tool that
-always applies the model's own formatting.
+**Exact token sequences in, exact token sequences out.** General harnesses
+work at the string and message level: lm-eval takes task prompt strings and
+applies the checkpoint's chat template only when asked —
+`--apply_chat_template` is an opt-in flag, not the default
+([interface](https://github.com/EleutherAI/lm-evaluation-harness/blob/main/docs/interface.md)) —
+and vLLM and llama.cpp render the model's Jinja template, though both also
+accept pre-tokenized input. Hand-rendering to text and encoding with
+`add_special_tokens=False` is Hugging Face's own documented workflow for
+avoiding duplicated special tokens
+([chat_templating](https://huggingface.co/docs/transformers/main/en/chat_templating)).
+What this lab adds is the pairing: a catalog of hand-rendered hypotheses from
+*other* format families — ChatML measured on a Llama checkpoint — each diffed
+token-for-token against the checkpoint's own template rendering, as the
+primary measurement object. The question "weights or formatting?" cannot be
+answered by a run that only ever applies the model's own formatting.
 
-**Token-ID boundaries instead of string stop-sequences.** lm-eval, vLLM,
-llama.cpp and HF `generate()` all detect stops at the string level, each
-shipping mitigations for string↔tokenization mismatches (e.g. lm-eval's
-`MultiTokenEOSCriteria` "tokenizers suck" lookback,
+**Boundary measurement after generation, not a stop rule.** Token-ID
+stopping itself is established practice — vLLM's
+[`stop_token_ids`](https://docs.vllm.ai/en/v0.23.0/api/vllm/sampling_params/)
+stops on token IDs, and HF's `StopStringCriteria` matches token sequences
+internally — so this lab claims no novelty for working at the token level.
+String-level stop rules additionally ship mitigations for
+string↔tokenization mismatches (e.g. lm-eval's `MultiTokenEOSCriteria`
+"tokenizers suck" lookback,
 [vLLM's stop-buffer holdback](https://raw.githubusercontent.com/vllm-project/vllm/main/vllm/v1/engine/detokenizer.py),
 HF's
 [`StopStringCriteria` overhang matching](https://raw.githubusercontent.com/huggingface/transformers/main/src/transformers/generation/stopping_criteria.py)).
-This lab matches an explicit token-ID subsequence and records a text-level
-cross-check (`boundary_text_match`) as a diagnostic, so a tokenization mismatch
-shows up as evidence instead of silently changing the result.
+The difference here is the use: generation runs a fixed token budget, and
+the response boundary is then located *post hoc* as an explicit token-ID
+subsequence in the recorded output, with the text-level cross-check
+(`boundary_text_match`) reported as a named diagnostic when the two
+disagree — so a tokenization mismatch shows up as evidence in the report
+instead of silently changing the result.
 
-**No implicit EOS stop.** lm-eval appends EOS to its stop sequences (when the
-tokenizer declares one); vLLM and llama.cpp offer opt-in `ignore_eos`. This lab
-generates exactly N tokens and observes where the boundary fell, separating
-backend stop behavior from boundary measurement.
+**Exactly-N generation as a default, not a capability.** lm-eval appends
+EOS to its stop sequences (when the tokenizer declares one); vLLM and
+llama.cpp stop on EOS by default but ship the opt-out (`ignore_eos`,
+`--ignore-eos` alongside `--predict N`), so exactly-N generation is
+available in all three. This lab differs only in its default: it generates
+exactly N tokens and observes where the boundary fell, so backend stop
+behavior never decides the measurement.
 
-**Abstention instead of ranking.** Exactly one candidate passing every search
-fixture is selected and frozen before held-out evaluation; ties and failures
-abstain and the held-out set is never used to break them. No counterpart to
-this selection rule was found in lm-eval's evaluator; there is no leaderboard
-here.
+**Abstention instead of ranking.** The selection rule is Chow's reject
+rule (1970) — the core of selective prediction — applied to a decision it
+is not usually applied to: chat-format hypotheses. Exactly one candidate
+passing every search fixture is selected and frozen before held-out
+evaluation; ties and failures abstain, and the held-out set is never used
+to break them. The same rule is re-applied per arm across the probe
+battery, so each instrument reports a winner or an abstention rather than
+a ranking. No harness surveyed for this section (lm-eval, HELM, promptfoo,
+DeepEval, Inspect) ships that rule for format selection; there is no
+leaderboard here.
+
+**Behavioural template probing, not just static template scanning.**
+Static Jinja template scanners already ship elsewhere — promptfoo's
+[ModelAudit](https://www.promptfoo.dev/docs/model-audit/scanners/) checks
+GGUF chat templates for SSTI patterns, and
+[Guardana](https://github.com/guardana/guardana/releases/tag/v0.2.0) has a
+chat-template rule — so this lab claims no novelty for scanning template
+source. Two things differ here. The firewall is fail-closed *inside the
+measurement path*: a denied template is never rendered by the lab, rather
+than flagged by a separate audit. And the template is also probed
+behaviourally: word-swap sentinel pairs detect *content-conditional*
+logic — a template that renders differently depending on what the user
+said. No equivalent behavioural probe was found in the Jinja sandbox
+documentation, ModelAudit's scanner catalog, or Guardana's release notes
+(checked 2026-11-04).
+
+**Replay and mirror-recomputed diffs for result files.** Content hashing
+and independent re-implementation are established practice (DVC-style
+manifests; N-version programming). This lab points both at evaluation
+artifacts: `verify` replays a stored `results.json` through independent
+code paths, and `diff-reports` recomputes both sides with an independent
+mirror before comparing — with records carrying answer digests only, by
+default. One caveat travels with the claim: the `pack` bundle seal is
+unsigned, and signed attestation (the SLSA/Sigstore standard) is strictly
+stronger; the seal proves bit-integrity only when its digest is kept
+separately.
+
+**Split hygiene at the content level.** Group-aware splitting and n-gram
+decontamination are prior art (scikit-learn's GroupKFold; lm-eval's
+decontamination). The combination here is narrower: the loader rejects
+*identical message sequences* across the search/held-out split — content
+level, not just ID or group level — and the CSV fixture builder refuses to
+write a leaky file, round-tripping its output through the strict loader
+before anything is saved.
+
+**Falsification rules frozen in advance, denominators in the output.**
+Each probe ships the falsification rule it was frozen with, its control
+arms, and its denominators and abstention counts in the instrument's own
+output, by default. "Frozen in advance" is the accurate phrase: the rules
+are fixed in code and docs before a run, but they are not registered with
+any independent registry, and no OSF-style pre-registration is claimed.
 
 **Dynamic prompt probing next to static prompt scoring.** ctxray
 ([github.com/ctxray/ctxray](https://github.com/ctxray/ctxray), MIT, checked
@@ -300,9 +364,10 @@ probe is the dynamic tier: it *executes* the prompt under a frozen set of
 surface-noise perturbations and reports a per-operator verdict-stability
 vector with minimal-flip counterfactuals — a measurement ctxray explicitly
 does not do. The reported "nearest observed flip" is an upper bound over
-the searched subset, never a guarantee; the academic precedent is the
-CoIPO/NoisyPromptBench "decoding radius" (arXiv:2603.03314) and the 2026
-PCE minimal-flip counterfactuals work (arXiv:2601.03156), both cited, not
+the searched subset, never a guarantee; the academic precedents are CoIPO
+(arXiv:2603.03314) — a training method for intrinsic prompt-noise
+resistance, with its NoisyPromptBench benchmark — and the 2026 PCE
+minimal-flip counterfactuals work (arXiv:2601.03156), both cited, not
 claimed over.
 
 **What this lab does not do:** benchmark general model quality, recover a

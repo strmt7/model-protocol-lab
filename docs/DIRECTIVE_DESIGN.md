@@ -254,7 +254,7 @@ class level, and at class level it is false advertising.
   `primary_winner` from the native result) and **refuted as a
   novelty claim about the tree**: prefill re-applies selection
   per condition (`experiments.py:2585` `prefill_adherence`;
-  prefill's pre-registered claim 1 is a winner-under-condition
+  prefill's claim 1 frozen in advance is a winner-under-condition
   contrast), canonical-form re-applies it per arm over a
   restricted shared population (`canonicalform.py:599`
   `arm_selection`, `:641` `winner_headline`), and confidence
@@ -453,7 +453,7 @@ re-litigate the sketch, which is dead.
       per-arm `n_limit` counting and decomposition label the
       censoring; the fresh review must decide whether labelling
       suffices, whether truncated cells leave the headline
-      population under a pre-registered rule (and what that does
+      population under a rule frozen in advance (and what that does
       to the conditioning, F6), or whether the instrument needs
       a different budget regime — argued against the native
       comparability constraint, not defaulted.
@@ -1037,7 +1037,7 @@ consequences:
    line (`confidence._final_line`) as binding on stage and
    validator mirror alike, and J's boundary-only membership
    stated in one sentence.
-6. The 6(a) population sentence pre-registered in the design
+6. The 6(a) population sentence frozen in advance in the design
    text (truncated cells stay in the headline population; the
    label's gloss pinned to passes at the recorded
    configuration), and the 6(c) string-scope defence written

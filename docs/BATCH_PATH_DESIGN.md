@@ -10,7 +10,7 @@ trusting a winner measured one request at a time.
 This is a capability cycle, not a new probe. Cycle 153 built
 the audit (`model_protocol_lab/batchinv.py`,
 `experiments.batch_stage`, `run --batch-invariance`) around
-an optional backend contract and pre-registered as its
+an optional backend contract and froze in advance as its
 claim 1 that no backend in the tree exposes a batch path.
 This cycle builds the path — `LocalHFBackend.generate_batch`
 — and supersedes claim 1 by construction. The audit, its
@@ -39,7 +39,7 @@ refusal. Briefs: `~/workspace/agents_out/wave8/`
 
 ## What supersedes what, exactly
 
-- `batchinv.py`'s pre-registered claim 1 ("No backend in the
+- `batchinv.py`'s claim 1 frozen in advance ("No backend in the
   current tree exposes a batch path, so on the real local
   backend the stage records `batch_unsupported`") becomes
   false the moment `generate_batch` lands. The claim text is

@@ -164,7 +164,7 @@ able to recompute from them (numform precedent).
   contrast "isolates" authorship; they report the discordant
   pair (§Readouts) so churn and silence are distinguishable.
 
-## Stage mechanics (pre-registered edge rules)
+## Stage mechanics (edge rules frozen in advance)
 
 The stage is a sequential loop — the first stage in the lab
 where generation k's output builds generation k+1's prompt.
@@ -339,7 +339,7 @@ recovery from anything, and its numerator was not a subset of
 its stated denominator). Cross-depth reporting is the two
 per-depth blocks, full stop.
 
-## Falsifiable claims (pre-registered)
+## Falsifiable claims (frozen in advance)
 
 - **F1 (per candidate).** If at every evaluable depth the
   self-history pair is (0, 0) while scripted-arm discordance
@@ -454,7 +454,7 @@ pooling unstated) adopted: per-family counts beside pooled.
 Fatal four fixed as specified by A and confirmed by B:
 recovery deleted (A1), classification rebuilt with
 `below_threshold` and single-depth gating (A2), history
-screen pre-registered (A5), generator fully specified
+screen frozen in advance (A5), generator fully specified
 (A8: question placement, derive material with depth, both
 value mappings, `str(int)` entries per B's correction,
 joiner, group, caps, protocol object, house vocabulary).

@@ -33,9 +33,27 @@ tested, documented, and secure — no gimmicks.
   Guidance/Outlines/llguidance. Findings: every competitor renders the
   model's *own* chat template; all detect stops at string level with
   mitigations that hide tokenization mismatch; lm-eval auto-appends EOS to
-  stop lists; none has a selection/abstention discipline; none verifies
+  stop lists; none of the surveyed harnesses has a selection/abstention
+  discipline (abstention-as-selection is established method — Chow 1970
+  and the selective-prediction literature; the finding is only that these
+  harnesses do not apply it, and not to format selection); none verifies
   boundary portability across tokenizers. 10 ideas killed (already covered
   by competitors). Proposed P1–P5 (below), ranked by value/effort.
+  **Correction (2026-11-05, cycle 232).** Two findings in the
+  paragraph above were restated by the 2026-11-04 competitive
+  re-verification (gap_analysis §4.1/§4.2): lm-eval applies the
+  checkpoint's chat template only when asked (`--apply_chat_template`
+  is an opt-in flag), so "every competitor renders the model's *own*
+  chat template" overstates the default; and vLLM stops on token IDs
+  (`stop_token_ids`), so "all detect stops at string level" is wrong
+  for vLLM. The corrected statements live in the README's differs
+  section (checked 2026-11-04). The same re-verification supersedes
+  this log's dated uses of "pre-registered" (18 occurrences): the
+  falsification rules are frozen in advance in code and docs, not
+  registered with any independent registry, and the living documents
+  say "frozen in advance" from cycle 232 on. The 2026-10-13 text
+  stands as the record of what was concluded then; this note is the
+  correction of record.
 - **Round B — hostile audit (2026-10-13).** 5 bugs found and fixed
   (doctor report shape, codec/parser text leaks, fingerprint-less backend
   AttributeError, NFC evasion gap in `evaluate`, chmod through symlinks),
@@ -180,7 +198,9 @@ answer (verifiable in code) → would it make someone star the repo?
 - **lm-eval (lm-evaluation-harness).** Renders the checkpoint's *own* chat
   template via `tokenizer.apply_chat_template`; string-level stops with a
   "tokenizers suck" lookback (`MultiTokenEOSCriteria`); appends EOS to stop
-  sequences; ranks candidates with no abstention discipline. This lab:
+  sequences; ranks candidates with no abstention discipline (the
+  established Chow/selective-prediction rule, applied by no surveyed
+  harness). This lab:
   hand-renders format hypotheses and encodes with `add_special_tokens=False`
   (`core.Format.render`), then diffs each hypothesis as an exact token-ID
   sequence against the checkpoint's own template rendering
@@ -227,6 +247,13 @@ closes the most common operator error (wrong `--max-context`) at the
 moment it matters. Star-worthy? For the niche -- local checkpoint
 debuggers -- the honest answer is "these are real, verifiable differences,
 not marketing"; the FAQ and doctor DX lower the floor for everyone else.
+
+**Correction (2026-11-05, cycle 232).** The vLLM bullet above
+describes stop detection at the string level only; vLLM also stops
+on token IDs (`stop_token_ids`), as the 2026-11-04 competitive
+re-verification established (gap_analysis §4.2). The corrected
+statement lives in the README's differs section (checked
+2026-11-04). The 2026-10-13 text stands as written at the time.
 
 ## Cycle 1 — verification (2026-10-13, Python 3.12, Linux x86-64)
 
@@ -5765,6 +5792,14 @@ After the infrastructure fix: the wave-5 specialist round.
 ## Cycle 165 (2026-10-19) — surface-noise self-consistency probe (prompt-quality meter build)
 
 **Research (uniqueness pass, web-verified 2026-10-19):** the meter-build swarm's researcher brief (`~/workspace/agents_out/meter/researcher.md`) found the near-miss **ctxray** (github.com/ctxray/ctxray, MIT): deterministic 0–100 prompt scoring from 30+ static features, zero LLM calls, <50ms per prompt, MCP server, CI quality-gate action. Re-checked at build time (2026-10-19): ctxray's positioning is unchanged — static features only, no perturbation radius, no minimal-flip counterfactuals, not stdlib-only. A secondary source (the author's dev.to post) claims "PromptPerfect got absorbed into Jina" — still not primary-source verified, so it is NOT cited as fact. **Positioning decision:** ctxray is the static tier; this probe is the dynamic tier. Academic precedent credited explicitly: CoIPO/NoisyPromptBench "decoding radius" R(a) (arXiv:2603.03314) and the 2026 PCE minimal-flip counterfactuals paper — both LLM-based/paper-only; cited, not claimed over. (Cycle 216: an "ICLR 2026" venue tag on the CoIPO citation was removed — the arXiv record carries no comments or journal-reference field supporting it.) Two researcher leads remain UNVERIFIED (Glama "deterministic heuristics" MCP server; PromptPerfect sunset) and are never cited.
+
+**Correction (2026-11-05, cycle 232).** The "decoding radius" R(a)
+gloss above overstates arXiv:2603.03314: the paper's abstract frames
+CoIPO as a training method for intrinsic prompt-noise resistance,
+with its NoisyPromptBench benchmark, and no "decoding radius"
+construct appears in the record (gap_analysis §4.6). The README's
+sentence was corrected in the same cycle. This entry's 2026-10-19
+text stands as written then.
 
 **Design (binding constraints from the 4/4 swarm briefs, adversarially cross-checked):** R1 [CRITICAL] — the per-prompt verdict function V did not exist (repo verdicts are selection-over-candidate-sets); design doc §1 defines V(P, F, B) as the pass/fail/abstain vector over fixtures, a flip as a vector difference, perturbation on the prompt span only. R4 [CRITICAL, proved from first principles by red-team B] — the "radius" over a searched subset S ⊂ F is mathematically an UPPER bound (d_obs ≥ d*), erring toward false confidence; labeled everywhere as "nearest observed flip under frozen search plan", never a guarantee; the instrument is honestly named a **surface-noise self-consistency probe**, not a "prompt-quality meter". R2 [HIGH] — per-operator radius vector, never a collapsed scalar; distance unit = token indel-edit rate (Myers O(ND), substitution = delete+insert, normalized by combined length) in [0,1]. R5 — budget expiry → `status: "cancelled"`, no score. R12 — no margin metric; tiers side-by-side never blended; ranking requires identical (fixtures, backend, protocol-fingerprint) triples; full denominators; lint advisory. R13 — protocol embeds backend fingerprint; cross-fingerprint comparison refused. MCP spec 2026-07-28 could not be fetched directly (network error); the server interoperates with both framings and documents the caveat. The VulnerabilityScreener skeleton's "never touches the network" docstring was proven FALSE in its own code by the verifier — corrected to "local and offline" on port.
 

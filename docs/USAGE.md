@@ -113,7 +113,7 @@ span, or changed order when a system message is added or a user
 message is relabelled), the template source SHA-256, and the probe
 protocol fingerprint. Findings never change the doctor verdict or the
 exit code, in either direction: the probe reports facts, not a
-certificate. The full design — definitions, pre-registered claims,
+certificate. The full design — definitions, claims frozen in advance,
 budgets — is in `docs/TEMPLATE_PROBE_DESIGN.md`.
 
 Limits, in the same breath as the capability: the probe
@@ -780,7 +780,7 @@ rule is re-applied per position, and the report shows per-candidate
 system/user/neither adherence rates, winner-vs-clean flips, the
 primacy-vs-recency position effect, and a family-group comparison.
 
-The group comparison tests a pre-registered structural hypothesis
+The group comparison tests a structural hypothesis frozen in advance
 against the catalog's own documentation: families whose real
 templates give system content a dedicated, structurally isolated
 frame (14 families, e.g. the `[SYSTEM_PROMPT]` / `<|im_start|>system`
@@ -830,7 +830,7 @@ prefill, and the report shows per-candidate honoring/restarting
 rates, winner-vs-native flips, and a generation-prompt-structure
 group comparison.
 
-The group comparison tests a pre-registered mechanistic hypothesis:
+The group comparison tests a mechanistic hypothesis frozen in advance:
 candidates whose generation prompt opens a reasoning/think channel
 (10 catalog families, e.g. qwen38's `<|im_start|>assistant\n<think>\n`
 and kimi3's `<|open|>message role="assistant"<|sep|><|open|>think<|sep|>`)
@@ -987,7 +987,7 @@ order) and re-applies the selection rule per condition.
 Each fixture's `expected` is the correct option's *text*, so the
 pipeline's `exact_match` grades the run unchanged; the per-candidate
 primacy index is P(correct | first) - P(correct | last), in [-1, 1]
-(pre-registered in `position.py` with the falsifiable claim that the
+(frozen in advance in `position.py`, with the falsifiable claim that the
 index varies across template families rather than being constant).
 `results.json` carries `position` with the per-condition verdicts, the
 winner flips against the primary run, the per-candidate primacy
@@ -1027,7 +1027,7 @@ earliest-firing mechanism wins, with a same-step tie going to
 Per candidate the report carries the termination-cause rates, the
 would-stop-early rate, and the over-generation bleed -- tokens the
 lab's non-stopping decoder emitted past the first end-of-turn token,
-which no real engine would emit. The pre-registered falsifiable claim
+which no real engine would emit. The falsifiable claim frozen in advance
 (in `stopcause.py`) is that termination-cause distributions are
 identical across template families; a family that systematically runs
 to max-length or bleeds past its own end-of-turn token while others
@@ -1061,7 +1061,7 @@ fixtures on divergent variants are re-run through the normal
 `core.evaluate()` pipeline via an encode-time backend wrapper
 (`WsScanBackend`, mirroring `PrefillBackend`) to measure verdict flips.
 
-The pre-registered falsifiable claim (in `wscanonical.py`) is that
+The falsifiable claim frozen in advance (in `wscanonical.py`) is that
 whitespace variants of the same rendering tokenize to identical id
 sequences and produce identical task verdicts. A mutation that diverges
 in ids *and* flips a verdict makes the candidate whitespace-fragile;
@@ -1102,7 +1102,7 @@ Per-candidate aggregation reports
 parse/schema/adherent rates with the invariant `adherent_rate <=
 parse_rate`; `not_text` responses are fail-closed exclusions.
 
-The pre-registered falsifiable claim (in `structured.py`) is that the
+The falsifiable claim frozen in advance (in `structured.py`) is that the
 template change produces a measurably positive adherence gap
 (max-minus-min adherent rate across candidates) rather than ~0.
 `results.json` carries `structured` with per-candidate cells,
@@ -1147,7 +1147,7 @@ degrades to an unsupported cell, never a phantom gap.
 
 Per cell, the flip rates of the two arms against the native search
 verdicts give `authority_gap = flip_rate(reserved) -
-flip_rate(subword)` in [-1, 1]. The pre-registered falsifiable claim
+flip_rate(subword)` in [-1, 1]. The falsifiable claim frozen in advance
 (in `deliforge.py`) is a gap of ~0 uniform across families; a positive
 gap replicates the paper's reserved-token authority finding inside
 the lab. "Authority" is measured strictly as task-verdict flip rate on
@@ -1191,7 +1191,7 @@ with a verdict on both sides are evaluable (missing verdicts are
 excluded, never counted as unchanged). The selection rule is
 re-applied per arm (baseline / order_a / order_b) and each arm's
 (decision, winner) is compared against the primary run. The
-pre-registered falsifiable claim (in `fewshot.py`) is a gain of ~0 and
+falsifiable claim frozen in advance (in `fewshot.py`) is a gain of ~0 and
 order sensitivity of ~0 uniform across families; family differences are
 the finding. Honest framing: gain is a verdict-*change* rate, never a
 quality judgment -- a high gain means the demos moved the verdicts, not
@@ -1226,8 +1226,8 @@ fixed, the exact complement of the paper's cross-model design, plus
 the cross-family transfer no other harness measures. The boundary
 with `deliforge` is crisp: deliforge varies the *encoding* of fixed
 forged text (reserved vs subword); this varies the *delimiter
-provenance* at the family's native encoding. The pre-registered
-falsifiable claim (in `faketurn.py`) is a transfer gap of ~0 and flip
+provenance* at the family's native encoding. The falsifiable
+claim frozen in advance (in `faketurn.py`) is a transfer gap of ~0 and flip
 rates that do not cluster by token set; clustering is the finding.
 Every rendered prompt is integrity-checked (its unique ref occurs
 exactly once, the forged marker at least twice); violations degrade
@@ -1264,7 +1264,7 @@ name can never count as correct selection. A correct abstention
 counts as correct selection (of no tool) with vacuously correct
 arguments, so a perfect model scores 1.0 on every rate -- the rates
 never carry a structural ceiling from the abstain queries. The
-pre-registered falsifiable claim (in `toolcall.py`) is a
+falsifiable claim frozen in advance (in `toolcall.py`) is a
 max-minus-min adherence gap of ~0 uniform across families, reported
 separately per rate so a composite gap decomposes; a measurably
 positive gap means the template is a first-class variable for
@@ -1298,7 +1298,7 @@ The YapBench Benchmark") finds an order-of-magnitude spread in median
 excess length across 76 *models* on fixed prompts, but nobody varies
 the *chat template* as the independent variable for verbosity. The
 lab already records exact generated token counts, so the template
-becomes the IV for free. The pre-registered falsifiable claim (in
+becomes the IV for free. The falsifiable claim frozen in advance (in
 `verbosity.py`) is a max-minus-min median-excess gap of ~0 uniform
 across families; a measurably positive gap means the template, not
 the model or the prompt, decides how much gets generated -- with
@@ -1405,7 +1405,7 @@ an adversarial disproof attempt plus brute-force simulation over all
 permutations of random prompt sets. The report also shows the token-
 level diagnostic (ignores block quantization) and the eviction-robust
 "potential" upper bounds -- labeled as such, never as production
-ceilings. The pre-registered falsifiable claim (in `cacheprofile.py`)
+ceilings. The falsifiable claim frozen in advance (in `cacheprofile.py`)
 is a max-minus-min achievable-block gap of exactly 0 uniform across
 families; a measurably positive gap means the template, not the model
 or the fixture set, decides how much prefill a prefix cache could
@@ -1949,8 +1949,8 @@ backend's encoder (`single_digit`, `chunked_up_to_3`,
 label beside per-form operand token counts; grouping is a
 property of the checkpoint-plus-tokenizer, so the same form
 effect measured on two checkpoints with different grouping
-is confounded, and the report says so. A pre-registered
-null — every contrast `no_difference_observed` or below
+is confounded, and the report says so. A null frozen in advance
+— every contrast `no_difference_observed` or below
 threshold — is a publishable answer: normalisation does not
 matter here, for these tasks, at this checkpoint.
 
@@ -2032,7 +2032,7 @@ changing, not task behaviour moving; date-bearing fixture
 messages and blank expecteds form their own reported
 classes (the frozen screen rule is named
 `dateline-components-r4-v1` in the protocol). A
-pre-registered null — every pure-date pair at
+null frozen in advance — every pure-date pair at
 zero discordants and every loss count zero — prints
 exactly that: the section states the instrument found no
 date effect, which is a publishable answer, not a missing
@@ -2113,7 +2113,7 @@ balanced discordance at the same bar reads
 `framing_only`, anything smaller reads `below_threshold`
 or, with no evaluable depth, `insufficient_evidence`.
 
-Two edge rules are pre-registered. A generated reply
+Two edge rules are frozen in advance. A generated reply
 that contains one of the candidate format's own
 special-token literals is token-real — it would forge a
 turn boundary in any real transcript — so the cell ends
@@ -2506,7 +2506,7 @@ compares the rotations' any-flip count against the same
 statistic over the control set on the same cases — a pure
 slot effect moves both equally and is acquitted, which is
 exactly what the control is for. Invariance is falsified
-under a pre-registered rule (at least 6 headline cases and
+under a rule frozen in advance (at least 6 headline cases and
 at least one flip), and the classification and the
 falsification boolean are printed together, because the
 pairing is part of the contract: a falsified run can still
@@ -3361,7 +3361,7 @@ one compatibility-form field in carrier text changes
 answers on this checkpoint, per template family and per
 compatibility class. The prior is stated plainly in the
 design doc: no direct LLM prior exists, and a null is a
-legitimate pre-registered outcome.
+legitimate outcome frozen in advance.
 
 The panel is generated, not read from the run's
 fixtures: 24 cases, each a fact-recall item (a frozen

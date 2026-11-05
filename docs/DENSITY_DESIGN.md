@@ -308,7 +308,7 @@ its denominator is 0; every readout prints its denominators.
   is a density-and-position mixture — solo_j sits at
   effective position 1 — and is labelled as such).
 
-### Falsification (pre-registered, scoped)
+### Falsification (frozen in advance, scoped)
 
 Claim, scoped to the contrast the test supports: for a
 candidate, per-constraint satisfaction at full density

@@ -98,8 +98,8 @@ them, with the researcher's corrections applied:
   shape to expect: stated values cluster at multiples of 5 in
   the 80–100 range, and vanilla elicitation
   is heavily overconfident by their (judge-scored) measure.
-  Top-bin-dominated, sparse low bins are the pre-registered
-  expected shape here, not a surprise.
+  Top-bin-dominated, sparse low bins are the expected shape
+  frozen in advance here, not a surprise.
 - Seo et al., "ADVICE: Answer-Dependent Verbalized Confidence
   Estimation" (arXiv:2510.10913): a **primary fine-tuning
   study** (an earlier brief miscited it as a survey; the

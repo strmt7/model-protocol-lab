@@ -520,7 +520,7 @@ four lanes: `render(history_alone)` raises `ValueError` for
 29/29 catalog families — a history prefix, which ends with an
 assistant turn, is not a renderable object. The sketch's literal
 recipe (render the segments, concatenate) fails its own
-pre-registered control check: concatenating a history render
+control check frozen in advance: concatenating a history render
 (which needs a dummy closing user turn to satisfy `render` at
 all) with a final-turn render duplicates BOS, strands family A's
 open suffix mid-prompt, and inserts a dummy turn (RT-A F2:

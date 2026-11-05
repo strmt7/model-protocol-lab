@@ -413,7 +413,7 @@ cross-script (Cyrillic/Greek) slice, frozen above.
   these characters. This probe's ids gate (§6) is therefore
   expected to find divergence where candidate 1's DICP arms
   found identity — a *difference between the sibling probes'
-  regimes*, pre-registered in §6.
+  regimes*, frozen in advance in §6.
 - **(c) vs invisible-chars (§8.60):** disjoint mechanisms and
   disjoint code points, executed: the frozen replacements are
   all category-Ll **visible letters**; their code-point set's
@@ -753,7 +753,7 @@ folded in from the start:
 - *(a) Hidden slots* — completed generations whose span does not
   parse are completed cells, decomposed `non_answer` (§5),
   **inside** the perimeter; `n_non_answer` per arm is printed,
-  and §9's pre-registered reading governs high-non-answer
+  and §9's reading frozen in advance governs high-non-answer
   discordance. They never count toward J.
 - *(b) Incompletion* — a generation producing no
   boundary-delimited span at all (or a missing cell) has no
@@ -894,7 +894,7 @@ folded in from the start:
   classes are reported per-arm as descriptive (the rarity arm's
   echo class is `echo_control`, not `echo_confusable`).
 
-## 9. Risks and pre-registered readings
+## 9. Risks and readings frozen in advance
 
 - **R1 — Attack endpoints ≠ benign effect.** Boucher et al.
   measure attacks (a single imperceptible injection
@@ -903,7 +903,7 @@ folded in from the start:
   are jailbreak ASR under a heuristic criterion. This probe
   substitutes **unoptimized, standards-frozen letters on benign
   recall tasks**. The benign effect size is genuinely unknown;
-  a null is a legitimate pre-registered outcome, and **dose
+  a null is a legitimate outcome frozen in advance, and **dose
   escalation in response to a null is forbidden**: no "add
   Armenian/Cherokee letters and retry" inside this probe — the
   zero-eligible letters stay zero-eligible in v1; broadening
@@ -937,7 +937,7 @@ folded in from the start:
   model echoing Cyrillic surface as a capability change; with
   it, the headline counts only `wrong_value`. The residual risk
   is masking via silence (`non_answer`): printed per arm, with
-  the pre-registered reading that an arm whose discordance is
+  the reading frozen in advance that an arm whose discordance is
   dominated by `non_answer` is reported as "substitution
   disrupts output form", a distinct finding — never silently
   acquitted, never pooled into J.

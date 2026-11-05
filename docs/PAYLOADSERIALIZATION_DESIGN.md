@@ -113,7 +113,7 @@ diagnostic beside the headline. What still kills it as written:
   rewrites visible text. V1 arms must be stdlib-serializable frozen
   renderings only.
 - The falsification headline must be downgraded from causal to
-  descriptive pairwise discordance with ONE pre-registered primary pair;
+  descriptive pairwise discordance with ONE primary pair frozen in advance;
   the researcher's prose-vs-rest framing plus all-pairs matrix, with
   placement's floors borrowed without operating characteristics for a
   four-arm panel, does not survive the k(k−1)/2 multiplicity problem
@@ -149,7 +149,7 @@ weights.
 
 ### Arms (frozen, byte-exact, stdlib-only)
 
-- Exactly one pre-registered primary pair, recommended: prose vs
+- Exactly one primary pair frozen in advance, recommended: prose vs
   canonical JSON as defined by `structured._canonical_json`
   (`structured.py:336-343`: `json.dumps(document, sort_keys=True,
   separators=(", ", ": "), allow_nan=False)`; default

@@ -6,6 +6,47 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 232 — docs truth-repair, R1 of the competitive research program, 2026-11-05)
+
+- The README's "How this differs from nearby tools" section was
+  rewritten to the claims that survived the 2026-11-04 primary-source
+  re-verification against 26 tools (program record:
+  `~/workspace/agents_out/competitive_research/` — landscape matrix,
+  gap analysis, redesign program). Corrected: lm-eval applies the
+  checkpoint's chat template only on request (`--apply_chat_template`
+  is opt-in, not the default); vLLM stops on token IDs and HF's
+  `StopStringCriteria` matches token sequences, so the boundary claim
+  is now the post-hoc measurement use, not the mechanism; exactly-N
+  generation is reframed as this lab's default, not a capability
+  (vLLM `ignore_eos` and llama.cpp `--ignore-eos` ship the same
+  opt-out); the abstention rule is credited to Chow's reject rule
+  (1970) and selective prediction, applied to format selection.
+  Added, in narrowed combination form: behavioural template probing
+  (static Jinja scanners already ship in promptfoo ModelAudit and
+  Guardana — the fail-closed in-path firewall and the word-swap
+  sentinel probe are the difference), replay and mirror-recomputed
+  diffs for result files (with the unsigned-seal caveat stated),
+  content-level split hygiene, and falsification rules frozen in
+  advance with denominators in the output. The surface-noise
+  paragraph's CoIPO "decoding radius" gloss (arXiv:2603.03314) is
+  cut to what the paper shows. The differs baseline is re-dated to
+  2026-11-04.
+- "Zero runtime dependencies" now carries its qualifier where it
+  does differentiation work (README): the core install is
+  dependency-free; measuring a checkpoint requires the optional
+  `hf` extra. The README Status line's coverage figure is the
+  precise value from the cycle's own gate run.
+- "Pre-registered" is replaced by "frozen in advance" across the
+  living documents (README, `docs/USAGE.md`, the `*_DESIGN.md`
+  set — 55 occurrences): the rules are fixed in code and docs
+  before a run but registered with no independent registry, and no
+  OSF-style registration is claimed. Dated entries in
+  `docs/RESEARCH_LOG.md` and this changelog stand as written; the
+  log carries dated correction notes (2026-11-05) at the Round A
+  summary, the Cycle 1 review, and the surface-noise entry,
+  covering the restated competitor findings and the CoIPO gloss.
+  No code changed in this cycle.
+
 ### Added (cycle 231 — compatibility-form substitution probe, 2026-11-04)
 
 - A compatibility-form substitution probe
