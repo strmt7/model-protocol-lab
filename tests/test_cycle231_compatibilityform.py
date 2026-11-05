@@ -479,25 +479,39 @@ class TestGeneratorFreeze(unittest.TestCase):
 
 
 def _unicode_rows() -> dict[int, tuple[str, str]]:
-    """All (name, decomposition) rows: from the pinned
-    UnicodeData.txt when it is present at its recorded
-    location (its SHA-256 verified first), else from the
-    local unicodedata (15.0.0 -- the pinned file's own
-    version, interchangeable by the design section 2
-    coherence argument).
+    """All (name, decomposition) rows, parsed from the
+    pinned UnicodeData.txt (15.0.0) vendored into this
+    repository at tests/data/UnicodeData.txt, its SHA-256
+    verified against cf.UNICODEDATA_SHA256 before use.
+
+    Cycle 234: the loader previously read the pinned file
+    from a workspace-local path when present and silently
+    fell back to the host unicodedata when absent, so the
+    census below asserted whatever the host's UCD version
+    carried and failed deterministically on CI's 3.11
+    (UCD 14) and 3.13 (UCD 15.1) legs. The vendored file
+    is the only source now: absence or a digest mismatch
+    raises, failing the census loudly -- never a host
+    fallback, never a skip.
     """
-    pinned = Path.home() / "workspace" / "agents_out" / "compatfold" / "scripts" / "UnicodeData.txt"
+    pinned = Path(__file__).resolve().parent / "data" / "UnicodeData.txt"
+    if not pinned.is_file():
+        raise AssertionError(
+            f"pinned UnicodeData.txt missing from the repository: {pinned}; "
+            "the census derives from the vendored file only (cycle 234)"
+        )
+    data = pinned.read_bytes()
+    digest = sha256(data).hexdigest()
+    if digest != cf.UNICODEDATA_SHA256:
+        raise AssertionError(
+            f"vendored UnicodeData.txt digest {digest} != pinned "
+            f"{cf.UNICODEDATA_SHA256}; refusing to derive the census "
+            "from unverified data (cycle 234)"
+        )
     rows: dict[int, tuple[str, str]] = {}
-    if pinned.exists():
-        data = pinned.read_bytes()
-        assert sha256(data).hexdigest() == cf.UNICODEDATA_SHA256
-        for line in data.decode("utf-8").splitlines():
-            fields = line.split(";")
-            rows[int(fields[0], 16)] = (fields[1], fields[5] if len(fields) > 5 else "")
-        return rows
-    for codepoint in range(0x110000):
-        char = chr(codepoint)
-        rows[codepoint] = (unicodedata.name(char, ""), unicodedata.decomposition(char))
+    for line in data.decode("utf-8").splitlines():
+        fields = line.split(";")
+        rows[int(fields[0], 16)] = (fields[1], fields[5] if len(fields) > 5 else "")
     return rows
 
 
