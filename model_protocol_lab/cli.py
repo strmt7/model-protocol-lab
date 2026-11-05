@@ -1107,6 +1107,54 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     run.add_argument(
+        "--enumeration-convention",
+        action="store_true",
+        help=(
+            "also run the enumeration-convention probe: a stage-local generated "
+            "24-case fact-recall panel per candidate whose frozen list gives "
+            "each position a nine-item enumeration under one of six marker "
+            "systems (arabic control 1. to 9.; upper alpha A. to I.; lower alpha "
+            "a. to i.; Roman I. to IX.; parenthesised wrapper (1) to (9); bullet, "
+            "index-free), with the count never stated anywhere in the content, "
+            "so the answer can only be found by enumerating the list, scored "
+            "with the tree's own exact-match-plus-boundary scorer, and "
+            "classified per (candidate, arm) over the token-id-divergent paired "
+            "population by a completion-guarded rule (floors: at least 10 "
+            "divergent control passes and at least 6 in-grammar wrong-value "
+            "discordants; acquittal labels issue only when stable under the "
+            "worst-case completion of the id-divergent incomplete cases, and "
+            "every label is withheld above 6 incomplete in the divergent "
+            "domain) into insufficient / no_discordance_observed / "
+            "discordant_asymmetric / below_threshold, with the answer "
+            "decomposition per arm (pass / boundary-only / wrong-value / echo / "
+            "form-only / non-answer, so a model repeating the list's own marker "
+            "is never counted as a value change, and a wrong value wearing a "
+            "marker prefix counts toward the alarm exactly as a bare one does), "
+            "the id-divergence report with the divergent-domain size printed "
+            "beside every label, the by-position length join (the mean "
+            "id-length delta by target position beside the by-position counts, "
+            "so a length explanation is checkable against the label), the "
+            "operating characteristics (competent-null fire 0.0173 by exact "
+            "independent enumeration, 0.0044 by the exact paired computation; "
+            "25-point-drop power 0.8159 independent, 0.6981 paired; the "
+            "family-wise price over the 120 labelled comparisons printed beside "
+            "the licence), a byte cap on the serialised records, and "
+            "informational reporting only (never affects selection; a family "
+            "whose treated renders are token-id-identical to control is "
+            "reported instrument-inapplicable for that arm, not as passing; "
+            "records carry answer digests plus the answer text the "
+            "decomposition classes are functions of, bound by the digest; "
+            "answer text never reaches a report). Monday morning: anyone "
+            "rendering numbered or bulleted lists for a local model, and "
+            "platform teams publishing prompt-format guidance, learn per "
+            "template family and per marker system whether the enumeration "
+            "convention alone changes answers. Costs 6 generations per "
+            "candidate per case (3,456 at the legal maximum: 24 candidates x "
+            "24 cases x 6). Informational only; never touches selection. The "
+            "stage never fails the run."
+        ),
+    )
+    run.add_argument(
         "--rotate",
         action="store_true",
         help="Context rotation probe (cycle 203, research wave-9 "
@@ -2823,6 +2871,49 @@ def _run_compatibility_form_probe(
         result["compatibility_form"] = {
             "available": False,
             "detail": "compatibility_form_unavailable",
+        }
+
+
+def _run_enumeration_convention_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the enumeration-convention probe; never raises.
+
+    The probe is self-contained: its cases are generated from
+    the run seed, so it consults neither the recorded search
+    nor the primary decision, and a failed user run cannot
+    silently suppress it. The run's cancel event is threaded
+    dispatch -> wrapper -> stage -> evaluate, so SIGINT/
+    SIGTERM stop the stage cooperatively.
+    """
+    try:
+        from .experiments import enumeration_convention_analysis, enumeration_convention_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = enumeration_convention_stage(
+            backend,
+            formats,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["enumeration_convention"] = enumeration_convention_analysis(stage, names)
+    except Exception:  # noqa: BLE001 -- enumeration-convention must not fail the run
+        result["enumeration_convention"] = {
+            "available": False,
+            "detail": "enumeration_convention_unavailable",
         }
 
 
@@ -4975,6 +5066,27 @@ def main(argv: list[str] | None = None) -> int:
                 # changes selection. Never fails the run.
                 if args.compatibility_form:
                     _run_compatibility_form_probe(
+                        backend,
+                        formats,
+                        result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Enumeration-convention probe (cycle 233, research
+                # wave-12 candidate 4): a generated fact-recall
+                # panel whose frozen list enumerates nine items
+                # under one of six marker systems (arabic, upper
+                # and lower alpha, Roman, wrapper, bullet), the
+                # count never stated, the run's cancel event
+                # threaded into the stage loop. Informational
+                # only -- never changes selection. Never fails
+                # the run.
+                if args.enumeration_convention:
+                    _run_enumeration_convention_probe(
                         backend,
                         formats,
                         result,

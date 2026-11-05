@@ -10036,6 +10036,438 @@ def _compatibility_form_section(result: dict[str, Any]) -> str:
     )
 
 
+def _enumeration_convention_section(result: dict[str, Any]) -> str:
+    """Enumeration-convention probe: does the marker system
+    a list is enumerated under move answers to wrong values?
+
+    Renders the ``enumeration_convention`` payload (see
+    experiments.enumeration_convention_analysis). The first
+    sentences state the treatment exactly: a frozen
+    nine-item list inside every generated case is enumerated
+    under one of six marker systems, and the count is never
+    stated anywhere in the content. Per candidate, in the
+    design's printed order: per-arm pass rates with
+    attrition and the six-class completed-cell
+    decomposition; the per-arm token-ID report (the regime
+    gate); per treated arm the guarded headline over the
+    id-divergent paired population -- label with the
+    divergent-domain size M printed beside it, D, J,
+    reverse discordants, incomplete count, the paired
+    control rate, the pair decomposition with the failing
+    cells' classes, and the non-answer count; and the
+    by-position join (amendment A5): the mean id-length
+    delta by target position beside the by-position D and
+    J, so a length explanation is checkable against the
+    label. After the table: the estimand sentence, the
+    operating-characteristics paragraph (exact figures,
+    one convention, the sensitivity rows, the family-wise
+    price over the 120 labelled comparisons printed beside
+    the licence), the guard paragraph (what incompletion
+    can and cannot do, with the executed worlds and the
+    pinned-domain rule), the length-pattern reading, and
+    the printed limitations. Counts and rates only; no
+    prompt or answer text is rendered. Every
+    payload-derived value below goes through _escape_text,
+    never bare escape().
+    """
+    probe: Any = result.get("enumeration_convention")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        """Return the rate."""
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return _escape_text(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        """Return the count."""
+        return _escape_text(str(value)) if type(value) is int else "n/a"
+
+    def _exact(value: Any) -> str:
+        """Return the exact."""
+        return _escape_text(str(value)) if type(value) in (int, float) else "n/a"
+
+    arm_names = (
+        "control_arabic",
+        "alpha_upper",
+        "alpha_lower",
+        "roman",
+        "wrapper",
+        "bullet",
+    )
+    class_names = (
+        "pass",
+        "boundary_only",
+        "wrong_value",
+        "echo",
+        "form_only",
+        "non_answer",
+    )
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + _escape_text(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        arms = entry.get("arms")
+        if type(arms) is dict:
+            for arm_name in arm_names:
+                arm = arms.get(arm_name)
+                if type(arm) is not dict:
+                    continue
+                decomp = arm.get("decomposition")
+                decomp_bit = ""
+                if type(decomp) is dict:
+                    decomp_bit = (
+                        " Decomposition of completed cells -- "
+                        + ", ".join(
+                            class_name + " " + _count(decomp.get(class_name))
+                            for class_name in class_names
+                        )
+                        + " (in the frozen order: a boundary-only "
+                        "cell is a boundary effect, never a form "
+                        "effect; wrong-value counts only values "
+                        "inside the frozen grammar, bare or wearing "
+                        "exactly one marker-shaped prefix or "
+                        "suffix; echo and form-only are the model "
+                        "rendering the expected value with the "
+                        "list's marker form attached, the value "
+                        "intact, and never count toward J)."
+                    )
+                bits.append(
+                    "<div>"
+                    + _escape_text(arm_name)
+                    + " pass rate "
+                    + _rate(arm.get("rate"))
+                    + " ("
+                    + _count(arm.get("n_pass"))
+                    + " of "
+                    + _count(arm.get("n_completed"))
+                    + " completed), "
+                    + _count(arm.get("n_context_exceeded"))
+                    + " context-exceeded, "
+                    + _count(arm.get("n_evaluation_failed"))
+                    + " evaluation-failed."
+                    + decomp_bit
+                    + "</div>"
+                )
+        ids = entry.get("ids")
+        headline = entry.get("headline")
+        positions = entry.get("positions")
+        if type(ids) is dict and type(headline) is dict:
+            for arm_name in arm_names[1:]:
+                arm_ids = ids.get(arm_name)
+                arm_head = headline.get(arm_name)
+                if type(arm_ids) is not dict or type(arm_head) is not dict:
+                    continue
+                deltas = arm_ids.get("id_length_delta")
+                delta_bit = ""
+                if type(deltas) is list:
+                    delta_bit = (
+                        " Per-case id-length deltas (arm minus "
+                        "control, in case order): "
+                        + _escape_text(", ".join(str(d) for d in deltas))
+                        + "."
+                    )
+                pair = arm_head.get("pair_decomposition")
+                pair_bit = ""
+                if type(pair) is dict:
+                    pair_bit = (
+                        " Pair decomposition of the discordant "
+                        "pairs -- exact-only "
+                        + _count(pair.get("exact_only"))
+                        + ", boundary-only "
+                        + _count(pair.get("boundary_only"))
+                        + ", mixed "
+                        + _count(pair.get("mixed"))
+                        + " (reported, never attributed)."
+                    )
+                failing = arm_head.get("failing_classes")
+                failing_bit = ""
+                if type(failing) is dict:
+                    failing_bit = (
+                        " The discordant pairs' failing cells "
+                        "decompose as "
+                        + ", ".join(
+                            class_name + " " + _count(failing.get(class_name))
+                            for class_name in class_names
+                        )
+                        + "."
+                    )
+                position_bit = ""
+                if type(positions) is dict and type(positions.get(arm_name)) is list:
+                    position_rows = positions[arm_name]
+                    position_bit = (
+                        " By target position (paired population; "
+                        "position, cases, control passes, "
+                        "wrong-value discordants, mean id-length "
+                        "delta): "
+                        + _escape_text(
+                            "; ".join(
+                                "position "
+                                + str(row.get("position"))
+                                + ": "
+                                + str(row.get("n_population"))
+                                + " cases, "
+                                + str(row.get("control_passes"))
+                                + " passes, "
+                                + str(row.get("wrong_values"))
+                                + " wrong values, mean delta "
+                                + (
+                                    f"{float(row['mean_id_length_delta']):.3f}"
+                                    if type(row.get("mean_id_length_delta")) in (int, float)
+                                    else "n/a"
+                                )
+                                for row in position_rows
+                                if type(row) is dict
+                            )
+                        )
+                        + "."
+                    )
+                bits.append(
+                    "<div>"
+                    + _escape_text(arm_name)
+                    + " headline over "
+                    + _count(arm_head.get("n_population"))
+                    + " paired cases (completed in both control "
+                    "and this arm and id-divergent for this arm; "
+                    "the divergent-domain size M is "
+                    + _count(arm_head.get("n_ids_divergent"))
+                    + ", "
+                    + _count(arm_ids.get("n_ids_identical"))
+                    + " cases were ids-identical for this arm "
+                    "-- instrument-inapplicable for those, never "
+                    "passes -- and "
+                    + _count(arm_head.get("n_incomplete"))
+                    + " id-divergent cases were incomplete): "
+                    "label "
+                    + _escape_text(str(arm_head.get("label")))
+                    + " at M "
+                    + _count(arm_head.get("n_ids_divergent"))
+                    + ", D (control passes) "
+                    + _count(arm_head.get("control_passes"))
+                    + " at control rate "
+                    + _rate(arm_head.get("control_rate"))
+                    + ", J (wrong-value discordants) "
+                    + _count(arm_head.get("wrong_values"))
+                    + ", reverse discordants "
+                    + _count(arm_head.get("n_reverse"))
+                    + " (counted, never pooled into J), "
+                    "arm pass rate "
+                    + _rate(arm_head.get("arm_rate"))
+                    + ", non-answer arm cells in the population "
+                    + _count(arm_head.get("n_non_answer"))
+                    + ". Same-ids verdict flips for this arm: "
+                    + _count(arm_ids.get("n_same_ids_verdict_flips"))
+                    + " (a determinism finding, never convention "
+                    "fragility); maximum absolute id-length delta "
+                    + _count(arm_ids.get("max_abs_id_delta"))
+                    + "."
+                    + delta_bit
+                    + pair_bit
+                    + failing_bit
+                    + position_bit
+                    + "</div>"
+                )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + _escape_text(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    oc: dict[str, Any] = {}
+    for entry in candidates.values():
+        if type(entry) is dict and type(entry.get("operating_characteristics")) is dict:
+            oc = entry["operating_characteristics"]
+            break
+
+    def _oc(key: str) -> str:
+        """Return the oc."""
+        return _rate(oc.get(key))
+
+    tail_paragraphs = [
+        "<p>The estimand, stated once: value-changing "
+        "discordance between the arabic control and one "
+        "enumeration convention, over the id-divergent paired "
+        "cases both arms completed, for this candidate's "
+        "template family on this checkpoint. The claim is per "
+        "candidate and per arm; nothing is pooled, and a fire "
+        "proves only that this marker system, as the carrier "
+        "list's enumeration, moved this checkpoint's answers "
+        "to wrong values inside the frozen grammar on this "
+        "generated population -- never a claim about weights, "
+        "attacks, or marker systems outside the frozen six. "
+        "A null does not license claims about enumeration in "
+        "answer-bearing text: the markers enumerate carrier "
+        "items adjacent to the fact, and the answer itself is "
+        "never enumerated.</p>",
+        "<p>Operating characteristics (exact enumeration under "
+        "per-case independence, q the arm's marginal in-grammar "
+        "wrong-value rate; the paired column couples the two "
+        "outcomes within each case at correlation 0.5 and is "
+        "computed exactly): the competent panel fires "
+        + _oc("fire_competent_independent")
+        + " independent and "
+        + _exact(oc.get("fire_competent_paired"))
+        + " paired; the weak panel (control rate 0.80) fires "
+        + _oc("fire_weak_independent")
+        + " and the random labeller "
+        + _oc("fire_random_independent")
+        + " -- the label is comparative evidence at a stated "
+        "base rate, which is why each candidate's control rate "
+        "prints beside its label above. Power at the 25-point "
+        "target effect is "
+        + _oc("power_drop25_base90")
+        + " at base .90 and "
+        + _oc("power_drop25_base85")
+        + " at base .85 (paired "
+        + _exact(oc.get("power_drop25_paired"))
+        + "); a 10-point drop fires only "
+        + _oc("power_drop10_base90")
+        + " of the time and a 5-point drop "
+        + _oc("power_drop5_base90")
+        + ", so an acquittal is an observed null at this "
+        "panel's resolution, never proof of invariance and "
+        "never a few-point null. The operating characteristics "
+        "condition on the divergent-domain size M printed "
+        "beside every label: at M = 18 the 25-point power is "
+        + _oc("sensitivity18_drop25")
+        + " and the competent fire "
+        + _oc("sensitivity18_competent")
+        + "; at M = 12 they fall to "
+        + _oc("sensitivity12_drop25")
+        + " and "
+        + _oc("sensitivity12_competent")
+        + ", while the competent-null fire rate only falls as "
+        "M shrinks, so the licence is never overstated at "
+        "small M -- an acquittal there is simply weaker "
+        "evidence. Family-wise, over the 120 labelled "
+        "comparisons (5 treated arms x 24 candidates) the "
+        "competent expectation is "
+        + _rate(oc.get("familywise_competent_expected_120"))
+        + " false labels (probability of at least one "
+        + _oc("familywise_competent_any_120")
+        + "); paired, the expectation is "
+        + _exact(oc.get("familywise_paired_expected_120"))
+        + " (probability of at least one "
+        + _exact(oc.get("familywise_paired_any_120"))
+        + "); the random labeller's expectation is "
+        + _rate(oc.get("familywise_random_expected_120"))
+        + ". The rejected two-directional transplant rule "
+        "fires "
+        + _oc("transplant_fire_competent_independent")
+        + " on the same competent null, which is why the "
+        "floors are this instrument's own. The corrected "
+        "required-N computation (an erratum to the executed "
+        "search, recorded in the design document) puts the "
+        "smallest panel licensing 80 percent power at a "
+        "10-point drop at N = 117 cases with floors (0, 18) "
+        "-- roughly five times this panel's cost -- which is "
+        "why the shipped panel is sized and priced for the "
+        "25-point target only.</p>",
+        "<p>The completion guard, and what incompletion can "
+        "and cannot do: fires issue on observed counts over "
+        "completed cases, so removing a generation can never "
+        "create a wrong-value discordant; acquittal labels "
+        "issue only when stable under the worst-case "
+        "completion of the pair's incomplete id-divergent "
+        "cases (the completion ranges over divergent cases "
+        "only -- an encode-time property, decidable whether "
+        "or not the generation completed -- and counts each "
+        "as a control pass with an arm wrong value, a "
+        "deliberate blanket over-count), so removal can never "
+        "manufacture an acquittal either -- in the executed "
+        "attack worlds with the ids dimension (10,000 trials "
+        "each, every case id-divergent with probability 0.8, "
+        "a stated simulation parameter), sign-concentrated "
+        "incompletion drives the unguarded rule's "
+        "below-threshold rate to "
+        + _oc("world_b_unguarded_below_threshold")
+        + " on a true drop while the guarded rate stays "
+        + _oc("world_b_guarded_below_threshold")
+        + ", the displaced mass withheld as insufficient; on "
+        "the zero-effect manufacture world the guarded rule "
+        "withholds "
+        + _oc("world_a1_guarded_insufficient")
+        + " of trials as insufficient and fires "
+        + _oc("world_a1_guarded_fire")
+        + " against the unguarded "
+        + _oc("world_a1_unguarded_fire")
+        + "; under flat incompletion the guarded rule still "
+        "fires "
+        + _oc("world_c_guarded_fire")
+        + " on the true drop. The cap bounds incomplete cases "
+        "within the divergent domain at 6; it guarantees at "
+        "least 18 paired cases only when the domain is the "
+        "full 24, and at smaller M labels issue at paired "
+        "counts down to M - 6, priced by the M-conditioned "
+        "rows above. Length-pattern reading: the Roman "
+        "markers' character lengths by position are 2, 3, 4, "
+        "3, 2, 3, 4, 5, 3 -- position 8 carries the longest "
+        "marker and position 9 a short one -- so a "
+        "Roman-arm effect concentrated at the long-marker "
+        "positions with a null at position 9 reads as "
+        "length-correlated, while one spread evenly or "
+        "peaking at position 9 does not; the by-position join "
+        "above prints the mean id-length delta beside the "
+        "by-position D and J for exactly this check, for "
+        "every arm. Printed limitations: the count is never "
+        "stated, so the probe measures enumeration-dependent "
+        "retrieval, not counting ability; the list length is "
+        "frozen at nine items and the panel at 24 cases; "
+        "value changes outside the frozen grammar print as "
+        "non-answer and are outside the headline claim; "
+        "marker interpretation in the decomposition is "
+        "ASCII-pinned (a non-ASCII digit head is a "
+        "non-answer, never a parsed marker). Records carry "
+        "digests, except cells' answer text, which is "
+        "digest-bound and never rendered here.</p>",
+    ]
+    return (
+        '<section class="card" id="enumeration-convention">'
+        "<h2>Enumeration convention (marker-system substitution on a frozen list)</h2>"
+        "<p>This probe changes only the marker system a "
+        "frozen list is enumerated under: each of the 24 "
+        "generated cases is a fact-recall item (a nine-item "
+        "list of inspection codes under a frozen intro line, "
+        "two neutral carrier sentences, a question), rendered "
+        "in the arabic control arm with markers 1. to 9. and "
+        "in five treated arms under upper alpha (A. to I.), "
+        "lower alpha (a. to i.), Roman (I. to IX.), "
+        "parenthesised wrapper ((1) to (9)), and bullet "
+        "(index-free). The count is never stated anywhere in "
+        "the content, so the answer can only be found by "
+        "enumerating the list; the items, their order, the "
+        "question, and the carriers are byte-identical "
+        "across arms; the scorer is byte-exact conjoined "
+        "with boundary presence; every arm is a fixture with "
+        "the same id, so request seeds are identical across "
+        "arms. Each cell is one greedy generation. The "
+        "readout is a guarded classification per candidate "
+        "and per arm over the id-divergent paired "
+        "population, with the operating characteristics and "
+        "the family-wise price printed beside it.</p>"
+        "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        + "".join(tail_paragraphs)
+        + "</section>"
+    )
+
+
 def _rotation_section(result: dict[str, Any]) -> str:
     """Context rotation probe: does cyclically rotating the block span move the verdict?
 
@@ -12704,6 +13136,7 @@ def render_html(result: dict[str, Any]) -> str:
     invisible_chars_html = _invisible_chars_section(result)
     confusable_skeleton_html = _confusable_skeleton_section(result)
     compatibility_form_html = _compatibility_form_section(result)
+    enumeration_convention_html = _enumeration_convention_section(result)
     choiceaudit_html = _choiceaudit_section(result)
     precision_html = _precision_section(result)
     confidence_html = _confidence_section(result)
@@ -12920,6 +13353,11 @@ def render_html(result: dict[str, Any]) -> str:
                 compatibility_form_html,
             ),
             (
+                "enumeration-convention",
+                "Enumeration convention (marker-system substitution on a frozen list)",
+                enumeration_convention_html,
+            ),
+            (
                 "choice-audit",
                 "Choice-scoring audit (second opinion)",
                 choiceaudit_html,
@@ -13053,6 +13491,7 @@ def render_html(result: dict[str, Any]) -> str:
         + invisible_chars_html
         + confusable_skeleton_html
         + compatibility_form_html
+        + enumeration_convention_html
         + choiceaudit_html
         + precision_html
         + confidence_html

@@ -11470,3 +11470,80 @@ verified zero.
   mirror; `arm_content` silently rendered the control
   content for an unknown arm and now raises (F6; seed
   leniency has sibling parity and is unchanged).
+
+## Cycle 233 — enumeration-convention probe: six frozen list-marker systems on one generated panel (2026-11-05)
+
+- **What shipped:** `run --enumeration-convention`
+  (`model_protocol_lab/enumerationconvention.py`, the
+  package's 73rd source file): a generated 24-case
+  fact-recall panel (frozen topics, a word-number
+  inspection code over a frozen 24-word list, nine-item
+  lists, two neutral carrier sentences, a question), each
+  case rendered under six frozen marker systems on
+  identical list content — arabic control (`1.`), upper
+  alpha (`A.`), lower alpha (`a.`), Roman (`I.`), a
+  parenthesised wrapper (`(1)`), and an index-free bullet
+  (`•`) — so the only thing that moves between arms is
+  the marker convention itself. The readout is a guarded
+  classification per candidate and arm over the
+  id-divergent paired population (floors D ≥ 10 control
+  passes and J ≥ 6 wrong-value discordants, both derived
+  under the instrument's own null; acquittals issue only
+  when stable under the worst-case completion of the
+  arm's incomplete id-divergent pairs; every label is
+  withheld above 6 incomplete in the domain; the arm's
+  divergent-domain size M is printed beside every label),
+  with a total six-class decomposition of completed
+  cells (pass, boundary-only, wrong-value in the frozen
+  grammar, echo — decidable only as string identity with
+  the arm's own marker, form-only, non-answer, an
+  ordered decision list), the per-arm token-ID report as
+  the regime gate, the per-position readout carrying the
+  mean id-length delta by target position (the Roman
+  arm's marker lengths are non-monotone in position, an
+  internal control on length readings), and the exact
+  operating characteristics printed beside the licence
+  (family-wise over 120 comparisons: a competent
+  checkpoint fires at most one arm in 120 with
+  expectation 2.07; the design target — a 25-point
+  discordance move — is powered at 0.8159 under the
+  floors). Monday-morning use: a template author
+  choosing one house list style learns whether changing
+  only the markers moves the checkpoint's answers, and
+  standardises on the incumbent arabic style unless an
+  arm fires.
+- **As amended (A1–A9) after the wave-12 round-4 fresh
+  review:** A1 counts a marker-prefixed wrong value
+  (exactly one marker-shaped token stripped from either
+  edge) toward J, so an encoder that emits answers in
+  the treatment's format is measured, not masked — the
+  amendment is worth 26 points of fire rate in the
+  drop-25 world (0.8893 guarded under A1 against 0.1731
+  for the J-floor alone); A2 pins every glyph test to
+  ASCII (no `isdigit()`/`int()` leniency anywhere,
+  including the diff mirror); A3 makes echo string
+  identity, never index equality (`03.` is form-only);
+  A4 completes the validator's bare-glyph set with the
+  lowercase Roman forms and the single-letter Roman
+  values the scorer parses; A5 prints the by-position
+  length join; A6 corrects the printed required-N
+  (smallest licence-strength panel is N = 117 at floors
+  (0, 18), null 0.017231, power at drop-10 0.802337 —
+  the round-3 float scan's (73, 18) point is one member
+  of the tie set at identical power); A7 discloses the
+  task190 criterion behind the 25-point target wherever
+  it is derived and sends the Unicode Roman-numeral
+  series to the compatibility-form axis that owns it;
+  A8 pins the topic pool by digest beside the word and
+  neutral pools; A9 binds the build tests to reproduce
+  every printed operating characteristic exactly.
+- **Verification:** suite 9,378 tests (75 in the new
+  file, including the cycle-174 gap battery); precise
+  coverage 95.08321460950654%, the new module at 99.06%
+  with two by-construction lines enumerated in
+  VALIDATION.md beside the mirror's two. The host
+  restarted twice during the gate, voiding two coverage
+  attempts, and one voided attempt's completion notice
+  reported a verdict its log did not contain — caught by
+  re-reading the log, disclosed in VALIDATION.md, and
+  re-earned from a clean full leg.
