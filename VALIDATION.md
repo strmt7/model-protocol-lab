@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–233 (executed 2026-10-14 → 2026-11-05, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–234 (executed 2026-10-14 → 2026-11-05, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -62,6 +62,49 @@ doctor's resource fallbacks degrade there.
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
   (+0.583) is auditable rather than inferred from the display.
+  Cycle 234 moves neither figure: a test-infrastructure and
+  dependency-hygiene cycle changed no package code, and its
+  gate reproduced the precise figure exactly —
+  95.08321460950654% (39,946 of 41,490 statements), with the
+  suite count unchanged at 9,378. The cycle-231 census test
+  now derives from the vendored, SHA-256-pinned
+  UnicodeData.txt (15.0.0) in `tests/data/` and fails closed
+  without it; it previously read a workspace-local copy when
+  present and silently fell back to the host `unicodedata`,
+  so its hardcoded counts failed deterministically on CI's
+  3.11 (UCD 14) and 3.13 (UCD 15.1) legs — the defect behind
+  the red 3.11/3.13 closing legs of cycles 231–233, verified
+  fixed by execution under real 3.11.18 (UCD 14.0.0) and
+  3.13.18 (UCD 15.1.0) interpreters (101/101 on both). The
+  cycle-89 debug-script signal tests were hardened on a
+  diagnosed mechanism, not the presumed one: their long-leg
+  failures (rc 0) reproduce in seconds under a
+  SIGINT-ignoring parent — a detached gate launcher's
+  `trap "" INT` hands the child an inherited SIG_IGN across
+  exec, so the signal never lands and the child simply
+  finishes — and the spawn helper now resets the child's
+  signal dispositions to default (the SIGTERM case never
+  failed in those legs: launchers trap INT, not TERM). The
+  tests also prove the interruptible window with a
+  marker-file handshake (the script's own `.save` after
+  1,000 commands, ~50,000 further commands behind it)
+  instead of first-output-byte timing — the original
+  9,000-command script executes in ~0.30s end to end, so
+  the window the timing version relied on was sub-second —
+  and send the double-SIGINT case's signals back-to-back
+  so the second cannot land in the interpreter-shutdown
+  window. The hardened tests pass 10/10 isolated, 10/10
+  under full CPU saturation, and under a SIGINT-ignoring
+  parent. On the dependency side,
+  Dependabot PR #8 (filelock 4.2.1 in the cocoindex lock)
+  was closed as genuinely blocked — pip's resolver refuses
+  the combination because litellm 1.106.6 (and the latest
+  litellm, 1.108.0) requires `filelock<4.0` — and PR #7
+  (dev-hf minor-patch group) was left open with the same
+  class of evidence recorded on it: torch 2.15.0, the
+  latest release, exact-pins `cuda-toolkit==13.2.2`, and
+  sympy 1.14.0 caps `mpmath<1.4`, so its bumps wait on a
+  future torch-lock regeneration cycle.
   Cycle 233 moves both figures: the enumeration-convention
   feature added 1,182 statements (40,308 → 41,490) and 1,177
   covered statements (38,769 → 39,946), for a precise

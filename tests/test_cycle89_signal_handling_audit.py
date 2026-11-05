@@ -7,9 +7,23 @@ path not tested: needs live signals"). Two layers:
 
 1. Real OS signals against real subprocesses (``sys.executable -m
    model_protocol_lab ...``) in PID-scoped temp dirs:
-   - ``debug --script`` with a ~9000-command script gives a reliably
-     interruptible multi-second window; readiness is polled (first stdout
-     byte), never slept into. Pins: SIGINT -> exit 130, stderr's last
+   - ``debug --script`` with a long script gives the interruptible
+     window; readiness is a marker-file handshake, never slept into:
+     the script runs ``.save <marker>`` after its first 1,000 commands
+     and then works through ~50,000 further commands via ``.read``
+     blocks, and the test signals only once the marker exists and the
+     child is provably still running. (Cycle 234: two defects hid in
+     this readiness. The original 9,000-command script executes in
+     ~0.30s end to end -- measured -- so first-stdout-byte readiness
+     left a sub-second window; the handshake removes that timing
+     guess. And the long-leg rc-0 failures were diagnosed to the
+     runner's own signal disposition: a detached launcher's
+     ``trap "" INT`` hands the child an inherited SIG_IGN across
+     exec, so the signal never lands and the child simply finishes;
+     ``_Child`` now resets the child's dispositions to default at
+     spawn. The SIGTERM case never failed in those legs --
+     launchers trap INT, not TERM.) Pins: SIGINT -> exit 130,
+     stderr's last
      line is the clean "Interrupted before a complete report was saved."
      (no traceback); double SIGINT -> still terminates promptly, no hang,
      no traceback; SIGTERM -> default disposition (killed, -SIGTERM).
@@ -87,6 +101,14 @@ DELIBERATELY NOT VERIFIED
 
 Verified by RUNNING this file: ``pytest -p no:cacheprovider
 tests/test_cycle89_signal_handling_audit.py`` -- 2026-10-16.
+Cycle 234 re-verification (2026-11-05): the DebugScriptSignalTests
+hardening (marker handshake + back-to-back double SIGINT +
+default dispositions at spawn) passed 10/10 isolated repetitions
+and 10/10 repetitions under full CPU saturation (one busy loop
+per core), and -- the discriminating check for the diagnosed
+long-leg mechanism -- passes under a SIGINT-ignoring parent
+(``trap "" INT``), the exact condition that reproduced the
+rc-0 failures in seconds before the disposition fix.
 """
 
 from __future__ import annotations
@@ -169,9 +191,28 @@ class _Child:
     """Subprocess with background-drained pipes for incremental polling."""
 
     def __init__(self, argv: list[str], cwd: str, env: dict[str, str] | None = None) -> None:
-        self._proc = subprocess.Popen(
-            argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env
-        )
+        # The measured subject is a normally launched process, so the
+        # child must start from default signal dispositions. A runner
+        # that ignores SIGINT (a detached gate launcher under
+        # `trap "" INT`, say) otherwise hands the child that ignored
+        # disposition across exec -- Python keeps an inherited
+        # SIG_IGN -- and a SIGINT assertion then watches the child
+        # run to completion instead (rc 0: the long-leg failure shape
+        # of cycles 231-234, diagnosed in cycle 234 by reproducing
+        # it under a signal-ignoring parent in seconds). Reset both
+        # dispositions around the spawn and restore the runner's own
+        # immediately after; the child keeps the defaults.
+        old_int = signal.getsignal(signal.SIGINT)
+        old_term = signal.getsignal(signal.SIGTERM)
+        try:
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
+            signal.signal(signal.SIGTERM, signal.SIG_DFL)
+            self._proc = subprocess.Popen(
+                argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env
+            )
+        finally:
+            signal.signal(signal.SIGINT, old_int)
+            signal.signal(signal.SIGTERM, old_term)
         self._stdout = bytearray()
         self._stderr = bytearray()
         self._lock = threading.Lock()
@@ -236,6 +277,10 @@ class _Child:
     def returncode(self) -> int | None:
         return self._proc.returncode
 
+    def alive(self) -> bool:
+        """True while the child is still running."""
+        return self._proc.poll() is None
+
 
 def _send(pid: int, sig: int) -> bool:
     """Deliver a signal; False when the child already exited (prompt death)."""
@@ -248,7 +293,7 @@ def _send(pid: int, sig: int) -> bool:
 
 # ---------------------------------------------------------------------------
 # Layer 1a: real subprocess, debug --script (deterministic window via
-# first-output-byte readiness polling).
+# the .save marker-file handshake).
 # ---------------------------------------------------------------------------
 
 
@@ -256,12 +301,36 @@ def _send(pid: int, sig: int) -> bool:
 class DebugScriptSignalTests(unittest.TestCase):
     """Debug script signal tests."""
 
+    # Cycle 234 hardening: the pre-234 script was 9,000 commands and,
+    # measured on this host, executes in ~0.30s end to end -- the
+    # "interruptible window" was sub-second, so a contended parent
+    # runner could miss it entirely and watch the child exit 0 (the
+    # rc 0 != 130 flake in long legs). The script now proves its
+    # mid-window position with a marker: after 1,000 commands it runs
+    # `.save <marker>`, and the parent signals only once the marker
+    # exists and the child is still running, with _BLOCKS_AFTER_MARKER
+    # further .read blocks (~50,000 commands, ~0.8s on a fast host,
+    # longer under load) still ahead of it. Each block stays under
+    # the shell's 10,000-line .read cap, and the blocks are `.audit`
+    # (the cheapest real command, ~83 transcript chars) so the whole
+    # run's transcript stays under the shell's 5MB cap -- past the
+    # cap every command re-truncates the transcript, an O(transcript)
+    # per-command cost measured in cycle 234. The signal path
+    # exercised is unchanged: a signal inside the script loop ->
+    # KeyboardInterrupt -> cli.main's exit 130 + the interrupted line.
+    _BLOCKS_AFTER_MARKER = 5
+
     def setUp(self) -> None:
         """Set up the test fixture."""
         self.tmp = _scratch("dbg")
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         _write_fixture(self.tmp)
-        lines = [".render" if i % 2 == 0 else ".audit" for i in range(9000)]
+        block = [".audit"] * 9999
+        (self.tmp / "block.script").write_text("\n".join(block) + "\n", encoding="utf-8")
+        self.marker = self.tmp / "in-window.marker"
+        lines = [".render" if i % 2 == 0 else ".audit" for i in range(1000)]
+        lines.append(f".save {self.marker}")
+        lines.extend(f".read {self.tmp / 'block.script'}" for _ in range(self._BLOCKS_AFTER_MARKER))
         (self.tmp / "long.script").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     def _spawn(self) -> _Child:
@@ -281,9 +350,21 @@ class DebugScriptSignalTests(unittest.TestCase):
         )
 
     def _in_window(self, child: _Child) -> _Child:
-        """In window."""
-        ready = _wait_until(lambda: len(child.stdout_bytes()) > 0, 60)
-        self.assertTrue(ready, "child printed nothing; no interruptible window observed")
+        """Wait until the child is provably inside the window.
+
+        The marker file is written by the child's own ``.save``
+        command partway through the script; its existence, plus the
+        child still running, proves the signal lands inside the
+        interruptible region (cycle 234 handshake, replacing
+        first-stdout-byte polling).
+        """
+        ready = _wait_until(self.marker.exists, 120, poll=0.02)
+        self.assertTrue(
+            ready, "child never reached the in-window marker; no interruptible window observed"
+        )
+        self.assertTrue(
+            child.alive(), "child exited before the marker was observed; no interruptible window"
+        )
         return child
 
     def _finish(self, child: _Child, timeout: float = 60) -> tuple[int, str]:
@@ -309,8 +390,15 @@ class DebugScriptSignalTests(unittest.TestCase):
         """Test double sigint still terminates no hang no traceback."""
         child = self._in_window(self._spawn())
         _send(child.pid, signal.SIGINT)
-        time.sleep(0.05)
-        # May already be gone: that itself proves prompt termination.
+        # Back-to-back, no sleep (cycle 234): the pre-234 0.05s gap
+        # let the second SIGINT land in the child's interpreter-
+        # shutdown window -- after the first interrupt's graceful
+        # teardown had begun and the disposition was back to default
+        # -- killing it outright (rc -2) instead of exercising the
+        # graceful path. Sent together, both signals queue while the
+        # child is provably still in the script loop. The second may
+        # still find the child already gone: that itself proves
+        # prompt termination.
         _send(child.pid, signal.SIGINT)
         rc, err = self._finish(child)
         self.assertEqual(rc, 130)

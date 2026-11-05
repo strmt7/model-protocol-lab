@@ -31,6 +31,42 @@ All notable changes to this project are documented here. The format follows
   as amended A1-A9). Informational only; never affects
   selection.
 
+### Fixed (cycle 234 — test infrastructure and dependency hygiene, 2026-11-05)
+
+- The cycle-231 census test derived its Unicode census from a
+  workspace-local copy of the pinned UnicodeData.txt when one was
+  present and silently fell back to the host `unicodedata` when
+  absent, so its hardcoded counts failed deterministically on CI
+  legs whose Unicode version differs (3.11: UCD 14; 3.13: UCD
+  15.1) — the defect behind the red 3.11/3.13 closing legs of
+  cycles 231–233. The pinned file (15.0.0, SHA-256 verified before
+  use) is now vendored at `tests/data/UnicodeData.txt` and is the
+  only source; absence or a digest mismatch fails the census
+  loudly. Verified under real 3.11.18 and 3.13.18 interpreters.
+- The cycle-89 debug-script signal tests failed intermittently
+  in long legs (rc 0). Diagnosed by reproduction: a runner that
+  ignores SIGINT (a detached launcher's `trap "" INT`) hands the
+  child that ignored disposition across exec, so the signal
+  never lands — the spawn helper now resets the child's signal
+  dispositions to default. The tests also stopped relying on a
+  timing window that measurement showed to be sub-second (the
+  9,000-command script runs in ~0.30s end to end): the child now
+  proves it is inside the interruptible region with a marker
+  file (its own `.save` command partway through the script,
+  ~50,000 further commands behind it), and the double-SIGINT
+  case sends both signals back-to-back so the second cannot
+  land in the interpreter-shutdown window.
+- Dependabot PR #8 (filelock 4.2.1 in the cocoindex tool lock)
+  was closed as genuinely blocked upstream: pip's resolver
+  refuses the combination because litellm requires
+  `filelock<4.0` (still true of the latest litellm, 1.108.0);
+  the 13 alerts stand open and documented in `docs/SECURITY.md`.
+  PR #7 (dev-hf minor-patch group) was left open with executed
+  evidence recorded on it: its CUDA bumps are coupled to torch
+  2.15.0's exact `cuda-toolkit==13.2.2` pin and its mpmath bump
+  to sympy 1.14.0's `mpmath<1.4` cap, so both wait on a future
+  torch-lock regeneration cycle.
+
 ### Fixed (cycle 232 — docs truth-repair, R1 of the competitive research program, 2026-11-05)
 
 - The README's "How this differs from nearby tools" section was

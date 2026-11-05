@@ -903,7 +903,13 @@ latest release, inside cocoindex's admitted range
 pin moves to filelock 4.x in the same cycle that litellm or
 cocoindex admits it; until then the exposure is a multi-user
 attack against a single-user research tool, recorded here
-rather than hidden.
+rather than hidden. Re-verified 2026-11-05 (cycle 234):
+Dependabot's PR #8 proposed the bump; installing its own
+lock with `pip install --require-hashes` fails in the
+resolver (`litellm 1.106.6 depends on filelock<4.0 and
+>=3.16.1`), and litellm's latest release (1.108.0) still
+declares `filelock<4.0` — the PR was closed with that
+evidence on it, and the alerts remain open and undismissed.
 
 ## Reporting defects
 
