@@ -11547,3 +11547,46 @@ verified zero.
   reported a verdict its log did not contain — caught by
   re-reading the log, disclosed in VALIDATION.md, and
   re-earned from a clean full leg.
+
+## Cycle 235 — real-checkpoint validation: the core battery on real weights (2026-11-05)
+
+- **What ran:** the lab's first executed runs against real
+  (non-synthetic) checkpoints, closing the competitive-research
+  program's top gap (no real-checkpoint evidence existed). Four
+  ungated checkpoints were acquired out-of-band with revision
+  pins and SHA-256 digests — `openai-community/gpt2` (124M),
+  `gpt2-medium` (355M), `gpt2-large` (774M),
+  `TinyLlama/TinyLlama-1.1B-Chat-v1.0` — and all four passed
+  `doctor`. The full record (acquisition table, adapter
+  verdicts, per-row results, remainder) is
+  `docs/REAL_CHECKPOINT_VALIDATION.md`.
+- **Headline result:** on GPT-2 (124M), the frozen core battery
+  (chatml + llama3, `--mutate --stop-cause`, 12 search fixtures
+  authored for this cycle, each candidate measured with its
+  own format's boundary) produced `no_candidate` in both
+  families: 0 exact-and-boundary passes in 96 generations, the
+  failure taxonomy recording `no-boundary-in-N` for every
+  generation — the configured boundary token sequence never
+  occurred — while the stop-cause stage classified 95 of 96
+  generations `stop_string` (the marker's text appears; its
+  tokenization does not match the configured IDs). Held-out
+  was never read: the selection rule abstained. On
+  TinyLlama-1.1B-Chat, the behavioural template probe rendered
+  its 8 frozen word-swap pairs through the checkpoint's own
+  (Zephyr-style, non-catalog) template and found no
+  content-conditional template logic; a smoke run proved the
+  adapter load-and-generate path at float32 on this host.
+- **What did not run, stated plainly:** TinyLlama's battery
+  rows were killed three times by host reboots (~25, ~100,
+  ~102 minutes in) and are counted as not run, as are the
+  gpt2-medium/gpt2-large rows queued behind them. The gated
+  Llama-3.2 rows are in scope after the owner's 2026-11-05
+  licence decision but parked: no HF token exists on this
+  machine yet. Gemma remains outside the shipped adapter's
+  `gpt2`/`llama` reach at any licence state, and the 3B row's
+  float32 weights (~12.4 GB) exceed this host's RAM.
+- **Falsification note:** the GPT-2 reading would be wrong if
+  the recorded generations in fact contained the configured
+  boundary token sequence — the taxonomy and boundary audit
+  are computed from those records by the shipped code and are
+  re-derivable from the retained run directories.

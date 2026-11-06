@@ -541,7 +541,12 @@ class ValidationHonestyTests(unittest.TestCase):
         text = (REPO_ROOT / "VALIDATION.md").read_text(encoding="utf-8")
         section = text.split("## Not established", 1)[1].split("## Important limitations", 1)[0]
         for item in (
-            "No real (non-synthetic) model run has been performed",
+            # Cycle 235 superseded the previous first item ("No real
+            # (non-synthetic) model run has been performed") with
+            # executed evidence; the pin now guards the scoped
+            # replacement, which still lists what is not established.
+            "Real (non-synthetic) model runs are established only for the cycle-235",
+            "CPU/GPU parity, and VRAM fit",
             "No browser rendering check",
             "No full-codebase mutation-testing run",
             "not yet executed on GitHub",

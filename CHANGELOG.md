@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 235 — real-checkpoint validation, 2026-11-05)
+
+- The lab's first real-checkpoint evidence
+  (`docs/REAL_CHECKPOINT_VALIDATION.md`): four real
+  checkpoints acquired with revision pins and SHA-256
+  digests (GPT-2 124M/355M/774M and TinyLlama-1.1B-Chat)
+  and passed through `doctor`; the GPT-2 (124M) core
+  battery (chatml + llama3, 96 generations) completed
+  with both decisions `no_candidate` and the boundary
+  failure mode recorded in every generation (the
+  configured boundary token sequence occurred 0 times
+  while a string-level stop would have fired in 95 of
+  96), and TinyLlama's own chat template passed the
+  behavioural template probe with no findings. The
+  remaining battery rows (TinyLlama generation rows,
+  gpt2-medium, gpt2-large) and the gated Llama-3.2 rows
+  are recorded in that page as not established, with
+  their blockers named (host reboots; HF token not yet
+  present), not silently dropped.
+
 ### Added (cycle 233 — enumeration-convention probe, 2026-11-05)
 
 - An enumeration-convention probe
