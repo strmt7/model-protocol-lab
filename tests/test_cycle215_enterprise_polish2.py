@@ -132,23 +132,25 @@ class TestWorkflowPermissionScoping(unittest.TestCase):
                 self.assertEqual(level, "read", f"{path.name}: {scope}")
 
     def test_docs_pages_grants_are_job_level(self):
-        # Docs-publishing migration: branch publishing retired the
-        # deploy job and the Pages grants this pin used to assert
-        # (pages/id-token write on build and deploy). The surviving
-        # cycle-215 rule is the scoping itself: grants live at job
-        # level, the build job stays read-only, and the publish
-        # job's contents write — the grant a git push to gh-pages
-        # needs — exists nowhere else and at no higher level.
+        # Docs-publishing migration (cycle 222) retired the deploy
+        # job for branch publishing and this pin asserted the
+        # publish job's contents write instead; cycle 236 restored
+        # the Actions pipeline on the owner's one-branch order. The
+        # surviving cycle-215 rule is the scoping itself: grants
+        # live at job level, the build job's only write grants are
+        # the Pages ones its upload action needs, the deploy job
+        # holds pages/id-token write and nothing else, and no write
+        # grant exists at any higher level.
         """The docs workflow's Pages grants are job-level only."""
         doc = _load_yaml(WORKFLOWS / "docs.yml")
         build_perms = doc["jobs"]["build"]["permissions"]
         self.assertEqual(build_perms.get("contents"), "read")
-        self.assertIsNone(build_perms.get("pages"))
-        self.assertIsNone(build_perms.get("id-token"))
-        publish_perms = doc["jobs"]["publish"]["permissions"]
-        self.assertEqual(publish_perms.get("contents"), "write")
-        self.assertIsNone(publish_perms.get("pages"))
-        self.assertIsNone(publish_perms.get("id-token"))
+        self.assertEqual(build_perms.get("pages"), "write")
+        self.assertEqual(build_perms.get("id-token"), "write")
+        deploy_perms = doc["jobs"]["deploy"]["permissions"]
+        self.assertEqual(deploy_perms.get("pages"), "write")
+        self.assertEqual(deploy_perms.get("id-token"), "write")
+        self.assertIsNone(deploy_perms.get("contents"))
 
     def test_codeql_and_scorecard_grants_are_job_level(self):
         """CodeQL and Scorecard grants are job-level, with security-events write only where
