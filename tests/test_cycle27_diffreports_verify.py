@@ -7230,6 +7230,250 @@ def oracle_diff_reports(
             return False
         return bool(value.get("n_cases") == len(cases))
 
+    def _or_typographicemphasis_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_typographic_emphasis:
+        # exact top-level shape (the audit block
+        # shape-checked only), the protocol rebuilt through
+        # the producer module (typographicemphasis),
+        # every record checked against the
+        # producer-regenerated case in panel order, the
+        # recorded content digests rebound to the
+        # regenerated arm contents for all eight record
+        # arms (the treatment itself is committed), the
+        # per-arm ids-identical flags and id-length
+        # deltas re-derived from the recorded digests and
+        # token counts, every cell's verdict re-derived
+        # from its digest identity, every cell's answer
+        # text verified against its answer digest
+        # (surrogate-safe: an unencodable text is invalid,
+        # never an exception), completed cells bound to
+        # the record's arm token count, and the aggregates
+        # recomputed through the producer's own aggregate
+        # function -- so a certificate label is accepted
+        # only when the producer's counts earn it. A drift
+        # in either side's constants breaks the agreement.
+        """Or typographicemphasis valid."""
+
+        import re as _re
+
+        from model_protocol_lab import typographicemphasis as _tem
+
+        def _digest_ok(digest: Any) -> bool:
+            """Digest ok."""
+            return type(digest) is str and _re.fullmatch(r"[0-9a-f]{64}", digest) is not None
+
+        def _text_digest(text: str) -> Any:
+            """Text digest (None when unencodable)."""
+            try:
+                return hashlib.sha256(text.encode("utf-8")).hexdigest()
+            except UnicodeEncodeError:
+                return None
+
+        if type(value) is not dict or value.get("available") is not True:
+            return False
+        if set(value) != {
+            "available",
+            "detail",
+            "protocol",
+            "audit",
+            "candidates",
+            "n_candidates",
+            "n_cases",
+        }:
+            return False
+        if value.get("detail") != "":
+            return False
+        protocol = value.get("protocol")
+        if type(protocol) is not dict:
+            return False
+        seed = protocol.get("seed")
+        backend_fp = protocol.get("backend_fingerprint")
+        if type(seed) is not int or isinstance(seed, bool):
+            return False
+        if type(backend_fp) is not str:
+            return False
+        expected_protocol = dict(_tem.protocol_object(seed, backend_fp))
+        expected_protocol["fingerprint"] = _tem.protocol_fingerprint(seed, backend_fp)
+        if protocol != expected_protocol:
+            return False
+        audit = value.get("audit")
+        if type(audit) is not dict or set(audit) != {
+            "n_audit_excluded",
+            "by_reason",
+            "special_token_findings",
+        }:
+            return False
+        if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+            return False
+        if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+            return False
+        if type(audit["by_reason"]) is not dict:
+            return False
+        for reason, count in audit["by_reason"].items():
+            if type(reason) is not str or type(count) is not int or count < 0:
+                return False
+        cases = _tem.generate_cases(seed)
+        if len(cases) != _tem.CASE_COUNT:
+            return False
+        candidates = value.get("candidates")
+        if type(candidates) is not dict or not candidates:
+            return False
+        if len(candidates) > _tem.MAX_CANDIDATES:
+            return False
+        records_bytes = 0
+        total_records = 0
+        aggregate_keys = {
+            "arms",
+            "dose",
+            "ids",
+            "positive_control",
+            "headline",
+            "operating_characteristics",
+            "n_cases",
+            "n_incomplete",
+        }
+        for entry in candidates.values():
+            if type(entry) is not dict:
+                return False
+            if entry.get("status") == "unavailable":
+                if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                    return False
+                continue
+            if entry.get("status") != "available" or entry.get("detail") != "":
+                return False
+            if set(entry) != aggregate_keys | {"status", "detail", "records"}:
+                return False
+            records = entry["records"]
+            if type(records) is not list or len(records) != len(cases):
+                return False
+            total_records += len(records)
+            records_bytes += len(
+                json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            )
+            if records_bytes > _tem.MAX_RECORDS_BYTES:
+                return False
+            for record, case in zip(records, cases, strict=True):
+                if type(record) is not dict or set(record) != {
+                    "fixture",
+                    "topic",
+                    "expected_digest",
+                    "content_digests",
+                    "arm_tokens",
+                    "id_digests",
+                    "ids_identical",
+                    "id_length_delta",
+                    "cells",
+                    "cell_details",
+                }:
+                    return False
+                if record["fixture"] != case["fixture_id"]:
+                    return False
+                if record["topic"] != case["topic"]:
+                    return False
+                if record["expected_digest"] != _tem.digest_text(case["expected"]):
+                    return False
+                if record["content_digests"] != {
+                    arm: _tem.digest_text(_tem.content_for(case, arm)) for arm in _tem.RECORD_ARMS
+                }:
+                    return False
+                arm_tokens = record["arm_tokens"]
+                cells = record["cells"]
+                details = record["cell_details"]
+                for mapping in (
+                    arm_tokens,
+                    cells,
+                    details,
+                    record["id_digests"],
+                    record["content_digests"],
+                    record["ids_identical"],
+                    record["id_length_delta"],
+                ):
+                    if type(mapping) is not dict:
+                        return False
+                for mapping in (
+                    arm_tokens,
+                    cells,
+                    details,
+                    record["id_digests"],
+                    record["content_digests"],
+                ):
+                    if set(mapping) != set(_tem.RECORD_ARMS):
+                        return False
+                for mapping in (record["ids_identical"], record["id_length_delta"]):
+                    if set(mapping) != set(_tem.TREATED_ARMS):
+                        return False
+                if any(not _digest_ok(digest) for digest in record["id_digests"].values()):
+                    return False
+                if any(not _digest_ok(digest) for digest in record["content_digests"].values()):
+                    return False
+                for arm in _tem.RECORD_ARMS:
+                    tokens = arm_tokens[arm]
+                    if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                        return False
+                for arm in _tem.TREATED_ARMS:
+                    if record["ids_identical"][arm] is not (
+                        record["id_digests"][arm] == record["id_digests"]["control"]
+                    ):
+                        return False
+                    if record["id_length_delta"][arm] != (arm_tokens[arm] - arm_tokens["control"]):
+                        return False
+                for arm in _tem.RECORD_ARMS:
+                    tokens = arm_tokens[arm]
+                    if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                        return False
+                    detail = details[arm]
+                    if detail not in ("", "arm_context_exceeded", "arm_evaluation_failed"):
+                        return False
+                    cell = cells[arm]
+                    if cell is None:
+                        if detail == "":
+                            return False
+                        continue
+                    if detail != "":
+                        return False
+                    if type(cell) is not dict or set(cell) != {
+                        "verdict",
+                        "boundary_found",
+                        "boundary_text_match",
+                        "input_tokens",
+                        "answer_digest",
+                        "answer_text",
+                    }:
+                        return False
+                    if (
+                        type(cell["verdict"]) is not bool
+                        or type(cell["boundary_found"]) is not bool
+                    ):
+                        return False
+                    if (
+                        cell["boundary_text_match"] is not None
+                        and type(cell["boundary_text_match"]) is not bool
+                    ):
+                        return False
+                    if type(cell["input_tokens"]) is not int or cell["input_tokens"] != tokens:
+                        return False
+                    digest = cell["answer_digest"]
+                    if digest is not None and not _digest_ok(digest):
+                        return False
+                    text = cell["answer_text"]
+                    if text is None:
+                        if digest is not None:
+                            return False
+                    elif type(text) is not str or _text_digest(text) != digest:
+                        return False
+                    verdict = (digest == record["expected_digest"]) and cell["boundary_found"]
+                    if cell["verdict"] != verdict:
+                        return False
+            expected = _tem.aggregate_candidate(records, cases)
+            for key, val in expected.items():
+                if entry.get(key) != val:
+                    return False
+        if total_records > _tem.MAX_GROUND_RECORDS:
+            return False
+        if value.get("n_candidates") != len(candidates):
+            return False
+        return bool(value.get("n_cases") == len(cases))
+
     def _or_rotation_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_rotation: exact top-level
         # shape, the protocol rebuilt through the producer
@@ -9014,6 +9258,18 @@ def oracle_diff_reports(
         _o_env_available = "neither"
     _o_env_asymmetric = _o_env_available not in ("both", "neither")
 
+    _tem_old_ok = _or_typographicemphasis_valid(old.get("typographic_emphasis"))
+    _tem_new_ok = _or_typographicemphasis_valid(new.get("typographic_emphasis"))
+    if _tem_old_ok and _tem_new_ok:
+        _o_tem_available = "both"
+    elif _tem_old_ok:
+        _o_tem_available = "old"
+    elif _tem_new_ok:
+        _o_tem_available = "new"
+    else:
+        _o_tem_available = "neither"
+    _o_tem_asymmetric = _o_tem_available not in ("both", "neither")
+
     _rt_old_ok = _or_rotation_valid(old.get("rotation"))
     _rt_new_ok = _or_rotation_valid(new.get("rotation"))
     if _rt_old_ok and _rt_new_ok:
@@ -9270,6 +9526,8 @@ def oracle_diff_reports(
         "compatibility_form_asymmetric": _o_cxf_asymmetric,
         "enumeration_convention_changed": False,
         "enumeration_convention_asymmetric": _o_env_asymmetric,
+        "typographic_emphasis_changed": False,
+        "typographic_emphasis_asymmetric": _o_tem_asymmetric,
         "history_frame_asymmetric": _o_hf_asymmetric,
         "choice_audit_changed": False,
         "choice_audit_asymmetric": _o_ca_asymmetric,
@@ -9343,6 +9601,7 @@ def oracle_diff_reports(
         "confusable_skeleton": {"available": _o_cs_available, "changed": False},
         "compatibility_form": {"available": _o_cxf_available, "changed": False},
         "enumeration_convention": {"available": _o_env_available, "changed": False},
+        "typographic_emphasis": {"available": _o_tem_available, "changed": False},
         "choice_audit": {"available": _o_ca_available, "changed": False},
         "precision": {"available": _o_pr_available, "changed": False},
         "confidence": {"available": _o_cn_available, "changed": False},

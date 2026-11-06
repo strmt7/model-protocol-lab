@@ -6,6 +6,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 237 — typographic emphasis probe, 2026-11-06)
+
+- `run --typographic-emphasis`: a frozen 24-case
+  fact-recall panel whose fact sentence's topic span
+  carries one typographic treatment (bold, italic,
+  monospace, or the span uppercased, against a verbatim
+  control; exactly one treated occurrence per case),
+  read out per template family and per arm behind the
+  encode-time token-id gate and the completion guard.
+  The fire rule is the sibling shape; the new part is
+  the certificate — when the statistic event (D >= 10,
+  H <= 5 over every failure class, net harm <= 0) holds
+  on the full 24-case id-divergent domain, is stable
+  under the worst-case completion, and the candidate's
+  bold-detection positive control passed in the same
+  run, the arm is labelled `equivalence_certified` at
+  delta 0.34, with the completed heterogeneous-class
+  bound (0.013826 per comparison at alpha 0.02) and the
+  family-wise price printed beside every label. A PC-B
+  `***topic***` arm is reported descriptively. Full
+  contract: `docs/TYPOGRAPHIC_EMPHASIS_DESIGN.md`;
+  manual: USAGE section 8.64. The diff-reports mirror
+  recomputes every label, certificate included, from
+  the committed counts.
+
 ### Changed (cycle 236 — one-branch docs publishing, 2026-11-06)
 
 - The docs site is published by GitHub Actions again

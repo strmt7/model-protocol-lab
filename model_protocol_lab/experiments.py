@@ -12951,6 +12951,374 @@ def enumeration_convention_analysis(
     }
 
 
+class _TypographicEmphasisCancelled(Exception):
+    """Internal: the run's cancel event fired during the
+    typographic-emphasis stage; the stage unwinds to
+    its fail-closed payload rather than mislabelling
+    the interruption.
+    """
+
+
+def _typographic_emphasis_cell(
+    backend: Any,
+    fmt: Any,
+    fixture: Any,
+    ids: tuple[int, ...],
+    *,
+    boundary_ids: tuple[int, ...],
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Event | None,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """One typographic-emphasis generation: (detail, cell).
+
+    Exactly one of the pair is set. ``ids`` are the arm
+    render's ids, measured by the stage at construction for
+    the record's arm token counts and ids-identical
+    derivations; the cell's ``input_tokens`` come from the
+    evaluation's own observation, so a backend whose encode
+    disagreed with itself surfaces as a validator rejection
+    downstream, never a silently wrong record (the mirror
+    binds the two). Every cell carries ``answer_text`` -- the
+    decoded pre-boundary answer, verbatim, never normalised
+    -- bound by the cell's ``answer_digest`` (the cycle-190
+    pattern), because the decomposition classes are functions
+    of the answer text. A cell is built only from an
+    aggregate-eligible report, whose invariants force the
+    recorded observation's status to "completed", so the
+    verdict recomputes from the digest and the boundary flag
+    exactly. The cancel event is checked before and after
+    ``evaluate`` (the multiturn rule: a cancel observed during
+    a generation is never mislabelled an evaluation failure).
+    """
+    if len(ids) + max_new_tokens > max_context:
+        return "arm_context_exceeded", None
+    if cancel is not None and cancel.is_set():
+        raise _TypographicEmphasisCancelled
+    report = evaluate(
+        backend,
+        fmt,
+        (fixture,),
+        boundary=boundary_ids,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        cancel=cancel,
+    )
+    if cancel is not None and cancel.is_set():
+        raise _TypographicEmphasisCancelled
+    if report.aggregate_eligible and report.observations:
+        obs = report.observations[0]
+        return None, {
+            "verdict": bool(obs.exact_match and obs.boundary_found),
+            "boundary_found": bool(obs.boundary_found),
+            "boundary_text_match": obs.boundary_text_match,
+            "input_tokens": len(obs.input_ids),
+            "answer_digest": _answer_digest(obs.answer),
+            "answer_text": obs.answer,
+        }
+    return "arm_evaluation_failed", None
+
+
+def typographic_emphasis_stage(
+    backend: Any,
+    formats: tuple[Any, ...],
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    max_context: int,
+    seed: int = 0,
+    cancel: Event | None = None,
+) -> dict[str, Any]:
+    """Typographic-emphasis stage (cycle 237): a generated
+    24-case fact-recall panel whose fact sentence's topic
+    span is rendered verbatim (control) or under one
+    typographic treatment (bold, italic, monospace, caps),
+    with a bold-detection positive-control panel and a
+    both-sites PC-B arm, per candidate.
+
+    The cases are generated from the run seed inside the stage;
+    there is no dependence on the user's fixtures or the primary
+    run. Surgery is at the fixture level: every arm of a case is
+    a Fixture with the same id, group, and expected, so request
+    seeds are identical across arms by construction
+    (``request_seed_for`` is id-derived) and ``core.evaluate``
+    is used unchanged. The pre-generation screens (the per-case
+    invariant battery, the panel-global value distinctness, the
+    special-token-literal audit over every arm's full message
+    content for every family, and boundary-text containment)
+    fail the whole stage closed with
+    ``typographic_emphasis_screen_failed``; their counts
+    travel in the payload's ``audit`` block, never silently
+    dropped. The serialised-records byte cap degrades the whole
+    stage to ``typographic_emphasis_record_budget_exceeded``.
+    Design: docs/TYPOGRAPHIC_EMPHASIS_DESIGN.md.
+    """
+    from . import typographicemphasis as _te
+    from .fixtures import audit_special_token_literals
+
+    if type(formats) is not tuple or not formats:
+        raise ValueError("formats must be a nonempty tuple")
+    names = [fmt.name for fmt in formats]
+    if len(set(names)) != len(names):
+        # Candidate records are keyed by name; two formats
+        # sharing a name would silently collapse into one
+        # candidate's records (red-team F7, cycle 193). The
+        # precondition is stated at this stage's own boundary.
+        raise ValueError("formats must have unique names")
+    try:
+        protocol: dict[str, Any] = dict(_te.protocol_object(seed, _backend_fingerprint(backend)))
+        protocol["fingerprint"] = _te.protocol_fingerprint(seed, _backend_fingerprint(backend))
+    except _te.RedrawExhausted:
+        # The protocol's ground hash itself regenerates the
+        # panel, so exhaustion can surface here first; it is
+        # the same fail-closed screen outcome, with no
+        # protocol to report.
+        return {
+            "available": False,
+            "detail": "typographic_emphasis_screen_failed",
+            "protocol": {},
+            "audit": {
+                "n_audit_excluded": 0,
+                "by_reason": {"redraw_exhausted": 1},
+                # nosec B105 -- integer audit counter field, not a credential
+                "special_token_findings": 0,
+            },
+            "candidates": {},
+        }
+    audit: dict[str, Any] = {
+        "n_audit_excluded": 0,
+        "by_reason": {},
+        # nosec B105 -- integer audit counter field, not a credential
+        "special_token_findings": 0,
+    }
+    if len(formats) * _te.CASE_COUNT > _te.MAX_GROUND_RECORDS:
+        return {
+            "available": False,
+            "detail": "typographic_emphasis_record_budget_exceeded",
+            "protocol": protocol,
+            "audit": audit,
+            "candidates": {},
+        }
+    try:
+        cases = _te.generate_cases(seed)
+    except _te.RedrawExhausted:
+        return {
+            "available": False,
+            "detail": "typographic_emphasis_screen_failed",
+            "protocol": protocol,
+            "audit": {
+                "n_audit_excluded": 0,
+                "by_reason": {"redraw_exhausted": 1},
+                # nosec B105 -- integer audit counter field, not a credential
+                "special_token_findings": 0,
+            },
+            "candidates": {},
+        }
+    invalid = sum(1 for case in cases if not _te.validate_case(case))
+    panel_values = [str(case["expected"]) for case in cases]
+    panel_distinct = len(set(panel_values)) == len(panel_values)
+    if invalid or not panel_distinct:
+        by_reason: dict[str, int] = {}
+        if invalid:
+            by_reason["case_invariant"] = invalid
+        if not panel_distinct:
+            by_reason["panel_distinctness"] = 1
+        return {
+            "available": False,
+            "detail": "typographic_emphasis_screen_failed",
+            "protocol": protocol,
+            "audit": {
+                "n_audit_excluded": 0,
+                "by_reason": by_reason,
+                # nosec B105 -- integer audit counter field, not a credential
+                "special_token_findings": 0,
+            },
+            "candidates": {},
+        }
+    contents = tuple(_te.content_for(case, arm) for case in cases for arm in _te.RECORD_ARMS)
+    findings = audit_special_token_literals(contents, formats)
+    if findings:
+        # A special-token literal in an arm's content would
+        # forge turn structure in every cell of every run; the
+        # stage fails closed before any generation, with the
+        # count in the audit block (never silently dropped).
+        audit = {
+            "n_audit_excluded": 0,
+            "by_reason": {"special_token_literal": len(findings)},
+            "special_token_findings": len(findings),
+        }
+        return {
+            "available": False,
+            "detail": "typographic_emphasis_screen_failed",
+            "protocol": protocol,
+            "audit": audit,
+            "candidates": {},
+        }
+    boundaries = _resolve_boundaries(formats, boundary, boundary_map)
+    for fmt in formats:
+        try:
+            boundary_text = backend.decode(boundaries[fmt.name])
+        except Exception:  # noqa: BLE001 -- an undecodable boundary screens nothing
+            boundary_text = ""
+        if boundary_text and any(boundary_text in content for content in contents):
+            return {
+                "available": False,
+                "detail": "typographic_emphasis_screen_failed",
+                "protocol": protocol,
+                "audit": audit,
+                "candidates": {},
+            }
+
+    def _cancelled() -> bool:
+        """Return the cancelled."""
+        return cancel is not None and cancel.is_set()
+
+    candidates: dict[str, Any] = {}
+    for fmt in formats:
+        name = fmt.name
+        records: list[dict[str, Any]] = []
+        try:
+            for case in cases:
+                if _cancelled():
+                    raise _TypographicEmphasisCancelled
+                case_id = str(case["fixture_id"])
+                record: dict[str, Any] = {
+                    "fixture": case_id,
+                    "topic": str(case["topic"]),
+                    "expected_digest": _te.digest_text(str(case["expected"])),
+                    "content_digests": dict.fromkeys(_te.RECORD_ARMS),
+                    "arm_tokens": dict.fromkeys(_te.RECORD_ARMS),
+                    "id_digests": dict.fromkeys(_te.RECORD_ARMS),
+                    "ids_identical": dict.fromkeys(_te.TREATED_ARMS),
+                    "id_length_delta": dict.fromkeys(_te.TREATED_ARMS),
+                    "cells": dict.fromkeys(_te.RECORD_ARMS),
+                    "cell_details": dict.fromkeys(_te.RECORD_ARMS, ""),
+                }
+                for arm in _te.RECORD_ARMS:
+                    content = _te.content_for(case, arm)
+                    fixture = Fixture(
+                        id=case_id,
+                        messages=(Message("user", content),),
+                        expected=str(case["expected"]),
+                        group=_te.GROUP,
+                    )
+                    ids = tuple(backend.encode(fmt.render(fixture.messages)))
+                    record["arm_tokens"][arm] = len(ids)
+                    record["id_digests"][arm] = _te.digest_ids(ids)
+                    record["content_digests"][arm] = _te.digest_text(content)
+                    detail, cell = _typographic_emphasis_cell(
+                        backend,
+                        fmt,
+                        fixture,
+                        ids,
+                        boundary_ids=boundaries[name],
+                        max_new_tokens=max_new_tokens,
+                        max_context=max_context,
+                        seed=seed,
+                        cancel=cancel,
+                    )
+                    if detail is not None:
+                        record["cell_details"][arm] = detail
+                    elif cell is not None:
+                        record["cells"][arm] = cell
+                for arm in _te.TREATED_ARMS:
+                    record["ids_identical"][arm] = (
+                        record["id_digests"][arm] == record["id_digests"]["control"]
+                    )
+                    record["id_length_delta"][arm] = int(record["arm_tokens"][arm]) - int(
+                        record["arm_tokens"]["control"]
+                    )
+                records.append(record)
+        except _TypographicEmphasisCancelled:
+            return {
+                "available": False,
+                "detail": "cancelled",
+                "protocol": protocol,
+                "audit": audit,
+                "candidates": {},
+            }
+        candidates[name] = {"status": "available", "detail": "", "records": records}
+    if sum(_te.records_bytes(entry["records"]) for entry in candidates.values()) > (
+        _te.MAX_RECORDS_BYTES
+    ):
+        # The byte cap is a hard bound on what a results file
+        # may carry (a non-ASCII-stressed panel of answer texts
+        # reaches it; design section 6 budgets): the whole stage
+        # degrades to the frozen budget detail, never a partial
+        # panel.
+        return {
+            "available": False,
+            "detail": "typographic_emphasis_record_budget_exceeded",
+            "protocol": protocol,
+            "audit": audit,
+            "candidates": {},
+        }
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": protocol,
+        "audit": audit,
+        "candidates": candidates,
+    }
+
+
+def typographic_emphasis_analysis(
+    stage: dict[str, Any],
+    candidate_names: tuple[str, ...],
+) -> dict[str, Any]:
+    """Aggregate a typographic-emphasis stage into the stored
+    payload (cycle 237).
+
+    Per-candidate readouts come from
+    typographicemphasis.aggregate_candidate over the
+    candidate's ground records and the regenerated panel:
+    per-arm rates with the completed-cell decomposition,
+    the per-arm dose deltas, the per-arm id report (the
+    regime gate), the positive-control block with its
+    gate verdict, and per treated arm the combined
+    guarded headline over the id-divergent paired
+    population, with its label, counts, divergent-domain
+    size M, certification companions, and the gates that
+    blocked a certificate. The stage never affects
+    selection. Design: docs/TYPOGRAPHIC_EMPHASIS_DESIGN.md.
+    """
+    from . import typographicemphasis as _te
+
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "typographic_emphasis_unavailable")),
+            "protocol": stage.get("protocol"),
+            "audit": stage.get("audit"),
+        }
+    stage_candidates = stage["candidates"]
+    cases = _te.generate_cases(int(stage["protocol"]["seed"]))
+    candidates_out: dict[str, Any] = {}
+    for name in candidate_names:
+        entry = stage_candidates[name]
+        if entry["status"] != "available":
+            candidates_out[name] = {
+                "status": "unavailable",
+                "detail": entry["detail"],
+                "records": [],
+            }
+            continue
+        aggregates = _te.aggregate_candidate(entry["records"], cases)
+        aggregates.update({"status": "available", "detail": "", "records": entry["records"]})
+        candidates_out[name] = aggregates
+    return {
+        "available": True,
+        "detail": "",
+        "protocol": stage["protocol"],
+        "audit": stage.get("audit"),
+        "candidates": candidates_out,
+        "n_candidates": len(candidate_names),
+        "n_cases": len(cases),
+    }
+
+
 class _RotationCancelled(Exception):
     """Internal: the run's cancel event fired during the
     rotation stage; the stage unwinds to its fail-closed

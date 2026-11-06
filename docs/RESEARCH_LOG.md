@@ -11629,3 +11629,75 @@ verified zero.
   were being served from a branch — both are contradicted by the
   post-flip API read-backs and the live 200 recorded in the cycle
   report.
+
+## Cycle 237 — typographic emphasis: the falsification track's certifying probe (2026-11-06)
+
+- **What shipped.** `run --typographic-emphasis`
+  (docs/TYPOGRAPHIC_EMPHASIS_DESIGN.md; USAGE section
+  8.64): a frozen 24-case fact-recall panel whose fact
+  sentence's topic span carries one treatment — bold
+  `**span**`, italic `*span*`, monospace `` `span` ``, or
+  the span uppercased, against a verbatim control, exactly
+  one treated occurrence per case — read out per template
+  family and per arm behind the encode-time id gate and
+  the completion guard. The fire rule is the sibling shape
+  (D >= 10, J >= 6). What is new is the certificate: when
+  the statistic event (D >= 10, H <= 5 over every failure
+  class, net harm S = H - R <= 0) holds on the full
+  24-case id-divergent domain, is stable under the
+  worst-case completion, and the candidate's
+  positive-control panel (which of two facts' topics is
+  written in bold; the main case's own values, A5-guarded)
+  passed in the same run, the arm is labelled
+  `equivalence_certified` at delta 0.34. The diff-reports
+  mirror recomputes every label, certificate included,
+  from the committed counts, so a certificate cannot be
+  asserted by a record whose counts do not earn it.
+- **The level, stated honestly.** The certification level
+  is computed over the heterogeneous class — per-pair
+  joint laws arbitrary, the null a pooled marginal drop
+  of at least delta — not under an independence or
+  restricted-coupling assumption. The completed extremal
+  bound at delta 0.34 is 0.013826 per comparison at alpha
+  0.02; family-wise over the 96 labelled comparisons the
+  expectation is 1.3273 false certificates, probability
+  0.7373 of at least one (independence convention), and
+  both prices print beside the licence in every report.
+  The restricted-class bound that would have licensed
+  delta 0.28 was withdrawn after a real-table
+  counterexample world certified at 0.022662 under it:
+  the restriction was load-bearing, and delta moved to
+  0.34 rather than the assumption being kept. The
+  certificate is therefore coarse by construction — it
+  is silent below 0.34 and does not exclude the PASTA
+  study's average emphasis effects (0.1791 / 0.2514) —
+  and the design says so in words rather than letting the
+  label overclaim. Three neighbouring quantities print
+  near 0.0122 (restricted-vertex bound 0.012253 at delta
+  0.34, anchored probability 0.012232 at the old delta
+  0.28, homogeneous uniform sup 0.012252 at delta 0.30);
+  every printed occurrence carries its full name.
+- **Uniqueness pass (combination framing).** The PASTA
+  study (arXiv:2311.02262, opened in the design session)
+  measures emphasis effects as averages over task suites
+  and offers no per-candidate certificate, no abstention
+  vocabulary, and no completion guard; the lab's own
+  sibling probes measure format confounds with
+  fire-or-abstain labels but none certifies an equivalence
+  at a stated level, and none gates a verdict on a
+  marks-channel positive control. The combination —
+  behavioural probing of a checkpoint's own rendering
+  pipeline, a level-controlled certificate over an
+  explicitly dependence-free-of-assumptions class, and a
+  positive control proving the channel is live for that
+  candidate — was found in no surveyed neighbour during
+  the wave-12 design pass; the claim is the combination,
+  not any component.
+- **Falsification note:** the cycle's level claim would be
+  wrong if a per-pair law in the heterogeneous class at
+  marginal drop 0.34 certified above 0.013826 — the
+  extremal computation is archived with the adjudication
+  record, and the build's tests re-verify its machinery
+  exactly on named vertices of the class (the real-table
+  assignment reproducing 0.022662 among them) with every
+  vertex dominated by the printed bound.

@@ -224,11 +224,12 @@ class ValidationToolchainTests(unittest.TestCase):
         # invisiblechars.py is the 70th, cycle 223;
         # confusableskeleton.py is the 71st, cycle 224;
         # compatibilityform.py is the 72nd, cycle 231;
-        # enumerationconvention.py is the 73rd, cycle 233.)
+        # enumerationconvention.py is the 73rd, cycle 233;
+        # typographicemphasis.py is the 74th, cycle 237.)
         """Mypy clean 58 source files."""
         proc = run_tool("mypy", "model_protocol_lab", timeout=600)
         self.assertEqual(proc.returncode, 0, proc.stdout[-1000:])
-        self.assertIn("73 source files", proc.stdout)
+        self.assertIn("74 source files", proc.stdout)
 
     def test_bandit_zero_issues_at_any_severity(self):
         # Doc claims a remaining Low/Medium B105 false positive; actual:
