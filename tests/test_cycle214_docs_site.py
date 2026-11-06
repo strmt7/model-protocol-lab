@@ -125,36 +125,37 @@ class TestDocsToolchain(unittest.TestCase):
 class TestDocsWorkflow(unittest.TestCase):
     """The docs workflow builds strict and publishes the site."""
 
-    def test_docs_workflow_builds_strict_and_publishes_to_branch(self):
-        """The docs workflow builds with mkdocs strict mode and publishes the site."""
+    def test_docs_workflow_builds_strict_and_deploys_via_actions(self):
+        """The docs workflow builds with mkdocs strict mode and deploys via the Pages actions."""
         path = REPO_ROOT / ".github" / "workflows" / "docs.yml"
         doc = _load_yaml(path)
         # Cycle 215: the Pages grants moved into the build and
         # deploy jobs (zizmor excessive-permissions — workflow-level
         # write grants are inherited by every job). Through cycle
         # 214 this pin asserted the top-level block.
-        # Docs-publishing migration: the deploy job and its Pages
-        # grants are gone. Publishing is a git push to the gh-pages
-        # branch (Pages build_type=legacy), so no job may hold the
-        # pages or id-token grants the deployment API required, and
-        # the only write grant in the workflow is the publish job's
-        # contents grant for the push itself.
+        # Docs-publishing migration (cycle 222) replaced the deploy
+        # job with a git push to the gh-pages branch and this pin
+        # asserted that shape; cycle 236 restored the Actions
+        # pipeline on the owner's one-branch order and deleted the
+        # branch. The publish job and its contents write are gone;
+        # the Pages grants (pages/id-token write) are held only by
+        # the build and deploy jobs that call the Pages actions.
         self.assertNotEqual(doc["permissions"].get("pages"), "write")
-        for job_name, job in doc["jobs"].items():
-            perms = job.get("permissions") or {}
-            self.assertNotEqual(perms.get("pages"), "write", job_name)
-            self.assertNotEqual(perms.get("id-token"), "write", job_name)
         self.assertEqual(doc["jobs"]["build"]["permissions"].get("contents"), "read")
-        self.assertEqual(doc["jobs"]["publish"]["permissions"].get("contents"), "write")
-        self.assertIsNone(doc["jobs"]["publish"].get("environment"))
+        self.assertEqual(doc["jobs"]["build"]["permissions"].get("pages"), "write")
+        self.assertEqual(doc["jobs"]["build"]["permissions"].get("id-token"), "write")
+        self.assertEqual(doc["jobs"]["deploy"]["permissions"].get("pages"), "write")
+        self.assertEqual(doc["jobs"]["deploy"]["permissions"].get("id-token"), "write")
+        self.assertIsNone(doc["jobs"]["deploy"]["permissions"].get("contents"))
+        self.assertEqual(doc["jobs"]["deploy"]["environment"]["name"], "github-pages")
         for job_name, job in doc["jobs"].items():
             self.assertIsInstance(job.get("timeout-minutes"), int, job_name)
         text = path.read_text(encoding="utf-8")
         self.assertIn("mkdocs build --strict", text)
-        self.assertNotIn("actions/upload-pages-artifact@", text)
-        self.assertNotIn("actions/deploy-pages@", text)
-        self.assertIn("git push", text)
-        self.assertIn("gh-pages", text)
+        self.assertIn("actions/upload-pages-artifact@", text)
+        self.assertIn("actions/deploy-pages@", text)
+        self.assertNotIn("git push --force", text)
+        self.assertNotIn("git init", text)
         self.assertIn("requirements-docs.txt", text)
 
 
