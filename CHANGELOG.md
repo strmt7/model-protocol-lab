@@ -6,6 +6,37 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (cycle 239 — security-policy dated records, 2026-11-06)
+
+- `docs/SECURITY.md`'s Dependabot section gains the
+  2026-11-06 re-verification record for the 13 open
+  filelock alerts (all in the cocoindex tool lock): a
+  dedicated remediation lane re-audited every
+  repository manifest with pip-audit (nothing else
+  found), re-measured the block (litellm, latest
+  stable 1.108.1, is still the only package in the
+  closure capping `filelock<4.0`), and proved the
+  remedy against the release candidate that lifts
+  it — litellm 1.109.0rc1 already declares
+  `filelock<5`, and the two-pin lock change (filelock
+  4.2.9, litellm 1.109.x) installs hash-locked, passes
+  `pip check`, and passes the tool smoke. It lands
+  the day the first stable litellm ≥ 1.109.0
+  publishes (a watch is armed on that trigger);
+  forcing the pin was tested, runs, and was rejected
+  because it cannot be expressed in the hash-locked
+  one-step install. The alerts remain open and
+  undismissed. The section also gains the closure
+  record for Dependabot PR #7 (the dev-hf
+  minor-patch group): blocked by resolver execution
+  on sympy's `mpmath<1.4` cap and torch's exact
+  `cuda-toolkit==13.2.2` pin, left open by cycle 234
+  as the torch-lock regeneration cycle's tracking
+  object, and closed on 2026-11-05 — evidence pointer
+  recorded on the PR, branch deleted — when the owner
+  restated the one-branch rule; its bumps still wait
+  on that regeneration cycle. No code changed.
+
 ### Fixed (cycle 238 — typographic-emphasis decomposer agreement, 2026-11-06)
 
 - `typographicemphasis.decompose_cell` read the cell

@@ -11765,3 +11765,59 @@ verified zero.
   shapes and the sweep re-measures the invariant over
   the full scalar grid, so a future loosening of
   either path fails by name.
+
+## Cycle 239 — security-policy dated records: the filelock re-verification and the PR #7 closure (2026-11-06)
+
+- **What shipped.** Two dated records appended to the
+  Dependabot section of `docs/SECURITY.md`, written
+  from primary records; no code changed. (1) The
+  2026-11-06 re-verification of the 13 open filelock
+  Dependabot alerts, adapting the deep-remediation
+  lane's paste-ready record: pip-audit over all eleven
+  repository manifests found nothing else; litellm
+  remains the only package in the closure capping
+  `filelock<4.0` (latest stable 1.108.1), while
+  litellm 1.109.0rc1 already declares
+  `filelock<5,>=3.16.1`, making the fix a two-pin lock
+  change (filelock 4.2.9, litellm 1.109.x) the day the
+  first stable litellm ≥ 1.109.0 ships. (2) The
+  closure record for Dependabot PR #7 (the dev-hf
+  minor-patch group): cycle 234 left it open with both
+  resolver verdicts recorded on it — sympy 1.14.0's
+  `mpmath<1.4` cap against its mpmath 1.4.1, and torch
+  2.15.0's exact `cuda-toolkit==13.2.2` pin against
+  its 13.4.3, both the latest releases; it was closed
+  on 2026-11-05 after the owner's one-branch
+  restatement, the evidence pointer recorded on the
+  PR and its branch deleted; the bumps wait on the
+  queued torch-lock regeneration cycle.
+- **Evidence.** The lane proved the remedy by
+  execution against the release candidate (one-step
+  `--require-hashes` install succeeds, `pip check`
+  clean, the cocoindex tool smoke passes) and settled
+  the alternatives the same way: cocoindex-code
+  0.2.43 changes no relevant range and a floated
+  stable resolution still selects filelock 3.32.7;
+  forcing filelock 4.2.9 over the cap runs correctly
+  but cannot be expressed in the hash-locked one-step
+  install without weakening its integrity design, and
+  was not taken; the import trace shows filelock
+  executing in the cocoindex daemon through
+  huggingface_hub/torch cache locking while litellm
+  is never imported on the tool's index/search paths.
+  The coordinator re-enumerated the open alerts
+  through the GitHub API at cycle start — 13 open,
+  all filelock in `tools/requirements/cocoindex.txt`
+  (1 high, 9 medium, 3 low) — and the counts the
+  record prints are that read's, confirmed against
+  the lane's enumeration rather than copied from it.
+- **Falsification note:** the record's central claim
+  — that the alerts clear with a two-pin lock change
+  once litellm 1.109.0 goes stable — is falsified if
+  the first stable litellm ≥ 1.109.0 does not declare
+  `filelock<5,>=3.16.1`, or if the regenerated
+  two-pin lock then fails the hash-locked install,
+  `pip check`, or the tool smoke; the armed watch
+  fires on the trigger either way, and the apply
+  cycle re-proves each step before pushing. The
+  alerts stand open and undismissed until then.

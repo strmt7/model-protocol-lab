@@ -910,6 +910,63 @@ resolver (`litellm 1.106.6 depends on filelock<4.0 and
 >=3.16.1`), and litellm's latest release (1.108.0) still
 declares `filelock<4.0` — the PR was closed with that
 evidence on it, and the alerts remain open and undismissed.
+Re-verified 2026-11-06 (cycle 239): the 13 alerts were
+re-investigated end to end by a dedicated remediation lane.
+pip-audit over all eleven repository manifests found no
+other vulnerability. The block is unchanged in shape and
+one release from lifting: litellm is the only package in
+the closure capping `filelock<4.0` (the latest stable,
+1.108.1, still caps), but litellm 1.109.0rc1 already
+declares `filelock<5,>=3.16.1`, and with the 1.109 line
+the fix is a two-pin lock change (filelock → 4.2.9,
+litellm → 1.109.x) — proven by execution against the
+release candidate: the one-step `--require-hashes`
+install succeeds, `pip check` is clean, and the full
+cocoindex tool smoke passes. A watch on the trigger (the
+first stable litellm ≥ 1.109.0) is armed, and the change
+lands the day it fires. The alternatives were settled by
+execution, not argument: upgrading cocoindex-code to its
+newest release (0.2.43) changes no relevant range, and a
+floated stable resolution still selects the vulnerable
+filelock 3.32.7; forcing filelock 4.2.9 over litellm's
+cap runs correctly — the tool smoke passes and litellm's
+only two filelock-using modules load and bind under
+4.2.9 — but no single lock file can express the override
+(pip validates the graph even for a fully pinned file),
+so it would require a two-step `--no-deps` swap leaving
+an environment `pip check` calls broken: a direct
+weakening of this lock's install-integrity design (any
+drift between the file and the index fails the install),
+and not taken. Reachability, restated from the lane's
+import trace: filelock executes in the cocoindex daemon
+through huggingface_hub and torch cache locking (both
+already accept 4.x), while litellm itself is never
+imported on the tool's index/search paths — the cap that
+holds the vulnerable version belongs to a component
+that never imports it on any path this repository
+executes. The alerts stand open and undismissed. The
+lane's report and logs are kept with the cycle records
+outside this repository.
+
+Closed 2026-11-05 (recorded in cycle 239): Dependabot
+PR #7, the dev-hf minor-patch group, which cycle 234
+had left open with its execution evidence recorded on
+it. Its bumps are blocked in two independent places,
+both proven by resolver execution in cycle 234: the
+15-bump splice fails because sympy 1.14.0 — the latest
+release — caps `mpmath<1.4` against the group's mpmath
+1.4.1, and the 14-bump remainder fails because torch
+2.15.0 — also the latest — exact-pins
+`cuda-toolkit==13.2.2` on Linux against the group's
+13.4.3. Cycle 234 kept the PR open as the tracking
+object for a future torch-lock regeneration cycle;
+when the owner restated the one-branch rule later that
+day, the evidence pointer was recorded on the PR, the
+PR was closed, and its branch was deleted — the
+repository keeps exactly one branch, `main`. Nothing
+from PR #7 has landed; its bumps arrive only through
+the torch-lock regeneration cycle, which stays in the
+queue.
 
 ## Reporting defects
 
