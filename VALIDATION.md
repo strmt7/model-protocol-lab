@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–234 (executed 2026-10-14 → 2026-11-05, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–235 (executed 2026-10-14 → 2026-11-05, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -105,6 +105,22 @@ doctor's resource fallbacks degrade there.
   latest release, exact-pins `cuda-toolkit==13.2.2`, and
   sympy 1.14.0 caps `mpmath<1.4`, so its bumps wait on a
   future torch-lock regeneration cycle.
+  Cycle 235 moves neither figure either: it changed no
+  package code and no tests — it is the real-checkpoint
+  validation cycle, whose evidence lives in
+  `docs/REAL_CHECKPOINT_VALIDATION.md`. Four real checkpoints
+  were acquired with revision pins and SHA-256 digests and
+  passed `doctor`; the GPT-2 (124M) checkpoint completed the
+  full core battery (chatml + llama3, 96 generations, both
+  `no_candidate` with the boundary failure mode recorded in
+  every generation), and TinyLlama-1.1B-Chat passed the
+  doctor suite including the behavioural template probe on
+  its own template (8 word-swap pairs, no findings) plus a
+  load-and-generate smoke run. The remaining battery rows
+  (TinyLlama generation rows, gpt2-medium, gpt2-large) were
+  blocked by three host reboots that killed the long CPU
+  runs mid-flight and are recorded as not established in
+  that page's remainder section, not silently dropped.
   Cycle 233 moves both figures: the enumeration-convention
   feature added 1,182 statements (40,308 → 41,490) and 1,177
   covered statements (38,769 → 39,946), for a precise
@@ -507,8 +523,11 @@ reproducible from the repository root in a fresh virtual environment.
 
 ## Not established
 
-- No real (non-synthetic) model run has been performed; adapter behavior on
-  production checkpoints, CPU/GPU parity, and VRAM fit are unverified.
+- Real (non-synthetic) model runs are established only for the cycle-235
+  matrix rows recorded in `docs/REAL_CHECKPOINT_VALIDATION.md` (GPT-2 124M
+  full battery; TinyLlama-1.1B-Chat doctor suite, template probe and smoke
+  run). Not established: the TinyLlama and gpt2-medium/gpt2-large generation
+  battery rows, the gated Llama-3.2 rows, CPU/GPU parity, and VRAM fit.
 - No browser rendering check of `report.html` (structure/contrast/escaping
   validated programmatically only).
 - No full-codebase mutation-testing run (scoped cosmic-ray trials on
