@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–237 (executed 2026-10-14 → 2026-11-06, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–238 (executed 2026-10-14 → 2026-11-06, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9459 tests collected**
-  (cycle 237, 2026-11-06). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9460 tests collected**
+  (cycle 238, 2026-11-06). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -59,7 +59,7 @@ doctor's resource fallbacks degrade there.
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  95.2012% (cycle 237, 2026-11-06)**. The gate compares the
+  95.2012% (cycle 238, 2026-11-06)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
   (+0.701) is auditable rather than inferred from the display.
@@ -206,6 +206,35 @@ doctor's resource fallbacks degrade there.
   the cycle's first coverage leg measured 94.7868% before
   the coverage-recovery battery above, a dip enumerated
   from the coverage JSON rather than rounded away.
+  Cycle 238 moves neither figure: a one-defect fix in the
+  typographic-emphasis decomposer changed two lines of
+  already-covered code and added no statements, and its
+  gate reproduced the precise figure exactly —
+  95.20118473705769% (41,088 of 42,636 statements), with
+  the suite count at 9,460. The defect (bug-hunt 3,
+  finding F1, from the parallel bug-hunt lane that ran
+  alongside cycle 237): decompose_cell read the cell
+  verdict by truthiness and the boundary flag by
+  negation, where its diff-reports mirror, the sibling
+  decomposers and the module's own _cell_verdict read
+  `is True` — on non-bool JSON scalars the paths
+  returned different classes (880 divergent instances
+  over the campaign's 2,640-cell grid, none on
+  bool-shaped cells; unreachable through the shipped
+  CLI, whose staging builds genuine bools, and the
+  mirror rejects non-bool cells before decomposing).
+  Both reads are now `is True` reads; the regression
+  test names both shapes, fails on the pre-fix code
+  (proven against a reverted copy, the four non-bool
+  subtests failing and the bool twins passing), and a
+  post-fix sweep of 10,240 scalar/text/digest/arm
+  combinations shows zero producer/mirror divergences.
+  The same sweep adjudicated the pair partition's
+  boundary read as the family's uniform idiom —
+  byte-identical in all seven producers, every mirror
+  section and the audit oracles — and left it: changing
+  this probe's pair alone would have manufactured the
+  sibling asymmetry the fix removes.
   changed documentation, doc pins, and one test heuristic (the
   cycle-87 coherence audit's URL exemption, made token-based)
   only, and its gate reproduced the precise figure exactly —

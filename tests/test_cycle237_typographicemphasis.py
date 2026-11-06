@@ -1994,6 +1994,59 @@ class TestCoverageBattery(unittest.TestCase):
         self.assertEqual(dr._typographicemphasis_classify(24, 3, 3, 0, 3, 24, True), "insufficient")
         self.assertIsNone(dr._typographicemphasis_rate(1, 0))
 
+    def test_mirror_decompose_nonbool_scalars_agree(self):
+        """Regression pin (bug-hunt 3, finding F1):
+        decompose_cell's verdict and boundary reads are
+        `is True` reads, exactly as in the mirror, the
+        sibling decomposers (enumerationconvention,
+        compatibilityform), and this module's own
+        _cell_verdict -- the producer/mirror agreement
+        invariant. On cells whose JSON scalars are
+        non-bool the truthiness reads formerly returned
+        the producer classes in parentheses: verdict 1
+        (pass) where the mirror says non_answer on an
+        out-of-grammar answer and wrong_value on an
+        in-grammar one; boundary_found 1 with the
+        expected digest (non_answer) where the mirror
+        says boundary_only. The bool twins keep their
+        classes on both paths."""
+        digest = te.digest_text("glade-2443")
+        verdict_int = _cell("maple-5678", verdict=1, boundary=False)
+        verdict_int["answer_digest"] = None
+        boundary_int = _cell("maple-5678", verdict=False, boundary=1)
+        boundary_int["answer_digest"] = digest
+        shapes = [
+            ("verdict_int_out_of_grammar", verdict_int, "non_answer"),
+            (
+                "verdict_int_in_grammar",
+                _cell("basalt-9999", verdict=1, boundary=False),
+                "wrong_value",
+            ),
+            ("boundary_int_foreign_text", boundary_int, "boundary_only"),
+            (
+                "boundary_int_expected_text",
+                _cell("glade-2443", verdict=False, boundary=1),
+                "boundary_only",
+            ),
+            (
+                "verdict_bool_twin",
+                _cell("basalt-9999", verdict=True, boundary=False),
+                "pass",
+            ),
+            (
+                "boundary_bool_twin",
+                _cell("glade-2443", verdict=False, boundary=False),
+                "boundary_only",
+            ),
+        ]
+        for name, cell, want in shapes:
+            with self.subTest(shape=name):
+                self.assertEqual(te.decompose_cell(cell, "glade-2443", "bold"), want)
+                self.assertEqual(
+                    dr._typographicemphasis_decompose_cell(cell, "glade-2443", digest, "bold"),
+                    want,
+                )
+
     def test_mirror_aggregate_direct_shapes(self):
         """Hand records exercising the mirror aggregate's
         shape guards (non-int tokens, ids-identical flips,

@@ -762,9 +762,12 @@ def decompose_cell(cell: dict[str, Any], expected: str, arm: str) -> str:
     unreachable by construction (empty echo set,
     identity strip).
     """
-    if cell.get("verdict"):
+    if cell.get("verdict") is True:
         return "pass"
-    if cell.get("answer_digest") == digest_text(expected) and not cell.get("boundary_found"):
+    if (
+        cell.get("answer_digest") == digest_text(expected)
+        and cell.get("boundary_found") is not True
+    ):
         return "boundary_only"
     text = cell.get("answer_text")
     if type(text) is not str:
