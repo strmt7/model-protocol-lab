@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–235 (executed 2026-10-14 → 2026-11-05, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–236 (executed 2026-10-14 → 2026-11-06, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -121,6 +121,27 @@ doctor's resource fallbacks degrade there.
   blocked by three host reboots that killed the long CPU
   runs mid-flight and are recorded as not established in
   that page's remainder section, not silently dropped.
+  Cycle 236 moves neither figure either: it changed no
+  package code — its gate reproduced the precise figure
+  exactly, 95.08321460950654% (39,946 of 41,490
+  statements), with the suite count unchanged at 9,378.
+  The cycle is the one-branch publishing migration: the
+  docs workflow publishes through the GitHub Actions
+  Pages pipeline again (`actions/upload-pages-artifact`
+  + `actions/deploy-pages`, Pages `build_type=workflow`,
+  restoring the cycle-214 mechanism), the `gh-pages`
+  branch is deleted, and the repository keeps exactly
+  one branch, `main`. The two docs-mechanism test pins
+  (cycles 214 and 215) were rewritten to the restored
+  contract — Pages grants at job level on the build and
+  deploy jobs, no branch-push publish step. Each
+  workflow publish mints one Deployment record in the
+  `github-pages` environment; this cycle's records were
+  deleted immediately after the publishes verified, and
+  the deployments list reads empty. Closing CI for the
+  workflow change was 6/6 green, and the site verified
+  live from the workflow publish (HTTP 200, cycle-235
+  page present) before the branch was deleted.
   Cycle 233 moves both figures: the enumeration-convention
   feature added 1,182 statements (40,308 → 41,490) and 1,177
   covered statements (38,769 → 39,946), for a precise

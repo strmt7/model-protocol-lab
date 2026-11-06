@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (cycle 236 — one-branch docs publishing, 2026-11-06)
+
+- The docs site is published by GitHub Actions again
+  (`.github/workflows/docs.yml`:
+  `actions/upload-pages-artifact` + `actions/deploy-pages`,
+  Pages `build_type=workflow`), restoring the cycle-214
+  mechanism, and the `gh-pages` branch is deleted: the
+  repository now keeps exactly one branch, `main` (owner
+  order, 2026-11-05). Cycle 222's branch publishing is
+  retired. Every workflow publish mints one Deployment
+  record in the `github-pages` environment; under the
+  standing deployments duty, the records minted by this
+  cycle's publishes were deleted immediately after
+  verification and the deployments list reads empty. The
+  two docs-mechanism pins (the cycle-214 docs-site test and
+  the cycle-215 grants test) were rewritten to the
+  restored contract.
+
 ### Added (cycle 235 — real-checkpoint validation, 2026-11-05)
 
 - The lab's first real-checkpoint evidence

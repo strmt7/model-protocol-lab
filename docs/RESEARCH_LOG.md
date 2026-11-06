@@ -11590,3 +11590,42 @@ verified zero.
   boundary token sequence — the taxonomy and boundary audit
   are computed from those records by the shipped code and are
   re-derivable from the retained run directories.
+
+## Cycle 236 — one branch: the docs site returns to Actions publishing, gh-pages deleted (2026-11-06)
+
+- **Owner order and end state.** On 2026-11-05 the owner ordered the
+  `gh-pages` branch eliminated ("needs to go/get merged"), end state
+  exactly one branch. The branch held only generated site output —
+  there was nothing to merge — so elimination took the form cycle 214
+  originally shipped and cycle 222 migrated away from: Pages
+  `build_type=workflow` with `.github/workflows/docs.yml` publishing
+  through `actions/upload-pages-artifact` (v5.0.0) and
+  `actions/deploy-pages` (v5.0.1), both SHA-pinned to the current
+  releases resolved at build time. Verified end state, read back from
+  the API after the flip: branches exactly `[main]`; Pages
+  `build_type=workflow`, status `built`; the site answers 200 at its
+  unchanged URL with the cycle-235 real-checkpoint page present.
+- **The deployments trade, stated plainly.** Cycle 222 left this
+  mechanism because every deploy-pages run mints a Deployment record
+  in the `github-pages` environment. That is still true — this
+  cycle's two publishes minted two records — and the branch route
+  minted platform records too, so the standing per-publish deletion
+  duty applied on both routes and applies now: each record was
+  deactivated and deleted after its publish verified, and the
+  deployments list reads empty. The one-branch order and the
+  no-visible-deployments rule are both met; the mechanism that mints
+  the records is the platform's, on either route.
+- **Sequence discipline.** The workflow change was gated and pushed
+  first (full gate; precise coverage reproduced exactly at
+  95.08321460950654%, suite 9,378), the Pages setting flipped second,
+  and the branch deleted only after two workflow publishes (the push
+  run and a dispatched run) succeeded end-to-end including the deploy
+  job and the site verified live from them. The two test pins that
+  encoded branch publishing (cycles 214 and 215) were rewritten to
+  the restored contract in the same push as the workflow; dated
+  records of the earlier migrations stand as written.
+- **Falsification note:** the one-branch claim would be wrong if the
+  branches list read back anything beyond `main`, or if the site
+  were being served from a branch — both are contradicted by the
+  post-flip API read-backs and the live 200 recorded in the cycle
+  report.
