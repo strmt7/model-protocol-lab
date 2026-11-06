@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–238 (executed 2026-10-14 → 2026-11-06, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–239 (executed 2026-10-14 → 2026-11-06, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -14,7 +14,7 @@ the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
 - `python -m pytest -q -p no:cacheprovider` — **9460 tests collected**
-  (cycle 238, 2026-11-06). Subtests numbered in the 72k+
+  (cycle 239, 2026-11-06). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -59,7 +59,7 @@ doctor's resource fallbacks degrade there.
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  95.2012% (cycle 238, 2026-11-06)**. The gate compares the
+  95.2012% (cycle 239, 2026-11-06)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
   (+0.701) is auditable rather than inferred from the display.
@@ -235,6 +235,37 @@ doctor's resource fallbacks degrade there.
   section and the audit oracles — and left it: changing
   this probe's pair alone would have manufactured the
   sibling asymmetry the fix removes.
+  Cycle 239 moves neither figure: a documentation-truth
+  cycle for `docs/SECURITY.md` changed no package code
+  and no test logic — its gate reproduced the precise
+  figure exactly — 95.20118473705769% (41,088 of 42,636
+  statements), with the suite count unchanged at 9,460.
+  The cycle appends two dated records to the security
+  policy's Dependabot section. First, the 2026-11-06
+  deep re-verification of the 13 open filelock alerts
+  (all against `tools/requirements/cocoindex.txt`): a
+  dedicated remediation lane re-ran pip-audit over all
+  eleven repository manifests (nothing else found),
+  re-measured the upstream state (litellm's latest
+  stable, 1.108.1, still caps `filelock<4.0`; litellm
+  1.109.0rc1 already declares `filelock<5`), and proved
+  the two-pin remedy (filelock 4.2.9, litellm 1.109.x)
+  end to end against the release candidate — one-step
+  hash-locked install, clean `pip check`, passing tool
+  smoke — so the fix lands the day the first stable
+  1.109.0 publishes, with a watch armed on that trigger;
+  forcing the pin over the cap was execution-proven to
+  run but rejected, because no single lock file can
+  express it without weakening the install-integrity
+  design. The alerts stand open and undismissed.
+  Second, the closure record for Dependabot PR #7: left
+  open by cycle 234 with both of its resolver verdicts
+  recorded on it (sympy 1.14.0's `mpmath<1.4` cap;
+  torch 2.15.0's exact `cuda-toolkit==13.2.2` pin), it
+  was closed on 2026-11-05 after the owner's one-branch
+  restatement, its evidence pointer recorded on the PR
+  and its branch deleted; its bumps wait on the queued
+  torch-lock regeneration cycle.
   changed documentation, doc pins, and one test heuristic (the
   cycle-87 coherence audit's URL exemption, made token-based)
   only, and its gate reproduced the precise figure exactly —
