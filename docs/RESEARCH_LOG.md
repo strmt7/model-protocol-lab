@@ -11701,3 +11701,67 @@ verified zero.
   exactly on named vertices of the class (the real-table
   assignment reproducing 0.022662 among them) with every
   vertex dominated by the printed bound.
+
+## Cycle 238 — bug-hunt F1: the typographic-emphasis decomposer reads its verdict strictly (2026-11-06)
+
+- **What shipped.** A two-line fix in
+  `typographicemphasis.decompose_cell`: the verdict read
+  `if cell.get("verdict"):` and the boundary read
+  `not cell.get("boundary_found")` are now
+  `cell.get("verdict") is True` and
+  `cell.get("boundary_found") is not True` — the
+  semantics of the diff-reports mirror, of the sibling
+  decomposers (enumeration convention, compatibility
+  form), and of the module's own `_cell_verdict`. The
+  defect came from the parallel bug-hunt lane that ran
+  alongside cycle 237 (bug-hunt 3, finding F1, LOW): on
+  cells carrying non-bool JSON scalars the producer and
+  its mirror returned different classes — verdict 1:
+  producer `pass`, mirror `non_answer` (out-of-grammar
+  answer) or `wrong_value` (in-grammar); boundary_found
+  1 with the expected digest: producer `non_answer`,
+  mirror `boundary_only` — 880 divergent instances over
+  the campaign's 2,640-cell grid, zero on bool-shaped
+  cells. Reachability, as the lane stated it: not
+  reachable through the shipped CLI today (staging
+  builds records in-process with genuine bools; the
+  mirror's cell screen rejects non-bool cells before
+  decomposing). The fix restores the producer/mirror
+  agreement invariant by construction rather than by
+  the current callers' discipline.
+- **Evidence.** The coordinator re-executed the
+  finding against the shipped tree before touching it
+  (both shapes diverge; the bool twins agree). The
+  regression test (`test_mirror_decompose_nonbool_scalars_agree`,
+  naming both shapes plus the bool twins) fails on the
+  pre-fix code — proven against an isolated reverted
+  copy, the four non-bool subtests failing and the two
+  bool twins passing — and passes on the fixed tree.
+  Post-fix, a 10,240-combination sweep (verdict and
+  boundary scalars across bools, ints, floats, strings
+  and None; eight answer texts; four digests; five
+  arms) shows zero producer/mirror divergences.
+- **The sweep, and its one adjudication.** Every
+  verdict/boundary read in the module and its mirror
+  section was inventoried. The mirror is strict
+  throughout; its cell screen type-validates both
+  fields as bool before its one `and` combination, so
+  that combination ranges over validated bools. The
+  pair partition's boundary read
+  (`X.get("boundary_found") and Y.get("boundary_found")`)
+  is the family's uniform idiom — byte-identical in
+  all seven producers, in every diff-reports mirror
+  section, and in the test-cycle-67 audit oracles —
+  with zero measured pair divergence; it was left as
+  the family has it, because changing this probe's
+  pair alone would have manufactured exactly the
+  sibling asymmetry F1 documents. The recordnotation
+  `$`-anchor lead from the same campaign
+  (execution-proven unreachable) was not touched.
+- **Falsification note:** the cycle's agreement claim
+  would be wrong if any cell shape — bool or not —
+  decomposed differently in the producer and the
+  mirror; the regression test pins the two executed
+  shapes and the sweep re-measures the invariant over
+  the full scalar grid, so a future loosening of
+  either path fails by name.

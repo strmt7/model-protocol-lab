@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 238 — typographic-emphasis decomposer agreement, 2026-11-06)
+
+- `typographicemphasis.decompose_cell` read the cell
+  verdict by truthiness and the boundary flag by
+  `not cell.get(...)`, where its diff-reports mirror,
+  the sibling decomposers (enumeration convention,
+  compatibility form) and the module's own
+  `_cell_verdict` all read `is True`. On cells carrying
+  non-bool JSON scalars the two paths returned
+  different classes (verdict 1: producer `pass`, mirror
+  `non_answer` or `wrong_value`; boundary_found 1 with
+  the expected digest: producer `non_answer`, mirror
+  `boundary_only`) — 880 divergent instances over the
+  bug-hunt campaign's 2,640-cell grid, none on
+  bool-shaped cells. Not reachable through the shipped
+  CLI (staging builds records in-process with genuine
+  bools, and the mirror rejects non-bool cells before
+  decomposing), but the producer/mirror agreement the
+  diff rests on now holds by construction: both reads
+  are `is True` reads, pinned by a regression test
+  naming both shapes. Found by the parallel bug-hunt
+  lane (bug-hunt 3, finding F1) after cycle 237
+  shipped; fixed here rather than carried.
+
 ### Added (cycle 237 — typographic emphasis probe, 2026-11-06)
 
 - `run --typographic-emphasis`: a frozen 24-case
