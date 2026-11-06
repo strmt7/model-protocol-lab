@@ -1155,6 +1155,63 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     run.add_argument(
+        "--typographic-emphasis",
+        action="store_true",
+        help=(
+            "also run the typographic-emphasis probe: a stage-local generated "
+            "24-case fact-recall panel per candidate whose fact sentence's "
+            "topic span is rendered in five arms (verbatim control; bold "
+            "**span**; italic *span*; monospace `span`; the span uppercased), "
+            "with exactly one treated occurrence per case (the question's "
+            "topic stays verbatim), a positive-control panel asking which of "
+            "two facts' topics is written in bold, and a both-sites ***span*** "
+            "arm reported descriptively, scored with the tree's own "
+            "exact-match-plus-boundary scorer, and classified per (candidate, "
+            "arm) over the token-id-divergent paired population by a "
+            "completion-guarded rule (floors: at least 10 divergent control "
+            "passes and at least 6 in-grammar wrong-value discordants; "
+            "acquittal labels issue only when stable under the worst-case "
+            "completion of the id-divergent incomplete cases, and every label "
+            "is withheld above 6 incomplete in the divergent domain) into "
+            "insufficient / no_discordance_observed / discordant_asymmetric / "
+            "below_threshold, extended by a certification label: when the "
+            "statistic event (at least 10 control passes, at most 5 "
+            "control-pass arm-failures over every failure class, and net harm "
+            "at most 0) holds on the full 24-case divergent domain, is stable "
+            "under the same worst-case completion, and the candidate's "
+            "positive control passed in the same run, the arm is labelled "
+            "equivalence_certified -- a level-controlled certificate, over "
+            "the heterogeneous class with arbitrary per-pair dependence, "
+            "that the treatment's true marginal drop is below delta 0.34 "
+            "(completed extremal bound 0.013826 per comparison at alpha "
+            "0.02; family-wise over the 96 labelled comparisons the "
+            "expectation is 1.3273 false certificates, probability 0.7373 "
+            "of at least one, printed beside the licence), with the answer "
+            "decomposition per arm (pass / boundary-only / wrong-value / "
+            "echo / form-only / non-answer, so a model answering in the "
+            "arm's own marks is never counted as a value change), the "
+            "per-arm dose deltas, the id-divergence report with the "
+            "divergent-domain size printed beside every label, the "
+            "certification companions and blocking gates, the positive "
+            "control's counts, the operating characteristics, a byte cap "
+            "on the serialised records, and informational reporting only "
+            "(never affects selection; a family whose treated renders are "
+            "token-id-identical to control is reported "
+            "instrument-inapplicable for that arm, not as passing; records "
+            "carry answer digests plus the answer text the decomposition "
+            "classes are functions of, bound by the digest; answer text "
+            "never reaches a report). Monday morning: a template author "
+            "deciding whether house style may bold, italicise, monospace "
+            "or capitalise key terms in local-checkpoint prompts learns, "
+            "per template family and per treatment, a guarded verdict -- "
+            "the treatment fires, or a certificate excludes drops of 0.34 "
+            "or more, or the instrument abstains. Costs 8 generations per "
+            "candidate per case (4,608 at the legal maximum: 24 candidates "
+            "x 24 cases x 8). Informational only; never touches selection. "
+            "The stage never fails the run."
+        ),
+    )
+    run.add_argument(
         "--rotate",
         action="store_true",
         help="Context rotation probe (cycle 203, research wave-9 "
@@ -2914,6 +2971,49 @@ def _run_enumeration_convention_probe(
         result["enumeration_convention"] = {
             "available": False,
             "detail": "enumeration_convention_unavailable",
+        }
+
+
+def _run_typographic_emphasis_probe(
+    backend: Any,
+    formats: Any,
+    result: dict[str, Any],
+    *,
+    boundary: Any,
+    boundary_map: Any,
+    max_new_tokens: int,
+    max_context: int,
+    seed: int,
+    cancel: Any,
+) -> None:
+    """Run the typographic-emphasis probe; never raises.
+
+    The probe is self-contained: its cases are generated from
+    the run seed, so it consults neither the recorded search
+    nor the primary decision, and a failed user run cannot
+    silently suppress it. The run's cancel event is threaded
+    dispatch -> wrapper -> stage -> evaluate, so SIGINT/
+    SIGTERM stop the stage cooperatively.
+    """
+    try:
+        from .experiments import typographic_emphasis_analysis, typographic_emphasis_stage
+
+        names = tuple(fmt.name for fmt in formats)
+        stage = typographic_emphasis_stage(
+            backend,
+            formats,
+            boundary=boundary,
+            boundary_map=boundary_map,
+            max_new_tokens=max_new_tokens,
+            max_context=max_context,
+            seed=seed,
+            cancel=cancel,
+        )
+        result["typographic_emphasis"] = typographic_emphasis_analysis(stage, names)
+    except Exception:  # noqa: BLE001 -- typographic-emphasis must not fail the run
+        result["typographic_emphasis"] = {
+            "available": False,
+            "detail": "typographic_emphasis_unavailable",
         }
 
 
@@ -5087,6 +5187,29 @@ def main(argv: list[str] | None = None) -> int:
                 # the run.
                 if args.enumeration_convention:
                     _run_enumeration_convention_probe(
+                        backend,
+                        formats,
+                        result,
+                        boundary=args.boundary_ids,
+                        boundary_map=boundary_map,
+                        max_new_tokens=args.max_new_tokens,
+                        max_context=args.max_context,
+                        seed=args.seed,
+                        cancel=cancel,
+                    )
+                # Typographic-emphasis probe (cycle 237, research
+                # wave-12 falsification track): a generated
+                # fact-recall panel whose fact sentence's topic
+                # span is rendered verbatim or under one
+                # typographic treatment (bold, italic,
+                # monospace, caps), with a bold-detection
+                # positive control and the combined
+                # fire-or-certificate guarded label, the run's
+                # cancel event threaded into the stage loop.
+                # Informational only -- never changes
+                # selection. Never fails the run.
+                if args.typographic_emphasis:
+                    _run_typographic_emphasis_probe(
                         backend,
                         formats,
                         result,

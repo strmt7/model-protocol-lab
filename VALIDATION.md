@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–236 (executed 2026-10-14 → 2026-11-06, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–237 (executed 2026-10-14 → 2026-11-06, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9378 tests collected**
-  (cycle 233, 2026-11-05). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9459 tests collected**
+  (cycle 237, 2026-11-06). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -52,16 +52,17 @@ doctor's resource fallbacks degrade there.
   the record-notation probe (`run --record-notation`),
   the confusable-skeleton substitution probe (`run --confusable-skeleton`),
   the compatibility-form substitution probe (`run --compatibility-form`),
+  the typographic-emphasis probe (`run --typographic-emphasis`),
   the real batched generation path behind the batch-invariance
   audit (`LocalHFBackend.generate_batch`, cycle 192),
   and differential-verification suites with
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  95.0832% (cycle 233, 2026-11-05)**. The gate compares the
+  95.2012% (cycle 237, 2026-11-06)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
-  (+0.583) is auditable rather than inferred from the display.
+  (+0.701) is auditable rather than inferred from the display.
   Cycle 234 moves neither figure: a test-infrastructure and
   dependency-hygiene cycle changed no package code, and its
   gate reproduced the precise figure exactly —
@@ -174,7 +175,37 @@ doctor's resource fallbacks degrade there.
   and coverage, and the pytest leg's only other failure was
   a README count pin the cycle's own gap pass had moved,
   fixed and re-verified before the final leg.
-  Cycle 232 moves neither figure: the R1 docs truth-repair cycle
+  Cycle 237 moves both figures: the typographic-emphasis
+  feature added 1,146 statements (41,490 → 42,636) and 1,142
+  covered statements (39,946 → 41,088), for a precise
+  95.20118473705769%. The new module measures 100% — every
+  line and branch exercised, including the validator's
+  content-invariant battery (each invariant fired by a
+  builder patched to break exactly it) and both redraw
+  give-up paths. The diffreports mirror carries three
+  missing lines of the standing unreachable-by-construction
+  class (the same class cycle 233's entry documents for the
+  enumeration mirror): its headline loop's cell-None
+  continue, subsumed by the paired pre-filter above it; its
+  duplicated arm-token type check, subsumed by the
+  before-arithmetic validation loop above it; and its
+  ground-record total cap, which the candidate-count cap
+  bounds to equality. The probe's certification licence,
+  printed beside every label: over the heterogeneous class
+  (per-pair joint laws arbitrary, the null a pooled
+  marginal drop of at least delta 0.34), the completed
+  extremal bound is 0.013826 per comparison at alpha 0.02;
+  family-wise over the 96 labelled comparisons the
+  expectation is 1.3273 false certificates, probability
+  0.7373 of at least one (independence convention). Two
+  host notes, recorded rather than hidden: this machine
+  restarted twice during the cycle's gate runs, voiding a
+  pytest leg at 85% and a scoped coverage run (each
+  followed by the interrupted-run mutant-absence audit —
+  22 gate (original, mutant) pairs swept, 0 orphaned); and
+  the cycle's first coverage leg measured 94.7868% before
+  the coverage-recovery battery above, a dip enumerated
+  from the coverage JSON rather than rounded away.
   changed documentation, doc pins, and one test heuristic (the
   cycle-87 coherence audit's URL exemption, made token-based)
   only, and its gate reproduced the precise figure exactly —
@@ -309,10 +340,10 @@ doctor's resource fallbacks degrade there.
   negation feature added 393 statements, 32,655 → 33,048.)
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (325 files in that CI scope; the repo-root scope counts more.
+  (327 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
-- `mypy model_protocol_lab` — clean (73 source files).
+- `mypy model_protocol_lab` — clean (74 source files).
 - `bandit -r model_protocol_lab` — **no issues identified** at any
   severity/confidence (the targeted `# nosec B105` suppressions on
   report-schema fields carry justifications).

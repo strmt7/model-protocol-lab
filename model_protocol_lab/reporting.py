@@ -10468,6 +10468,507 @@ def _enumeration_convention_section(result: dict[str, Any]) -> str:
     )
 
 
+def _typographic_emphasis_section(result: dict[str, Any]) -> str:
+    """Typographic-emphasis probe: does wrapping one
+    topic span of a fact carrier in bold, italic,
+    monospace, or capitals move answers to wrong
+    values -- and can a candidate earn the certificate
+    that it does not?
+
+    Renders the ``typographic_emphasis`` payload (see
+    experiments.typographic_emphasis_analysis). Per
+    candidate, in the design's printed order: per-arm
+    pass rates with attrition and the completed-cell
+    decomposition (the five main arms); the per-arm
+    dose deltas; the positive-control block (the
+    bold-detection panel's counts and gate verdict);
+    the per-arm token-ID report (the regime gate); and
+    per treated arm the combined guarded headline over
+    the id-divergent paired population -- the label
+    with the divergent-domain size M, D, J, H, R, S,
+    the incomplete count, the rates, the non-answer
+    count, the pair decomposition with the failing
+    cells' classes, and the certification companions
+    (delta, alpha, the positive-control gate's status,
+    and the gates that blocked a certificate). After
+    the table: the estimand sentence, the
+    operating-characteristics paragraph (the
+    certification licence with every near-0.0122 figure
+    under its full name, the fire grid, both
+    family-wise prices, the positive control's deaf
+    range), the guard paragraph, the section-8 readings,
+    and the printed limitations. Counts and rates only;
+    no prompt or answer text is rendered. Every
+    payload-derived value below goes through
+    _escape_text, never bare escape().
+    """
+    probe: Any = result.get("typographic_emphasis")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+    candidates = probe.get("candidates")
+    if type(candidates) is not dict:
+        return ""
+
+    def _rate(value: Any) -> str:
+        """Return the rate."""
+        if type(value) in (int, float) and not isinstance(value, bool):
+            return _escape_text(f"{float(value):.3f}")
+        return "n/a"
+
+    def _count(value: Any) -> str:
+        """Return the count."""
+        return _escape_text(str(value)) if type(value) is int else "n/a"
+
+    def _exact(value: Any) -> str:
+        """Return the exact."""
+        return _escape_text(str(value)) if type(value) in (int, float) else "n/a"
+
+    main_arms = ("control", "bold", "italic", "monospace", "caps")
+    record_arms = main_arms + ("pc_plain", "pc_info", "pc_b")
+    class_names = (
+        "pass",
+        "boundary_only",
+        "wrong_value",
+        "echo_bold",
+        "echo_italic",
+        "echo_monospace",
+        "echo_caps",
+        "form_only",
+        "non_answer",
+    )
+    rows: list[str] = []
+    for name in sorted(candidates, key=str):
+        entry = candidates[name]
+        if type(entry) is not dict:
+            continue
+        if entry.get("status") != "available":
+            rows.append(
+                '<tr><td><span class="mono">'
+                + _escape_text(str(name))
+                + '</span></td><td colspan="2">unavailable</td></tr>'
+            )
+            continue
+        bits: list[str] = []
+        arms = entry.get("arms")
+        if type(arms) is dict:
+            for arm_name in record_arms:
+                arm = arms.get(arm_name)
+                if type(arm) is not dict:
+                    continue
+                decomp = arm.get("decomposition")
+                decomp_bit = ""
+                if type(decomp) is dict:
+                    decomp_bit = (
+                        " Decomposition of completed cells -- "
+                        + ", ".join(
+                            class_name + " " + _count(decomp.get(class_name))
+                            for class_name in class_names
+                        )
+                        + " (in the frozen order: a boundary-only "
+                        "cell is a boundary effect, never a form "
+                        "effect; wrong-value counts only values "
+                        "inside the frozen grammar; echo and "
+                        "form-only are the model rendering the "
+                        "expected value wearing the arm's own "
+                        "treatment, with the value intact, and "
+                        "never count toward J)."
+                    )
+                bits.append(
+                    "<div>"
+                    + _escape_text(arm_name)
+                    + " pass rate "
+                    + _rate(arm.get("rate"))
+                    + " ("
+                    + _count(arm.get("n_pass"))
+                    + " of "
+                    + _count(arm.get("n_completed"))
+                    + " completed), "
+                    + _count(arm.get("n_context_exceeded"))
+                    + " context-exceeded, "
+                    + _count(arm.get("n_evaluation_failed"))
+                    + " evaluation-failed."
+                    + decomp_bit
+                    + "</div>"
+                )
+        dose = entry.get("dose")
+        if type(dose) is dict:
+            for arm_name in main_arms[1:]:
+                arm_dose = dose.get(arm_name)
+                if type(arm_dose) is not dict:
+                    continue
+                bits.append(
+                    "<div>" + _escape_text(arm_name) + " dose on this panel: the fact "
+                    "sentence's topic span only; codepoint delta versus "
+                    "control ranges "
+                    + _count(arm_dose.get("codepoint_delta_min"))
+                    + " to "
+                    + _count(arm_dose.get("codepoint_delta_max"))
+                    + ", UTF-8 byte delta "
+                    + _count(arm_dose.get("byte_delta_min"))
+                    + " to "
+                    + _count(arm_dose.get("byte_delta_max"))
+                    + " (bold adds four asterisks, italic and "
+                    "monospace two marks each, caps none -- "
+                    "bold and italic differ only in asterisk "
+                    "dose, the same character twice or four "
+                    "times).</div>"
+                )
+        pc = entry.get("positive_control")
+        if type(pc) is dict:
+            bits.append(
+                "<div>Positive control (which of the two facts' "
+                "topics is written in bold; the plain arm has no "
+                "correct answer by construction): "
+                + _count(pc.get("n_pairs"))
+                + " completed pairs, "
+                + _count(pc.get("n_incomplete"))
+                + " incomplete, info-arm passes "
+                + _count(pc.get("info_passes"))
+                + ", plain-fail/info-pass pairs "
+                + _count(pc.get("plain_fail_info_pass"))
+                + ", plain-pass/info-fail pairs "
+                + _count(pc.get("plain_pass_info_fail"))
+                + ", margin "
+                + _count(pc.get("margin"))
+                + "; gate "
+                + ("passed" if pc.get("passed") is True else "not passed")
+                + " (floors: at least 10 info passes, margin at "
+                "least 8, and the margin stable under the "
+                "worst-case completion of the incomplete "
+                "pairs). No certificate issues for this "
+                "candidate without this gate.</div>"
+            )
+        ids = entry.get("ids")
+        headline = entry.get("headline")
+        if type(ids) is dict and type(headline) is dict:
+            for arm_name in main_arms[1:]:
+                arm_ids = ids.get(arm_name)
+                arm_head = headline.get(arm_name)
+                if type(arm_ids) is not dict or type(arm_head) is not dict:
+                    continue
+                deltas = arm_ids.get("id_length_delta")
+                delta_bit = ""
+                if type(deltas) is list:
+                    delta_bit = (
+                        " Per-case id-length deltas (arm minus "
+                        "control, in case order): "
+                        + _escape_text(", ".join(str(d) for d in deltas))
+                        + "."
+                    )
+                pair = arm_head.get("pair_decomposition")
+                pair_bit = ""
+                if type(pair) is dict:
+                    pair_bit = (
+                        " Pair decomposition of the discordant "
+                        "pairs -- exact-only "
+                        + _count(pair.get("exact_only"))
+                        + ", boundary-only "
+                        + _count(pair.get("boundary_only"))
+                        + ", mixed "
+                        + _count(pair.get("mixed"))
+                        + " (reported, never attributed)."
+                    )
+                failing = arm_head.get("failing_classes")
+                failing_bit = ""
+                if type(failing) is dict:
+                    failing_bit = (
+                        " The discordant pairs' failing cells "
+                        "decompose as "
+                        + ", ".join(
+                            class_name + " " + _count(failing.get(class_name))
+                            for class_name in class_names
+                        )
+                        + "."
+                    )
+                blocked = arm_head.get("certification_blocked_by")
+                blocked_bit = ""
+                if type(blocked) is list:
+                    blocked_bit = (
+                        " Certification gates blocking a "
+                        "certificate for this arm: "
+                        + (_escape_text(", ".join(str(b) for b in blocked)) if blocked else "none")
+                        + "."
+                    )
+                bits.append(
+                    "<div>"
+                    + _escape_text(arm_name)
+                    + " headline over "
+                    + _count(arm_head.get("n_population"))
+                    + " paired cases (completed in both control "
+                    "and this arm and id-divergent for this arm; "
+                    "the divergent-domain size M is "
+                    + _count(arm_head.get("n_ids_divergent"))
+                    + ", "
+                    + _count(arm_ids.get("n_ids_identical"))
+                    + " cases were ids-identical for this arm "
+                    "-- instrument-inapplicable for those, never "
+                    "passes -- and "
+                    + _count(arm_head.get("n_incomplete"))
+                    + " id-divergent cases were incomplete): "
+                    "label "
+                    + _escape_text(str(arm_head.get("label")))
+                    + " at M "
+                    + _count(arm_head.get("n_ids_divergent"))
+                    + ", D (control passes) "
+                    + _count(arm_head.get("control_passes"))
+                    + " at control rate "
+                    + _rate(arm_head.get("control_rate"))
+                    + ", J (wrong-value discordants) "
+                    + _count(arm_head.get("wrong_values"))
+                    + ", H (control-pass arm-failures, every "
+                    "class) "
+                    + _count(arm_head.get("harm"))
+                    + ", reverse discordants "
+                    + _count(arm_head.get("n_reverse"))
+                    + " (counted, never pooled into J), net harm "
+                    "S "
+                    + _count(arm_head.get("net_harm"))
+                    + ", arm pass rate "
+                    + _rate(arm_head.get("arm_rate"))
+                    + ", non-answer arm cells in the population "
+                    + _count(arm_head.get("n_non_answer"))
+                    + ". The label's licence: delta "
+                    + _exact(arm_head.get("delta"))
+                    + " at alpha "
+                    + _exact(arm_head.get("alpha"))
+                    + ", positive-control gate "
+                    + ("passed" if arm_head.get("pc_gate_passed") is True else "not passed")
+                    + ". Same-ids verdict flips for this arm: "
+                    + _count(arm_ids.get("n_same_ids_verdict_flips"))
+                    + " (a determinism finding, never form "
+                    "fragility); maximum absolute id-length delta "
+                    + _count(arm_ids.get("max_abs_id_delta"))
+                    + "."
+                    + delta_bit
+                    + pair_bit
+                    + failing_bit
+                    + blocked_bit
+                    + "</div>"
+                )
+        rows.append(
+            '<tr><td><span class="mono">'
+            + _escape_text(str(name))
+            + "</span></td><td>"
+            + "".join(bits)
+            + "</td></tr>"
+        )
+    oc: dict[str, Any] = {}
+    for entry in candidates.values():
+        if type(entry) is dict and type(entry.get("operating_characteristics")) is dict:
+            oc = entry["operating_characteristics"]
+            break
+
+    def _oc(key: str) -> str:
+        """Return the oc."""
+        return _rate(oc.get(key))
+
+    tail_paragraphs = [
+        "<p>The estimand, stated once: value-changing "
+        "discordance, and net harm over every failure "
+        "class, between the verbatim control and one "
+        "typographic treatment of the fact sentence's "
+        "topic span, over the id-divergent paired cases "
+        "both arms completed, for this candidate's "
+        "template family on this checkpoint. The claim "
+        "is per candidate and per arm; nothing is pooled "
+        "and there is no winner readout. A fire proves "
+        "only that this treatment, at this one carrier "
+        "span, moved this checkpoint's answers to wrong "
+        "values inside the frozen grammar on this "
+        "generated population. A certificate asserts "
+        "exactly one thing: the treatment's true marginal "
+        "drop is below delta 0.34, under the licence "
+        "printed below; it is silent below 0.34 -- it "
+        "does not exclude, for example, the published "
+        "PASTA-study average effects of 0.1791 and 0.2514 "
+        "-- and it says nothing about highlight or "
+        "colour treatments, marks used as selectors, "
+        "churn among cases both arms fail, ids-identical "
+        "cases, other spans, other doses, or treatments "
+        "of instruction segments.</p>",
+        "<p>Operating characteristics. The certification "
+        "licence (per comparison, alpha 0.02, stated over "
+        "the heterogeneous class -- per-pair joint laws "
+        "arbitrary, the null a pooled marginal drop of at "
+        "least delta): the completed extremal bound at "
+        "delta 0.34 is "
+        + _exact(oc.get("certification_bound_completed_per_comparison"))
+        + " per comparison. Three neighbouring figures "
+        "are printed under their full names so none can "
+        "be mistaken for the licence: the restricted-vertex "
+        "heterogeneous bound at delta 0.34 is "
+        + _exact(oc.get("certification_bound_restricted_vertex_delta_034"))
+        + "; the homogeneous uniform bound at delta 0.34 "
+        "(context only, never the licence) is "
+        + _exact(oc.get("certification_bound_uniform_homogeneous_delta_034"))
+        + "; and a real-table counterexample world "
+        "certifies at "
+        + _exact(oc.get("rtb_counterexample_certification_probability"))
+        + " at delta, which is why the licence is stated "
+        "over the completed class. Partial domains: the "
+        "completed bound at M = 23 is "
+        + _exact(oc.get("certification_bound_completed_m23"))
+        + " (the unique partial domain the level "
+        "supports) and at M = 22 is "
+        + _exact(oc.get("certification_bound_completed_m22"))
+        + ", above alpha -- the shipped gate nevertheless "
+        "requires the full M = 24, because a guarded "
+        "certificate at M implies the full-data event at "
+        "size 24 under worst-case completion, by "
+        "componentwise monotonicity of (D, H, S). "
+        "Family-wise over the 96 labelled comparisons (4 "
+        "treated arms x 24 candidates), under the "
+        "independence convention, the certification "
+        "expectation is "
+        + _exact(oc.get("familywise_certification_expected_96"))
+        + " false certificates (probability of at least "
+        "one "
+        + _exact(oc.get("familywise_certification_any_96"))
+        + ") and the competent fire expectation is "
+        + _exact(oc.get("familywise_fire_expected_96"))
+        + " (probability of at least one "
+        + _exact(oc.get("familywise_fire_any_96"))
+        + "). The fire rule's own grid (exact enumeration "
+        "under per-case independence; the paired column "
+        "couples the outcomes within each case at "
+        "correlation 0.5): the competent panel fires "
+        + _exact(oc.get("fire_competent_independent"))
+        + " independent and "
+        + _exact(oc.get("fire_competent_paired"))
+        + " paired; the weak panel (control rate 0.80) "
+        "fires "
+        + _oc("fire_weak_independent")
+        + " and the random labeller "
+        + _exact(oc.get("fire_random_independent"))
+        + "; power is "
+        + _oc("power_drop10_base90")
+        + " at a 10-point drop, "
+        + _oc("power_drop25_base90")
+        + " at the 25-point target (paired "
+        + _exact(oc.get("power_drop25_paired"))
+        + "), and "
+        + _oc("power_drop50_base90")
+        + " at 50 points. Under the anchored coupling "
+        "(independence at control rate 0.90) a true-null "
+        "candidate certifies with probability "
+        + _exact(oc.get("certify_anchored_delta_000_pc_090"))
+        + " -- the null yield: the predicted-null "
+        "instrument certifies the null it predicts, at "
+        "the stated level, rather than merely failing to "
+        "reject it. The positive control's deaf-guesser "
+        "probability of passing its gate is "
+        + _exact(oc.get("pc_gate_deaf_x_025_independence"))
+        + " at the independence point of the "
+        "discordant-cell parameter x (x is the "
+        "probability of each discordant cell, plain-fail/"
+        "info-pass and plain-pass/info-fail alike, with "
+        "both-pass and both-fail carrying 0.5 - x each); "
+        "along the dependence range it rises to "
+        + _exact(oc.get("pc_gate_deaf_x_030"))
+        + " at x = 0.30, "
+        + _exact(oc.get("pc_gate_deaf_x_035"))
+        + " at x = 0.35, and "
+        + _exact(oc.get("pc_gate_deaf_x_050"))
+        + " at x = 0.50, so the gate's licence is read "
+        "as independence-conditioned.</p>",
+        "<p>The completion guard, and what incompletion "
+        "can and cannot do: fires issue on observed "
+        "counts over completed cases, so removing a "
+        "generation can never create a wrong-value "
+        "discordant; acquittals and certificates issue "
+        "only when stable under the worst-case completion "
+        "of the pair's incomplete id-divergent cases (the "
+        "completion ranges over divergent cases only -- "
+        "an encode-time property, decidable whether or "
+        "not the generation completed); in the executed "
+        "attack worlds with the ids dimension (10,000 "
+        "trials each at the designer's seed), the "
+        "zero-effect manufacture world certifies guarded "
+        "at "
+        + _oc("world_a_guarded_certification")
+        + " and fires guarded at "
+        + _oc("world_a_guarded_fire")
+        + ", the true-delta world's certification falls "
+        "from "
+        + _oc("world_b_delta_unguarded_certification")
+        + " unguarded to "
+        + _oc("world_b_delta_guarded_certification")
+        + " guarded, and the true-drop world fires "
+        "guarded at "
+        + _oc("world_c_guarded_fire")
+        + ". The cap bounds incomplete cases within the "
+        "divergent domain at 6. One disclosed inversion: "
+        "a certificate can issue at J = 0 with k > 0 "
+        "where the sibling no-discordance acquittal "
+        "would withhold (245 such states in the "
+        "exhaustive audit) -- the certificate is the "
+        "stronger claim and carries the completion guard "
+        "as its own stability condition, so the inversion "
+        "is a property of the two claims, not a hole. "
+        "Readings, frozen in advance: a bold fire beside "
+        "an italic null (or the reverse) is an "
+        "asterisk-dose response, the two arms differing "
+        "only in dose of the same character; a "
+        "monospace-only fire reads as a code-span effect "
+        "(the emphasis reading is withheld: code spans "
+        "carry their own semantics); a caps fire with "
+        "the mark arms quiet is a case-channel effect; "
+        "all four firing is surface fragility, not four "
+        "findings; the PC-B arm's rate beside bold's is "
+        "a dose and site-count signal for a future "
+        "design, never a contradiction of the bold "
+        "label. Printed limitations: one treated "
+        "occurrence per case by construction, so "
+        "multi-site house styles are out of scope; quote "
+        "marks belong to the punctuation axis and "
+        "highlight and colour have no plain-text "
+        "representation, so both sit outside the claim; "
+        "value changes outside the frozen grammar print "
+        "as non-answer and are outside the headline "
+        "claim. Records carry digests, except cells' "
+        "answer text, which is digest-bound and never "
+        "rendered here.</p>",
+    ]
+    return (
+        '<section class="card" id="typographic-emphasis">'
+        "<h2>Typographic emphasis (span treatment on a frozen fact carrier)</h2>"
+        "<p>This probe changes only the typographic "
+        "treatment of one span: each of the 24 generated "
+        "cases is a fact-recall item (a frozen topic, a "
+        "word-number inspection code, two neutral "
+        "carrier sentences, a fact sentence, a question), "
+        "rendered in five main arms that differ only in "
+        "the fact sentence's topic span -- verbatim "
+        "control, bold (**span**), italic (*span*), "
+        "monospace (`span`), or the span uppercased -- "
+        "with the question's topic occurrence verbatim in "
+        "every main arm, so exactly one occurrence is "
+        "treated. A positive-control panel asks which of "
+        "two facts' topics is written in bold (the main "
+        "case's value under its own topic, plain or bold, "
+        "beside a distractor fact), and a PC-B arm wraps "
+        "the topic in ***...*** at both occurrences, "
+        "reported descriptively. The scorer is byte-exact "
+        "conjoined with boundary presence; every arm is a "
+        "fixture with the same id, so request seeds are "
+        "identical across arms. Each cell is one greedy "
+        "generation. The readout is a combined guarded "
+        "classification per candidate and per arm over "
+        "the id-divergent paired population -- fire, "
+        "sibling acquittal, or a level-controlled "
+        "certificate that the treatment's marginal drop "
+        "is below delta 0.34 -- with the operating "
+        "characteristics and the family-wise prices "
+        "printed beside it.</p>"
+        "<table><thead><tr><th>Candidate</th><th>Readout</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+        + "".join(tail_paragraphs)
+        + "</section>"
+    )
+
+
 def _rotation_section(result: dict[str, Any]) -> str:
     """Context rotation probe: does cyclically rotating the block span move the verdict?
 
@@ -13137,6 +13638,7 @@ def render_html(result: dict[str, Any]) -> str:
     confusable_skeleton_html = _confusable_skeleton_section(result)
     compatibility_form_html = _compatibility_form_section(result)
     enumeration_convention_html = _enumeration_convention_section(result)
+    typographic_emphasis_html = _typographic_emphasis_section(result)
     choiceaudit_html = _choiceaudit_section(result)
     precision_html = _precision_section(result)
     confidence_html = _confidence_section(result)
@@ -13358,6 +13860,11 @@ def render_html(result: dict[str, Any]) -> str:
                 enumeration_convention_html,
             ),
             (
+                "typographic-emphasis",
+                "Typographic emphasis (span treatment on a frozen fact carrier)",
+                typographic_emphasis_html,
+            ),
+            (
                 "choice-audit",
                 "Choice-scoring audit (second opinion)",
                 choiceaudit_html,
@@ -13492,6 +13999,7 @@ def render_html(result: dict[str, Any]) -> str:
         + confusable_skeleton_html
         + compatibility_form_html
         + enumeration_convention_html
+        + typographic_emphasis_html
         + choiceaudit_html
         + precision_html
         + confidence_html

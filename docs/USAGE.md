@@ -3528,6 +3528,101 @@ bound by its digest. Informational only: the probe
 never affects selection, and the stage never fails the
 run.
 
+### 8.64 Typographic emphasis (`run --typographic-emphasis`)
+
+```sh
+model-protocol-lab run ... --typographic-emphasis
+```
+
+This probe renders a frozen fact-recall panel whose
+fact sentence's topic span carries one typographic
+treatment and reports, per template family and per
+treatment, a guarded verdict: the treatment fires, or
+a level-controlled certificate excludes marginal drops
+of 0.34 or more, or the instrument abstains. It answers,
+for a template author deciding whether house style may
+bold, italicise, monospace or capitalise key terms in
+local-checkpoint prompts, whether the treatment changes
+answers on this checkpoint -- and, uniquely in this
+lab, it can certify the null it predicts.
+
+The panel is generated, not read from the run's
+fixtures: 24 cases, each a fact-recall item (a frozen
+topic, a `word-number` inspection code, two neutral
+carrier sentences, a fact sentence, a question), drawn
+by a frozen seeded generator (SHA-256 derivations with
+the draw order, slot order, and redraw semantics pinned
+in the design doc; values distinct across the panel).
+Five main arms differ only in the fact sentence's topic
+span: verbatim control; bold `**span**`; italic
+`*span*`; monospace `` `span` ``; the span uppercased.
+Exactly one occurrence is treated -- the question's
+topic stays verbatim -- so bold and italic differ only
+in asterisk dose, and caps is the delimiter-free
+internal control. A positive-control panel asks which
+of two facts' topics is written in bold (the main
+case's own value under its topic, plain or bold, beside
+a distractor fact), and a PC-B arm wraps the topic in
+`***...***` at both occurrences, reported
+descriptively.
+
+The scorer is byte-exact conjoined with boundary
+presence, and the readout is a combined guarded
+classification per candidate and per arm over the
+token-id-divergent paired population, behind an
+encode-time id gate (the arm's divergent-domain size M
+prints beside every label). The fire rule is the
+sibling shape (floors D >= 10 divergent control passes
+and J >= 6 in-grammar wrong-value discordants; reverse
+discordants counted, never pooled; acquittals
+`no_discordance_observed` / `below_threshold` issue
+only when stable under the worst-case completion of
+the id-divergent incomplete cases, and every label is
+withheld above 6 incomplete in the domain). The
+certification rule extends it: when the statistic
+event (D >= 10, H <= 5 control-pass arm-failures over
+every failure class, net harm S = H - R <= 0) holds on
+the full 24-case divergent domain, is stable under the
+same completion, and the candidate's positive control
+passed in the same run, the label is
+`equivalence_certified` -- over the heterogeneous class
+(per-pair joint laws arbitrary, the null a pooled
+marginal drop of at least delta 0.34), the completed
+extremal bound is 0.013826 per comparison at alpha
+0.02; family-wise over the 96 labelled comparisons the
+expectation is 1.3273 false certificates, probability
+0.7373 of at least one, printed beside the licence in
+every report. (Three neighbouring quantities print
+near 0.0122 and are always named in full: the
+restricted-vertex heterogeneous bound at delta 0.34,
+0.012253; the anchored probability at the old delta
+0.28, 0.012232; the homogeneous uniform sup at delta
+0.30, 0.012252.) The certificate is silent below 0.34:
+it does not exclude published average effects of
+0.1791 or 0.2514, and it says nothing about highlight
+or colour, marks as selectors, other spans or doses.
+Each completed cell decomposes (pass / boundary-only /
+wrong-value / echo-bold / echo-italic / echo-monospace
+/ echo-caps / form-only / non-answer -- an ordered
+decision list in which the value grammar is matched
+with fullmatch semantics, so a model answering in the
+arm's own marks, value intact, is an echo, never a
+value change) and the report prints the operating
+characteristics beside the licence (competent-null
+fire 0.0173 by exact independent enumeration, 0.0044
+by the exact paired computation; 25-point-drop power
+0.8159, paired 0.6981; the positive control's
+deaf-guesser gate rate 0.0147 at the independence
+point of its discordant-cell parameter, with the
+dependence range printed). The full contract is in
+`docs/TYPOGRAPHIC_EMPHASIS_DESIGN.md`. Costs 192
+generations per candidate (4,608 at the legal maximum:
+24 candidates x 24 cases x 8 arms), spent only when
+the flag is passed. Records carry digests, plus each
+cell's answer text bound by its digest. Informational
+only: the probe never affects selection, and the stage
+never fails the run.
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out

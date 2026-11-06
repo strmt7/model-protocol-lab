@@ -121,6 +121,7 @@ STAGE_FLAGS = [
     ("--confusable-skeleton", "confusable_skeleton", None),
     ("--compatibility-form", "compatibility_form", None),
     ("--enumeration-convention", "enumeration_convention", None),
+    ("--typographic-emphasis", "typographic_emphasis", None),
     ("--rotate", "rotate", None),
     ("--density", "density", None),
     ("--field-order", "field_order", None),
@@ -368,6 +369,12 @@ HELPER_DISPATCH = [
         "enumeration_convention",
         "enumeration_convention_unavailable",
         ["enumeration_convention_stage", "enumeration_convention_analysis"],
+    ),
+    (
+        "_run_typographic_emphasis_probe",
+        "typographic_emphasis",
+        "typographic_emphasis_unavailable",
+        ["typographic_emphasis_stage", "typographic_emphasis_analysis"],
     ),
     (
         "_run_rotation_probe",

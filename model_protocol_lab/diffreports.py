@@ -772,6 +772,9 @@ def diff_reports(
     enumeration_convention_diff = diff_enumeration_convention(
         old.get("enumeration_convention"), new.get("enumeration_convention")
     )
+    typographic_emphasis_diff = diff_typographic_emphasis(
+        old.get("typographic_emphasis"), new.get("typographic_emphasis")
+    )
     choiceaudit_diff = diff_choiceaudit(old.get("choice_audit"), new.get("choice_audit"))
     precision_diff = diff_precision(old.get("precision"), new.get("precision"))
     confidence_diff = diff_confidence(old.get("confidence"), new.get("confidence"))
@@ -890,6 +893,10 @@ def diff_reports(
         "neither",
     )
     enumeration_convention_asymmetric = enumeration_convention_diff["available"] not in (
+        "both",
+        "neither",
+    )
+    typographic_emphasis_asymmetric = typographic_emphasis_diff["available"] not in (
         "both",
         "neither",
     )
@@ -1026,6 +1033,8 @@ def diff_reports(
         and not compatibility_form_asymmetric
         and not enumeration_convention_diff["changed"]
         and not enumeration_convention_asymmetric
+        and not typographic_emphasis_diff["changed"]
+        and not typographic_emphasis_asymmetric
         and not choiceaudit_diff["changed"]
         and not choiceaudit_asymmetric
         and not precision_diff["changed"]
@@ -1140,6 +1149,8 @@ def diff_reports(
         "compatibility_form_asymmetric": compatibility_form_asymmetric,
         "enumeration_convention_changed": enumeration_convention_diff["changed"],
         "enumeration_convention_asymmetric": enumeration_convention_asymmetric,
+        "typographic_emphasis_changed": typographic_emphasis_diff["changed"],
+        "typographic_emphasis_asymmetric": typographic_emphasis_asymmetric,
         "choice_audit_changed": choiceaudit_diff["changed"],
         "choice_audit_asymmetric": choiceaudit_asymmetric,
         "precision_changed": precision_diff["changed"],
@@ -1202,6 +1213,7 @@ def diff_reports(
         "confusable_skeleton": confusable_skeleton_diff,
         "compatibility_form": compatibility_form_diff,
         "enumeration_convention": enumeration_convention_diff,
+        "typographic_emphasis": typographic_emphasis_diff,
         "choice_audit": choiceaudit_diff,
         "precision": precision_diff,
         "confidence": confidence_diff,
@@ -20610,6 +20622,1319 @@ _ROTATION_SCREENING_RULE_TEXT = (
     "record whose closed-book cell passed is excluded from its "
     "candidate's rotation populations."
 )
+
+
+# ------------------------------------------------------------------
+# Typographic-emphasis mirror (cycle 237): an independent
+# re-derivation of the typographicemphasis module's frozen
+# panel, decomposition, combined fire/certification guard,
+# positive control, and aggregates, from literals carried in
+# this module. No imports from typographicemphasis.py
+# anywhere in this mirror. The value grammar is applied with
+# fullmatch semantics only.
+# ------------------------------------------------------------------
+
+_TYPOGRAPHICEMPHASIS_TOPICS = (
+    "harbor",
+    "summit",
+    "quarry",
+    "tundra",
+    "granite",
+    "willow",
+    "copper",
+    "saddle",
+    "walnut",
+    "velvet",
+    "cobalt",
+    "marble",
+    "cinder",
+    "falcon",
+    "garnet",
+    "saffron",
+    "indigo",
+    "juniper",
+    "lagoon",
+    "magnet",
+    "nickel",
+    "pepper",
+    "quartz",
+    "birch",
+)
+_TYPOGRAPHICEMPHASIS_WORDS = (
+    "alder",
+    "basalt",
+    "cedar",
+    "drift",
+    "elm",
+    "fern",
+    "glade",
+    "heath",
+    "iris",
+    "jade",
+    "kelp",
+    "loom",
+    "moss",
+    "nova",
+    "ochre",
+    "pine",
+    "quill",
+    "reed",
+    "sage",
+    "tide",
+    "urn",
+    "vale",
+    "wren",
+    "yew",
+)
+_TYPOGRAPHICEMPHASIS_NEUTRAL_STATEMENTS = (
+    "The weather changed slowly during the afternoon hours.",
+    "A wooden fence runs along the edge of the property.",
+    "She placed the documents inside a plain folder yesterday.",
+    "The train arrived later than the schedule suggested.",
+    "Fresh bread was cooling on the counter near the sink.",
+    "He repaired the bicycle with tools from the garage.",
+    "The bookshop extends its opening hours during summer.",
+    "Several chairs were arranged around the long table.",
+    "The recipe calls for a pinch of salt and herbs.",
+    "They walked along the path beside the lake at dawn.",
+    "The committee postponed its decision until next week.",
+    "A thick layer of dust covered the old furniture.",
+    "The children played quietly in the courtyard after lunch.",
+    "His handwriting was difficult to read in places.",
+    "The farmer harvested the fields before the rain came.",
+    "An old map hung framed on the wall of the hallway.",
+    "The accountant reviewed the figures a second time.",
+    "Birds gathered on the rooftops as the sun went down.",
+    "The mechanic inspected the engine and changed the oil.",
+    "A narrow staircase led up to the attic.",
+    "The orchestra rehearsed the piece several times over.",
+    "Someone left a bicycle leaning against the railing.",
+    "The soup simmered gently on the stove all morning.",
+    "Visitors signed the guest book near the entrance.",
+)
+_TYPOGRAPHICEMPHASIS_ARM_KEYS = ("control", "bold", "italic", "monospace", "caps")
+_TYPOGRAPHICEMPHASIS_TREATED_ARMS = _TYPOGRAPHICEMPHASIS_ARM_KEYS[1:]
+_TYPOGRAPHICEMPHASIS_PC_ARM_KEYS = ("pc_plain", "pc_info")
+_TYPOGRAPHICEMPHASIS_PCB_ARM = "pc_b"
+_TYPOGRAPHICEMPHASIS_RECORD_ARMS = (
+    _TYPOGRAPHICEMPHASIS_ARM_KEYS
+    + _TYPOGRAPHICEMPHASIS_PC_ARM_KEYS
+    + (_TYPOGRAPHICEMPHASIS_PCB_ARM,)
+)
+_TYPOGRAPHICEMPHASIS_PC_QUESTION = "What is the inspection code of the topic written in bold?"
+_TYPOGRAPHICEMPHASIS_CASE_COUNT = 24
+_TYPOGRAPHICEMPHASIS_MIN_D = 10
+_TYPOGRAPHICEMPHASIS_MIN_J = 6
+_TYPOGRAPHICEMPHASIS_MAX_INCOMPLETE = 6
+_TYPOGRAPHICEMPHASIS_REDRAW_LIMIT = 1000
+_TYPOGRAPHICEMPHASIS_DELTA = 0.34
+_TYPOGRAPHICEMPHASIS_ALPHA = 0.02
+_TYPOGRAPHICEMPHASIS_PC_MIN_INFO_PASSES = 10
+_TYPOGRAPHICEMPHASIS_PC_MIN_MARGIN = 8
+_TYPOGRAPHICEMPHASIS_GENERATOR_SPEC = (
+    "per case index i in 0..23 with run seed s: topic = TOPICS[i]; "
+    "value drawn at slots 0 (word) and 1 (number) of the frozen draw "
+    "int.from_bytes(sha256(f'{s}|typographicemphasis|{i}|{slot}|{counter}')"
+    ".digest()[:8], 'big'), word = WORDS[draw % 24], number = 1000 + "
+    "draw % 9000, redrawn at counter+1 while the value collides with an "
+    "earlier case's value (give up past 1000: the stage fails closed); "
+    "neutrals at slots 2 and 3 (second index +1 mod 24 on collision); "
+    "positive-control distractor topic at slot 4 (draw % 24, +1 mod 24 "
+    "when equal to i), distractor value at slots 5 and 6 (redrawn at "
+    "counter+1 while equal to the case's own value, give up past 1000), "
+    "position bit at slot 7 (0 = the target fact is printed first)"
+)
+_TYPOGRAPHICEMPHASIS_MAX_CANDIDATES = 24
+_TYPOGRAPHICEMPHASIS_MAX_GROUND_RECORDS = (
+    _TYPOGRAPHICEMPHASIS_MAX_CANDIDATES * _TYPOGRAPHICEMPHASIS_CASE_COUNT
+)
+_TYPOGRAPHICEMPHASIS_GENERATION_BUDGET = (
+    _TYPOGRAPHICEMPHASIS_MAX_CANDIDATES
+    * _TYPOGRAPHICEMPHASIS_CASE_COUNT
+    * len(_TYPOGRAPHICEMPHASIS_RECORD_ARMS)
+)
+_TYPOGRAPHICEMPHASIS_MAX_RECORDS_BYTES = 12 * 1024 * 1024
+_TYPOGRAPHICEMPHASIS_CELL_FIELDS = {
+    "verdict",
+    "boundary_found",
+    "boundary_text_match",
+    "input_tokens",
+    "answer_digest",
+    "answer_text",
+}
+_TYPOGRAPHICEMPHASIS_DETAILS = ("arm_context_exceeded", "arm_evaluation_failed")
+_TYPOGRAPHICEMPHASIS_CELL_CLASSES = (
+    "pass",
+    "boundary_only",
+    "wrong_value",
+    "echo_bold",
+    "echo_italic",
+    "echo_monospace",
+    "echo_caps",
+    "form_only",
+    "non_answer",
+)
+_TYPOGRAPHICEMPHASIS_PAIR_CLASSES = ("boundary_only", "exact_only", "mixed")
+_TYPOGRAPHICEMPHASIS_OPERATING_CHARACTERISTICS: dict[str, Any] = {
+    "delta": 0.34,
+    "alpha": 0.02,
+    "certification_bound_completed_per_comparison": 0.013826,
+    "certification_bound_restricted_vertex_delta_034": 0.012253,
+    "certification_bound_completed_m23": 0.017934,
+    "certification_bound_completed_m22": 0.023163,
+    "familywise_certification_expected_96": 1.3273,
+    "familywise_certification_any_96": 0.7373,
+    "certify_anchored_delta_034_pc_090": 0.0034,
+    "certification_bound_uniform_homogeneous_delta_034": 0.005414,
+    "rtb_counterexample_certification_probability": 0.022662,
+    "fire_competent_independent": 0.017274,
+    "fire_competent_paired": 0.004442,
+    "fire_weak_independent": 0.1743,
+    "fire_random_independent": 0.550306,
+    "power_drop10_base90": 0.2542,
+    "power_drop25_base90": 0.8159,
+    "power_drop25_base85": 0.8761,
+    "power_drop25_paired": 0.698078,
+    "power_drop50_base90": 0.9990,
+    "certify_paired_rho_05_delta_000": 0.6139,
+    "certify_paired_rho_05_delta_028": 0.0044,
+    "familywise_fire_expected_96": 1.6583,
+    "familywise_fire_any_96": 0.8123,
+    "certify_anchored_delta_000_pc_090": 0.5974,
+    "pc_gate_deaf_x_025_independence": 0.0147,
+    "pc_gate_deaf_x_030": 0.0235,
+    "pc_gate_deaf_x_035": 0.0332,
+    "pc_gate_deaf_x_050": 0.0758,
+    "world_a_guarded_certification": 0.0016,
+    "world_a_guarded_fire": 0.0047,
+    "world_b_delta_unguarded_certification": 0.2709,
+    "world_b_delta_guarded_certification": 0.0127,
+    "world_b_pasta_guarded_certification": 0.0006,
+    "world_c_guarded_fire": 0.6318,
+}
+_TYPOGRAPHICEMPHASIS_AGGREGATE_KEYS = {
+    "arms",
+    "dose",
+    "ids",
+    "positive_control",
+    "headline",
+    "operating_characteristics",
+    "n_cases",
+    "n_incomplete",
+}
+
+
+def _typographicemphasis_digest(text: str) -> str:
+    """SHA-256 hex digest (local copy; no imports from
+    typographicemphasis.py anywhere in this mirror).
+    """
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _typographicemphasis_text_digest(text: str) -> str | None:
+    """SHA-256 of the UTF-8 encoding, or None when the
+    text cannot be encoded (a lone-surrogate answer_text
+    is a validation failure, never an exception -- the
+    cycle-190 A3 pattern, applied per audit F2).
+    """
+    try:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    except UnicodeEncodeError:
+        return None
+
+
+def _typographicemphasis_digest_ok(value: Any) -> bool:
+    """Whether a stored digest is a well-formed SHA-256 hex
+    digest.
+    """
+    if type(value) is not str or len(value) != 64:
+        return False
+    return all(ch in "0123456789abcdef" for ch in value)
+
+
+def _typographicemphasis_derive(seed: int, index: int, slot: int, counter: int) -> int:
+    """Mirror of typographicemphasis._derive (the draw
+    conversion pinned by the design's generator spec).
+    """
+
+    material = f"{seed}|typographicemphasis|{index}|{slot}|{counter}"
+    return int.from_bytes(hashlib.sha256(material.encode("ascii")).digest()[:8], "big")
+
+
+class _TypographicEmphasisMirrorExhausted(Exception):
+    """Mirror-internal: the redraw give-up bound was reached
+    during regeneration, so the payload cannot be recomputed
+    and validates false.
+    """
+
+
+def _typographicemphasis_generate(seed: int) -> list[dict[str, Any]]:
+    """Mirror of typographicemphasis.generate_cases: the
+    frozen SHA-256 derivation with panel-wide value
+    distinctness by redraw, the neutral pair, and the
+    positive-control draws (distractor topic, distractor
+    value, position bit).
+    """
+    cases: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index in range(_TYPOGRAPHICEMPHASIS_CASE_COUNT):
+        counter = 0
+        while True:
+            word = _TYPOGRAPHICEMPHASIS_WORDS[
+                _typographicemphasis_derive(seed, index, 0, counter)
+                % len(_TYPOGRAPHICEMPHASIS_WORDS)
+            ]
+            number = 1000 + _typographicemphasis_derive(seed, index, 1, counter) % 9000
+            value = f"{word}-{number}"
+            if value not in seen:
+                break
+            counter += 1
+            if counter > _TYPOGRAPHICEMPHASIS_REDRAW_LIMIT:
+                raise _TypographicEmphasisMirrorExhausted
+        seen.add(value)
+        first = _typographicemphasis_derive(seed, index, 2, 0) % len(
+            _TYPOGRAPHICEMPHASIS_NEUTRAL_STATEMENTS
+        )
+        second = _typographicemphasis_derive(seed, index, 3, 0) % len(
+            _TYPOGRAPHICEMPHASIS_NEUTRAL_STATEMENTS
+        )
+        if second == first:
+            second = (first + 1) % len(_TYPOGRAPHICEMPHASIS_NEUTRAL_STATEMENTS)
+        distractor_index = _typographicemphasis_derive(seed, index, 4, 0) % len(
+            _TYPOGRAPHICEMPHASIS_TOPICS
+        )
+        if distractor_index == index:
+            distractor_index = (index + 1) % len(_TYPOGRAPHICEMPHASIS_TOPICS)
+        counter = 0
+        while True:
+            d_word = _TYPOGRAPHICEMPHASIS_WORDS[
+                _typographicemphasis_derive(seed, index, 5, counter)
+                % len(_TYPOGRAPHICEMPHASIS_WORDS)
+            ]
+            d_number = 1000 + _typographicemphasis_derive(seed, index, 6, counter) % 9000
+            distractor_value = f"{d_word}-{d_number}"
+            if distractor_value != value:
+                break
+            counter += 1
+            if counter > _TYPOGRAPHICEMPHASIS_REDRAW_LIMIT:
+                raise _TypographicEmphasisMirrorExhausted
+        cases.append(
+            {
+                "fixture_id": f"typographicemphasis-{index:02d}",
+                "index": index,
+                "topic": _TYPOGRAPHICEMPHASIS_TOPICS[index],
+                "expected": value,
+                "neutral_indices": [first, second],
+                "distractor_topic": _TYPOGRAPHICEMPHASIS_TOPICS[distractor_index],
+                "distractor_value": distractor_value,
+                "target_first": _typographicemphasis_derive(seed, index, 7, 0) % 2 == 0,
+            }
+        )
+    return cases
+
+
+def _typographicemphasis_wrap(span: str, arm: str) -> str:
+    """Mirror of typographicemphasis.wrap_span."""
+    if arm == "bold":
+        return f"**{span}**"
+    if arm == "italic":
+        return f"*{span}*"
+    if arm == "monospace":
+        return f"`{span}`"
+    if arm == "caps":
+        return span.upper()
+    return span
+
+
+def _typographicemphasis_fact(case: dict[str, Any], arm: str) -> str:
+    """Mirror of typographicemphasis.fact_sentence."""
+    return (
+        f"The {_typographicemphasis_wrap(str(case['topic']), arm)} "
+        f"inspection code is {case['expected']}."
+    )
+
+
+def _typographicemphasis_question(case: dict[str, Any]) -> str:
+    """Mirror of typographicemphasis.question_text."""
+    return f"What is the {case['topic']} inspection code?"
+
+
+def _typographicemphasis_arm_content(case: dict[str, Any], arm: str) -> str:
+    """Mirror of typographicemphasis.arm_content."""
+    first, second = (int(i) for i in case["neutral_indices"])
+    return (
+        f"{_TYPOGRAPHICEMPHASIS_NEUTRAL_STATEMENTS[first]} "
+        f"{_typographicemphasis_fact(case, arm)} "
+        f"{_TYPOGRAPHICEMPHASIS_NEUTRAL_STATEMENTS[second]} "
+        f"{_typographicemphasis_question(case)}"
+    )
+
+
+def _typographicemphasis_pc_content(case: dict[str, Any], arm: str) -> str:
+    """Mirror of typographicemphasis.pc_content."""
+    topic = str(case["topic"])
+    wrapped = f"**{topic}**" if arm == "pc_info" else topic
+    target = f"The {wrapped} inspection code is {case['expected']}."
+    distractor = f"The {case['distractor_topic']} inspection code is {case['distractor_value']}."
+    if case["target_first"]:
+        fact_a, fact_b = target, distractor
+    else:
+        fact_a, fact_b = distractor, target
+    first, second = (int(i) for i in case["neutral_indices"])
+    return (
+        f"{_TYPOGRAPHICEMPHASIS_NEUTRAL_STATEMENTS[first]} {fact_a} {fact_b} "
+        f"{_TYPOGRAPHICEMPHASIS_NEUTRAL_STATEMENTS[second]} "
+        f"{_TYPOGRAPHICEMPHASIS_PC_QUESTION}"
+    )
+
+
+def _typographicemphasis_pcb_content(case: dict[str, Any]) -> str:
+    """Mirror of typographicemphasis.pcb_content."""
+    first, second = (int(i) for i in case["neutral_indices"])
+    topic = str(case["topic"])
+    fact = f"The ***{topic}*** inspection code is {case['expected']}."
+    question = f"What is the ***{topic}*** inspection code?"
+    return (
+        f"{_TYPOGRAPHICEMPHASIS_NEUTRAL_STATEMENTS[first]} {fact} "
+        f"{_TYPOGRAPHICEMPHASIS_NEUTRAL_STATEMENTS[second]} {question}"
+    )
+
+
+def _typographicemphasis_content_for(case: dict[str, Any], arm: str) -> str:
+    """Mirror of typographicemphasis.content_for."""
+    if arm in _TYPOGRAPHICEMPHASIS_PC_ARM_KEYS:
+        return _typographicemphasis_pc_content(case, arm)
+    if arm == _TYPOGRAPHICEMPHASIS_PCB_ARM:
+        return _typographicemphasis_pcb_content(case)
+    return _typographicemphasis_arm_content(case, arm)
+
+
+def _typographicemphasis_pool_digests() -> dict[str, str]:
+    """Mirror of typographicemphasis.POOL_DIGESTS."""
+
+    def _pool_digest(pool: tuple[str, ...]) -> str:
+        """Pool digest."""
+        canonical = json.dumps(list(pool), separators=(",", ":"), ensure_ascii=True)
+        return _typographicemphasis_digest(canonical)
+
+    return {
+        "topics": _pool_digest(_TYPOGRAPHICEMPHASIS_TOPICS),
+        "words": _pool_digest(_TYPOGRAPHICEMPHASIS_WORDS),
+        "neutral_statements": _pool_digest(_TYPOGRAPHICEMPHASIS_NEUTRAL_STATEMENTS),
+    }
+
+
+def _typographicemphasis_case_material_sha256() -> str:
+    """Mirror of typographicemphasis.case_material_sha256."""
+
+    material = {
+        "topics": list(_TYPOGRAPHICEMPHASIS_TOPICS),
+        "words": list(_TYPOGRAPHICEMPHASIS_WORDS),
+        "neutral_statements": list(_TYPOGRAPHICEMPHASIS_NEUTRAL_STATEMENTS),
+        "pool_digests": _typographicemphasis_pool_digests(),
+        "generator": _TYPOGRAPHICEMPHASIS_GENERATOR_SPEC,
+    }
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return _typographicemphasis_digest(canonical)
+
+
+def _typographicemphasis_ground_sha256(seed: int) -> str:
+    """Mirror of typographicemphasis.ground_sha256."""
+
+    canonical = json.dumps(
+        _typographicemphasis_generate(seed),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return _typographicemphasis_digest(canonical)
+
+
+def _typographicemphasis_protocol(seed: int, backend_fingerprint: str) -> dict[str, Any]:
+    """The typographic-emphasis protocol rebuilt from this
+    module's own literals, fingerprint included (compared
+    whole).
+    """
+
+    protocol: dict[str, Any] = {
+        "version": 1,
+        "arm_keys": list(_TYPOGRAPHICEMPHASIS_ARM_KEYS),
+        "treated_arms": list(_TYPOGRAPHICEMPHASIS_TREATED_ARMS),
+        "pc_arm_keys": list(_TYPOGRAPHICEMPHASIS_PC_ARM_KEYS),
+        "pcb_arm": _TYPOGRAPHICEMPHASIS_PCB_ARM,
+        "record_arms": list(_TYPOGRAPHICEMPHASIS_RECORD_ARMS),
+        "case_count": _TYPOGRAPHICEMPHASIS_CASE_COUNT,
+        "min_d": _TYPOGRAPHICEMPHASIS_MIN_D,
+        "min_j": _TYPOGRAPHICEMPHASIS_MIN_J,
+        "max_incomplete": _TYPOGRAPHICEMPHASIS_MAX_INCOMPLETE,
+        "delta": _TYPOGRAPHICEMPHASIS_DELTA,
+        "alpha": _TYPOGRAPHICEMPHASIS_ALPHA,
+        "pc_min_info_passes": _TYPOGRAPHICEMPHASIS_PC_MIN_INFO_PASSES,
+        "pc_min_margin": _TYPOGRAPHICEMPHASIS_PC_MIN_MARGIN,
+        "generator_spec": _TYPOGRAPHICEMPHASIS_GENERATOR_SPEC,
+        "pool_digests": _typographicemphasis_pool_digests(),
+        "case_material_sha256": _typographicemphasis_case_material_sha256(),
+        "ground_sha256": _typographicemphasis_ground_sha256(seed),
+        "generation_budget": _TYPOGRAPHICEMPHASIS_GENERATION_BUDGET,
+        "max_ground_records": _TYPOGRAPHICEMPHASIS_MAX_GROUND_RECORDS,
+        "max_records_bytes": _TYPOGRAPHICEMPHASIS_MAX_RECORDS_BYTES,
+        "max_candidates": _TYPOGRAPHICEMPHASIS_MAX_CANDIDATES,
+        "seed": seed,
+        "backend_fingerprint": backend_fingerprint,
+    }
+    canonical = json.dumps(protocol, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    protocol["fingerprint"] = _typographicemphasis_digest(canonical)
+    return protocol
+
+
+def _typographicemphasis_cell_get(record: dict[str, Any], key: str) -> dict[str, Any] | None:
+    """Return the typographicemphasis cell get."""
+    cells = record.get("cells")
+    if not isinstance(cells, dict):
+        return None
+    cell = cells.get(key)
+    return cell if isinstance(cell, dict) else None
+
+
+def _typographicemphasis_detail_get(record: dict[str, Any], key: str) -> str:
+    """Return the typographicemphasis detail get."""
+    details = record.get("cell_details")
+    if not isinstance(details, dict):
+        return ""
+    detail = details.get(key, "")
+    return detail if type(detail) is str else ""
+
+
+def _typographicemphasis_verdict(record: dict[str, Any], key: str) -> bool:
+    """Return the typographicemphasis verdict."""
+    cell = _typographicemphasis_cell_get(record, key)
+    return bool(cell is not None and cell.get("verdict") is True)
+
+
+def _typographicemphasis_ids_identical(record: dict[str, Any], arm: str) -> bool:
+    """Mirror of typographicemphasis._ids_divergent_records'
+    complement: derived from the recorded id digests alone.
+    """
+    digests = record.get("id_digests")
+    if not isinstance(digests, dict):
+        return False
+    control = digests.get("control")
+    return type(control) is str and control != "" and control == digests.get(arm)
+
+
+def _typographicemphasis_grammar_ok(text: Any) -> bool:
+    """Mirror of typographicemphasis._value_grammar_ok
+    (fullmatch semantics only).
+    """
+    if type(text) is not str or re.fullmatch(r"[a-z]+-[0-9]{4}", text) is None:
+        return False
+    word, _, number = text.partition("-")
+    return word in _TYPOGRAPHICEMPHASIS_WORDS and 1000 <= int(number) <= 9999
+
+
+def _typographicemphasis_echo_set(expected: str, arm: str) -> set[str]:
+    """Mirror of typographicemphasis.echo_set."""
+    word, _, number = expected.partition("-")
+    if arm == "bold":
+        return {f"**{expected}**", f"**{word}**-{number}"}
+    if arm == "italic":
+        return {f"*{expected}*", f"*{word}*-{number}"}
+    if arm == "monospace":
+        return {f"`{expected}`", f"`{word}`-{number}"}
+    if arm == "caps":
+        return {expected.upper(), f"{word.upper()}-{number}"}
+    return set()
+
+
+def _typographicemphasis_strip(text: str, arm: str) -> str:
+    """Mirror of typographicemphasis.strip_marks."""
+    if arm in ("bold", "italic"):
+        return text.replace("*", "")
+    if arm == "monospace":
+        return text.replace("`", "")
+    if arm == "caps":
+        return text.lower()
+    return text
+
+
+def _typographicemphasis_decompose_cell(
+    cell: dict[str, Any], expected: str, expected_digest: str, arm: str
+) -> str:
+    """Mirror of typographicemphasis.decompose_cell (the
+    ordered decision list; boundary-only requires the
+    boundary to have failed, exactly as in the producer).
+    """
+    if cell.get("verdict") is True:
+        return "pass"
+    digest = cell.get("answer_digest")
+    if digest is not None and digest == expected_digest and cell.get("boundary_found") is not True:
+        return "boundary_only"
+    text = cell.get("answer_text")
+    if type(text) is not str:
+        return "non_answer"
+    if text != expected and _typographicemphasis_grammar_ok(text):
+        return "wrong_value"
+    if text in _typographicemphasis_echo_set(expected, arm):
+        return f"echo_{arm}"
+    if text != expected and _typographicemphasis_strip(text, arm) == expected:
+        return "form_only"
+    return "non_answer"
+
+
+def _typographicemphasis_decompose_pair(
+    control_cell: dict[str, Any], arm_cell: dict[str, Any]
+) -> str:
+    """Mirror of typographicemphasis.decompose_pair."""
+    if control_cell.get("answer_digest") == arm_cell.get("answer_digest"):
+        return "boundary_only"
+    if control_cell.get("boundary_found") and arm_cell.get("boundary_found"):
+        return "exact_only"
+    return "mixed"
+
+
+def _typographicemphasis_pc_gate(
+    info_passes: int, margin_base: int, margin_harm: int, n_incomplete: int
+) -> bool:
+    """Mirror of typographicemphasis.pc_gate_passed (the
+    A5 completion guard included).
+    """
+    if info_passes < _TYPOGRAPHICEMPHASIS_PC_MIN_INFO_PASSES:
+        return False
+    if margin_base - margin_harm < _TYPOGRAPHICEMPHASIS_PC_MIN_MARGIN:
+        return False
+    if n_incomplete > _TYPOGRAPHICEMPHASIS_MAX_INCOMPLETE:
+        return False
+    return margin_base - (margin_harm + n_incomplete) >= _TYPOGRAPHICEMPHASIS_PC_MIN_MARGIN
+
+
+def _typographicemphasis_blockers(
+    control_passes: int,
+    harm: int,
+    reverse: int,
+    n_incomplete: int,
+    domain_size: int,
+    pc_passed: bool,
+) -> list[str]:
+    """Mirror of typographicemphasis.certification_blockers."""
+    blockers: list[str] = []
+    if not (control_passes >= _TYPOGRAPHICEMPHASIS_MIN_D and harm <= 5 and harm - reverse <= 0):
+        blockers.append("statistic_event")
+    if domain_size != _TYPOGRAPHICEMPHASIS_CASE_COUNT:
+        blockers.append("domain_size")
+    if not (harm + n_incomplete <= 5 and harm - reverse + n_incomplete <= 0):
+        blockers.append("completion_guard")
+    if not pc_passed:
+        blockers.append("positive_control")
+    return blockers
+
+
+def _typographicemphasis_classify(
+    control_passes: int,
+    wrong_values: int,
+    harm: int,
+    reverse: int,
+    n_incomplete: int,
+    domain_size: int,
+    pc_passed: bool,
+) -> str:
+    """Mirror of typographicemphasis.classify_headline
+    (the combined guarded label).
+    """
+    if n_incomplete > _TYPOGRAPHICEMPHASIS_MAX_INCOMPLETE:
+        return "insufficient"
+    if control_passes < _TYPOGRAPHICEMPHASIS_MIN_D:
+        return "insufficient"
+    if wrong_values >= _TYPOGRAPHICEMPHASIS_MIN_J:
+        return "discordant_asymmetric"
+    if not _typographicemphasis_blockers(
+        control_passes, harm, reverse, n_incomplete, domain_size, pc_passed
+    ):
+        return "equivalence_certified"
+    if wrong_values == 0:
+        return "no_discordance_observed" if n_incomplete == 0 else "insufficient"
+    return (
+        "below_threshold"
+        if wrong_values + n_incomplete < _TYPOGRAPHICEMPHASIS_MIN_J
+        else "insufficient"
+    )
+
+
+def _typographicemphasis_rate(numerator: int, denominator: int) -> float | None:
+    """Return the typographicemphasis rate."""
+    return (numerator / denominator) if denominator else None
+
+
+def _typographicemphasis_aggregate(
+    records: list[dict[str, Any]], cases: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Mirror of typographicemphasis.aggregate_candidate."""
+    expected_by_fixture = {str(case["fixture_id"]): str(case["expected"]) for case in cases}
+    arms: dict[str, Any] = {}
+    for key in _TYPOGRAPHICEMPHASIS_RECORD_ARMS:
+        n_completed = 0
+        n_pass = 0
+        n_context = 0
+        n_failed = 0
+        decomposition = dict.fromkeys(_TYPOGRAPHICEMPHASIS_CELL_CLASSES, 0)
+        for record in records:
+            detail = _typographicemphasis_detail_get(record, key)
+            if detail == "arm_context_exceeded":
+                n_context += 1
+            elif detail == "arm_evaluation_failed":
+                n_failed += 1
+            cell = _typographicemphasis_cell_get(record, key)
+            if cell is None:
+                continue
+            n_completed += 1
+            if cell.get("verdict") is True:
+                n_pass += 1
+            if key in _TYPOGRAPHICEMPHASIS_ARM_KEYS:
+                decomposition[
+                    _typographicemphasis_decompose_cell(
+                        cell,
+                        expected_by_fixture.get(str(record.get("fixture", "")), ""),
+                        str(record.get("expected_digest", "")),
+                        key,
+                    )
+                ] += 1
+        entry: dict[str, Any] = {
+            "rate": _typographicemphasis_rate(n_pass, n_completed),
+            "n_pass": n_pass,
+            "n_completed": n_completed,
+            "n_context_exceeded": n_context,
+            "n_evaluation_failed": n_failed,
+        }
+        if key in _TYPOGRAPHICEMPHASIS_ARM_KEYS:
+            entry["decomposition"] = decomposition
+        arms[key] = entry
+    dose: dict[str, Any] = {}
+    for arm in _TYPOGRAPHICEMPHASIS_TREATED_ARMS:
+        codepoint_deltas: list[int] = []
+        byte_deltas: list[int] = []
+        for case in cases:
+            treated = _typographicemphasis_arm_content(case, arm)
+            control = _typographicemphasis_arm_content(case, "control")
+            codepoint_deltas.append(len(treated) - len(control))
+            byte_deltas.append(len(treated.encode("utf-8")) - len(control.encode("utf-8")))
+        dose[arm] = {
+            "codepoint_delta_min": min(codepoint_deltas, default=0),
+            "codepoint_delta_max": max(codepoint_deltas, default=0),
+            "byte_delta_min": min(byte_deltas, default=0),
+            "byte_delta_max": max(byte_deltas, default=0),
+        }
+    ids: dict[str, Any] = {}
+    for arm in _TYPOGRAPHICEMPHASIS_TREATED_ARMS:
+        deltas: list[int] = []
+        n_ids_identical = 0
+        n_same_ids_flips = 0
+        for record in records:
+            tokens = record.get("arm_tokens")
+            tokens = tokens if isinstance(tokens, dict) else {}
+            treated_count = tokens.get(arm)
+            baseline_count = tokens.get("control")
+            if type(treated_count) is int and type(baseline_count) is int:
+                deltas.append(treated_count - baseline_count)
+            else:
+                deltas.append(0)
+            if _typographicemphasis_ids_identical(record, arm):
+                n_ids_identical += 1
+                control_cell = _typographicemphasis_cell_get(record, "control")
+                arm_cell = _typographicemphasis_cell_get(record, arm)
+                if (
+                    control_cell is not None
+                    and arm_cell is not None
+                    and (control_cell.get("verdict") is True) != (arm_cell.get("verdict") is True)
+                ):
+                    n_same_ids_flips += 1
+        ids[arm] = {
+            "n_ids_identical": n_ids_identical,
+            "n_ids_divergent": len(records) - n_ids_identical,
+            "id_length_delta": deltas,
+            "max_abs_id_delta": max((abs(delta) for delta in deltas), default=0),
+            "n_same_ids_verdict_flips": n_same_ids_flips,
+        }
+    n_pc_pairs = 0
+    pc_info_passes = 0
+    pc_b = 0
+    pc_h = 0
+    for record in records:
+        plain = _typographicemphasis_cell_get(record, "pc_plain")
+        info = _typographicemphasis_cell_get(record, "pc_info")
+        if plain is not None and info is not None:
+            n_pc_pairs += 1
+            plain_verdict = plain.get("verdict") is True
+            info_verdict = info.get("verdict") is True
+            if info_verdict:
+                pc_info_passes += 1
+            if not plain_verdict and info_verdict:
+                pc_b += 1
+            if plain_verdict and not info_verdict:
+                pc_h += 1
+    pc_incomplete = _TYPOGRAPHICEMPHASIS_CASE_COUNT - n_pc_pairs
+    positive_control = {
+        "n_pairs": n_pc_pairs,
+        "n_incomplete": pc_incomplete,
+        "info_passes": pc_info_passes,
+        "plain_fail_info_pass": pc_b,
+        "plain_pass_info_fail": pc_h,
+        "margin": pc_b - pc_h,
+        "passed": _typographicemphasis_pc_gate(pc_info_passes, pc_b, pc_h, pc_incomplete),
+    }
+    headline: dict[str, Any] = {}
+    for arm in _TYPOGRAPHICEMPHASIS_TREATED_ARMS:
+        domain = [
+            record for record in records if not _typographicemphasis_ids_identical(record, arm)
+        ]
+        paired = [
+            record
+            for record in domain
+            if _typographicemphasis_cell_get(record, "control") is not None
+            and _typographicemphasis_cell_get(record, arm) is not None
+        ]
+        n_incomplete = len(domain) - len(paired)
+        control_passes = 0
+        wrong_values = 0
+        harm = 0
+        reverse = 0
+        arm_passes = 0
+        non_answer = 0
+        pair_decomposition = dict.fromkeys(_TYPOGRAPHICEMPHASIS_PAIR_CLASSES, 0)
+        failing_classes = dict.fromkeys(_TYPOGRAPHICEMPHASIS_CELL_CLASSES, 0)
+        for record in paired:
+            control_cell = _typographicemphasis_cell_get(record, "control")
+            arm_cell = _typographicemphasis_cell_get(record, arm)
+            if control_cell is None or arm_cell is None:
+                continue
+            expected = expected_by_fixture.get(str(record.get("fixture", "")), "")
+            expected_digest = str(record.get("expected_digest", ""))
+            arm_class = _typographicemphasis_decompose_cell(
+                arm_cell, expected, expected_digest, arm
+            )
+            if arm_class == "non_answer":
+                non_answer += 1
+            control_verdict = control_cell.get("verdict") is True
+            arm_verdict = arm_cell.get("verdict") is True
+            if control_verdict:
+                control_passes += 1
+                if arm_class == "wrong_value":
+                    wrong_values += 1
+                if not arm_verdict:
+                    harm += 1
+            elif arm_verdict:
+                reverse += 1
+            if arm_verdict:
+                arm_passes += 1
+            if control_verdict != arm_verdict:
+                pair_decomposition[_typographicemphasis_decompose_pair(control_cell, arm_cell)] += 1
+                failing = arm_cell if control_verdict else control_cell
+                failing_arm = arm if control_verdict else "control"
+                failing_classes[
+                    _typographicemphasis_decompose_cell(
+                        failing, expected, expected_digest, failing_arm
+                    )
+                ] += 1
+        headline[arm] = {
+            "label": _typographicemphasis_classify(
+                control_passes,
+                wrong_values,
+                harm,
+                reverse,
+                n_incomplete,
+                len(domain),
+                bool(positive_control["passed"]),
+            ),
+            "n_population": len(paired),
+            "n_incomplete": n_incomplete,
+            "n_ids_divergent": len(domain),
+            "control_passes": control_passes,
+            "wrong_values": wrong_values,
+            "harm": harm,
+            "n_reverse": reverse,
+            "net_harm": harm - reverse,
+            "control_rate": _typographicemphasis_rate(control_passes, len(paired)),
+            "arm_rate": _typographicemphasis_rate(arm_passes, len(paired)),
+            "n_non_answer": non_answer,
+            "pair_decomposition": pair_decomposition,
+            "failing_classes": failing_classes,
+            "delta": _TYPOGRAPHICEMPHASIS_DELTA,
+            "alpha": _TYPOGRAPHICEMPHASIS_ALPHA,
+            "pc_gate_passed": positive_control["passed"],
+            "certification_blocked_by": _typographicemphasis_blockers(
+                control_passes,
+                harm,
+                reverse,
+                n_incomplete,
+                len(domain),
+                bool(positive_control["passed"]),
+            ),
+        }
+    return {
+        "arms": arms,
+        "dose": dose,
+        "ids": ids,
+        "positive_control": positive_control,
+        "headline": headline,
+        "operating_characteristics": dict(_TYPOGRAPHICEMPHASIS_OPERATING_CHARACTERISTICS),
+        "n_cases": len(records),
+        "n_incomplete": sum(
+            1
+            for record in records
+            if any(
+                _typographicemphasis_cell_get(record, arm) is None
+                for arm in _TYPOGRAPHICEMPHASIS_RECORD_ARMS
+            )
+        ),
+    }
+
+
+def _typographicemphasis_cell_ok(cell: Any, expected_digest: str) -> bool:
+    """One cell's shape and bindings: the exact field set;
+    the verdict binding ``verdict == (answer_digest ==
+    expected_digest) and boundary_found``; the carried
+    ``answer_text`` must hash to its ``answer_digest`` (the
+    cycle-190 binding); the input-token binding to the
+    record's arm token count is checked by the caller.
+    """
+    if type(cell) is not dict or set(cell) != _TYPOGRAPHICEMPHASIS_CELL_FIELDS:
+        return False
+    if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
+        return False
+    if cell["boundary_text_match"] is not None and type(cell["boundary_text_match"]) is not bool:
+        return False
+    if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 0:
+        return False
+    digest = cell["answer_digest"]
+    if digest is not None and not _typographicemphasis_digest_ok(digest):
+        return False
+    text = cell["answer_text"]
+    if text is None:
+        if digest is not None:
+            return False
+    elif type(text) is not str or _typographicemphasis_text_digest(text) != digest:
+        return False
+    verdict = (digest == expected_digest) and cell["boundary_found"]
+    return bool(cell["verdict"] == verdict)
+
+
+def _typographicemphasis_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Recompute a typographic-emphasis payload from its
+    ground records.
+
+    The validator carries its own generator mirror with the
+    frozen SHA-256 derivation, the frozen pools, and the
+    aggregators (no imports from typographicemphasis.py):
+    the protocol is rebuilt from frozen literals plus the
+    payload's seed and backend fingerprint and compared
+    whole; the case set is regenerated from the seed and
+    every record is checked against it in protocol order;
+    every record's per-arm content digests are rebound to
+    the regenerated arm contents (all eight record arms,
+    so the treatment itself -- the main arms' wraps, the
+    positive control's bold wrap, the PC-B double wrap --
+    is committed); the record's ids_identical flags and
+    id_length_delta values must equal the derivations from
+    its recorded digests and token counts; every cell's
+    answer_text is verified against its answer_digest, its
+    verdict is re-derived from its digest identity, and
+    its input_tokens are bound to the record's arm token
+    count; the decompositions, id report, dose, positive
+    control, and combined headlines -- including every
+    certification label and its blocking gates -- are
+    recomputed from the records and the regenerated
+    expected values; the aggregates are recomputed and
+    compared. A certificate therefore cannot be asserted
+    by a record whose committed counts do not earn it.
+    Cells exist only from aggregate-eligible reports, so a
+    non-null cell certifies a completed evaluation and the
+    verdict's status conjunct is discharged structurally.
+    """
+
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return None
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or isinstance(seed, bool) or type(backend_fingerprint) is not str:
+        return None
+    try:
+        expected_protocol = _typographicemphasis_protocol(seed, backend_fingerprint)
+    except _TypographicEmphasisMirrorExhausted:
+        return None
+    if not _recomputed_equal(protocol, expected_protocol):
+        return None
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict or not candidates:
+        return None
+    if len(candidates) > _TYPOGRAPHICEMPHASIS_MAX_CANDIDATES:
+        return None
+    try:
+        generated = _typographicemphasis_generate(seed)
+    except _TypographicEmphasisMirrorExhausted:
+        return None
+    total_records = 0
+    records_bytes = 0
+    aggregates: dict[str, Any] = {}
+    for name, entry in candidates.items():
+        if type(entry) is not dict:
+            return None
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"} or entry.get("records") != []:
+                return None
+            continue
+        if status != "available" or entry.get("detail") != "":
+            return None
+        if set(entry) != _TYPOGRAPHICEMPHASIS_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return None
+        records = entry["records"]
+        if type(records) is not list or len(records) != len(generated):
+            return None
+        total_records += len(records)
+        records_bytes += len(
+            json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
+        if records_bytes > _TYPOGRAPHICEMPHASIS_MAX_RECORDS_BYTES:
+            return None
+        for record, case in zip(records, generated, strict=True):
+            if type(record) is not dict or set(record) != {
+                "fixture",
+                "topic",
+                "expected_digest",
+                "content_digests",
+                "arm_tokens",
+                "id_digests",
+                "ids_identical",
+                "id_length_delta",
+                "cells",
+                "cell_details",
+            }:
+                return None
+            if record["fixture"] != case["fixture_id"]:
+                return None
+            if record["topic"] != case["topic"]:
+                return None
+            expected_digest = _typographicemphasis_digest(str(case["expected"]))
+            if record["expected_digest"] != expected_digest:
+                return None
+            arm_tokens = record["arm_tokens"]
+            id_digests = record["id_digests"]
+            content_digests = record["content_digests"]
+            ids_identical = record["ids_identical"]
+            id_length_delta = record["id_length_delta"]
+            cells = record["cells"]
+            details = record["cell_details"]
+            for mapping in (arm_tokens, id_digests, content_digests, cells, details):
+                if type(mapping) is not dict or set(mapping) != set(
+                    _TYPOGRAPHICEMPHASIS_RECORD_ARMS
+                ):
+                    return None
+            for mapping in (ids_identical, id_length_delta):
+                if type(mapping) is not dict or set(mapping) != set(
+                    _TYPOGRAPHICEMPHASIS_TREATED_ARMS
+                ):
+                    return None
+            # Validate every arm_tokens value BEFORE any arithmetic on
+            # them, exactly as in _invisiblechars_recompute: a
+            # type-confused value escaped as a raw TypeError while the
+            # type check sat in the later per-arm loop (bug-hunt
+            # wave 2, BH2B-02).
+            for arm in _TYPOGRAPHICEMPHASIS_RECORD_ARMS:
+                tokens = arm_tokens[arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                    return None
+            for arm in _TYPOGRAPHICEMPHASIS_TREATED_ARMS:
+                if ids_identical[arm] is not (id_digests[arm] == id_digests["control"]):
+                    return None
+                if id_length_delta[arm] != arm_tokens[arm] - arm_tokens["control"]:
+                    return None
+            for arm in _TYPOGRAPHICEMPHASIS_RECORD_ARMS:
+                tokens = arm_tokens[arm]
+                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                    return None
+                if not _typographicemphasis_digest_ok(id_digests[arm]):
+                    return None
+                if content_digests[arm] != _typographicemphasis_digest(
+                    _typographicemphasis_content_for(case, arm)
+                ):
+                    return None
+                cell = cells[arm]
+                detail = details[arm]
+                if detail not in ("", *_TYPOGRAPHICEMPHASIS_DETAILS):
+                    return None
+                if cell is None:
+                    if detail == "":
+                        return None
+                    continue
+                if detail != "":
+                    return None
+                if not _typographicemphasis_cell_ok(cell, expected_digest):
+                    return None
+                if cell["input_tokens"] != tokens:
+                    return None
+        aggregates[name] = _typographicemphasis_aggregate(records, generated)
+    if total_records > _TYPOGRAPHICEMPHASIS_MAX_GROUND_RECORDS:
+        return None
+    if not aggregates:
+        return None
+    return {
+        "aggregates": aggregates,
+        "n_candidates": len(candidates),
+        "n_cases": len(generated),
+    }
+
+
+def _valid_typographic_emphasis(payload: Any) -> bool:
+    """Structural check for a ``typographic_emphasis`` payload
+    (recompute standard). The audit block is shape-checked
+    only: its counts are stage observations (special-token
+    findings against the run's own formats), not recomputable
+    from records.
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    audit = payload.get("audit")
+    if type(audit) is not dict or set(audit) != {
+        "n_audit_excluded",
+        "by_reason",
+        "special_token_findings",
+    }:
+        return False
+    if type(audit["n_audit_excluded"]) is not int or audit["n_audit_excluded"] < 0:
+        return False
+    if type(audit["special_token_findings"]) is not int or audit["special_token_findings"] < 0:
+        return False
+    by_reason = audit["by_reason"]
+    if type(by_reason) is not dict:
+        return False
+    for key, count in by_reason.items():
+        if type(key) is not str or type(count) is not int or count < 0:
+            return False
+    recomputed = _typographicemphasis_recompute(payload)
+    if recomputed is None:
+        return False
+    candidates = payload["candidates"]
+    for name, expected in recomputed["aggregates"].items():
+        entry = candidates[name]
+        for key, value in expected.items():
+            if not _recomputed_equal(entry.get(key), value):
+                return False
+    if not _recomputed_equal(payload.get("n_candidates"), recomputed["n_candidates"]):
+        return False
+    return _recomputed_equal(payload.get("n_cases"), recomputed["n_cases"])
+
+
+def diff_typographic_emphasis(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``typographic_emphasis`` probe payloads;
+    deterministic.
+
+    Answers "did the typographic-emphasis story change
+    between runs?": per candidate and treated arm, drift in
+    the combined label with the D / J / H / R counts that
+    carry it, the divergent-domain size M, the reverse and
+    non-answer counts, the paired population and its
+    incompletion, the certification blocking gates, the
+    positive-control counts and gate verdict, the id
+    report, the per-arm dose deltas, and the pair
+    decomposition; candidates added/removed; and protocol /
+    generator / backend drift (any of which marks the
+    comparison not comparable, with the drift still listed
+    -- the generated panel is the treatment, so a changed
+    generator is protocol drift). A side without a valid
+    payload is reported plainly.
+    """
+    old_ok = _valid_typographic_emphasis(old)
+    new_ok = _valid_typographic_emphasis(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    te_protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    te_generator_drift = old["protocol"].get("ground_sha256") != new["protocol"].get(
+        "ground_sha256"
+    ) or old["protocol"].get("case_material_sha256") != new["protocol"].get("case_material_sha256")
+    te_backend_drift = old["protocol"].get("backend_fingerprint") != new["protocol"].get(
+        "backend_fingerprint"
+    )
+    te_comparable = not te_protocol_drift and not te_generator_drift and not te_backend_drift
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    te_candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    te_candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    te_candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != "available" or new_entry.get("status") != "available":
+            if old_entry.get("status") != new_entry.get("status"):
+                te_candidate_drift.append(
+                    {
+                        "candidate": name,
+                        "metric": "status",
+                        "old": old_entry.get("status"),
+                        "new": new_entry.get("status"),
+                    }
+                )
+            continue
+        te_metrics: list[tuple[str, Any, Any]] = []
+        for arm in _TYPOGRAPHICEMPHASIS_RECORD_ARMS:
+            te_metrics.append(
+                (f"{arm}_rate", old_entry["arms"][arm]["rate"], new_entry["arms"][arm]["rate"])
+            )
+        old_pc = old_entry["positive_control"]
+        new_pc = new_entry["positive_control"]
+        te_metrics.extend(
+            [
+                ("pc_passed", old_pc["passed"], new_pc["passed"]),
+                ("pc_info_passes", old_pc["info_passes"], new_pc["info_passes"]),
+                (
+                    "pc_plain_fail_info_pass",
+                    old_pc["plain_fail_info_pass"],
+                    new_pc["plain_fail_info_pass"],
+                ),
+                (
+                    "pc_plain_pass_info_fail",
+                    old_pc["plain_pass_info_fail"],
+                    new_pc["plain_pass_info_fail"],
+                ),
+                ("pc_margin", old_pc["margin"], new_pc["margin"]),
+                ("pc_n_incomplete", old_pc["n_incomplete"], new_pc["n_incomplete"]),
+            ]
+        )
+        for arm in _TYPOGRAPHICEMPHASIS_TREATED_ARMS:
+            te_metrics.extend(
+                [
+                    (
+                        f"{arm}_dose_codepoint_min",
+                        old_entry["dose"][arm]["codepoint_delta_min"],
+                        new_entry["dose"][arm]["codepoint_delta_min"],
+                    ),
+                    (
+                        f"{arm}_dose_codepoint_max",
+                        old_entry["dose"][arm]["codepoint_delta_max"],
+                        new_entry["dose"][arm]["codepoint_delta_max"],
+                    ),
+                    (
+                        f"{arm}_dose_byte_min",
+                        old_entry["dose"][arm]["byte_delta_min"],
+                        new_entry["dose"][arm]["byte_delta_min"],
+                    ),
+                    (
+                        f"{arm}_dose_byte_max",
+                        old_entry["dose"][arm]["byte_delta_max"],
+                        new_entry["dose"][arm]["byte_delta_max"],
+                    ),
+                ]
+            )
+        for arm in _TYPOGRAPHICEMPHASIS_TREATED_ARMS:
+            old_head = old_entry["headline"][arm]
+            new_head = new_entry["headline"][arm]
+            old_ids = old_entry["ids"][arm]
+            new_ids = new_entry["ids"][arm]
+            te_metrics.extend(
+                [
+                    (f"{arm}_label", old_head["label"], new_head["label"]),
+                    (
+                        f"{arm}_control_passes",
+                        old_head["control_passes"],
+                        new_head["control_passes"],
+                    ),
+                    (f"{arm}_wrong_values", old_head["wrong_values"], new_head["wrong_values"]),
+                    (f"{arm}_harm", old_head["harm"], new_head["harm"]),
+                    (f"{arm}_n_reverse", old_head["n_reverse"], new_head["n_reverse"]),
+                    (f"{arm}_net_harm", old_head["net_harm"], new_head["net_harm"]),
+                    (f"{arm}_n_population", old_head["n_population"], new_head["n_population"]),
+                    (f"{arm}_n_incomplete", old_head["n_incomplete"], new_head["n_incomplete"]),
+                    (
+                        f"{arm}_n_ids_divergent",
+                        old_head["n_ids_divergent"],
+                        new_head["n_ids_divergent"],
+                    ),
+                    (f"{arm}_n_non_answer", old_head["n_non_answer"], new_head["n_non_answer"]),
+                    (f"{arm}_control_rate", old_head["control_rate"], new_head["control_rate"]),
+                    (f"{arm}_arm_rate", old_head["arm_rate"], new_head["arm_rate"]),
+                    (
+                        f"{arm}_pc_gate_passed",
+                        old_head["pc_gate_passed"],
+                        new_head["pc_gate_passed"],
+                    ),
+                    (
+                        f"{arm}_certification_blocked_by",
+                        old_head["certification_blocked_by"],
+                        new_head["certification_blocked_by"],
+                    ),
+                    (
+                        f"{arm}_pair_exact_only",
+                        old_head["pair_decomposition"]["exact_only"],
+                        new_head["pair_decomposition"]["exact_only"],
+                    ),
+                    (
+                        f"{arm}_pair_boundary_only",
+                        old_head["pair_decomposition"]["boundary_only"],
+                        new_head["pair_decomposition"]["boundary_only"],
+                    ),
+                    (
+                        f"{arm}_pair_mixed",
+                        old_head["pair_decomposition"]["mixed"],
+                        new_head["pair_decomposition"]["mixed"],
+                    ),
+                    (
+                        f"{arm}_n_ids_identical",
+                        old_ids["n_ids_identical"],
+                        new_ids["n_ids_identical"],
+                    ),
+                    (
+                        f"{arm}_max_abs_id_delta",
+                        old_ids["max_abs_id_delta"],
+                        new_ids["max_abs_id_delta"],
+                    ),
+                    (
+                        f"{arm}_n_same_ids_verdict_flips",
+                        old_ids["n_same_ids_verdict_flips"],
+                        new_ids["n_same_ids_verdict_flips"],
+                    ),
+                ]
+            )
+        for metric, old_value, new_value in te_metrics:
+            if old_value != new_value:
+                te_candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    result["candidate_drift"] = te_candidate_drift
+    result["candidates_added"] = te_candidates_added
+    result["candidates_removed"] = te_candidates_removed
+    result["protocol_drift"] = te_protocol_drift
+    result["generator_drift"] = te_generator_drift
+    result["backend_drift"] = te_backend_drift
+    result["comparable"] = te_comparable
+    result["changed"] = bool(
+        te_candidate_drift
+        or te_candidates_added
+        or te_candidates_removed
+        or te_protocol_drift
+        or te_generator_drift
+        or te_backend_drift
+    )
+    return result
 
 
 def _rotation_digest(text: str) -> str:
