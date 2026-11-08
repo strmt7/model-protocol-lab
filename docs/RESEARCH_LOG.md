@@ -11821,3 +11821,68 @@ verified zero.
   fires on the trigger either way, and the apply
   cycle re-proves each step before pushing. The
   alerts stand open and undismissed until then.
+
+## Cycle 240 — R2 remainder: the real-checkpoint battery completed except one reboot-blocked row (2026-11-08)
+
+- **What shipped.** Cycle 235's six ungated remainder rows
+  executed under its frozen settings verbatim (same fixture
+  set, digest-pinned; CPU, float32, greedy, seed 0;
+  `--mutate --stop-cause`, 64 new tokens; the audited
+  boundary token sets; checkpoint weights digests
+  re-verified against acquisition before each checkpoint's
+  first row). Five rows completed — gpt2-medium chatml and
+  llama3, gpt2-large chatml and llama3, TinyLlama chatml:
+  228 generations, every candidate at 0/12
+  exact-and-boundary passes, every decision
+  `no_candidate`, the held-out split never read — and are
+  recorded with their instrument readings in
+  `docs/REAL_CHECKPOINT_VALIDATION.md`, whose adapter
+  verdicts, cost record and remainder sections were
+  rewritten to match. The sixth row, TinyLlama llama3, did
+  not complete: six attempts were each killed by a host
+  reboot short of the roughly four hours the row needs, so
+  the cycle closed on the split cycle 235's precedent set —
+  publish what is banked, name the blocked row as the
+  remainder with its kill evidence, and leave the row to a
+  follow-up cycle on a stable host with the settings frozen.
+  VALIDATION's header and not-established scope rolled to
+  the widened matrix, the README's scoped-evidence phrase
+  was corrected, and the two docs-currency pins that guard
+  those claims (test_cycle178's header range, test_cycle44's
+  scoped replacement string) moved in the same push with
+  their reasons recorded in the pins' own comments. No
+  package code changed.
+- **Evidence.** Every published figure was copied from the
+  row's own `results.json` after the battery log's END line
+  and the process's exit both confirmed completion: wall
+  times 4,003 s / 8,015 s (medium), 7,892 s / 21,532 s
+  (large — the llama3 row is the longest single run the lab
+  has executed), 8,736 s (TinyLlama chatml). The recorded
+  variation is in how generations end: the GPT-2 rows are
+  overwhelmingly `stop_string` (a string-level stop would
+  have terminated most generations) with exactly one
+  `boundary-text-mismatch` across all 288 GPT-2 generations
+  in both cycles, while the TinyLlama chatml row is
+  `max_length`-dominant (24/36 — the marker text never
+  appeared inside the token budget) with the highest
+  boundary-audit rate of any row (0.4722) and still every
+  generation classified `no-boundary-in-N`. The blocked
+  row's boundary set was proven valid before its first
+  attempt (`doctor` verdict `ok`, "8 ids within
+  vocabulary" against TinyLlama's tokenizer), so its
+  remainder status is a host-window fact, not a measurement.
+  The cycle also voided five fabricated run deliveries
+  (three invented completions, two invented mid-run
+  statuses) against foreground process and log checks;
+  nothing from any of them is recorded anywhere, and every
+  verdict in this cycle comes from a log file or a run
+  record only.
+- **Falsification note:** the published claim — that the
+  completed rows uniformly abstain with the token-ID
+  boundary as the recorded failing component — is falsified
+  by any cited run record showing an exact-and-boundary
+  pass, a selected candidate, or a held-out evaluation;
+  none exists. The remainder claim for TinyLlama llama3 is
+  falsified by a completed `results.json` for that row
+  under the frozen settings; none exists, and the six
+  killed attempts' absence of one is the evidence.

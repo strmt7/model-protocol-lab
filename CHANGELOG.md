@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (cycle 240 — real-checkpoint battery remainder, 2026-11-08)
+
+- `docs/REAL_CHECKPOINT_VALIDATION.md` now records cycle
+  240's execution of the battery rows cycle 235 left open,
+  under the same frozen settings: gpt2-medium and
+  gpt2-large completed both families (192 generations) and
+  TinyLlama-1.1B-Chat completed its chatml row (36
+  generations). Every candidate scored 0/12
+  exact-and-boundary passes and every decision is
+  `no_candidate` with the held-out split never read; the
+  page records the per-row failure taxonomy, stop-cause and
+  boundary-audit readings (including TinyLlama chatml's
+  `max_length`-dominant profile and gpt2-medium chatml's
+  single `boundary-text-mismatch` generation), the extended
+  cost record, and adapter verdicts upgraded from
+  doctor-verified to generation-proven for gpt2-medium and
+  gpt2-large. The TinyLlama llama3 row did not complete —
+  six attempts were each killed by a host reboot — and is
+  carried as the page's named remainder with the kill
+  evidence; the gated Llama-3.2 rows, the 3B RAM exclusion
+  and the Gemma adapter exclusion stand as before.
+  VALIDATION's evidence header and not-established scope
+  rolled to cycles 10–240 and the widened matrix, the
+  README's scoped-evidence phrase was corrected, and the
+  two docs-currency test pins guarding those claims moved
+  with their reasons recorded. No code changed.
+
 ### Changed (cycle 239 — security-policy dated records, 2026-11-06)
 
 - `docs/SECURITY.md`'s Dependabot section gains the

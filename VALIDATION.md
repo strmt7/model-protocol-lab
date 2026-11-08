@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–239 (executed 2026-10-14 → 2026-11-06, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–240 (executed 2026-10-14 → 2026-11-08, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -14,7 +14,7 @@ the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
 - `python -m pytest -q -p no:cacheprovider` — **9460 tests collected**
-  (cycle 239, 2026-11-06). Subtests numbered in the 72k+
+  (cycle 240, 2026-11-08). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -122,6 +122,24 @@ doctor's resource fallbacks degrade there.
   blocked by three host reboots that killed the long CPU
   runs mid-flight and are recorded as not established in
   that page's remainder section, not silently dropped.
+  Cycle 240 moves neither figure either: it changed no
+  package code and no test count — two docs-currency pins
+  moved with the claims they guard (the header range in
+  test_cycle178 and the scoped replacement string in
+  test_cycle44) — and its gate reproduced the precise
+  figure exactly, 95.20118473705769%. The cycle is the
+  real-checkpoint battery remainder: five of the six rows
+  cycle 235 left open are now executed and recorded in
+  `docs/REAL_CHECKPOINT_VALIDATION.md` (gpt2-medium and
+  gpt2-large full batteries, 192 generations; the
+  TinyLlama chatml row, 36 generations — every candidate
+  in every row at 0/12 exact-and-boundary passes, every
+  decision `no_candidate`, the held-out split never read).
+  The sixth row, TinyLlama llama3, was attempted six times
+  and killed six times by host reboots short of the
+  roughly four hours it needs; it is recorded as not
+  established in that page's remainder section with the
+  kill evidence, not silently dropped.
   Cycle 236 moves neither figure either: it changed no
   package code — its gate reproduced the precise figure
   exactly, 95.08321460950654% (39,946 of 41,490
@@ -635,11 +653,13 @@ reproducible from the repository root in a fresh virtual environment.
 
 ## Not established
 
-- Real (non-synthetic) model runs are established only for the cycle-235
-  matrix rows recorded in `docs/REAL_CHECKPOINT_VALIDATION.md` (GPT-2 124M
-  full battery; TinyLlama-1.1B-Chat doctor suite, template probe and smoke
-  run). Not established: the TinyLlama and gpt2-medium/gpt2-large generation
-  battery rows, the gated Llama-3.2 rows, CPU/GPU parity, and VRAM fit.
+- Real (non-synthetic) model runs are established only for the cycle-235 and cycle-240
+  matrix rows recorded in `docs/REAL_CHECKPOINT_VALIDATION.md` (GPT-2 124M,
+  gpt2-medium and gpt2-large full batteries; TinyLlama-1.1B-Chat doctor suite,
+  template probe, smoke run and chatml battery row). Not established: the
+  TinyLlama llama3 generation battery row (six cycle-240 attempts, each killed
+  by a host reboot), the gated Llama-3.2 rows,
+  CPU/GPU parity, and VRAM fit.
 - No browser rendering check of `report.html` (structure/contrast/escaping
   validated programmatically only).
 - No full-codebase mutation-testing run (scoped cosmic-ray trials on
