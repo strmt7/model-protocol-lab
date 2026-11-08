@@ -1,11 +1,15 @@
-# Real-checkpoint validation — cycle 235 case studies (2026-11-05)
+# Real-checkpoint validation — cycle 235 case studies (2026-11-05), cycle 240 remainder (2026-11-08)
 
 This page records the lab's first executed runs against real
 (non-synthetic) checkpoints: what was acquired, what the shipped
 adapter did with it, and what the shipped instruments measured.
-Every number below traces to an executed run record from this
-cycle (commands, seeds, digests and raw summaries are retained
-with the cycle's work log). Nothing here is a benchmark, a
+Every number below traces to an executed run record from these
+cycles (commands, seeds, digests and raw summaries are retained
+with the cycles' work logs). Cycle 240 (2026-11-06 →
+2026-11-08) executed the remainder rows cycle 235 left: five
+of its six rows completed and are recorded below; the sixth is
+named in the remainder section with the evidence of why it did
+not. Nothing here is a benchmark, a
 model-quality ranking, or a comparison against other tools: the
 fixtures are strict exact-answer probes, and the measurements
 describe format/boundary behaviour of fixed weights under the
@@ -61,13 +65,15 @@ leaves no safe headroom on a 7.7 GiB host.
 checkpoints (asset layout, weight headers, tokenizer and the
 configured boundary verified). Load-and-generate through the
 adapter is proven by executed runs for `gpt2` (full battery
-below) and for TinyLlama-1.1B-Chat (a two-fixture smoke run:
-fp32 RSS ~4.56 GB; results and report written; backend
-fingerprint `sha256:0ac30fca97222743e85ac1aaa…`). For
-gpt2-medium and gpt2-large the battery rows that would carry
-their load evidence did not complete this cycle (see
-"Remainder") — their adapter status is doctor-verified,
-generation-unproven, and is stated that way.
+below, cycle 235), for `gpt2-medium` and `gpt2-large` (full
+battery, cycle 240 below), and for TinyLlama-1.1B-Chat (a
+two-fixture smoke run in cycle 235: fp32 RSS ~4.56 GB; results
+and report written; backend fingerprint
+`sha256:0ac30fca97222743e85ac1aaa…`; and its full chatml
+battery row in cycle 240 below). Cycle 235's version of this
+section stated gpt2-medium and gpt2-large as doctor-verified,
+generation-unproven; the cycle-240 rows below supersede that
+statement with executed evidence.
 
 ## Native-template results (doctor instruments)
 
@@ -157,31 +163,158 @@ often the bare answer text alone was right; the conjunction
 is what was measured, and its failing component is the one
 the taxonomy records.
 
+### GPT-2 medium (355M) — both rows completed (cycle 240)
+
+| Family | Candidates | Generations | Exact-and-boundary passes | Decision | Wall time |
+|---|---|---|---|---|---|
+| chatml | 3 | 36 (3 × 12 search) | 0/12 per candidate | `no_candidate` | 4,003 s |
+| llama3 | 5 | 60 (5 × 12 search) | 0/12 per candidate | `no_candidate` | 8,015 s |
+
+Run records: backend fingerprint
+`sha256:259783bb79bce39cbbe35ed5…` (same checkpoint and
+environment for both rows); configuration digests chatml
+`sha256:caeb357cf36c483eb83a5a8f…`, llama3
+`sha256:8b23753288567aae34aa7747…`.
+
+What the instruments recorded, per family:
+
+- **Failure taxonomy:** chatml classifies 35 of 36
+  generations `no-boundary-in-N` and one
+  `boundary-text-mismatch` — the decoded output ends with
+  the decoded boundary text but no token-ID boundary
+  occurred (the tokenization-mismatch false-negative mode);
+  it is the only generation in either cycle's GPT-2 rows
+  classified into that mode. llama3 classifies all 60
+  generations
+  `no-boundary-in-N`. All other modes are 0 in both rows.
+- **Stop-cause:** chatml 22/36 `stop_string` and 14/36
+  `max_length`; would-stop-early rates 0.8333, 0.1667,
+  0.8333 per candidate. llama3 51/60 `stop_string` and 9/60
+  `max_length`; would-stop-early rates 0.8333, 0.8333, 0.75,
+  0.8333, 1.0.
+- **Boundary audit:** 36 observations (chatml), overall rate
+  0.0; 60 observations (llama3), overall rate 0.0333.
+- **Held-out:** not evaluated in either row — the selection
+  rule abstains on the search split, exactly as in cycle 235.
+
+### GPT-2 large (774M) — both rows completed (cycle 240)
+
+| Family | Candidates | Generations | Exact-and-boundary passes | Decision | Wall time |
+|---|---|---|---|---|---|
+| chatml | 3 | 36 (3 × 12 search) | 0/12 per candidate | `no_candidate` | 7,892 s |
+| llama3 | 5 | 60 (5 × 12 search) | 0/12 per candidate | `no_candidate` | 21,532 s |
+
+Run records: backend fingerprint
+`sha256:25d57c88d350883a99bcfdc8…`; configuration digests
+chatml `sha256:a6de25f2eff0a404ef21a31b…`, llama3
+`sha256:f6ce9cde1d9a52c4c97148fc…`.
+
+What the instruments recorded, per family:
+
+- **Failure taxonomy:** all 96 generations are classified
+  `no-boundary-in-N`; all other modes are 0.
+- **Stop-cause:** chatml 33/36 `stop_string` and 3/36
+  `max_length`; would-stop-early rate 0.9167 per candidate.
+  llama3 55/60 `stop_string` and 5/60 `max_length`;
+  would-stop-early rates 0.9167, 0.8333, 0.9167, 0.9167, 1.0.
+- **Boundary audit:** 36 observations (chatml), overall rate
+  0.0556; 60 observations (llama3), overall rate 0.0.
+- **Held-out:** not evaluated in either row.
+
+The llama3 row's 21,532 s (5 h 59 min) is the longest single
+run the lab has executed; it completed on the fourth attempt
+after three host reboots killed the earlier ones mid-flight
+(no partial result from a killed attempt is counted anywhere
+on this page — that rule is the same one cycle 235 applied).
+
+### TinyLlama-1.1B-Chat — chatml row completed (cycle 240); llama3 row not completed
+
+| Family | Candidates | Generations | Exact-and-boundary passes | Decision | Wall time |
+|---|---|---|---|---|---|
+| chatml | 3 | 36 (3 × 12 search) | 0/12 per candidate | `no_candidate` | 8,736 s |
+| llama3 | — | not completed (see "Remainder") | — | — | — |
+
+Run record (chatml): backend fingerprint
+`sha256:0ac30fca97222743e85ac1aa…` — identical to the
+cycle-235 smoke run's fingerprint, as expected for the same
+checkpoint and environment; configuration digest
+`sha256:2f72b87e952c2f06b5f9c9fa…`.
+
+What the instruments recorded (chatml):
+
+- **Failure taxonomy:** all 36 generations are classified
+  `no-boundary-in-N`; all other modes are 0.
+- **Stop-cause:** the profile differs sharply from every
+  GPT-2 row in either cycle: only 12/36 generations are
+  `stop_string` while 24/36 are `max_length` — in two-thirds
+  of generations the marker text never appeared within the
+  64-token budget at all. The would-stop-early rate is
+  0.3333 per candidate.
+- **Boundary audit:** 36 observations, overall rate 0.4722 —
+  the highest recorded on any row. The taxonomy still
+  classifies every generation `no-boundary-in-N`, so no
+  generation satisfied the exact-boundary conjunction the
+  battery measures; the two instruments' readings are both
+  recorded here as measured, not reconciled into a claim
+  neither supports alone.
+- **Held-out:** not evaluated.
+
+Reading across both cycles, scoped to the recorded fields:
+the completed matrix is seven rows, 324 generations over
+four checkpoints, and every candidate in every row scored
+0/12 exact-and-boundary passes, so all seven decisions are
+`no_candidate` and the held-out split was never read. The
+failing component the taxonomy records is uniformly the
+token-ID boundary; the variation between checkpoints is in
+how the generations end — GPT-2 rows overwhelmingly produce
+the marker text (a string-level stop would have terminated
+most of them), while the TinyLlama chatml row mostly never
+reaches the marker text inside the token budget. As in cycle
+235, the records are digest-only: this page claims nothing
+about how often the bare answer text alone was right.
+
 ### Cost record
 
 Full-prefix greedy decoding at float32 on this 4-core host
 cost 1,365 s (chatml) and 2,808 s (llama3) for the 124M
 checkpoint's rows, 831 s for TinyLlama's two-fixture smoke
 (3 generations plus stages), and 139 s for the equivalent
-GPT-2 smoke. These are the shipped adapter's real operating
-costs on commodity CPU and are part of the evidence for any
-deployment decision.
+GPT-2 smoke. Cycle 240 adds 4,003 s and 8,015 s for the
+gpt2-medium rows, 7,892 s and 21,532 s for the gpt2-large
+rows, and 8,736 s for the TinyLlama chatml row — plus the
+killed attempts the reboot regime consumed across the
+cycle (more than 12 hours on the TinyLlama llama3 row's
+six attempts alone, and further killed attempts on four
+other rows), which produced no records and are counted
+nowhere above. These are the shipped adapter's
+real operating costs on commodity CPU and are part of the
+evidence for any deployment decision.
 
-## Remainder — what this cycle did not establish
+## Remainder — what these cycles did not establish
 
 Stated plainly, so the rows above are never read as covering
 more than they do:
 
-- **TinyLlama battery rows (chatml, llama3): not completed.**
-  The chatml row was attempted three times and killed three
-  times by host reboots (~25, ~100 and ~102 minutes in; this
-  host rebooted at ~18:00, ~19:41 and ~21:59 UTC on
-  2026-11-05, and the row needs roughly 2.3 hours). No partial
-  result is counted. The llama3 row was not attempted after
-  the third kill.
-- **gpt2-medium / gpt2-large battery rows: not run** (queued
-  behind TinyLlama in the frozen order; the cycle closed on
-  the split above).
+- **TinyLlama llama3 battery row: not completed.** Cycle
+  240 attempted it six times (2026-11-07 → 2026-11-08) and
+  a host reboot killed every attempt mid-flight — about
+  3 h 38 min, 1 h 45 min, 1 h 37 min, 1 h 30 min, 1 h 29 min
+  and 2 h 14 min into the run, respectively. At the chatml
+  row's measured per-generation cost the row needs roughly
+  4 hours of uninterrupted host time; the two longest
+  windows the cycle received (11 h 07 min and 8 h 08 min)
+  were consumed by other rows, and no attempt of this row
+  ever received one. No partial result is counted. The
+  block is the host's reboot regime, not a measured defect:
+  before the row's first attempt, `doctor` verified the
+  llama3 boundary token set against TinyLlama's tokenizer
+  (verdict `ok`, "8 ids within vocabulary"), and the sibling
+  chatml row completed on the same checkpoint in the same
+  cycle. Cycle 235's version of this section also listed
+  the TinyLlama chatml row and both gpt2-medium/gpt2-large
+  row pairs as not established; those five rows are
+  established by the cycle-240 records above, and this row
+  alone carries forward.
 - **Gated rows: not run** (licence decided by the owner; HF
   token not yet present on this machine; the 3B row is
   additionally RAM-blocked at float32, and Gemma is outside
@@ -193,9 +326,9 @@ more than they do:
 - CPU/GPU parity and VRAM fit remain unmeasured (no GPU on
   this host).
 
-A follow-up cycle on a stable host owns the remainder rows;
-the settings, fixtures and boundary tables above are frozen
-for it verbatim.
+A follow-up cycle on a stable host owns the one remaining
+battery row; the settings, fixtures and boundary tables
+above are frozen for it verbatim.
 
 ## Appendix — the R2 fixture set
 

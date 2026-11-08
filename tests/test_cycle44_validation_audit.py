@@ -546,7 +546,11 @@ class ValidationHonestyTests(unittest.TestCase):
             # (non-synthetic) model run has been performed") with
             # executed evidence; the pin now guards the scoped
             # replacement, which still lists what is not established.
-            "Real (non-synthetic) model runs are established only for the cycle-235",
+            # Cycle 240 extended the established rows to the
+            # cycle-240 battery remainder; the pin tracks the
+            # widened scope string, and the section still names
+            # the one battery row that remains not established.
+            "Real (non-synthetic) model runs are established only for the cycle-235 and cycle-240",
             "CPU/GPU parity, and VRAM fit",
             "No browser rendering check",
             "No full-codebase mutation-testing run",
