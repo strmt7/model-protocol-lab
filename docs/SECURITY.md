@@ -882,6 +882,74 @@ three labelled fact derivations — and none contains a real
 sub-decision whose extraction would be an improvement rather
 than a relocation. They stand open with the rest.
 
+### DeepSource fix-down, wave 3 (cycle 242)
+
+The standing rule is unchanged: a finding is fixed in code
+so the analyzer would clear the row, or it stands open and
+enumerated — nothing dismissed, nothing ignored on any
+dashboard, nothing suppressed in configuration, no new
+per-site annotations. Item 0 also stands: DeepSource's own
+integration has created no analysis run since 2026-11-01,
+so no capture was attempted this cycle and no count below
+is a capture. Every count is a derivation from the
+cycle-226 capture (911 standing open then; 352 at wave-2
+close) via local analyzer runs (pylint and pycodestyle
+from the cycle-229 proxy environment), and is labelled
+derived wherever it appears.
+
+Wave 3 fixes 21 of the 26 enumerated non-PY-R1000 rows, in
+four pushes. Push 1 (test-local shapes): the four
+reverse-direction diff calls now bind the swapped pair by
+keyword, `old=new, new=old`, so the deliberateness the
+variable names stated is visible to the analyzer as well
+(PYL-W1114 ×4); the fake `__import__`'s parameters are
+renamed `globals_dict` / `locals_dict` (PYL-W0622 ×2);
+three test doubles whose helper methods shared a name
+with an attribute `__init__` assigns rename the methods
+(`_forward_logits_impl`, `_encode_impl`), so no
+method/attribute collision remains (PYL-E0202 ×3); the
+inventory test's exhaustion check compares against a
+named module-level sentinel, `_EXHAUSTED = object()`,
+with the asserted failure path and its message unchanged
+(PTC-W0063 ×1). Push 2: the four mutation gates that
+`exec`d mutated source in memory now write the mutated
+text to a temporary file and load it with
+`spec_from_file_location` — the cycle-41 loader pattern —
+registering and unregistering the module around
+`exec_module` (PYL-W0122 ×4); all 27 named gate tests
+were re-run against the new loader and each still kills
+its mutant, so the conversion is a loader change, not a
+gate weakening. Push 3: the examples script's seven
+package imports now lead the file inside `try:`, and the
+bare-checkout `sys.path` bootstrap survives only as the
+`except ImportError:` fallback repeating the same
+imports (FLK-E402 ×7); the committed sample report
+regenerates byte-identically (proven twice), and the
+fallback branch was exercised for real against a copied
+tree with the package import blocked.
+
+Two wave-2 reasons in the table above were factually
+wrong, and are corrected here; the dated table itself is
+not edited. PYL-W0122's reason claimed no import can load
+in-memory mutated text — incorrect: the text can be
+written to a temporary file and loaded with
+`spec_from_file_location`, which is exactly what push 2
+does. PYL-W0622's reason claimed a fake `__import__`'s
+parameters must carry `__import__`'s own protocol names —
+incorrect: the import system invokes the hook
+positionally, so the parameter names are the fake's own
+choice, and renaming them changes no call site.
+
+Standing open after wave 3 (derived remaining total 331
+= 352 − 21):
+
+| code | count | why it stands |
+|---|---|---|
+| PY-R1000 | 326 | adjudicated per cluster above; unchanged |
+| PYL-R0401 | 3 rows / 2 cycles | cycle A: the module-level edge at `pack.py:42` (`from .verify import _display_id`), closed by the function-level edges at `pack.py:546` and `verify.py:712`; cycle B: `diffreports.py:27162`, `diffreports.py:27363`, `experiments.py:14685`, `surfacenoise.py:1666`. The module-level graph is acyclic; both loops close only through deferred imports, and restructuring would damage the lazy design |
+| PY-W0800 | 1 | premise false positive at `reporting.py:4922`: the rule is a SQLAlchemy where-clause check; no SQLAlchemy exists in this repo |
+| SCT-A000 | 1 | prose literal at `docs/SECURITY.md:189`, inside a dated audit entry; the record is not edited to dodge the scanner |
+
 ### Dependabot: filelock in the cocoindex tool lock (cycle 228)
 
 Cycle 228's hash-pinned cocoindex lock made its full transitive

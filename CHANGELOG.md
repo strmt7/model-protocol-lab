@@ -6,6 +6,43 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 242 — DeepSource fix-down, wave 3, 2026-11-09)
+
+- Twenty-one of the twenty-six enumerated non-PY-R1000
+  DeepSource rows left standing after wave 2 are fixed in
+  code, under the standing rule that a finding is fixed or
+  stands open — nothing dismissed, ignored, or
+  suppressed. Test-local shapes: four reverse-direction
+  diff calls now bind the swapped pair by keyword
+  (PYL-W1114); a fake `__import__`'s shadowing parameters
+  are renamed (PYL-W0622); three test doubles whose
+  helper methods collided with `__init__`-assigned
+  attributes rename the methods (PYL-E0202); the
+  inventory test's exhaustion sentinel is a named
+  module-level object (PTC-W0063). The four mutation
+  gates that `exec`d mutated source in memory now write
+  the mutated text to a temporary file and load it with
+  `spec_from_file_location` — the cycle-41 pattern — and
+  all twenty-seven named gate tests were re-proven to
+  kill their mutants under the new loader (PYL-W0122).
+  The examples script's imports now lead the file, with
+  the bare-checkout `sys.path` bootstrap kept as the
+  `except ImportError` fallback; the committed sample
+  report regenerates byte-identically (FLK-E402). Five
+  rows stand open and are enumerated in
+  `docs/SECURITY.md`: the two import cycles
+  (PYL-R0401 ×3 rows), the SQLAlchemy-premise row
+  (PY-W0800), and the prose literal inside a dated audit
+  entry (SCT-A000). The wave-2 record's reasons for
+  PYL-W0122 and PYL-W0622 were factually wrong and are
+  corrected in the wave-3 section; the dated table
+  itself is not edited. DeepSource's own integration
+  has created no analysis run since 2026-11-01, so no
+  capture was attempted and every count is a derivation
+  from the cycle-226 capture via local analyzer runs:
+  derived standing-open is 331 (352 − 21), of which 326
+  are the adjudicated PY-R1000 rows.
+
 ### Fixed (cycle 241 — stored-payload trust-boundary fixes, bug-hunt waves 4+5+6, 2026-11-09)
 
 - The diff/report mirrors consumed stored payload values

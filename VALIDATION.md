@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–241 (executed 2026-10-14 → 2026-11-09, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–242 (executed 2026-10-14 → 2026-11-09, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -14,7 +14,7 @@ the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
 - `python -m pytest -q -p no:cacheprovider` — **9516 tests collected**
-  (cycle 241, 2026-11-09). Subtests numbered in the 72k+
+  (cycle 242, 2026-11-09). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -59,7 +59,7 @@ doctor's resource fallbacks degrade there.
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  95.2412% (cycle 241, 2026-11-09)**. The gate compares the
+  95.2412% (cycle 242, 2026-11-09)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
   (+0.701) is auditable rather than inferred from the display.
