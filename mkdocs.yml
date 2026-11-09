@@ -49,7 +49,7 @@ nav:
       - Release readiness 0.1.0: RELEASE_READINESS_0.1.0.md
       - Release notes 0.2.0: RELEASE_NOTES_0.2.0.md
       - Portability research (2026-10-15): RESEARCH_PORTABILITY_2026-10-15.md
-      - Real-checkpoint validation (cycle 235): REAL_CHECKPOINT_VALIDATION.md
+      - Real-checkpoint validation (cycles 235 and 240): REAL_CHECKPOINT_VALIDATION.md
       - Agent tooling notes: crawl4ai.md
       - Evidence notes: evidence/README.md
       - Design documents:

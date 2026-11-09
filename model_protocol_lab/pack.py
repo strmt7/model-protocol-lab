@@ -467,7 +467,7 @@ def _valid_manifest(manifest: Any) -> str | None:
             return "manifest_path_duplicate"
         paths.add(path)
         sha = entry.get("sha256")
-        if type(sha) is not str or _SHA256_RE.match(sha) is None:
+        if type(sha) is not str or _SHA256_RE.fullmatch(sha) is None:
             return "manifest_sha256_invalid"
         size = entry.get("size")
         if type(size) is not int or size < 0:
@@ -482,7 +482,7 @@ def _valid_manifest(manifest: Any) -> str | None:
     if type(context.get("package_version")) is not str or not context.get("package_version"):
         return "manifest_context_invalid"
     catalog_sha = context.get("catalog_sha256")
-    if type(catalog_sha) is not str or _SHA256_RE.match(catalog_sha) is None:
+    if type(catalog_sha) is not str or _SHA256_RE.fullmatch(catalog_sha) is None:
         return "manifest_context_invalid"
     fingerprint = context.get("backend_fingerprint")
     if type(fingerprint) is not str or not fingerprint:

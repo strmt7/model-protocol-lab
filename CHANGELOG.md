@@ -6,6 +6,67 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 241 — stored-payload trust-boundary fixes, bug-hunt waves 4+5+6, 2026-11-09)
+
+- The diff/report mirrors consumed stored payload values
+  before type-checking them, so a damaged or crafted
+  results file crashed `diff-reports` or the HTML renderer
+  with a raw traceback instead of degrading to the frozen
+  `available` vocabulary. One combined fix cycle closes
+  the three parent-verified bug-hunt waves' findings.
+  Wave 4: the numform mirror's `value_id` construction
+  gate paired a Unicode-lenient `isdigit()` with `int()`
+  (a superscript or circled digit id raised `ValueError`);
+  it now carries the `isascii()` guard its sibling sites
+  carry, and the reporting distraction sort key carries
+  the same guard. The confidence mirror's final-line
+  grammar and the bundle manifest's SHA-256 screen were
+  applied with `.match()`, whose `$` admits one trailing
+  newline on a stored field; both now apply
+  `re.fullmatch`, aligning with the sibling fullmatch
+  sites (the pack conversion also closes wave 5's F4:
+  a newline-carrying `catalog_sha256` previously verified
+  `ok` and was echoed into the verified report). Wave 5:
+  the ws_canonical validator now type-gates
+  `fragile_candidates` before the differ's `set()`; the
+  frontier renderer validates span and step elements to
+  the `safe_budget_floor` standard before comparing or
+  keying on them; the portfolio renderer skips the
+  per-member lookup for non-string member names. Wave 6:
+  the token_healing validator type-gates `falsification`
+  and the template_robustness validator type-gates the
+  `operators` map and its entries before the differs'
+  `.get` reads; nine unhashable-operand sites in seven
+  sections (repetition, leading, distraction and dateline
+  cell details, the field_order record detail — whose
+  constant also takes the tuple shape of its density
+  sibling — the confidence elicited code, protocol
+  screens and control case, and the multiturn fixture
+  lookup) validate the operand's type before the
+  membership test or dict lookup, so a list or dict leaf
+  degrades exactly like a wrong string; and the dateline
+  anchor branch validates the treated cell (dict shape,
+  `_leading_int_ok` input tokens) before subscripting
+  it. By the wave-4 fix brief's adjudication, the
+  distraction plant grammar is also converted to
+  fullmatch — a named, protocol-visible decision: a
+  census of every shipped fixture and case source found
+  no `expected` value ending in a newline, so no shipped
+  case changes arms or digests, and `planted_answer`
+  now honours its documented contract that
+  whitespace-padded shapes return None. The 17
+  document-only `$`-grammars, the presence-flag
+  `isdigit()` pair (producer and mirror agree by
+  execution) and scorerlens' published numeric grammar
+  are untouched, per the same adjudication. Every fix
+  ships regression tests proven to fail on the pre-fix
+  code (56 tests in `tests/test_cycle241_fixwaves.py`;
+  32 fail pre-fix, the remaining 24 are honest-behavior
+  controls). The docs ride-alongs: the mkdocs nav label
+  for the real-checkpoint page now reads "(cycles 235
+  and 240)", and `docs/RELEASE_NOTES_0.2.0.md` is rolled
+  forward from cycle 228 through this cycle.
+
 ### Changed (cycle 240 — real-checkpoint battery remainder, 2026-11-08)
 
 - `docs/REAL_CHECKPOINT_VALIDATION.md` now records cycle

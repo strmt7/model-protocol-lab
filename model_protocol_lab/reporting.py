@@ -2930,17 +2930,29 @@ def _frontier_section(result: dict[str, Any]) -> str:
                     type(entry) is dict
                     and type(entry.get("span")) is list
                     and len(entry["span"]) == 2
+                    and type(entry["span"][0]) is int
+                    and type(entry["span"][1]) is int
                     and type(entry.get("crossings")) is list
                 ):
                     attribution[(entry["span"][0], entry["span"][1])] = entry["crossings"]
         items = []
         for span in frontier.get("flip_ranges") or []:
-            if type(span) is not list or len(span) != 2:
+            if (
+                type(span) is not list
+                or len(span) != 2
+                or type(span[0]) is not int
+                or type(span[1]) is not int
+            ):
                 continue
             lo = span[0]
             flip_decision, flip_winner = "?", None
             for point in steps:
-                if type(point) is list and len(point) == 3 and point[0] <= lo:
+                if (
+                    type(point) is list
+                    and len(point) == 3
+                    and type(point[0]) is int
+                    and point[0] <= lo
+                ):
                     flip_decision, flip_winner = point[1], point[2]
             label = (
                 "budgets "
@@ -5982,7 +5994,10 @@ def _distraction_section(result: dict[str, Any]) -> str:
                 if type(points) is not dict:
                     continue
                 cells = []
-                for level in sorted(points, key=lambda v: int(v) if str(v).isdigit() else 0):
+                for level in sorted(
+                    points,
+                    key=lambda v: int(v) if str(v).isascii() and str(v).isdigit() else 0,
+                ):
                     point = points[level]
                     if type(point) is not dict:
                         continue
@@ -13485,7 +13500,7 @@ def _portfolio_section(result: dict[str, Any]) -> str:
         per_member = cover.get("per_member_covers")
         per_member = per_member if type(per_member) is dict else {}
         for name in members:
-            fixtures = per_member.get(name)
+            fixtures = per_member.get(name) if type(name) is str else None
             fixtures = list(fixtures) if type(fixtures) is list else []
             member_rows.append(
                 '<tr><td><span class="mono">'
