@@ -32,6 +32,7 @@ these tests pin the amended design:
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import random
 import string
@@ -799,8 +800,9 @@ class DoctorIntegrationTests(unittest.TestCase):
 
 class MutationGateTests(unittest.TestCase):
     """Tempdir gates: each mutant of templateprobe.py must be killed
-    by a named classify test above. Mutants are exec'd standalone
-    (the module is pure stdlib) under its package name.
+    by a named classify test above. Mutants are materialised to a temp
+    file and loaded through the import system, standalone (the module
+    is pure stdlib) under its package name.
     """
 
     def _mutant_module(self, anchor: str, mutant: str):
@@ -808,11 +810,18 @@ class MutationGateTests(unittest.TestCase):
         source = Path(tp.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(anchor), 1, "gate anchor not unique")
         mutated = source.replace(anchor, mutant)
-        namespace: dict[str, object] = {"__name__": "model_protocol_lab.templateprobe_mut"}
-        exec(  # noqa: S102 -- the gate's whole point: run a mutated copy of our own module
-            compile(mutated, "templateprobe_mut", "exec"), namespace
-        )
-        return namespace
+        name = "model_protocol_lab.templateprobe_mut"
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "templateprobe.py"
+            path.write_text(mutated, encoding="utf-8")
+            spec = importlib.util.spec_from_file_location(name, path)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[name] = module
+            try:
+                spec.loader.exec_module(module)
+            finally:
+                del sys.modules[name]
+        return module.__dict__
 
     @staticmethod
     def _pair_renders(namespace):

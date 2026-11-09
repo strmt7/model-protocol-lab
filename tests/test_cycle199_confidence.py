@@ -18,7 +18,10 @@ fail-closed behaviour. Design: docs/CONFIDENCE_DESIGN.md.
 from __future__ import annotations
 
 import copy
+import importlib.util
 import re
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 from threading import Event
@@ -254,15 +257,23 @@ class TestParserBattery(unittest.TestCase):
 
 
 def _load_confidence_variant(source: str) -> dict:
-    """Exec a (possibly mutated) confidence.py source under the
-    package namespace so its relative imports resolve (the
-    cycle-169 standalone-exec rule).
-    """
-    import types
+    """Load a (possibly mutated) confidence.py source under the
+    package namespace so its relative imports resolve.
 
-    module = types.ModuleType("model_protocol_lab.confidence_variant")
-    module.__package__ = "model_protocol_lab"
-    exec(compile(source, "confidence_variant", "exec"), module.__dict__)  # noqa: S102 -- the gate execs this repo's own module source, mutated in memory only
+    The text is materialised to a temp file and loaded through the
+    import system (the cycle-41 temp-file loader pattern).
+    """
+    name = "model_protocol_lab.confidence_variant"
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "confidence.py"
+        path.write_text(source, encoding="utf-8")
+        spec = importlib.util.spec_from_file_location(name, path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            del sys.modules[name]
     return module.__dict__
 
 

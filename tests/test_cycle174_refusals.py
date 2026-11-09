@@ -697,25 +697,26 @@ class TestDiffRefusals(unittest.TestCase):
 
 
 def _exec_variant(original: str, mutant: str, tag: str):  # type: ignore[no-untyped-def]
-    """Exec refusals.py with one anchored mutation (tempdir pattern).
+    """Load refusals.py with one anchored mutation (tempdir pattern).
 
-    refusals.py is stdlib-only, so the mutant execs standalone; the
-    anchor must occur exactly once in the shipped source.
+    The mutated text is materialised to a temp file and loaded through
+    the import system; refusals.py is stdlib-only, so the mutant loads
+    standalone. The anchor must occur exactly once in the shipped
+    source.
     """
     source = (REPO_ROOT / "model_protocol_lab" / "refusals.py").read_text(encoding="utf-8")
     assert source.count(original) == 1, f"gate anchor not unique: {original!r}"
     name = f"model_protocol_lab.refusals_mut_{tag}"
-    spec = importlib.util.spec_from_loader(name, loader=None)
-    module = importlib.util.module_from_spec(spec)
-    module.__package__ = "model_protocol_lab"
-    sys.modules[name] = module
-    try:
-        exec(  # noqa: S102 -- the gate's whole point: run a mutated copy of our own module
-            compile(source.replace(original, mutant), f"<mutant {tag}>", "exec"),
-            module.__dict__,
-        )
-    finally:
-        del sys.modules[name]
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "refusals.py"
+        path.write_text(source.replace(original, mutant), encoding="utf-8")
+        spec = importlib.util.spec_from_file_location(name, path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            del sys.modules[name]
     return module
 
 
