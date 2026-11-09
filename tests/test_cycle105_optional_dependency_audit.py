@@ -62,12 +62,12 @@ def _block_hf_imports():
     """
     real_import = builtins.__import__
 
-    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+    def fake_import(name, globals_dict=None, locals_dict=None, fromlist=(), level=0):
         """Fake import."""
         # noqa: ANN001, ANN202
         if name.split(".")[0] in _HF_TOP_LEVELS:
             raise ImportError(f"No module named {name!r} (simulated)")
-        return real_import(name, globals, locals, fromlist, level)
+        return real_import(name, globals_dict, locals_dict, fromlist, level)
 
     return mock.patch("builtins.__import__", side_effect=fake_import)
 

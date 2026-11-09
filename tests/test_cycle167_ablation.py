@@ -521,7 +521,7 @@ class AblationDiffTests(unittest.TestCase):
         diff = diffreports.diff_ablation(old, new)
         self.assertEqual(diff["candidates_added"], ["t2"])
         self.assertTrue(diff["changed"])
-        diff2 = diffreports.diff_ablation(new, old)
+        diff2 = diffreports.diff_ablation(old=new, new=old)
         self.assertEqual(diff2["candidates_removed"], ["t2"])
 
     def test_asymmetric_and_neither(self):

@@ -193,7 +193,7 @@ class TestDiffFrontiers(unittest.TestCase):
             [[1, "selected", "alpha"]],
         )
         first = json.dumps(diff_frontiers(old, new), sort_keys=True)
-        second = json.dumps(diff_frontiers(new, old), sort_keys=True)
+        second = json.dumps(diff_frontiers(old=new, new=old), sort_keys=True)
         self.assertEqual(json.dumps(diff_frontiers(old, new), sort_keys=True), first)
         self.assertNotEqual(first, second)  # direction matters
 

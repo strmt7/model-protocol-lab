@@ -86,8 +86,11 @@ class LogitStubBackend:
         self._logit_fn = logit_fn
         self.vocab_size = vocab_size
         self.forward_calls: list[tuple[int, ...]] = []
-        if not with_forward_logits:
-            self.forward_logits = None  # type: ignore[assignment]
+        # The protocol member is an instance attribute by design: the
+        # bound implementation when this backend has the forward
+        # primitive, present but None when it does not — the simulated
+        # condition under test (a protocol with no forward primitive).
+        self.forward_logits = self._forward_logits_impl if with_forward_logits else None
 
     def encode(self, text: str) -> tuple[int, ...]:
         """Encode."""
@@ -97,7 +100,7 @@ class LogitStubBackend:
         """Decode."""
         return self._tokenizer.decode(token_ids)
 
-    def forward_logits(self, input_ids: tuple[int, ...]):
+    def _forward_logits_impl(self, input_ids: tuple[int, ...]):
         """Forward logits."""
         self.forward_calls.append(tuple(input_ids))
         if self._logit_fn is None:

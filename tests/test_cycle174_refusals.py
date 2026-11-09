@@ -666,7 +666,7 @@ class TestDiffRefusals(unittest.TestCase):
         diff = diffreports.diff_refusals(old, new)
         self.assertEqual(diff["excluded_added"], ["a"])
         self.assertTrue(diff["changed"])
-        back = diffreports.diff_refusals(new, old)
+        back = diffreports.diff_refusals(old=new, new=old)
         self.assertEqual(back["excluded_removed"], ["a"])
 
     def test_diff_reports_integration(self) -> None:

@@ -19,6 +19,10 @@ from tools import deepsource_inventory as inventory
 REPOSITORY = "fixture/project"
 COMMIT = "a" * 40
 
+# Distinct from every page payload (pages are dicts): marks iterator
+# exhaustion in InventoryTests.capture without an exception handler.
+_EXHAUSTED = object()
+
 
 def page(ids: range, total: int, more: bool = False, cursor: str | None = None) -> dict:
     """Generate distinct native IDs at deliberately identical file/line positions."""
@@ -86,9 +90,8 @@ class InventoryTests(unittest.TestCase):
         def fetch(variables, destination):
             """Persist each native test response before the collector interprets it."""
             self.requests.append(dict(variables))
-            try:
-                response = next(responses)
-            except StopIteration:
+            response = next(responses, _EXHAUSTED)
+            if response is _EXHAUSTED:
                 self.fail("Collector requested an unexpected additional response page")
             raw = json.dumps(response).encode()
             destination.write_bytes(raw)

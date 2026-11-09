@@ -169,12 +169,16 @@ class _FakePreTrainedTokenizerFast:
         if spec.construct_error is not None:
             raise spec.construct_error
         self._spec = spec
+        # The protocol member is an instance attribute by design; the
+        # spec.attrs overrides and the drop_encode removal below layer
+        # over it in that order, exactly as they did over the method.
+        self.encode = self._encode_impl
         for name, value in spec.attrs.items():
             setattr(self, name, value)
         if spec.drop_encode:
             self.encode = None  # present but unusable -> TypeError on call
 
-    def encode(self, text: str, add_special_tokens: bool = False) -> Any:
+    def _encode_impl(self, text: str, add_special_tokens: bool = False) -> Any:
         """Encode."""
         return self._spec.encode(text)
 

@@ -115,9 +115,11 @@ class StubBackend:
         self.forward_calls: list[tuple[int, ...]] = []
         if vocab_size is not None:
             self.vocab_size = vocab_size
-        if not with_forward_logits:
-            # Simulate a backend whose protocol has no forward primitive.
-            self.forward_logits = None  # type: ignore[assignment]
+        # The protocol member is an instance attribute by design: the
+        # bound implementation when this backend has the forward
+        # primitive, present but None when it does not — the simulated
+        # condition under test (a protocol with no forward primitive).
+        self.forward_logits = self._forward_logits_impl if with_forward_logits else None
 
     def encode(self, text: str) -> tuple[int, ...]:
         """Encode."""
@@ -127,7 +129,7 @@ class StubBackend:
         """Decode."""
         return self._tokenizer.decode(token_ids)
 
-    def forward_logits(self, input_ids: tuple[int, ...]) -> torch.Tensor:
+    def _forward_logits_impl(self, input_ids: tuple[int, ...]) -> torch.Tensor:
         """Forward logits."""
         self.forward_calls.append(tuple(input_ids))
         if self._forward_error is not None:

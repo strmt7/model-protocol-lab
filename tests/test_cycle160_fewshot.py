@@ -1317,7 +1317,7 @@ class DiffFewshotTests(unittest.TestCase):
         self.assertTrue(diff["changed"])
         self.assertEqual(diff["candidates_added"], ["c2"])
         self.assertFalse(diff["gain_drift"])
-        diff = diffreports.diff_fewshot(new, old)
+        diff = diffreports.diff_fewshot(old=new, new=old)
         self.assertEqual(diff["candidates_removed"], ["c2"])
         # Excluded added/removed.
         diff = diffreports.diff_fewshot(_diff_payload(), _diff_payload(excluded=["c"]))
