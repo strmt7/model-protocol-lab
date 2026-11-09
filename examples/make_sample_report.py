@@ -15,26 +15,47 @@ from pathlib import Path
 from threading import Event
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from model_protocol_lab.catalog import candidates
-from model_protocol_lab.core import Generation, Message
-from model_protocol_lab.datasets import load_dataset
-from model_protocol_lab.experiments import run_experiment
-from model_protocol_lab.reporting import save_report
-from model_protocol_lab.structured import (
-    STRUCTURED_SPECS,
-    build_structured_fixtures,
-    schema_map,
-    validate_structured_specs,
-)
-from model_protocol_lab.toolcall import (
-    TOOLCALL_QUERIES,
-    build_toolcall_fixtures,
-    canonical_call,
-    query_calls,
-    validate_toolcall_queries,
-)
+try:
+    from model_protocol_lab.catalog import candidates
+    from model_protocol_lab.core import Generation, Message
+    from model_protocol_lab.datasets import load_dataset
+    from model_protocol_lab.experiments import run_experiment
+    from model_protocol_lab.reporting import save_report
+    from model_protocol_lab.structured import (
+        STRUCTURED_SPECS,
+        build_structured_fixtures,
+        schema_map,
+        validate_structured_specs,
+    )
+    from model_protocol_lab.toolcall import (
+        TOOLCALL_QUERIES,
+        build_toolcall_fixtures,
+        canonical_call,
+        query_calls,
+        validate_toolcall_queries,
+    )
+except ImportError:
+    # Bare checkout without the package installed: put the repo
+    # root on sys.path and retry (the bootstrap this replaces).
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from model_protocol_lab.catalog import candidates
+    from model_protocol_lab.core import Generation, Message
+    from model_protocol_lab.datasets import load_dataset
+    from model_protocol_lab.experiments import run_experiment
+    from model_protocol_lab.reporting import save_report
+    from model_protocol_lab.structured import (
+        STRUCTURED_SPECS,
+        build_structured_fixtures,
+        schema_map,
+        validate_structured_specs,
+    )
+    from model_protocol_lab.toolcall import (
+        TOOLCALL_QUERIES,
+        build_toolcall_fixtures,
+        canonical_call,
+        query_calls,
+        validate_toolcall_queries,
+    )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BOUNDARY = (124,)  # ord("|")
