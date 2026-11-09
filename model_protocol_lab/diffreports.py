@@ -1948,6 +1948,9 @@ def _valid_token_healing(payload: Any) -> bool:
         return False
     if type(payload.get("flipped")) is not bool:
         return False
+    falsification = payload.get("falsification")
+    if falsification is not None and type(falsification) is not dict:
+        return False
     per_candidate = payload.get("per_candidate")
     if type(per_candidate) is not dict or not all(
         type(k) is str and type(v) is dict for k, v in per_candidate.items()
@@ -2520,6 +2523,12 @@ def _valid_ws_canonical(payload: Any) -> bool:
         return False
     mutations = payload.get("mutations")
     if type(mutations) is not list or not mutations or not all(type(m) is str for m in mutations):
+        return False
+    fragile_candidates = payload.get("fragile_candidates")
+    if fragile_candidates is not None and (
+        type(fragile_candidates) is not list
+        or not all(type(name) is str for name in fragile_candidates)
+    ):
         return False
     per_candidate = payload.get("per_candidate")
     if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
@@ -4830,7 +4839,7 @@ def _repetition_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
                 return None
             for arm in ("x2", "pad"):
                 detail = details.get(arm)
-                if detail not in _REPETITION_ARM_DETAILS:
+                if type(detail) is not str or detail not in _REPETITION_ARM_DETAILS:
                     return None
                 if r["vacuous"]:
                     if arms[arm] is not None or detail != "vacuous":
@@ -5313,7 +5322,7 @@ def _distraction_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
                 return None
             for key in cond_keys:
                 detail = details[key]
-                if detail not in _DISTRACTION_CELL_DETAILS:
+                if type(detail) is not str or detail not in _DISTRACTION_CELL_DETAILS:
                     return None
                 cell = cells[key]
                 if record["vacuous"]:
@@ -6080,7 +6089,7 @@ def _leading_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
                 return None
             for key in _LEADING_CONDITION_KEYS:
                 detail = details[key]
-                if detail not in _LEADING_CELL_DETAILS:
+                if type(detail) is not str or detail not in _LEADING_CELL_DETAILS:
                     return None
                 cell = cells[key]
                 if record["vacuous"]:
@@ -7079,6 +7088,7 @@ def _numform_record_construction(
         type(value_id) is not str
         or not value_id.startswith(f"nf-{task}-")
         or len(value_id) != len(task) + 6
+        or not value_id[-2:].isascii()
         or not value_id[-2:].isdigit()
         or int(value_id[-2:]) >= 16
     ):
@@ -8061,7 +8071,7 @@ def _dateline_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
                 class_detail = "message_date_bearing"
             for key in _DATELINE_TREATED:
                 detail = details[key]
-                if detail not in _DATELINE_CELL_DETAILS:
+                if type(detail) is not str or detail not in _DATELINE_CELL_DETAILS:
                     return None
                 cell = cells[key]
                 if class_detail is not None:
@@ -8090,7 +8100,11 @@ def _dateline_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
                         return None
                     if cell is not None:
                         anchor = cells[f"anchor_{fmt}"]
-                        if anchor is not None and (cell["input_tokens"] != anchor["input_tokens"]):
+                        if anchor is not None and (
+                            type(cell) is not dict
+                            or not _leading_int_ok(cell.get("input_tokens"))
+                            or cell["input_tokens"] != anchor["input_tokens"]
+                        ):
                             return None
                 if cell is None:
                     continue
@@ -8938,6 +8952,8 @@ def _multiturn_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
                 "cells",
                 "cell_details",
             }:
+                return None
+            if type(record["fixture"]) is not str:
                 return None
             fixture = by_id.get(record["fixture"])
             if fixture is None or record["fixture"] in seen:
@@ -24219,7 +24235,7 @@ _FO_RECORD_KEYS = {
     "input_tokens",
     "content_digest",
 }
-_FO_RECORD_DETAILS = {"", "arm_evaluation_failed", "arm_context_exceeded"}
+_FO_RECORD_DETAILS = ("", "arm_evaluation_failed", "arm_context_exceeded")
 _FO_AGGREGATE_KEYS = {
     "n_generated",
     "n_distinct_prompts",
@@ -26320,7 +26336,7 @@ def _confidence_cell_ok(cell: Any, expected_digest: str) -> bool:
     if type(cell["input_tokens"]) is not int or cell["input_tokens"] < 1:
         return False
     code = cell["code"]
-    if code not in _CONFIDENCE_CODES:
+    if type(code) is not str or code not in _CONFIDENCE_CODES:
         return False
     confidence = cell["confidence"]
     line = cell["final_line"]
@@ -26330,9 +26346,9 @@ def _confidence_cell_ok(cell: Any, expected_digest: str) -> bool:
             return False
         if type(confidence) is not int or not 0 <= confidence <= 100:
             return False
-        if type(line) is not str or _CONFIDENCE_GRAMMAR_RE.match(line) is None:
+        if type(line) is not str or _CONFIDENCE_GRAMMAR_RE.fullmatch(line) is None:
             return False
-        match = _CONFIDENCE_GRAMMAR_RE.match(line)
+        match = _CONFIDENCE_GRAMMAR_RE.fullmatch(line)
         if match is None or int(match.group(1)) != confidence:
             return False
         return bool(line_length == len(line))
@@ -26349,7 +26365,7 @@ def _confidence_cell_ok(cell: Any, expected_digest: str) -> bool:
             return False
         if not (line.startswith("Confidence:") or line.lower().startswith("confidence:")):
             return False
-        return not (line_length == len(line) and _CONFIDENCE_GRAMMAR_RE.match(line) is not None)
+        return not (line_length == len(line) and _CONFIDENCE_GRAMMAR_RE.fullmatch(line) is not None)
     return confidence is None and line is None and line_length is None
 
 
@@ -26529,7 +26545,11 @@ def _confidence_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     if type(screens) is not dict:
         return None
     for fixture_id, screen in screens.items():
-        if type(fixture_id) is not str or screen not in _CONFIDENCE_SCREEN_CLASSES:
+        if (
+            type(fixture_id) is not str
+            or type(screen) is not str
+            or screen not in _CONFIDENCE_SCREEN_CLASSES
+        ):
             return None
     cases_in = protocol["control_cases"]
     if type(cases_in) is not list or len(cases_in) != 24:
@@ -26606,7 +26626,12 @@ def _confidence_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         name = record["candidate"]
         case_id = record["case"]
-        if type(name) is not str or name not in candidates or case_id not in case_expected:
+        if (
+            type(name) is not str
+            or name not in candidates
+            or type(case_id) is not str
+            or case_id not in case_expected
+        ):
             return None
         if (name, case_id) in seen_control:
             return None
@@ -27497,6 +27522,14 @@ def _valid_template_robustness(payload: Any) -> bool:
         for key in ("n_preserved", "n_preservation_denominator", "n_unevaluable"):
             if type(rep.get(key)) is not int:
                 return False
+        operators = rep.get("operators")
+        if operators is not None:
+            if type(operators) is not dict:
+                return False
+            for op in ("case_flip", "whitespace", "unicode_variant"):
+                op_entry = operators.get(op)
+                if op_entry is not None and type(op_entry) is not dict:
+                    return False
         return True
 
     if type(payload) is not dict or payload.get("available") is not True:

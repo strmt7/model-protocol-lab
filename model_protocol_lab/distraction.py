@@ -144,7 +144,7 @@ def planted_answer(expected: str) -> str | None:
     """
     if type(expected) is not str:
         return None
-    match = _PLANT_SHAPE.match(expected)
+    match = _PLANT_SHAPE.fullmatch(expected)
     if match is None:
         return None
     mantissa = match.group("mantissa")

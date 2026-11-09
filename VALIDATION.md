@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–240 (executed 2026-10-14 → 2026-11-08, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–241 (executed 2026-10-14 → 2026-11-09, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9460 tests collected**
-  (cycle 240, 2026-11-08). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9516 tests collected**
+  (cycle 241, 2026-11-09). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -59,7 +59,7 @@ doctor's resource fallbacks degrade there.
   mutation gates for every module.
 - `coverage run -m unittest discover -s tests -t .` +
   `coverage report --fail-under=95` — **passes; precise coverage
-  95.2012% (cycle 239, 2026-11-06)**. The gate compares the
+  95.2412% (cycle 241, 2026-11-09)**. The gate compares the
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
   (+0.701) is auditable rather than inferred from the display.
@@ -284,6 +284,27 @@ doctor's resource fallbacks degrade there.
   restatement, its evidence pointer recorded on the PR
   and its branch deleted; its bumps wait on the queued
   torch-lock regeneration cycle.
+  Cycle 241 moves both figures: the combined bug-hunt
+  waves 4+5+6 fix cycle — one stored-payload
+  trust-boundary family across the diff/report mirrors
+  (diffreports, reporting, pack, distraction), where
+  stored values were consumed before type-checking —
+  added sixteen statements (42,636 → 42,652) and
+  twenty-eight covered statements (41,088 → 41,116),
+  for a precise figure of 95.24124464600655%, with the
+  suite count at 9,516. Every changed line is covered;
+  pack and distraction measure 100%. The 56 new
+  spec-cited tests were proven against a pre-fix
+  snapshot first: 32 fail there under per-testcase
+  accounting and the 24 that pass are honest-behaviour
+  controls (genuine payloads, clean shapes, trailing-
+  space grammar cases). One host note, recorded rather
+  than hidden: this machine restarted mid-gate, killing
+  the first coverage leg thirteen minutes in; the
+  interrupted-run audit found the tree differing from
+  the pre-fix snapshot in exactly this cycle's eleven
+  files with no orphaned mutant, and the relaunched leg
+  ran the full suite green (9,516 tests, OK).
   changed documentation, doc pins, and one test heuristic (the
   cycle-87 coherence audit's URL exemption, made token-based)
   only, and its gate reproduced the precise figure exactly —
@@ -418,7 +439,7 @@ doctor's resource fallbacks degrade there.
   negation feature added 393 statements, 32,655 → 33,048.)
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (327 files in that CI scope; the repo-root scope counts more.
+  (328 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (74 source files).
