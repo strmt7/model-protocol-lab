@@ -50,6 +50,8 @@ nav:
       - Release notes 0.2.0: RELEASE_NOTES_0.2.0.md
       - Portability research (2026-10-15): RESEARCH_PORTABILITY_2026-10-15.md
       - Real-checkpoint validation (cycles 235 and 240): REAL_CHECKPOINT_VALIDATION.md
+      - Stability contract: STABILITY_CONTRACT.md
+      - Stable-release ledger: STABLE_RELEASE_LEDGER.md
       - Agent tooling notes: crawl4ai.md
       - Evidence notes: evidence/README.md
       - Design documents:

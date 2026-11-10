@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (W0 — stable-release capability and contract census, 2026-11-10)
+
+- [Stability contract](docs/STABILITY_CONTRACT.md): the capability
+  inventory (12 CLI commands, 4 MCP tools, backends, platform cells),
+  the per-section contract table for all 62 persisted report sections
+  (53 with a `diff-reports` dispatch, 9 named gaps with their
+  exposure), and the boundary-invariants spec — established constants
+  and vocabularies cited from code, unestablished invariants named
+  with their owning work package.
+- [Stable-release ledger](docs/STABLE_RELEASE_LEDGER.md): the frozen
+  baseline record (head `1ffdb64`, 587 tracked files, package trees
+  byte-identical to the audit baseline `d8a1346`), the status of all
+  52 audit and wave-9 findings (49 open, 1 blocked-external —
+  DeepSource quota, parked by owner order — 2 accepted design debt,
+  0 fixed), and the design of the proposed readiness entry point,
+  which does not exist yet. The baseline is recorded as not
+  release-ready. Documentation only; no product code changes.
+
 ### Added (read-only repository audit, 2026-11-10)
 
 - [Current-state audit and stable-release plan](docs/audit/2026-11-10/README.md),
