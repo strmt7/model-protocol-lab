@@ -1016,6 +1016,29 @@ executes. The alerts stand open and undismissed. The
 lane's report and logs are kept with the cycle records
 outside this repository.
 
+Closed 2026-11-10 (cycle 245): the fix landed, on a
+nearer trigger than the watch was armed on. Stable
+litellm 1.108.3 (2026-11-07) already lifted the cap to
+`filelock<5,>=3.16.1` inside the 1.108.x line, so the
+two-pin change was applied against stable litellm
+1.108.4 instead of waiting for a 1.109 stable:
+`tools/requirements/cocoindex.txt` now pins
+`filelock==4.2.9` and `litellm==1.108.4`, and nothing
+else in the 130-entry closure moved (1.108.4's only
+other base-requirement change, `openai<4.0.0`, is
+satisfied by the pinned openai 2.54.0; its remaining
+requirement deltas are extra-scoped and not installed
+by this lock). The change was re-proven end to end
+against the exact stable versions before shipping:
+the one-step `pip install --require-hashes` succeeds
+in a fresh venv, `pip check` is clean, the cocoindex
+tool smoke (index and search) passes, and pip-audit
+over all eleven repository manifests finds no
+vulnerability. With filelock 4.2.9 past the 4.2.1
+first-patched version for every advisory in the
+family, all 13 alerts clear on the new lock; none was
+dismissed at any point.
+
 Closed 2026-11-05 (recorded in cycle 239): Dependabot
 PR #7, the dev-hf minor-patch group, which cycle 234
 had left open with its execution evidence recorded on

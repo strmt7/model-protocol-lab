@@ -6,6 +6,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (cycle 245 — Dependabot alert fix: filelock/litellm two-pin lock change, 2026-11-10)
+
+- All 13 open Dependabot alerts — every one against
+  `filelock==3.32.7` in the hash-pinned cocoindex tool
+  lock (`tools/requirements/cocoindex.txt`) — are
+  cleared by a two-pin change to that lock:
+  `filelock 3.32.7 → 4.2.9` (past the 4.2.1
+  first-patched version for all 13 advisories) and
+  `litellm 1.106.6 → 1.108.4`. The cap lifted earlier
+  than the cycle-239 record expected: stable litellm
+  1.108.3 already declares `filelock<5,>=3.16.1`, so
+  the fix landed against the current stable release
+  instead of waiting for the 1.109 line. Nothing else
+  in the 130-entry closure moves — litellm 1.108.4's
+  only other base-requirement change (`openai<4.0.0`)
+  is already satisfied by the pinned openai 2.54.0,
+  and its remaining requirement deltas are
+  extra-scoped. Proven by execution before shipping:
+  a one-step `pip install --require-hashes` of the
+  edited lock in a fresh venv succeeds, `pip check`
+  is clean, the cocoindex tool smoke (index + search)
+  passes, and pip-audit of the edited lock reports
+  zero findings, down from exactly the 13 filelock
+  advisories. The hand-maintained Windows colorama
+  entry is unchanged, and no alert was dismissed.
+
 ### Added (cycle 243 — R3 build cycle 1: serving-stack backends, llama.cpp arm, 2026-11-09)
 
 - New `exec-backends` subcommand and
