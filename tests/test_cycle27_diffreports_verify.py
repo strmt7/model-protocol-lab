@@ -364,19 +364,31 @@ def oracle_diff_reports(
         max_tokens = value.get("max_new_tokens")
         if type(max_tokens) is not int or max_tokens <= 0:
             return False
-        return any(
-            type(data) is dict
-            and len(data.get("fixture_ids") or []) > 0
-            and any(
+
+        # Wave-8 F4 mirror: fixture_ids / pass_steps are shape-gated
+        # to list before len()/iteration, exactly like the
+        # implementation (the `or []` form raised TypeError on
+        # truthy scalars).
+        def _candidate_has_point(data: Any) -> bool:
+            """Or frontier candidate has point."""
+            if type(data) is not dict:
+                return False
+            fixture_ids = data.get("fixture_ids")
+            if type(fixture_ids) is not list or len(fixture_ids) <= 0:
+                return False
+            pass_steps = data.get("pass_steps")
+            if type(pass_steps) is not list:
+                return False
+            return any(
                 type(point) is list
                 and len(point) == 2
                 and type(point[0]) is int
                 and type(point[1]) is int
                 and 1 <= point[0] <= max_tokens
-                for point in data.get("pass_steps") or []
+                for point in pass_steps
             )
-            for data in candidates.values()
-        )
+
+        return any(_candidate_has_point(data) for data in candidates.values())
 
     _old_ok = _or_frontier_valid(old.get("budget_frontier"))
     _new_ok = _or_frontier_valid(new.get("budget_frontier"))
@@ -425,7 +437,12 @@ def oracle_diff_reports(
         """Or ba valid."""
         if type(value) is not dict or value.get("available", True) is False:
             return False
-        if type(value.get("per_family")) is not dict:
+        per_family = value.get("per_family")
+        if type(per_family) is not dict:
+            return False
+        # Wave-8 F1 mirror: entry values dict-gated, like the
+        # implementation.
+        if not all(type(entry) is dict for entry in per_family.values()):
             return False
         rate = value.get("overall_rate")
         return rate is None or type(rate) in (int, float)
@@ -450,6 +467,9 @@ def oracle_diff_reports(
             and value.get("available") is True
             and type(ps) is dict
             and all(type(k) is str for k in ps)
+            # Wave-8 F2 mirror: entry values dict-gated, like the
+            # implementation.
+            and all(type(v) is dict for v in ps.values())
             and type(value.get("flips")) is list
         )
 
@@ -475,6 +495,9 @@ def oracle_diff_reports(
             and value.get("available") is True
             and type(per_checkpoint) is dict
             and all(type(k) is str for k in per_checkpoint)
+            # Wave-8 F3 mirror: per_checkpoint values dict-gated,
+            # like the implementation (and the matrix values).
+            and all(type(v) is dict for v in per_checkpoint.values())
             and type(matrix) is dict
             and all(type(k) is str for k in matrix)
             and all(type(v) is dict and all(type(k) is str for k in v) for v in matrix.values())
@@ -2523,8 +2546,16 @@ def oracle_diff_reports(
             )
 
         def _int(item: Any) -> bool:
-            """Int."""
-            return type(item) is int and not isinstance(item, bool) and item >= 0
+            """Int (wave-8 F5 mirror: float-convertible, like the
+            implementation's family int discipline -- the recompute
+            rebuilds float means from these counts)."""
+            if not (type(item) is int and not isinstance(item, bool) and item >= 0):
+                return False
+            try:
+                float(item)
+            except OverflowError:
+                return False
+            return True
 
         def _mcnemar(ctrl_only: int, treat_only: int) -> float | None:
             """Mcnemar."""
@@ -3411,6 +3442,14 @@ def oracle_diff_reports(
         import math as _math
         import re as _re
 
+        def _float_convertible(v: int) -> bool:
+            """Float convertible (wave-8 F5 mirror)."""
+            try:
+                float(v)
+            except OverflowError:
+                return False
+            return True
+
         _tasks = ("copy", "compare", "add")
         _forms = ("plain", "comma", "space", "scientific")
         _bands = ((1, 3), (4, 6), (7, 9), (10, 12))
@@ -3466,8 +3505,16 @@ def oracle_diff_reports(
         _hex = frozenset("0123456789abcdef")
 
         def _int(item: Any) -> bool:
-            """Int."""
-            return type(item) is int and not isinstance(item, bool) and item >= 0
+            """Int (wave-8 F5 mirror: float-convertible, like the
+            implementation's family int discipline -- the recompute
+            rebuilds float means from these counts)."""
+            if not (type(item) is int and not isinstance(item, bool) and item >= 0):
+                return False
+            try:
+                float(item)
+            except OverflowError:
+                return False
+            return True
 
         def _grouped(digits: str, separator: str) -> str:
             """Grouped."""
@@ -4048,10 +4095,17 @@ def oracle_diff_reports(
             if (mean is None) != (delta is None):
                 return False
             if mean is not None and (
-                type(mean) not in (int, float) or isinstance(mean, bool) or mean < 0
+                type(mean) not in (int, float)
+                or isinstance(mean, bool)
+                or mean < 0
+                or not _float_convertible(mean)
             ):
                 return False
-            if delta is not None and (type(delta) not in (int, float) or isinstance(delta, bool)):
+            if delta is not None and (
+                type(delta) not in (int, float)
+                or isinstance(delta, bool)
+                or not _float_convertible(delta)
+            ):
                 return False
         if deltas["plain"] is not None and deltas["plain"] != 0:
             return False
@@ -4125,8 +4179,16 @@ def oracle_diff_reports(
             )
 
         def _int(item: Any) -> bool:
-            """Int."""
-            return type(item) is int and not isinstance(item, bool) and item >= 0
+            """Int (wave-8 F5 mirror: float-convertible, like the
+            implementation's family int discipline -- the recompute
+            rebuilds float means from these counts)."""
+            if not (type(item) is int and not isinstance(item, bool) and item >= 0):
+                return False
+            try:
+                float(item)
+            except OverflowError:
+                return False
+            return True
 
         def _cell_ok(cell: Any, expected_digest: Any) -> bool:
             """Cell ok."""
@@ -4561,6 +4623,14 @@ def oracle_diff_reports(
             type(max_rate) in (int, float) and isinstance(max_rate, (int, float))
         ):
             return False
+        # Wave-8 F5 mirror: an int max_rate beyond float range is
+        # invalid before the float() tolerance comparison, like the
+        # implementation.
+        if type(max_rate) is int:
+            try:
+                float(max_rate)
+            except OverflowError:
+                return False
         if abs(float(max_rate) - max(float(r) for r in rates.values())) > 1e-9:
             return False
         worst = max(rates, key=lambda name: (float(rates[name]), name))
@@ -8020,6 +8090,14 @@ def oracle_diff_reports(
                 return _math.copysign(_math.inf, v)
             return _struct.unpack("<f", _struct.pack("<f", v))[0]
 
+        def _float_convertible(v: int) -> bool:
+            """Float convertible (wave-8 F5 mirror)."""
+            try:
+                float(v)
+            except OverflowError:
+                return False
+            return True
+
         if type(value) is not dict or value.get("available") is not True:
             return False
         if set(value) != {
@@ -8189,7 +8267,11 @@ def oracle_diff_reports(
                                 or _f32(cell_value) != cell_value
                             ):
                                 return False
-                        if cell["tokens"] < 1 or cell["bytes"] < 1:
+                        if (
+                            cell["tokens"] < 1
+                            or cell["bytes"] < 1
+                            or not _float_convertible(cell["bytes"])
+                        ):
                             return False
                     elif cell["status"] == "ok_empty":
                         if (
@@ -8744,13 +8826,26 @@ def oracle_diff_reports(
         # availability-level oracle must agree with the implementation
         # on hostile payloads too.
         """Or cache profile valid."""
+
+        def _float_convertible(v: int) -> bool:
+            """Float convertible (wave-8 F5 mirror)."""
+            try:
+                float(v)
+            except OverflowError:
+                return False
+            return True
+
         if type(value) is not dict or value.get("available") is not True:
             return False
         block_size = value.get("block_size")
-        if type(block_size) is not int or block_size < 1:
+        if type(block_size) is not int or block_size < 1 or not _float_convertible(block_size):
             return False
         n_observations = value.get("n_observations")
-        if type(n_observations) is not int or n_observations < 0:
+        if (
+            type(n_observations) is not int
+            or n_observations < 0
+            or not _float_convertible(n_observations)
+        ):
             return False
         per_candidate = value.get("per_candidate")
         if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
@@ -8762,7 +8857,7 @@ def oracle_diff_reports(
                 return False
             for key in ("n", "n_evaluable"):
                 count = entry.get(key)
-                if type(count) is not int or count < 0:
+                if type(count) is not int or count < 0 or not _float_convertible(count):
                     return False
             if entry["n_evaluable"] > entry["n"]:
                 return False
@@ -8777,7 +8872,7 @@ def oracle_diff_reports(
                 "n_duplicate_prompts",
             ):
                 count = entry.get(key)
-                if type(count) is not int or count < 0:
+                if type(count) is not int or count < 0 or not _float_convertible(count):
                     return False
             if entry["achievable_tokens"] != entry["cacheable_tokens"] - entry["shared_prefixes"]:
                 return False
@@ -8812,6 +8907,12 @@ def oracle_diff_reports(
                 # Recompute mirror (cycle 177, F6b).
                 total = entry["total_tokens"]
                 if total <= 0:
+                    return False
+                # Wave-8 F5 mirror: the composed block products
+                # are conversion-gated, like the implementation.
+                if not _float_convertible(block_size * entry["block_cacheable_blocks"]):
+                    return False
+                if not _float_convertible(block_size * entry["achievable_blocks"]):
                     return False
                 if mean != total / entry["n_evaluable"]:
                     return False

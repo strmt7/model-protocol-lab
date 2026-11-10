@@ -595,9 +595,19 @@ def _o_frontier_valid(value: Any) -> bool:
     if type(max_tokens) is not int or max_tokens <= 0:
         return False
     for data in candidates.values():
-        if type(data) is not dict or len(data.get("fixture_ids") or []) <= 0:
+        if type(data) is not dict:
             continue
-        for point in data.get("pass_steps") or []:
+        # Wave-8 F4 mirror: shape-gated exactly like the
+        # implementation -- a non-list fixture_ids / pass_steps
+        # contributes no points (the `or []` form raised TypeError
+        # on truthy scalars).
+        fixture_ids = data.get("fixture_ids")
+        if type(fixture_ids) is not list or len(fixture_ids) <= 0:
+            continue
+        pass_steps = data.get("pass_steps")
+        if type(pass_steps) is not list:
+            continue
+        for point in pass_steps:
             if (
                 type(point) is list
                 and len(point) == 2
@@ -685,7 +695,12 @@ def _o_boundary_audit_valid(value: Any) -> bool:
     """Oracle-side availability check, mirroring the implementation's rule."""
     if type(value) is not dict or value.get("available", True) is False:
         return False
-    if type(value.get("per_family")) is not dict:
+    per_family = value.get("per_family")
+    if type(per_family) is not dict:
+        return False
+    # Wave-8 F1 mirror: entry values are dict-gated, like the
+    # implementation (a truthy non-dict entry is invalid data).
+    if not all(type(entry) is dict for entry in per_family.values()):
         return False
     rate = value.get("overall_rate")
     return rate is None or type(rate) in (int, float)
@@ -739,6 +754,9 @@ def _o_selection_robustness_valid(value: Any) -> bool:
         and value.get("available") is True
         and type(ps) is dict
         and all(type(k) is str for k in ps)
+        # Wave-8 F2 mirror: entry values dict-gated, like the
+        # implementation.
+        and all(type(v) is dict for v in ps.values())
         and type(value.get("flips")) is list
     )
 
@@ -795,6 +813,9 @@ def _o_transfer_valid(value: Any) -> bool:
         and value.get("available") is True
         and type(pc) is dict
         and all(type(k) is str for k in pc)
+        # Wave-8 F3 mirror: per_checkpoint values dict-gated, like
+        # the implementation (and like the matrix values below).
+        and all(type(v) is dict for v in pc.values())
         and type(mx) is dict
         and all(type(k) is str for k in mx)
         and all(type(v) is dict and all(type(k) is str for k in v) for v in mx.values())
@@ -3399,8 +3420,13 @@ def _o_lead_digest(item: Any) -> bool:
 
 
 def _o_lead_int(item: Any) -> bool:
-    """O lead int."""
-    return type(item) is int and not isinstance(item, bool) and item >= 0
+    """O lead int (wave-8 F5 mirror: float-convertible counts)."""
+    return (
+        type(item) is int
+        and not isinstance(item, bool)
+        and item >= 0
+        and _o_float_convertible(item)
+    )
 
 
 def _o_lead_mcnemar(ctrl_only: int, treat_only: int) -> float | None:
@@ -4073,8 +4099,13 @@ _O_NF_HEX = frozenset("0123456789abcdef")
 
 
 def _o_nf_int_ok(value: Any) -> bool:
-    """O nf int ok."""
-    return type(value) is int and not isinstance(value, bool) and value >= 0
+    """O nf int ok (wave-8 F5 mirror: float-convertible counts)."""
+    return (
+        type(value) is int
+        and not isinstance(value, bool)
+        and value >= 0
+        and _o_float_convertible(value)
+    )
 
 
 def _o_nf_is_round(value: int) -> bool:
@@ -4380,10 +4411,17 @@ def _o_numform_recompute(value: Any) -> dict[str, Any] | None:
         if (mean is None) != (delta is None):
             return None
         if mean is not None and (
-            type(mean) not in (int, float) or isinstance(mean, bool) or mean < 0
+            type(mean) not in (int, float)
+            or isinstance(mean, bool)
+            or mean < 0
+            or not _o_float_convertible(mean)
         ):
             return None
-        if delta is not None and (type(delta) not in (int, float) or isinstance(delta, bool)):
+        if delta is not None and (
+            type(delta) not in (int, float)
+            or isinstance(delta, bool)
+            or not _o_float_convertible(delta)
+        ):
             return None
     if deltas["plain"] is not None and deltas["plain"] != 0:
         return None
@@ -4597,7 +4635,12 @@ def _o_dateline_recompute(value: Any) -> dict[str, Any] | None:
             if type(record.get("group")) is not str:
                 return None
             n_user = record.get("n_user_messages")
-            if type(n_user) is not int or isinstance(n_user, bool) or n_user < 1:
+            if (
+                type(n_user) is not int
+                or isinstance(n_user, bool)
+                or n_user < 1
+                or not _o_float_convertible(n_user)
+            ):
                 return None
             for flag in (
                 "vacuous",
@@ -4612,7 +4655,11 @@ def _o_dateline_recompute(value: Any) -> dict[str, Any] | None:
                 return None
             seam = record.get("seam_ids")
             if type(seam) is not list or any(
-                type(token) is not int or isinstance(token, bool) or token < 0 for token in seam
+                type(token) is not int
+                or isinstance(token, bool)
+                or token < 0
+                or not _o_float_convertible(token)
+                for token in seam
             ):
                 return None
             expected_digest = record.get("expected_digest")
@@ -4641,7 +4688,12 @@ def _o_dateline_recompute(value: Any) -> dict[str, Any] | None:
                 if cell.get("boundary_text_match") not in (True, False, None):
                     return False
                 tokens = cell.get("input_tokens")
-                if type(tokens) is not int or isinstance(tokens, bool) or tokens < 0:
+                if (
+                    type(tokens) is not int
+                    or isinstance(tokens, bool)
+                    or tokens < 0
+                    or not _o_float_convertible(tokens)
+                ):
                     return False
                 digest = cell.get("answer_digest")
                 if digest is not None and (
@@ -16924,7 +16976,11 @@ def _o_choiceaudit_recompute(value: Any) -> dict[str, Any] | None:
                             or _f32(cell_value) != cell_value
                         ):
                             return None
-                    if cell["tokens"] < 1 or cell["bytes"] < 1:
+                    if (
+                        cell["tokens"] < 1
+                        or cell["bytes"] < 1
+                        or not _o_float_convertible(cell["bytes"])
+                    ):
                         return None
                 elif cell["status"] == "ok_empty":
                     if (
@@ -18042,15 +18098,33 @@ def _o_confidence(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
     return diff, changed, asymmetric
 
 
+def _o_float_convertible(value: int) -> bool:
+    """Oracle-side float-convertibility check (wave-8 F5 mirror).
+
+    An int beyond float range is invalid wherever the mirrored
+    validator feeds a stored int into float conversion; the boundary
+    is tested by conversion, exactly like the implementation.
+    """
+    try:
+        float(value)
+    except OverflowError:
+        return False
+    return True
+
+
 def _o_cache_profile_valid(value: Any) -> bool:
     """Oracle cache-profile validator: mirrors diffreports._valid_cache_profile."""
     if type(value) is not dict or value.get("available") is not True:
         return False
     block_size = value.get("block_size")
-    if type(block_size) is not int or block_size < 1:
+    if type(block_size) is not int or block_size < 1 or not _o_float_convertible(block_size):
         return False
     n_observations = value.get("n_observations")
-    if type(n_observations) is not int or n_observations < 0:
+    if (
+        type(n_observations) is not int
+        or n_observations < 0
+        or not _o_float_convertible(n_observations)
+    ):
         return False
     per_candidate = value.get("per_candidate")
     if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
@@ -18062,7 +18136,7 @@ def _o_cache_profile_valid(value: Any) -> bool:
             return False
         for key in ("n", "n_evaluable"):
             count = entry.get(key)
-            if type(count) is not int or count < 0:
+            if type(count) is not int or count < 0 or not _o_float_convertible(count):
                 return False
         if entry["n_evaluable"] > entry["n"]:
             return False
@@ -18077,7 +18151,7 @@ def _o_cache_profile_valid(value: Any) -> bool:
             "n_duplicate_prompts",
         ):
             count = entry.get(key)
-            if type(count) is not int or count < 0:
+            if type(count) is not int or count < 0 or not _o_float_convertible(count):
                 return False
         if entry["achievable_tokens"] != entry["cacheable_tokens"] - entry["shared_prefixes"]:
             return False
@@ -18112,6 +18186,12 @@ def _o_cache_profile_valid(value: Any) -> bool:
             # Recompute mirror (cycle 177, F6b).
             total = entry["total_tokens"]
             if total <= 0:
+                return False
+            # Wave-8 F5 mirror: the composed block products are
+            # conversion-gated, like the implementation.
+            if not _o_float_convertible(block_size * entry["block_cacheable_blocks"]):
+                return False
+            if not _o_float_convertible(block_size * entry["achievable_blocks"]):
                 return False
             if mean != total / entry["n_evaluable"]:
                 return False
@@ -20977,6 +21057,11 @@ def _o_answer_collision_valid(value: Any) -> bool:
     if not rates:
         return max_rate is None and value.get("worst_candidate") is None
     if max_rate is None or type(max_rate) not in (int, float):
+        return False
+    # Wave-8 F5 mirror: an int max_rate beyond float range is
+    # invalid before the float() tolerance comparison, like the
+    # implementation.
+    if type(max_rate) is int and not _o_float_convertible(max_rate):
         return False
     if abs(float(max_rate) - max(float(r) for r in rates.values())) > 1e-9:
         return False

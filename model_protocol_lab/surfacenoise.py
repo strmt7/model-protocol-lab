@@ -832,7 +832,19 @@ def hardening_notes(probe_result: dict[str, Any]) -> dict[str, Any]:
             if type(flip) is not dict:
                 continue
             distance = flip.get("distance")
-            distance_str = f"{distance:.4f}" if type(distance) in (int, float) else str(distance)
+            if type(distance) in (int, float):
+                try:
+                    distance_str = f"{distance:.4f}"
+                except OverflowError:
+                    # A numeric distance beyond float range (a
+                    # several-hundred-digit int is valid JSON and
+                    # passes the type check) is invalid input data,
+                    # in this function's own ValueError vocabulary --
+                    # never an internal error at the MCP layer
+                    # (wave-8 F6).
+                    raise ValueError("flip distance is out of range") from None
+            else:
+                distance_str = str(distance)
             counterfactuals.append(
                 f"Operator {name}: variant {flip.get('variant_id')} "
                 f"(token indel-edit rate {distance_str}) flips "

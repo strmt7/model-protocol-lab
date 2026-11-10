@@ -50,6 +50,39 @@ All notable changes to this project are documented here. The format follows
   probe-gate failure), 2 (invalid input), 1 (no report could
   be produced).
 
+### Fixed (cycle 244 — stored-value magnitude validation, bug-hunt wave 8, 2026-11-10)
+
+- The wave-7 disproof lane found six more instances of the
+  stored-payload trust-boundary class — a stored value
+  consumed before its effective type or magnitude was
+  validated — and this cycle closes the class, not just
+  the proven sites. The `boundary_audit`,
+  `selection_robustness`, and `transfer` validators now
+  gate the values inside their per-family / per-axis /
+  per-checkpoint maps to dicts, matching the gates their
+  sibling clauses already carried, so a truthy non-dict
+  entry degrades the side instead of crashing the differ.
+  The `budget_frontier` validator type-gates
+  `fixture_ids` / `pass_steps` before the length and
+  iteration it performs on them, so the validator itself
+  can no longer raise on a truthy scalar. Magnitude: a
+  stored integer too large to convert to float (legal
+  JSON under the loader's digit cap) previously raised
+  `OverflowError` out of differs, the HTML renderer, and
+  the summary renderer; admission for every stored count
+  or measured value a consumer converts now requires
+  float-convertibility — tested by conversion, never by
+  a literal bound, so the exact representable edge
+  (just below 2^1024) still validates — and the
+  codebase's safe-conversion convention in the renderers
+  is completed uniformly, including values composed from
+  admitted operands. On the MCP surface,
+  `surfacenoise.hardening_notes` raises the tool's
+  invalid-input error for a non-convertible flip
+  distance, so an oversized client-supplied distance is
+  answered `-32602`, never the internal-error `-32603`.
+  The loader's contract is unchanged.
+
 ### Fixed (cycle 242 — DeepSource fix-down, wave 3, 2026-11-09)
 
 - Twenty-one of the twenty-six enumerated non-PY-R1000

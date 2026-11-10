@@ -102,6 +102,25 @@ _PRIMARY_DECISIONS = frozenset(
 _PRIMARY_WINNER_DECISIONS = frozenset({"compatible_on_fixture_set", "held_out_failed"})
 
 
+def _float_convertible(value: int) -> bool:
+    """Whether an int converts to float without overflowing.
+
+    A stored results payload can carry an int of up to 4,300 digits
+    (the bounded loader's cap); the producers' counts never approach
+    float range, so an int beyond it is outside the producer domain
+    in the same way a non-float32-representable total is. Validators
+    that feed a stored int into float conversion gate on this first:
+    the payload is invalid, never an ``OverflowError`` traceback
+    (wave-8 F5). The boundary is float's own -- tested by conversion,
+    not by a literal bound.
+    """
+    try:
+        float(value)
+    except OverflowError:
+        return False
+    return True
+
+
 def _valid_primary_pair(payload: dict[str, Any]) -> bool:
     """Bind a section's ``primary_decision``/``primary_winner`` pair.
 
@@ -1278,9 +1297,18 @@ def _valid_frontier(value: Any) -> bool:
     for data in candidates.values():
         if type(data) is not dict:
             continue
-        if len(data.get("fixture_ids") or []) <= 0:
+        # Shape before consumption (wave-8 F4): the `or []` idiom
+        # rescues only falsy values, so a truthy scalar fixture_ids /
+        # pass_steps raised TypeError inside this validator. A
+        # non-list contributes no points -- the same reading
+        # reporting._fixture_total gives a non-list fixture_ids.
+        fixture_ids = data.get("fixture_ids")
+        if type(fixture_ids) is not list or len(fixture_ids) <= 0:
             continue
-        for point in data.get("pass_steps") or []:
+        pass_steps = data.get("pass_steps")
+        if type(pass_steps) is not list:
+            continue
+        for point in pass_steps:
             if (
                 type(point) is list
                 and len(point) == 2
@@ -1538,7 +1566,15 @@ def _valid_boundary_audit(value: Any) -> bool:
     """Light validation: is this a comparable ``boundary_audit`` payload?"""
     if type(value) is not dict or value.get("available", True) is False:
         return False
-    if type(value.get("per_family")) is not dict:
+    per_family = value.get("per_family")
+    if type(per_family) is not dict:
+        return False
+    # Entry values are gated too (wave-8 F1): the differ reads
+    # entry.get("rate"), and the `or {}` idiom there rescues only
+    # falsy entries, so a truthy non-dict entry raised AttributeError.
+    # The sibling validators gate their per-X values the same way
+    # (_valid_perturbation, _valid_transfer's matrix).
+    if not all(type(entry) is dict for entry in per_family.values()):
         return False
     rate = value.get("overall_rate")
     return rate is None or type(rate) in (int, float)
@@ -1599,6 +1635,11 @@ def _valid_selection_robustness(payload: Any) -> bool:
         and payload.get("available") is True
         and type(per_semantic) is dict
         and all(type(k) is str for k in per_semantic)
+        # Entry values gated (wave-8 F2): the differ reads
+        # entry.get("decision") through the same `or {}` idiom as
+        # boundary_audit -- a truthy non-dict entry raised
+        # AttributeError there.
+        and all(type(v) is dict for v in per_semantic.values())
         and type(payload.get("flips")) is list
     )
 
@@ -1750,6 +1791,11 @@ def _valid_transfer(payload: Any) -> bool:
         and payload.get("available") is True
         and type(per_checkpoint) is dict
         and all(type(k) is str for k in per_checkpoint)
+        # per_checkpoint values gated exactly like the matrix values
+        # below (wave-8 F3): the differ reads entry.get("decision")
+        # through the `or {}` idiom, which rescues only falsy
+        # entries -- a truthy non-dict entry raised AttributeError.
+        and all(type(v) is dict for v in per_checkpoint.values())
         and type(matrix) is dict
         and all(type(k) is str for k in matrix)
         and all(type(v) is dict and all(type(k) is str for k in v) for v in matrix.values())
@@ -5790,8 +5836,20 @@ def _leading_digest_ok(value: Any) -> bool:
 
 
 def _leading_int_ok(value: Any) -> bool:
-    """Return whether the leading int is well-formed."""
-    return type(value) is int and not isinstance(value, bool) and value >= 0
+    """Return whether the leading int is well-formed.
+
+    The family recompute (leading / numform / dateline) rebuilds
+    float means and deltas from these counts, so a well-formed
+    count must also be float-convertible: an int beyond float
+    range is a magnitude no producer emits, and admitting it
+    overflowed the recompute's divisions (wave-8 F5).
+    """
+    return (
+        type(value) is int
+        and not isinstance(value, bool)
+        and value >= 0
+        and _float_convertible(value)
+    )
 
 
 def _leading_mcnemar_p(ctrl_only: int, treat_only: int) -> float | None:
@@ -7421,10 +7479,17 @@ def _numform_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         if (mean is None) != (delta is None):
             return None
         if mean is not None and (
-            type(mean) not in (int, float) or isinstance(mean, bool) or mean < 0
+            type(mean) not in (int, float)
+            or isinstance(mean, bool)
+            or mean < 0
+            or not _float_convertible(mean)
         ):
             return None
-        if delta is not None and (type(delta) not in (int, float) or isinstance(delta, bool)):
+        if delta is not None and (
+            type(delta) not in (int, float)
+            or isinstance(delta, bool)
+            or not _float_convertible(delta)
+        ):
             return None
     if deltas["plain"] is not None and deltas["plain"] != 0:
         return None
@@ -26402,7 +26467,16 @@ def _choiceaudit_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
                             or _ca_f32(value) != value
                         ):
                             return None
-                    if cell["tokens"] < 1 or cell["bytes"] < 1:
+                    # bytes feeds a float division in _ca_ranking_values;
+                    # an int beyond float range is outside the producer
+                    # domain and must fail construction, not overflow
+                    # there (wave-8 F5). tokens is consumed by exact int
+                    # arithmetic only, which cannot overflow.
+                    if (
+                        cell["tokens"] < 1
+                        or cell["bytes"] < 1
+                        or not _float_convertible(cell["bytes"])
+                    ):
                         return None
                 elif cell["status"] == "ok_empty":
                     if (
@@ -27770,15 +27844,23 @@ def _valid_cache_profile(payload: Any) -> bool:
     hold (achievable = potential count - first occurrences), ordering
     invariants (block <= token, achievable <= potential) must hold,
     and map keys must be strings, so the renderers never hit a
-    TypeError on a hostile payload.
+    TypeError on a hostile payload. The recompute below multiplies
+    and divides the counts into float expressions, so every count
+    must also be float-convertible (wave-8 F5): an int beyond float
+    range is outside the producer domain and fails validation here
+    instead of overflowing mid-recompute.
     """
     if type(payload) is not dict or payload.get("available") is not True:
         return False
     block_size = payload.get("block_size")
-    if type(block_size) is not int or block_size < 1:
+    if type(block_size) is not int or block_size < 1 or not _float_convertible(block_size):
         return False
     n_observations = payload.get("n_observations")
-    if type(n_observations) is not int or n_observations < 0:
+    if (
+        type(n_observations) is not int
+        or n_observations < 0
+        or not _float_convertible(n_observations)
+    ):
         return False
     per_candidate = payload.get("per_candidate")
     if type(per_candidate) is not dict or not all(type(k) is str for k in per_candidate):
@@ -27790,7 +27872,7 @@ def _valid_cache_profile(payload: Any) -> bool:
             return False
         for key in ("n", "n_evaluable"):
             value = entry.get(key)
-            if type(value) is not int or value < 0:
+            if type(value) is not int or value < 0 or not _float_convertible(value):
                 return False
         if entry["n_evaluable"] > entry["n"]:
             return False
@@ -27805,7 +27887,7 @@ def _valid_cache_profile(payload: Any) -> bool:
             "n_duplicate_prompts",
         ):
             value = entry.get(key)
-            if type(value) is not int or value < 0:
+            if type(value) is not int or value < 0 or not _float_convertible(value):
                 return False
         if entry["achievable_tokens"] != entry["cacheable_tokens"] - entry["shared_prefixes"]:
             return False
@@ -27843,6 +27925,14 @@ def _valid_cache_profile(payload: Any) -> bool:
             # producer computes the same expressions.
             total = entry["total_tokens"]
             if total <= 0:
+                return False
+            # The block fractions below convert the PRODUCT
+            # block_size * blocks; two individually convertible
+            # factors can compose past float range, so the products
+            # are gated as composed values (wave-8 F5).
+            if not _float_convertible(block_size * entry["block_cacheable_blocks"]):
+                return False
+            if not _float_convertible(block_size * entry["achievable_blocks"]):
                 return False
             if mean != total / entry["n_evaluable"]:
                 return False
@@ -28298,6 +28388,12 @@ def _valid_answer_collision(payload: Any) -> bool:
     max_rate = payload.get("max_collision_rate")
     if not rates:
         return max_rate is None and payload.get("worst_candidate") is None
+    if type(max_rate) is int and not _float_convertible(max_rate):
+        # The tolerance comparison below converts max_rate to float;
+        # an int beyond float range is a magnitude no producer emits
+        # (the recomputed rates are shares in [0, 1]) -- invalid,
+        # never an OverflowError (wave-8 F5).
+        return False
     if (
         max_rate is None
         or not (type(max_rate) in (int, float) and isinstance(max_rate, (int, float)))
@@ -29733,7 +29829,11 @@ def _render_hierarchy_summary(hierarchy_diff: dict[str, Any] | None) -> list[str
 
     def _fmt_rate(value: Any) -> str:
         """Return the fmt rate."""
-        return f"{value:.1%}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:.1%}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     drift = hierarchy_diff.get("candidate_drift") or []
     if drift:
@@ -29809,7 +29909,11 @@ def _render_position_summary(position_diff: dict[str, Any] | None) -> list[str]:
 
     def _fmt_index(value: Any) -> str:
         """Return the fmt index."""
-        return f"{value:+.2f}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:+.2f}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     drift = position_diff.get("index_drift") or []
     if drift:
@@ -29852,7 +29956,11 @@ def _render_stop_cause_summary(stopcause_diff: dict[str, Any] | None) -> list[st
 
     def _fmt_rate(value: Any) -> str:
         """Return the fmt rate."""
-        return f"{value:.0%}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:.0%}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     drift = stopcause_diff.get("cause_drift") or []
     if drift:
@@ -29900,7 +30008,11 @@ def _render_ws_canonical_summary(wscan_diff: dict[str, Any] | None) -> list[str]
 
     def _fmt_rate(value: Any) -> str:
         """Return the fmt rate."""
-        return f"{value:.0%}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:.0%}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     drift = wscan_diff.get("rate_drift") or []
     if drift:
@@ -29962,7 +30074,11 @@ def _render_structured_summary(structured_diff: dict[str, Any] | None) -> list[s
 
     def _fmt_rate(value: Any) -> str:
         """Return the fmt rate."""
-        return f"{value:.0%}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:.0%}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     drift = structured_diff.get("rate_drift") or []
     if drift:
@@ -30026,7 +30142,11 @@ def _render_deliforge_summary(deliforge_diff: dict[str, Any] | None) -> list[str
 
     def _fmt_gap(value: Any) -> str:
         """Return the fmt gap."""
-        return f"{value:+.2f}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:+.2f}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     drift = deliforge_diff.get("gap_drift") or []
     if drift:
@@ -30091,7 +30211,11 @@ def _render_fewshot_summary(fewshot_diff: dict[str, Any] | None) -> list[str]:
 
     def _fmt_gain(value: Any) -> str:
         """Return the fmt gain."""
-        return f"{value:.2f}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:.2f}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     gain_drift = fewshot_diff.get("gain_drift") or []
     if gain_drift:
@@ -30161,11 +30285,19 @@ def _render_faketurn_summary(faketurn_diff: dict[str, Any] | None) -> list[str]:
 
     def _fmt_rate(value: Any) -> str:
         """Return the fmt rate."""
-        return f"{value:.2f}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:.2f}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     def _fmt_gap(value: Any) -> str:
         """Return the fmt gap."""
-        return f"{value:+.2f}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:+.2f}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     cell_drift = faketurn_diff.get("cell_drift") or []
     if cell_drift:
@@ -30235,7 +30367,11 @@ def _render_toolcall_summary(toolcall_diff: dict[str, Any] | None) -> list[str]:
 
     def _fmt_rate(value: Any) -> str:
         """Return the fmt rate."""
-        return f"{value:.2f}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:.2f}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     for drift_key, label in (
         ("selection_drift", "selection-rate"),
@@ -30300,7 +30436,11 @@ def _render_labeled_block_summary(
 
     def _fmt_gap(value: Any) -> str:
         """Return the fmt gap."""
-        return f"{value:.1%}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:.1%}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     drift = section.get("gap_drift") or []
     for entry in drift[:3]:
@@ -30367,7 +30507,11 @@ def _render_answer_collision_summary(
 
     def _fmt_rate(value: Any) -> str:
         """Return the fmt rate."""
-        return f"{value:.1%}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:.1%}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     drift = answer_collision_diff.get("rate_drift") or []
     for entry in drift[:3]:
@@ -30429,7 +30573,11 @@ def _render_template_robustness_summary(
 
     def _fmt_rate(value: Any) -> str:
         """Return the fmt rate."""
-        return f"{value:.2f}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:.2f}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     drift = tr_diff.get("preservation_drift") or []
     for entry in drift[:3]:
@@ -30536,7 +30684,11 @@ def _render_verbosity_summary(verbosity_diff: dict[str, Any] | None) -> list[str
 
     def _fmt_tokens(value: Any) -> str:
         """Return the fmt tokens."""
-        return f"{value:.1f}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:.1f}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     for drift_key, label in (
         ("median_drift", "median-excess"),
@@ -30597,7 +30749,11 @@ def _render_refusals_summary(refusals_diff: dict[str, Any] | None) -> list[str]:
 
     def _fmt_rate(value: Any) -> str:
         """Return the fmt rate."""
-        return f"{value:.0%}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:.0%}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     drift = refusals_diff.get("rate_drift") or []
     for entry in drift[:3]:
@@ -30658,7 +30814,11 @@ def _render_cache_profile_summary(cache_profile_diff: dict[str, Any] | None) -> 
 
     def _fmt_share(value: Any) -> str:
         """Return the fmt share."""
-        return f"{value:.1%}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:.1%}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     for drift_key, label in (
         ("block_drift", "achievable-block-share"),
@@ -30735,7 +30895,11 @@ def _render_prefill_summary(prefill_diff: dict[str, Any] | None) -> list[str]:
 
     def _fmt_rate(value: Any) -> str:
         """Return the fmt rate."""
-        return f"{value:.1%}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:.1%}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     drift = prefill_diff.get("candidate_drift") or []
     if drift:
@@ -30809,7 +30973,11 @@ def _render_synthhistory_summary(synthhistory_diff: dict[str, Any] | None) -> li
 
     def _fmt_rate(value: Any) -> str:
         """Return the fmt rate."""
-        return f"{value:.1%}" if type(value) in (int, float) else "(none)"
+        return (
+            f"{value:.1%}"
+            if type(value) in (int, float) and _float_convertible(value)
+            else "(none)"
+        )
 
     drift = synthhistory_diff.get("pass_rate_drift") or []
     if drift:
@@ -30893,7 +31061,9 @@ def _render_boundary_audit_summary(audit_diff: dict[str, Any]) -> list[str]:
 
     def _fmt(rate: Any) -> str:
         """Return the fmt."""
-        return f"{rate:.1%}" if type(rate) in (int, float) else "(none)"
+        return (
+            f"{rate:.1%}" if type(rate) in (int, float) and _float_convertible(rate) else "(none)"
+        )
 
     overall = audit_diff["overall_rate"]
     lines.append(f"Prompt Boundary Problem rate: {_fmt(overall['old'])} -> {_fmt(overall['new'])}")

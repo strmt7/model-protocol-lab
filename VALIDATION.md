@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–243 (executed 2026-10-14 → 2026-11-09, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–244 (executed 2026-10-14 → 2026-11-10, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9602 tests collected**
-  (cycle 243, 2026-11-09). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9676 tests collected**
+  (cycle 244, 2026-11-10). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -81,6 +81,27 @@ doctor's resource fallbacks degrade there.
   the real b12182 binary at build start (C-1: unauthenticated
   /props, /slots and slot erase all 401; arms cold 0 / warm 14 /
   post-erase 0 / re-warm 14 under the ratified launch line).
+  Cycle 244 moves both figures again: the wave-8 fix cycle —
+  the stored-value magnitude-validation fixes (entry-value
+  gates in the `boundary_audit`, `selection_robustness` and
+  `transfer` mirrors; shape gates in the frontier validator;
+  float-convertibility admission for every stored count or
+  measured value a consumer converts, composed products
+  included; the renderers' safe-conversion convention
+  completed uniformly; the MCP hardening-notes invalid-input
+  class restored) — added 229 statements (44,232 → 44,461)
+  and 236 covered statements (42,668 → 42,904), for a
+  precise figure of 95.35207221373815%, with the suite
+  count at 9,676. One guard fallback remains unexercised,
+  enumerated rather than rounded away: the
+  template_robustness section helper's OverflowError arm,
+  whose genuine payload requires a full stage run. The 74
+  new spec-cited tests in
+  `tests/test_cycle244_fixwave8.py` fail on the pre-fix tree
+  (149 failing items) and pass on this one; the overflow
+  class is closed by execution on three sweep arms (897
+  int-leaf patterns, the float-leaf widening patterns, and
+  bulk widening — zero raises after the fix).
   Cycle 234 moves neither figure: a test-infrastructure and
   dependency-hygiene cycle changed no package code, and its
   gate reproduced the precise figure exactly —
@@ -457,7 +478,7 @@ doctor's resource fallbacks degrade there.
   negation feature added 393 statements, 32,655 → 33,048.)
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (330 files in that CI scope; the repo-root scope counts more.
+  (331 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (75 source files).

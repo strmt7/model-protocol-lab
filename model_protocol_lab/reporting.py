@@ -1380,18 +1380,41 @@ chart's per-point circles. Public so ``diffreports`` can share the bound
 """
 
 
+def _float_convertible(value: Any) -> bool:
+    """Whether ``value`` survives ``float()`` conversion.
+
+    A stored int beyond float range (a several-hundred-digit JSON
+    integer is loadable by design) raises ``OverflowError`` on
+    conversion and on float-spec formatting; renderers gate on
+    this predicate wherever a stored number is formatted, so the
+    value degrades instead of crashing the render (wave-8 F5).
+    Floats and small ints always convert.
+    """
+    try:
+        float(value)
+    except (OverflowError, TypeError, ValueError):
+        return False
+    return True
+
+
 def _valid_rate(rate: Any) -> float | None:
     """A pass rate as a finite float, or None when it is not one.
 
     Hostile result payloads can carry a string, a bool, or NaN/Infinity
     (the JSON parser accepts the latter two by default); formatting any of
     those with ``:.0%`` raises or renders ``"nan%"``. ``bool`` is excluded
-    explicitly: ``True == 1`` but a boolean is never a genuine rate.
-    Malformed rates degrade to the "incomplete" badge, never a crash.
+    explicitly: ``True == 1`` but a boolean is never a genuine rate. An
+    int beyond float range (a several-hundred-digit JSON integer) makes
+    the conversion itself raise ``OverflowError``; that is a malformed
+    rate too (wave-8 F5). Malformed rates degrade to the "incomplete"
+    badge, never a crash.
     """
     if type(rate) is bool or type(rate) not in (int, float):
         return None
-    value = float(rate)
+    try:
+        value = float(rate)
+    except OverflowError:
+        return None
     return value if math.isfinite(value) else None
 
 
@@ -3035,6 +3058,11 @@ def _frontier_section(result: dict[str, Any]) -> str:
             budget, count = point
             if type(budget) is not int or type(count) is not int:
                 continue
+            if not _float_convertible(count):
+                # The percent below divides count by the fixture
+                # total; a count beyond float range is a malformed
+                # point and is skipped like any other (wave-8 F5).
+                continue
             percent = f"{(count / total):.0%}" if total else "?"
             bar = (
                 '<span class="bar" role="img" aria-label="'
@@ -3092,7 +3120,11 @@ def _boundary_audit_section(result: dict[str, Any]) -> str:
             if type(entry) is not dict:
                 continue
             rate = entry.get("rate")
-            rate_text = "n/a" if type(rate) not in (int, float) else f"{rate:.1%}"
+            rate_text = (
+                "n/a"
+                if type(rate) not in (int, float) or not _float_convertible(rate)
+                else f"{rate:.1%}"
+            )
             badge = (
                 '<span class="badge pass">canonical</span>'
                 if rate == 0
@@ -3107,7 +3139,11 @@ def _boundary_audit_section(result: dict[str, Any]) -> str:
                 "<td>" + escape(str(entry.get("n_problem", "?"))) + "</td>"
                 "<td>" + escape(str(entry.get("n_usable", "?"))) + "</td></tr>"
             )
-    overall_text = "n/a" if type(overall) not in (int, float) else f"{overall:.1%}"
+    overall_text = (
+        "n/a"
+        if type(overall) not in (int, float) or not _float_convertible(overall)
+        else f"{overall:.1%}"
+    )
     parts = [
         '<section id="boundary-canonicality"><h2>Prompt-boundary canonicality</h2>',
         "<p>For every stored rendered prompt &times; greedy completion, the "
@@ -3197,7 +3233,11 @@ def _marker_isolation_section(result: dict[str, Any]) -> str:
                 )
         score = scores.get(family, {})
         rate = score.get("isolation_rate")
-        rate_text = "n/a" if type(rate) not in (int, float) else f"{rate:.0%}"
+        rate_text = (
+            "n/a"
+            if type(rate) not in (int, float) or not _float_convertible(rate)
+            else f"{rate:.0%}"
+        )
         rows.append(
             '<tr><th scope="row">'
             + escape(family)
@@ -3208,7 +3248,11 @@ def _marker_isolation_section(result: dict[str, Any]) -> str:
             + "</tr>"
         )
     overall = check.get("overall_isolation_rate")
-    overall_text = "n/a" if type(overall) not in (int, float) else f"{overall:.1%}"
+    overall_text = (
+        "n/a"
+        if type(overall) not in (int, float) or not _float_convertible(overall)
+        else f"{overall:.1%}"
+    )
     parts = [
         '<section id="marker-isolation"><h2>Chat-marker isolation</h2>',
         "<p>Each hostile marker string was injected into user text and the "
@@ -3771,7 +3815,10 @@ def _hierarchy_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float):
-            return f"{value:.0%}"
+            try:
+                return f"{value:.0%}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     verdict_lines = []
@@ -3878,7 +3925,12 @@ def _hierarchy_section(result: dict[str, Any]) -> str:
     def _as_rate(value: Any) -> float | None:
         # Strict: bools are excluded (type() check, not isinstance()).
         """Return the as rate."""
-        return float(value) if type(value) in (int, float) else None
+        if type(value) in (int, float):
+            try:
+                return float(value)
+            except OverflowError:
+                return None
+        return None
 
     ded_rate: float | None = None
     fold_rate: float | None = None
@@ -3996,13 +4048,19 @@ def _position_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float):
-            return f"{value:.0%}"
+            try:
+                return f"{value:.0%}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _index(value: Any) -> str:
         """Return the index."""
         if type(value) in (int, float):
-            return f"{value:+.2f}"
+            try:
+                return f"{value:+.2f}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     verdict_lines = []
@@ -4188,7 +4246,10 @@ def _stopcause_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float):
-            return f"{value:.0%}"
+            try:
+                return f"{value:.0%}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _num(value: Any) -> str:
@@ -4307,7 +4368,10 @@ def _wscanonical_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float):
-            return f"{value:.0%}"
+            try:
+                return f"{value:.0%}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _bool(value: Any) -> str:
@@ -4422,7 +4486,10 @@ def _structured_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float):
-            return f"{value:.0%}"
+            try:
+                return f"{value:.0%}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     rows = []
@@ -4458,7 +4525,7 @@ def _structured_section(result: dict[str, Any]) -> str:
         )
     gap = audit.get("adherence_gap")
     gap_line = ""
-    if type(gap) in (int, float):
+    if type(gap) in (int, float) and _float_convertible(gap):
         gap_line = (
             "<p>Adherence gap (strongest minus weakest template): "
             + escape(f"{gap:.0%}")
@@ -4517,7 +4584,10 @@ def _deliforge_section(result: dict[str, Any]) -> str:
     def _gap(value: Any) -> str:
         """Return the gap."""
         if type(value) in (int, float):
-            return f"{value:+.2f}"
+            try:
+                return f"{value:+.2f}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     rows = []
@@ -4556,7 +4626,7 @@ def _deliforge_section(result: dict[str, Any]) -> str:
         )
     top = audit.get("max_authority_gap")
     top_line = ""
-    if type(top) in (int, float):
+    if type(top) in (int, float) and _float_convertible(top):
         top_line = (
             "<p>Largest reserved-minus-subword flip-rate gap over all "
             "evaluable candidates: <strong>"
@@ -4630,13 +4700,19 @@ def _faketurn_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float):
-            return f"{value:.2f}"
+            try:
+                return f"{value:.2f}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _gap(value: Any) -> str:
         """Return the gap."""
         if type(value) in (int, float):
-            return f"{value:+.2f}"
+            try:
+                return f"{value:+.2f}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     rows = []
@@ -4677,7 +4753,7 @@ def _faketurn_section(result: dict[str, Any]) -> str:
         )
     top_gap = audit.get("max_transfer_gap")
     top_line = ""
-    if type(top_gap) in (int, float):
+    if type(top_gap) in (int, float) and _float_convertible(top_gap):
         top_line = (
             "<p>Largest cross-minus-same flip-rate gap over all evaluable "
             "candidates: <strong>"
@@ -4689,7 +4765,7 @@ def _faketurn_section(result: dict[str, Any]) -> str:
         )
     top_rate = audit.get("max_flip_rate")
     rate_line = ""
-    if type(top_rate) in (int, float):
+    if type(top_rate) in (int, float) and _float_convertible(top_rate):
         rate_line = (
             "<p>Largest per-cell verdict-flip rate over all evaluable "
             "candidates: <strong>" + escape(f"{top_rate:.2f}") + "</strong>.</p>"
@@ -4749,13 +4825,19 @@ def _toolcall_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float):
-            return f"{value:.2f}"
+            try:
+                return f"{value:.2f}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _gap(value: Any) -> str:
         """Return the gap."""
         if type(value) in (int, float):
-            return f"{value:+.2f}"
+            try:
+                return f"{value:+.2f}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     rows = []
@@ -4985,7 +5067,10 @@ def _template_robustness_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float):
-            return f"{value:.2f}"
+            try:
+                return f"{value:.2f}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _display_id(raw: Any) -> str:
@@ -5072,13 +5157,19 @@ def _verbosity_section(result: dict[str, Any]) -> str:
     def _num(value: Any) -> str:
         """Return the num."""
         if type(value) in (int, float):
-            return f"{value:.1f}"
+            try:
+                return f"{value:.1f}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _share(value: Any) -> str:
         """Return the share."""
         if type(value) in (int, float):
-            return f"{value:.0%}"
+            try:
+                return f"{value:.0%}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     rows = []
@@ -5112,7 +5203,7 @@ def _verbosity_section(result: dict[str, Any]) -> str:
         )
     gap = audit.get("median_excess_gap")
     gap_line = ""
-    if type(gap) in (int, float):
+    if type(gap) in (int, float) and _float_convertible(gap):
         gap_line = (
             "<p>Max-minus-min median excess over evaluable candidates: "
             "<strong>" + escape(f"{gap:+.1f}") + " tokens</strong>.</p>"
@@ -5224,7 +5315,10 @@ def _refusals_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float):
-            return f"{value:.0%}"
+            try:
+                return f"{value:.0%}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     rows = []
@@ -5373,7 +5467,13 @@ def _scorerlens_section(result: dict[str, Any]) -> str:
     def _share(entry: dict[str, Any]) -> str:
         """Return the share."""
         value = entry.get("surface_failure_share")
-        text = f"{value:.0%}" if type(value) in (int, float) else "n/a"
+        if type(value) in (int, float):
+            try:
+                text = f"{value:.0%}"
+            except OverflowError:
+                text = "n/a"
+        else:
+            text = "n/a"
         note = entry.get("share_note")
         if type(note) is str and note:
             text += " (" + escape(note.replace("_", " ")) + ")"
@@ -5763,7 +5863,10 @@ def _repetition_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):+.3f}")
+            try:
+                return escape(f"{float(value):+.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -5919,7 +6022,10 @@ def _distraction_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.3f}")
+            try:
+                return escape(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -6119,7 +6225,10 @@ def _leading_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.3f}")
+            try:
+                return escape(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -6347,7 +6456,10 @@ def _numform_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.3f}")
+            try:
+                return escape(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -6521,7 +6633,10 @@ def _dateline_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.3f}")
+            try:
+                return escape(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -6715,7 +6830,10 @@ def _multiturn_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.3f}")
+            try:
+                return escape(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -6840,7 +6958,10 @@ def _needle_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.3f}")
+            try:
+                return escape(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -6980,7 +7101,10 @@ def _placement_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.3f}")
+            try:
+                return escape(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -7122,7 +7246,10 @@ def _canonical_form_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.3f}")
+            try:
+                return _escape_text(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -7266,7 +7393,10 @@ def _negation_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.3f}")
+            try:
+                return _escape_text(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -7532,7 +7662,10 @@ def _instruction_distance_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.3f}")
+            try:
+                return _escape_text(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -7826,13 +7959,19 @@ def _history_frame_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.3f}")
+            try:
+                return _escape_text(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _pct(value: Any) -> str:
         """Return the pct."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{100.0 * float(value):.2f}")
+            try:
+                return _escape_text(f"{100.0 * float(value):.2f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -8183,7 +8322,10 @@ def _prune_sweep_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.3f}")
+            try:
+                return _escape_text(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -8540,7 +8682,10 @@ def _record_notation_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.3f}")
+            try:
+                return _escape_text(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -8550,7 +8695,10 @@ def _record_notation_section(result: dict[str, Any]) -> str:
     def _points(value: Any) -> str:
         """Return the points."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.1f}")
+            try:
+                return _escape_text(f"{float(value):.1f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     arm_names = ("prose", "canonical_json", "closed_book")
@@ -8742,7 +8890,10 @@ def _record_notation_section(result: dict[str, Any]) -> str:
         """Return the sci."""
         value = oc.get(key)
         if isinstance(value, (int, float)) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.2e}")
+            try:
+                return _escape_text(f"{float(value):.2e}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     tail_paragraphs = [
@@ -8901,7 +9052,10 @@ def _invisible_chars_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.3f}")
+            try:
+                return _escape_text(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -9258,7 +9412,10 @@ def _confusable_skeleton_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.3f}")
+            try:
+                return _escape_text(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -9662,7 +9819,10 @@ def _compatibility_form_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.3f}")
+            try:
+                return _escape_text(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -10095,7 +10255,10 @@ def _enumeration_convention_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.3f}")
+            try:
+                return _escape_text(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -10242,6 +10405,7 @@ def _enumeration_convention_section(result: dict[str, Any]) -> str:
                                 + (
                                     f"{float(row['mean_id_length_delta']):.3f}"
                                     if type(row.get("mean_id_length_delta")) in (int, float)
+                                    and _float_convertible(row["mean_id_length_delta"])
                                     else "n/a"
                                 )
                                 for row in position_rows
@@ -10684,7 +10848,10 @@ def _typographic_emphasis_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.3f}")
+            try:
+                return _escape_text(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -11173,7 +11340,10 @@ def _rotation_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.3f}")
+            try:
+                return _escape_text(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -11373,19 +11543,28 @@ def _density_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.3f}")
+            try:
+                return escape(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _pvalue(value: Any) -> str:
         """Return the pvalue."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.3g}")
+            try:
+                return escape(f"{float(value):.3g}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _mean(value: Any) -> str:
         """Return the mean."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.1f}")
+            try:
+                return escape(f"{float(value):.1f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -11641,13 +11820,19 @@ def _field_order_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.3f}")
+            try:
+                return _escape_text(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _pvalue(value: Any) -> str:
         """Return the pvalue."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return _escape_text(f"{float(value):.3g}")
+            try:
+                return _escape_text(f"{float(value):.3g}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -11880,7 +12065,10 @@ def _choiceaudit_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.3f}")
+            try:
+                return escape(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -12081,7 +12269,10 @@ def _precision_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.3f}")
+            try:
+                return escape(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -12091,7 +12282,10 @@ def _precision_section(result: dict[str, Any]) -> str:
     def _delta(value: Any) -> str:
         """Return the delta."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):+.3f}")
+            try:
+                return escape(f"{float(value):+.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _passed(value: Any) -> str:
@@ -12280,13 +12474,19 @@ def _confidence_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.3f}")
+            try:
+                return escape(f"{float(value):.3f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _num(value: Any) -> str:
         """Return the num."""
         if type(value) in (int, float) and not isinstance(value, bool):
-            return escape(f"{float(value):.1f}")
+            try:
+                return escape(f"{float(value):.1f}")
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _count(value: Any) -> str:
@@ -12320,7 +12520,7 @@ def _confidence_section(result: dict[str, Any]) -> str:
             + ".</div>"
         ]
         gap = block.get("gap")
-        if isinstance(gap, (int, float)) and not isinstance(gap, bool):
+        if isinstance(gap, (int, float)) and not isinstance(gap, bool) and _float_convertible(gap):
             lines.append(
                 "<div>Mean stated confidence: correct "
                 + _num(block.get("mean_correct"))
@@ -12479,13 +12679,19 @@ def _cache_profile_section(result: dict[str, Any]) -> str:
     def _pct(value: Any) -> str:
         """Return the pct."""
         if type(value) in (int, float):
-            return f"{value:.1%}"
+            try:
+                return f"{value:.1%}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _num(value: Any) -> str:
         """Return the num."""
         if type(value) in (int, float):
-            return f"{value:.1f}"
+            try:
+                return f"{value:.1f}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     rows = []
@@ -12518,7 +12724,7 @@ def _cache_profile_section(result: dict[str, Any]) -> str:
     block_size = audit.get("block_size")
     gap = audit.get("sharability_gap")
     gap_line = ""
-    if type(gap) in (int, float):
+    if type(gap) in (int, float) and _float_convertible(gap):
         gap_line = (
             "<p>Max-minus-min achievable block sharability over evaluable "
             "candidates: <strong>" + escape(f"{gap:.1%}") + "</strong>.</p>"
@@ -12631,13 +12837,19 @@ def _confidentiality_section(result: dict[str, Any]) -> str:
     def _pct(value: Any) -> str:
         """Return the pct."""
         if type(value) in (int, float):
-            return f"{value:.1%}"
+            try:
+                return f"{value:.1%}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _num(value: Any) -> str:
         """Return the num."""
         if type(value) in (int, float):
-            return f"{value:.3f}"
+            try:
+                return f"{value:.3f}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     rows = []
@@ -12678,7 +12890,7 @@ def _confidentiality_section(result: dict[str, Any]) -> str:
         )
     gap = audit.get("gap")
     gap_line = ""
-    if type(gap) in (int, float):
+    if type(gap) in (int, float) and _float_convertible(gap):
         gap_line = (
             "<p>Max-minus-min confidentiality gap over measurable "
             "candidates: <strong>" + escape(f"{gap:.1%}") + "</strong>.</p>"
@@ -12763,7 +12975,10 @@ def _answer_collision_section(result: dict[str, Any]) -> str:
     def _pct(value: Any) -> str:
         """Return the pct."""
         if type(value) in (int, float):
-            return f"{value:.1%}"
+            try:
+                return f"{value:.1%}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _int(value: Any) -> str:
@@ -12878,7 +13093,10 @@ def _fewshot_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float):
-            return f"{value:.2f}"
+            try:
+                return f"{value:.2f}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     rows = []
@@ -13051,7 +13269,10 @@ def _synthhistory_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float):
-            return f"{value:.0%}"
+            try:
+                return f"{value:.0%}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     verdict_lines = []
@@ -13139,7 +13360,12 @@ def _synthhistory_section(result: dict[str, Any]) -> str:
     def _as_rate(value: Any) -> float | None:
         # Strict: bools are excluded (type() check, not isinstance()).
         """Return the as rate."""
-        return float(value) if type(value) in (int, float) else None
+        if type(value) in (int, float):
+            try:
+                return float(value)
+            except OverflowError:
+                return None
+        return None
 
     exp_rate: float | None = None
     loose_rate: float | None = None
@@ -13244,7 +13470,10 @@ def _batchinv_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float):
-            return f"{value:.1%}"
+            try:
+                return f"{value:.1%}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     def _num(value: Any) -> str:
@@ -13358,7 +13587,10 @@ def _prefill_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float):
-            return f"{value:.0%}"
+            try:
+                return f"{value:.0%}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     verdict_lines = []
@@ -13453,7 +13685,12 @@ def _prefill_section(result: dict[str, Any]) -> str:
     def _as_rate(value: Any) -> float | None:
         # Strict: bools are excluded (type() check, not isinstance()).
         """Return the as rate."""
-        return float(value) if type(value) in (int, float) else None
+        if type(value) in (int, float):
+            try:
+                return float(value)
+            except OverflowError:
+                return None
+        return None
 
     if type(think_effect) is dict:
         think_rate: float | None = None
@@ -13629,7 +13866,10 @@ def _portfolio_section(result: dict[str, Any]) -> str:
     def _rate(value: Any) -> str:
         """Return the rate."""
         if type(value) in (int, float):
-            return f"{value:.0%}"
+            try:
+                return f"{value:.0%}"
+            except OverflowError:
+                return "n/a"
         return "n/a"
 
     n_fixtures = portfolio.get("n_fixtures")
