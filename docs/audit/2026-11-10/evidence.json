@@ -1,0 +1,1133 @@
+{
+  "schema_version": 1,
+  "repository": "strmt7/model-protocol-lab",
+  "audited_source": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+  "initial_source": "27bf1a2b863148d946d41374d389d1cfd583bcd4",
+  "checked_date": "2026-11-10",
+  "scope": "audit and implementation plan only; no product changes or release",
+  "verdict": "not_ready_for_stable_release",
+  "source_delta": [
+    "CHANGELOG.md",
+    "docs/SECURITY.md",
+    "tools/requirements/cocoindex.txt"
+  ],
+  "inventory": {
+    "tracked_files": 579,
+    "unique_paths": 579,
+    "python_files": 341,
+    "package_paths_with_explicit_review_depth": 76,
+    "python_physical_lines": 362433,
+    "package_physical_lines": 116124,
+    "metrics": {
+      "test_modules": 255,
+      "static_test_definitions": 9676,
+      "runtime_functions": 2571,
+      "runtime_missing_docstrings": 50,
+      "runtime_public_missing_docstrings": 22,
+      "over100_line_runtime_functions": 247,
+      "three_giant_modules_lines": 62534,
+      "files_with_write_text_calls": 93,
+      "files_with_getsource_calls": 0
+    },
+    "meaning": "All files inventoried/format-checked; AST maps are not full manual semantic review.",
+    "byte_and_line_counts": "Working-copy baseline measurements; baseline_git_blob identifies canonical committed bytes."
+  },
+  "review_execution": {
+    "initial_specialist_attempts": 8,
+    "initial_completed": 0,
+    "initial_failure": "provider credit exhaustion; partial evidence was not accepted as a completed review",
+    "resumed_specialist_scopes": {
+      "science_a": {
+        "status": "complete bounded review; targeted manual coverage, not exhaustive semantic review",
+        "assigned_files": 29,
+        "finding_ids": [
+          "SA-01",
+          "SA-02",
+          "SA-03",
+          "SA-04",
+          "SA-05"
+        ]
+      },
+      "science_b": {
+        "status": "bounded_review_complete",
+        "assigned_files": 32,
+        "finding_ids": [
+          "SCI-B-01",
+          "SCI-B-02",
+          "SCI-B-03",
+          "SCI-B-04"
+        ]
+      },
+      "runtime_interfaces": {
+        "status": "complete_with_explicit_depth_limits",
+        "assigned_files": 12,
+        "finding_ids": [
+          "RTI-01",
+          "RTI-02",
+          "RTI-03",
+          "RTI-04",
+          "RTI-05",
+          "RTI-06",
+          "RTI-07",
+          "RTI-08"
+        ]
+      },
+      "orchestration": {
+        "status": "complete_targeted_audit",
+        "assigned_files": 2,
+        "finding_ids": [
+          "ORCH-01",
+          "ORCH-02",
+          "ORCH-03",
+          "ORCH-04",
+          "ORCH-D01",
+          "ORCH-D02"
+        ]
+      }
+    },
+    "independent_refuter": "completed; five candidate groups adjudicated",
+    "parent_crosscheck": "All four resumed bounded probe groups re-executed with exit 0; see synthetic observations.",
+    "all_sources": "bound to audited_source; no source implementation writes"
+  },
+  "remote_baseline": {
+    "checked_utc": "2026-11-10T17:14:12.542862+00:00",
+    "workflow_run_count": 8,
+    "check_run_count": 17,
+    "check_conclusions": {
+      "success": 15,
+      "skipped": 1,
+      "failure": 1
+    },
+    "runs": [
+      {
+        "id": 42835082103,
+        "name": "Configured Graph Update: pip in /tools/requirements #1693113280",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835082103"
+      },
+      {
+        "id": 42835070138,
+        "name": "Findings guard",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "failure",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070138"
+      },
+      {
+        "id": 42835070246,
+        "name": "Scorecard",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070246"
+      },
+      {
+        "id": 42835070614,
+        "name": "Docs",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070614"
+      },
+      {
+        "id": 42835070194,
+        "name": "Secret scan",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070194"
+      },
+      {
+        "id": 42835070257,
+        "name": "Cross-OS smoke",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070257"
+      },
+      {
+        "id": 42835070185,
+        "name": "CodeQL",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070185"
+      },
+      {
+        "id": 42835070179,
+        "name": "CI",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070179"
+      }
+    ],
+    "checks": [
+      {
+        "id": 129895193964,
+        "name": "deploy to GitHub Pages",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070614/job/129895193964"
+      },
+      {
+        "id": 129895115030,
+        "name": "DeepSource: Analysis",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "skipped",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/runs/129895115030"
+      },
+      {
+        "id": 129895034489,
+        "name": "update-pip-graph",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835082103/job/129895034489"
+      },
+      {
+        "id": 129894987004,
+        "name": "gitleaks (history scan)",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070194/job/129894987004"
+      },
+      {
+        "id": 129894984682,
+        "name": "build and twine check",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070179/job/129894984682"
+      },
+      {
+        "id": 129894984636,
+        "name": "build site (mkdocs --strict)",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070614/job/129894984636"
+      },
+      {
+        "id": 129894984504,
+        "name": "tests (Python 3.11, with hf extra)",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070179/job/129894984504"
+      },
+      {
+        "id": 129894984480,
+        "name": "tests (Python 3.12, with hf extra)",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070179/job/129894984480"
+      },
+      {
+        "id": 129894984472,
+        "name": "tests (Python 3.13, with hf extra)",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070179/job/129894984472"
+      },
+      {
+        "id": 129894984436,
+        "name": "CodeQL (Python)",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070185/job/129894984436"
+      },
+      {
+        "id": 129894984396,
+        "name": "dependency and static security audit",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070179/job/129894984396"
+      },
+      {
+        "id": 129894984262,
+        "name": "smoke (windows-latest)",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070257/job/129894984262"
+      },
+      {
+        "id": 129894984096,
+        "name": "smoke (macos-latest)",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070257/job/129894984096"
+      },
+      {
+        "id": 129894984018,
+        "name": "lint and typecheck (no optional deps)",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070179/job/129894984018"
+      },
+      {
+        "id": 129894983772,
+        "name": "smoke (ubuntu-latest)",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070257/job/129894983772"
+      },
+      {
+        "id": 129894983612,
+        "name": "Scorecard analysis",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070246/job/129894983612"
+      },
+      {
+        "id": 129894983208,
+        "name": "findings guard (CodeQL + DeepSource thresholds)",
+        "head_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+        "status": "completed",
+        "conclusion": "failure",
+        "html_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42835070138/job/129894983208"
+      }
+    ],
+    "open_dependabot_alerts": 0,
+    "open_code_scanning_by_tool": {
+      "Scorecard": 3
+    },
+    "deepsource_count": null,
+    "deepsource_state": "not_configured; findings guard fails; skipped app is not success",
+    "protection": {
+      "required_status_checks": null,
+      "required_pull_request_reviews": null,
+      "force_pushes_allowed": false
+    }
+  },
+  "linux_tests": {
+    "run_id": 42835070179,
+    "source_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+    "legs": [
+      {
+        "python": "3.11",
+        "tests": 9676,
+        "skipped": 3,
+        "result": "passed"
+      },
+      {
+        "python": "3.12",
+        "tests": 9676,
+        "skipped": 3,
+        "result": "passed"
+      },
+      {
+        "python": "3.13",
+        "tests": 9676,
+        "skipped": 3,
+        "result": "passed"
+      }
+    ],
+    "python_3_12_coverage": {
+      "statements": 44461,
+      "missed_statements": 1557,
+      "branches": 21676,
+      "partial_branches": 1363,
+      "displayed_combined_percent": 95,
+      "statement_only_percent": 96.498054
+    },
+    "not_proven": "all optional platforms, real checkpoints, statistical calibration, or absence of defects"
+  },
+  "local_checks": {
+    "python": "3.12 audit environment; Windows",
+    "current_source": {
+      "ruff_check": "exit 0; package/tests/examples/tools/fuzz",
+      "ruff_format_check": "exit 0; package/tests/examples",
+      "bandit": "exit 0; package; existing exclusions/warnings recorded",
+      "mypy": "exit 1; 34 errors in 3 files"
+    },
+    "initial_source": {
+      "dependency_audit": "exit 0; installed dev/audit/build environment only, not uninstalled HF/semantic stacks",
+      "pytest_collection": {
+        "exit_code": 2,
+        "collected": 8936,
+        "collection_errors": 15
+      },
+      "unittest_coverage": {
+        "exit_code": 2,
+        "elapsed_seconds": 1822.903,
+        "final_test_total": null,
+        "coverage_percent": null
+      }
+    },
+    "locks": {
+      "latest_cocoindex_windows_resolution": "fails; unmarked Linux-only nvidia-cufile 1.17.1.22",
+      "dev_hf_windows_resolution": "fails; same unmarked platform-specific requirement"
+    },
+    "initial_artifacts": {
+      "source_sha": "27bf1a2b863148d946d41374d389d1cfd583bcd4",
+      "version": "0.2.0",
+      "canonical_double_build": "exit 0; wheel and normalized sdist reproducible",
+      "twine": "exit 0",
+      "strict_mkdocs": "exit 0",
+      "installed_offline_smoke": "exit 0; outside checkout, isolated imports, origin verified; 12 command helps, 29-family catalog, fixtures, MCP selftest, sample diff"
+    },
+    "final_documentation_tree": {
+      "package_source_sha": "d8a1346343e1b50b28bf567ab6b193b38fc79608",
+      "product_source_unchanged": true,
+      "canonical_epoch": 1794321131,
+      "canonical_double_build": "exit 0; identical independent artifacts",
+      "twine_check": "exit 0; both distributions passed",
+      "strict_mkdocs": "exit 0; added audit pages included, no browser rendering",
+      "new_document_markdown": "all new Markdown passes pinned default pymarkdown rules",
+      "root_document_markdown": "30 baseline and 30 current diagnostics; no added signatures; existing debt retained",
+      "agent_context_startup": "exit 0 after AGENTS entry-link update",
+      "installed_final_wheel_smoke": "exit 0; 21 checks, all 12 command helps, 29-family catalog; isolated installed origin outside checkout",
+      "artifacts": [
+        {
+          "name": "model_protocol_lab-0.2.0-py3-none-any.whl",
+          "bytes": 1135545,
+          "sha256": "01fa12cc0d19eb9a71b58c467d9e794da91332f38624e48e9db4d068dee7b60b"
+        },
+        {
+          "name": "model_protocol_lab-0.2.0.tar.gz",
+          "bytes": 3531935,
+          "sha256": "ecd80d44d9f938ff36b859e56968dfd0406b9c93aadd5f209307c91253712cd9"
+        }
+      ]
+    }
+  },
+  "scanner_sensitivity": {
+    "version": "8.30.1",
+    "official_release_checksum_verified": true,
+    "synthetic_canary": "never-issued provider-shaped token; intentionally omitted",
+    "checks": [
+      {
+        "config": "repository_config",
+        "exit_code": 0,
+        "detected": false,
+        "no_leaks_message": true
+      },
+      {
+        "config": "default_rules_control",
+        "exit_code": 1,
+        "detected": true,
+        "no_leaks_message": false
+      }
+    ]
+  },
+  "selected_parent_reproductions": [
+    {
+      "block": 0,
+      "exit_code": 0,
+      "stdout": "{\"case\": \"frontier\", \"exit\": 1, \"traceback\": true, \"valid_stdout_json\": false}\n{\"case\": \"floor\", \"exit\": 1, \"traceback\": true, \"valid_stdout_json\": true}\n",
+      "stderr": ""
+    },
+    {
+      "block": 1,
+      "exit_code": 0,
+      "stdout": "{\"drop\": false, \"calls\": 64, \"headline\": \"below_threshold\"}\n{\"drop\": true, \"calls\": 64, \"headline\": \"negation_drop_observed\"}\n{\"identical\": true, \"negation_compared\": false}\n",
+      "stderr": ""
+    },
+    {
+      "block": 2,
+      "exit_code": 0,
+      "stdout": "True\nTrue\nFalse\n",
+      "stderr": ""
+    }
+  ],
+  "subsystem_reproductions": [
+    {
+      "scope": "science_a",
+      "exit_code": 0,
+      "observations": {
+        "structured_large_integer": {
+          "exception": "OverflowError"
+        },
+        "structured_boolean_enum": {
+          "parse": "parse_ok",
+          "schema": "schema_ok",
+          "outcome": "adherent"
+        },
+        "structured_numeric_enum": {
+          "parse": "parse_ok",
+          "schema": "schema_ok",
+          "outcome": "adherent"
+        },
+        "toolcall_duplicate_arguments": {
+          "outcome": "adherent",
+          "selection_ok": true,
+          "args_ok": true,
+          "relevance_ok": true
+        },
+        "boundary_unusable_count": {
+          "available": false,
+          "n_observations": 1,
+          "n_usable": 0,
+          "n_unusable": 0,
+          "n_problem": 0,
+          "overall_rate": null,
+          "per_candidate": {
+            "synthetic": {
+              "n_observations": 1,
+              "n_usable": 0,
+              "n_problem": 0,
+              "rate": null
+            }
+          },
+          "per_family": {
+            "synthetic": {
+              "n_usable": 0,
+              "n_problem": 0,
+              "rate": null
+            }
+          }
+        },
+        "surface_plain_none": "abstain",
+        "surface_template_none": {
+          "exception": "AttributeError"
+        },
+        "surface_plain_short_limit": "abstain",
+        "surface_template_short_limit": "pass"
+      }
+    },
+    {
+      "scope": "science_b",
+      "exit_code": 0,
+      "observations": {
+        "cache_duplicate": {
+          "actual": 1,
+          "expected": 0,
+          "prompts": [
+            [
+              1
+            ],
+            [
+              1,
+              2
+            ]
+          ]
+        },
+        "cache_order_oracle": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "fewshot_missing_order": {
+          "actual": 0.0,
+          "expected_for_two_order_comparison": null
+        },
+        "position_capital": {
+          "question": "Which of these is a European capital?",
+          "options": [
+            "Lisbon",
+            "Oslo",
+            "Lima",
+            "Quito"
+          ],
+          "only_accepted_answer": "Oslo",
+          "lisbon_accepted": false
+        },
+        "sign_test_oracle": {
+          "checked": 65,
+          "mismatches": []
+        },
+        "verbosity_type7": {
+          "n": 4,
+          "median_excess": 6.0,
+          "p25_excess": 1.5,
+          "p75_excess": 12.5,
+          "iqr_excess": 11.0,
+          "mean_excess": 8.0,
+          "max_excess": 20
+        },
+        "numform_roundtrip": {
+          "checked": 36,
+          "mismatches": [
+            [
+              "plain",
+              10000000000000000000000000000000000000001,
+              "10000000000000000000000000000000000000001",
+              null
+            ],
+            [
+              "comma",
+              10000000000000000000000000000000000000001,
+              "10,000,000,000,000,000,000,000,000,000,000,000,000,001",
+              null
+            ],
+            [
+              "space",
+              10000000000000000000000000000000000000001,
+              "10 000 000 000 000 000 000 000 000 000 000 000 000 001",
+              null
+            ],
+            [
+              "scientific",
+              10000000000000000000000000000000000000001,
+              "1.0000000000000000000000000000000000000001e40",
+              null
+            ]
+          ]
+        },
+        "fewshot_unequal_cohorts": {
+          "stage": {
+            "available": true,
+            "n_eval": 2,
+            "demo_ids": [
+              "demo1",
+              "demo2"
+            ],
+            "per_candidate": {
+              "candidate": {
+                "n_eval": 2,
+                "verdicts": {
+                  "f1": {
+                    "baseline": true,
+                    "order_a": true,
+                    "order_b": true
+                  },
+                  "f2": {
+                    "baseline": true,
+                    "order_a": false,
+                    "order_b": null
+                  }
+                }
+              }
+            }
+          },
+          "analysis": {
+            "available": true,
+            "k": null,
+            "demo_ids": [
+              "demo1",
+              "demo2"
+            ],
+            "n_eval": 2,
+            "primary_winner": "candidate",
+            "primary_decision": "compatible_on_fixture_set",
+            "per_candidate": {
+              "candidate": {
+                "gain": 0.25,
+                "order_sensitivity": 0.25,
+                "n_evaluable": 1,
+                "per_order": {
+                  "order_a": {
+                    "change_rate": 0.5,
+                    "n_changed": 1,
+                    "n_evaluable": 2
+                  },
+                  "order_b": {
+                    "change_rate": 0.0,
+                    "n_changed": 0,
+                    "n_evaluable": 1
+                  }
+                }
+              }
+            },
+            "excluded_candidates": [],
+            "per_arm": {
+              "baseline": {
+                "decision": "selected",
+                "winner": "candidate",
+                "n_evaluable": 1,
+                "per_candidate": {
+                  "candidate": {
+                    "pass": true,
+                    "pass_rate": 1.0
+                  }
+                }
+              },
+              "order_a": {
+                "decision": "no_candidate",
+                "winner": null,
+                "n_evaluable": 1,
+                "per_candidate": {
+                  "candidate": {
+                    "pass": false,
+                    "pass_rate": 0.5
+                  }
+                }
+              },
+              "order_b": {
+                "decision": "unavailable",
+                "winner": null,
+                "n_evaluable": 0,
+                "per_candidate": {
+                  "candidate": null
+                }
+              }
+            },
+            "flips": [
+              {
+                "arm": "order_a",
+                "decision_from": "selected",
+                "decision_to": "no_candidate",
+                "winner_from": "candidate",
+                "winner_to": null
+              }
+            ]
+          },
+          "common_cohort_expected": {
+            "gain": 0.0,
+            "order_sensitivity": 0.0,
+            "n": 1
+          }
+        },
+        "cache_prefix_memory": [
+          {
+            "length": 256,
+            "distinct_prefixes": 256,
+            "stored_token_references": 32896,
+            "peak_bytes": 280904
+          },
+          {
+            "length": 512,
+            "distinct_prefixes": 512,
+            "stored_token_references": 131328,
+            "peak_bytes": 1095384
+          },
+          {
+            "length": 1024,
+            "distinct_prefixes": 1024,
+            "stored_token_references": 524800,
+            "peak_bytes": 4298464
+          }
+        ],
+        "generated_panel_checks": [
+          {
+            "module": "canonicalform",
+            "seed": 0,
+            "n_cases": 24,
+            "deterministic": true,
+            "case_keys": [
+              "content",
+              "expected",
+              "fact",
+              "fixture_id",
+              "payload",
+              "question",
+              "sentence_indices",
+              "topic",
+              "value"
+            ],
+            "self_validator_passes": null
+          },
+          {
+            "module": "canonicalform",
+            "seed": 1,
+            "n_cases": 24,
+            "deterministic": true,
+            "case_keys": [
+              "content",
+              "expected",
+              "fact",
+              "fixture_id",
+              "payload",
+              "question",
+              "sentence_indices",
+              "topic",
+              "value"
+            ],
+            "self_validator_passes": null
+          },
+          {
+            "module": "confusableskeleton",
+            "seed": 0,
+            "n_cases": 24,
+            "deterministic": true,
+            "case_keys": [
+              "expected",
+              "fixture_id",
+              "neutral_indices",
+              "topic",
+              "value"
+            ],
+            "self_validator_passes": 24
+          },
+          {
+            "module": "confusableskeleton",
+            "seed": 1,
+            "n_cases": 24,
+            "deterministic": true,
+            "case_keys": [
+              "expected",
+              "fixture_id",
+              "neutral_indices",
+              "topic",
+              "value"
+            ],
+            "self_validator_passes": 24
+          },
+          {
+            "module": "density",
+            "seed": 0,
+            "n_cases": 20,
+            "deterministic": true,
+            "case_keys": [
+              "constraints",
+              "expected_word_digest",
+              "fact",
+              "fixture_id",
+              "neutrals",
+              "question",
+              "topic",
+              "value"
+            ],
+            "self_validator_passes": null
+          },
+          {
+            "module": "density",
+            "seed": 1,
+            "n_cases": 20,
+            "deterministic": true,
+            "case_keys": [
+              "constraints",
+              "expected_word_digest",
+              "fact",
+              "fixture_id",
+              "neutrals",
+              "question",
+              "topic",
+              "value"
+            ],
+            "self_validator_passes": null
+          },
+          {
+            "module": "instructiondistance",
+            "seed": 0,
+            "n_cases": 24,
+            "deterministic": true,
+            "case_keys": [
+              "block",
+              "expected",
+              "fact",
+              "fixture_id",
+              "question",
+              "topic",
+              "value"
+            ],
+            "self_validator_passes": null
+          },
+          {
+            "module": "instructiondistance",
+            "seed": 1,
+            "n_cases": 24,
+            "deterministic": true,
+            "case_keys": [
+              "block",
+              "expected",
+              "fact",
+              "fixture_id",
+              "question",
+              "topic",
+              "value"
+            ],
+            "self_validator_passes": null
+          },
+          {
+            "module": "invisiblechars",
+            "seed": 0,
+            "n_cases": 24,
+            "deterministic": true,
+            "case_keys": [
+              "expected",
+              "fixture_id",
+              "neutral_indices",
+              "topic",
+              "value"
+            ],
+            "self_validator_passes": 24
+          },
+          {
+            "module": "invisiblechars",
+            "seed": 1,
+            "n_cases": 24,
+            "deterministic": true,
+            "case_keys": [
+              "expected",
+              "fixture_id",
+              "neutral_indices",
+              "topic",
+              "value"
+            ],
+            "self_validator_passes": 24
+          },
+          {
+            "module": "recordnotation",
+            "seed": 0,
+            "n_cases": 24,
+            "deterministic": true,
+            "case_keys": [
+              "expected",
+              "fixture_id",
+              "key",
+              "query_index",
+              "table"
+            ],
+            "self_validator_passes": 24
+          },
+          {
+            "module": "recordnotation",
+            "seed": 1,
+            "n_cases": 24,
+            "deterministic": true,
+            "case_keys": [
+              "expected",
+              "fixture_id",
+              "key",
+              "query_index",
+              "table"
+            ],
+            "self_validator_passes": 24
+          },
+          {
+            "module": "rotation",
+            "seed": 0,
+            "n_cases": 20,
+            "deterministic": true,
+            "case_keys": [
+              "blocks",
+              "expected",
+              "fixture_id",
+              "question",
+              "topic",
+              "topics",
+              "values"
+            ],
+            "self_validator_passes": null
+          },
+          {
+            "module": "rotation",
+            "seed": 1,
+            "n_cases": 20,
+            "deterministic": true,
+            "case_keys": [
+              "blocks",
+              "expected",
+              "fixture_id",
+              "question",
+              "topic",
+              "topics",
+              "values"
+            ],
+            "self_validator_passes": null
+          },
+          {
+            "module": "typographicemphasis",
+            "seed": 0,
+            "n_cases": 24,
+            "deterministic": true,
+            "case_keys": [
+              "distractor_topic",
+              "distractor_value",
+              "expected",
+              "fixture_id",
+              "index",
+              "neutral_indices",
+              "target_first",
+              "topic"
+            ],
+            "self_validator_passes": 24
+          },
+          {
+            "module": "typographicemphasis",
+            "seed": 1,
+            "n_cases": 24,
+            "deterministic": true,
+            "case_keys": [
+              "distractor_topic",
+              "distractor_value",
+              "expected",
+              "fixture_id",
+              "index",
+              "neutral_indices",
+              "target_first",
+              "topic"
+            ],
+            "self_validator_passes": 24
+          }
+        ]
+      }
+    },
+    {
+      "scope": "runtime_interfaces",
+      "exit_code": 0,
+      "observations": {
+        "pack_entry_limit": {
+          "input_files": 1024,
+          "archive_entries": 1025,
+          "zip_bytes": 411681,
+          "verification": "ValueError:bundle_too_many_entries"
+        },
+        "debug_save_limit": {
+          "declared_cap_bytes": 5000000,
+          "actual_bytes": 5000764,
+          "command_errors": 0
+        },
+        "mcp_stdio": {
+          "exit_code": 0,
+          "responses": [
+            {
+              "id": {
+                "unexpected": "object"
+              },
+              "accepted": true,
+              "error": null
+            },
+            {
+              "id": 2,
+              "accepted": true,
+              "error": null
+            },
+            {
+              "id": 3,
+              "accepted": true,
+              "error": null
+            }
+          ],
+          "stderr_empty": true
+        },
+        "mcp_validation_order": {
+          "backend_constructions_before_rejection": 1,
+          "error_code": -32602
+        },
+        "http_error_cleanup": {
+          "status": 401,
+          "stream_closed_after_return": true
+        },
+        "http_error_read_failure": {
+          "exception_type": "OSError",
+          "normalized_stack_unreachable": false,
+          "stream_closed": true
+        },
+        "artifact_field_validation": {
+          "exception": "TypeError:unhashable type: 'list'"
+        },
+        "render_budget_capability": {
+          "setitimer_available": false,
+          "returned": "audit",
+          "elapsed_seconds": 0.015,
+          "requested_budget_seconds": 0.001
+        },
+        "template_expansion_static_gate": {
+          "findings": [
+            "scan_unavailable"
+          ],
+          "render_executed": false
+        },
+        "unsupported_capability_negative_control": {
+          "detail": "capability_absent",
+          "completion_calls": 0
+        },
+        "cache_abort_teardown": {
+          "erase_calls": 1,
+          "identity_checks": 1,
+          "expected_minimum_erase_calls": 2
+        },
+        "cli_validation_order": {
+          "invalid_input_exit_code": 0,
+          "probe_calls": 1,
+          "output_created": true
+        }
+      }
+    },
+    {
+      "scope": "orchestration",
+      "exit_code": 0,
+      "observations": {
+        "checks": {
+          "transfer_default_privacy": {
+            "raw_evidence_included": false,
+            "local_checkpoint_path_retained": true,
+            "local_checkpoint_path_in_html": false
+          },
+          "serving_default_privacy": {
+            "raw_evidence_included": false,
+            "prompt_ids_retained": true,
+            "returned_ids_retained": true
+          },
+          "unavailable_serving_cell": {
+            "available": false,
+            "json_fired": false,
+            "html_claims_no_fire": true,
+            "html_retains_capability_absent_verdict": true
+          },
+          "batch_cancellation": {
+            "calls": [
+              {
+                "external_set": false,
+                "received_set": false
+              },
+              {
+                "external_set": true,
+                "received_set": false
+              },
+              {
+                "external_set": true,
+                "received_set": false
+              }
+            ],
+            "count": 3
+          },
+          "transfer_residency_source_trace": {
+            "trace": [
+              "load",
+              "load",
+              "load",
+              "evaluate"
+            ],
+            "retained_before_evaluation": 3,
+            "method": "source-isolated recording constructor; no model loaded"
+          },
+          "held_out_isolation": {
+            "prompt_order": [
+              "search",
+              "held"
+            ],
+            "selected_candidate": "candidate",
+            "decision": "held_out_failed"
+          },
+          "nonfinite_json_rejected": true,
+          "pair_visibility_before_second_open": {
+            "json_visible": true,
+            "html_visible": false
+          },
+          "python_exception_pair_cleanup": true,
+          "unsupported_schema_write": 999
+        }
+      }
+    }
+  ],
+  "mutation_gate_negative_control": {
+    "source": "tests/test_cycle124_margin_trajectory_audit.py:TestMutationGate.test_mutants_are_killed",
+    "method": "actual gate method with disposable source copy and controlled child collection-failure result",
+    "child_exit_code": 2,
+    "semantic_tests_executed": 0,
+    "iterations_counted_as_kills": 4,
+    "gate_returned_successfully": true
+  },
+  "unexecuted": [
+    "live model downloads/inference",
+    "GPU or driver operations",
+    "real serving-server fidelity",
+    "browser rendering/accessibility",
+    "real OS signals and hard-crash recovery",
+    "complete independent statistical calibration",
+    "DeepSource clean exact-head inventory",
+    "PyPI upload or release/tag creation"
+  ],
+  "publication": "Documentation only. Final commit checks are necessarily newer than this baseline evidence; read GitHub by exact published SHA."
+}

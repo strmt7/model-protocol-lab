@@ -5,6 +5,13 @@ checkpoints on exact token sequences; keep every measurement exact,
 deterministic, and honestly framed. See `README.md`, `docs/USAGE.md`, and
 `VALIDATION.md` before changing measurement code.
 
+## Current audit and development handover
+
+Read [docs/HANDOVER.md](docs/HANDOVER.md) and the
+[2026-11-10 audit](docs/audit/2026-11-10/README.md) before stabilization work.
+The audit is documentation-only; reconcile its baseline with current main.
+It authorizes no tag, release or package publication.
+
 ## Mandatory skills and research route
 
 - Caveman and CocoIndex are mandatory: apply

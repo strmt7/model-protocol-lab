@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (read-only repository audit, 2026-11-10)
+
+- [Current-state audit and stable-release plan](docs/audit/2026-11-10/README.md),
+  with reproducible diagnostics, per-file review depth, sanitized evidence and
+  [agent handover](docs/HANDOVER.md). Bound to source `d8a1346`; no product
+  fixes, dependency changes, tags or releases are included.
+
 ### Fixed (cycle 245 — Dependabot alert fix: filelock/litellm two-pin lock change, 2026-11-10)
 
 - All 13 open Dependabot alerts — every one against
