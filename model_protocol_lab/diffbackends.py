@@ -831,6 +831,162 @@ def divergence_section_data(
     }
 
 
+def fidelity_section_data(
+    *,
+    observations: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+    stop_texts: tuple[str, ...] | list[str],
+    eos_id: int | None,
+    min_tokens: int,
+    backend: Any,
+    decode: Any,
+    seed: int = 0,
+    cancel: Any = None,
+) -> dict[str, Any] | None:
+    """Build the fidelity-mode section data (§9.3 of the serving design).
+
+    The one place emulation and measurement meet: for each recorded
+    HF observation, the prompt is executed on the measured stack
+    (a :mod:`model_protocol_lab.servingbackends` execution backend)
+    under the Tier-A configuration mirroring the shipped emulation
+    cells — the same stop texts, the same ``min_tokens``, both
+    disposition arms where the stack has them (the keep arm is a
+    ``capability_absent`` record on stacks without it) — and the
+    measured record is compared against the lab's predictor.
+
+    Per fixture the verdicts are stream-conditioned: the returned
+    stream is compared against the recorded HF stream
+    (:func:`model_protocol_lab.determinism.compare_token_ids`); a
+    diverged stream is reported beside the verdicts
+    (``GENERATION_STREAM_DIVERGED`` with the first-divergence index),
+    never instead of them — two stacks may stop identically over
+    different text, and the report says both things.
+
+    Returns the section dict (``verdict`` in the
+    ``fidelity_agree`` / ``fidelity_diverge`` /
+    ``fidelity_unavailable`` vocabulary, ``counts``,
+    ``divergence_classes``, ``per_fixture``, ``records``, and the
+    observation accounting in the divergence entry's shape), or None
+    when no observation is usable. Observations are truncated at
+    ``MAX_DIVERGENCE_OBSERVATIONS`` like the divergence entry.
+    """
+    from . import servingbackends
+    from .core import request_seed_for
+    from .determinism import compare_token_ids
+
+    if type(observations) is tuple:
+        candidates: list[Any] = list(observations)
+    elif type(observations) is list:
+        candidates = list(observations)
+    else:
+        raise ValueError("invalid_observations")
+    observations_total = len(candidates)
+    truncated = observations_total > MAX_DIVERGENCE_OBSERVATIONS
+    if truncated:
+        candidates = candidates[:MAX_DIVERGENCE_OBSERVATIONS]
+    stops = _checked_stop_texts(stop_texts)
+    if eos_id is not None and (type(eos_id) is not int or eos_id < 0):
+        raise ValueError("invalid_eos_id")
+    if type(min_tokens) is not int or min_tokens < 0:
+        raise ValueError("invalid_min_tokens")
+    if getattr(backend, "identity", None) is None or not callable(
+        getattr(backend, "execute", None)
+    ):
+        raise ValueError("stack_identity_unavailable")
+    if not callable(decode):
+        raise ValueError("invalid_backend")
+
+    records: list[dict[str, Any]] = []
+    per_fixture: list[dict[str, Any]] = []
+    for index, observation in enumerate(candidates):
+        if cancel is not None and cancel.is_set():
+            raise servingbackends.ExecutionCancelled
+        if type(observation) is not dict:
+            continue
+        prompt_ids = _observation_ids(observation, "input_ids")
+        output_ids = _observation_ids(observation, "output_ids")
+        if prompt_ids is None or output_ids is None or not output_ids:
+            continue
+        name = observation.get("fixture")
+        fixture = name if type(name) is str and name else f"fixture_{index}"
+        fixture_records: list[dict[str, Any]] = []
+        stream: dict[str, Any] | None = None
+        for arm, include_stop in (("strip", False), ("keep", True)):
+            request = servingbackends.StackRequest(
+                prompt_ids=prompt_ids,
+                seed=request_seed_for(seed, f"fidelity:{index}:{arm}"),
+                max_new_tokens=len(output_ids),
+                stop_texts=stops,
+                eos_id=eos_id,
+                include_stop_str_in_output=include_stop,
+                min_tokens=min_tokens,
+            )
+            record = servingbackends.execute_cell(
+                backend,
+                request=request,
+                decode=decode,
+                candidate="hf",
+                fixture=fixture,
+                cache_position="standalone",
+            )
+            if arm == "strip":
+                returned = record["returned_ids"]
+                if type(returned) is list:
+                    comparison = compare_token_ids(output_ids, tuple(returned))
+                    stream = {
+                        "match": bool(comparison["match"]),
+                        "first_divergence": comparison["first_divergence"],
+                        "shared_prefix": comparison["shared_prefix"],
+                        "recorded_length": comparison["recorded_length"],
+                        "replayed_length": comparison["replayed_length"],
+                        "class": None if comparison["match"] else "GENERATION_STREAM_DIVERGED",
+                    }
+                    record["mirror"]["hf_stream"] = stream
+            fixture_records.append(record)
+            records.append(record)
+        base = fixture_records[0]
+        mirror = base["mirror"]
+        findings: list[dict[str, Any]] = []
+        if mirror["fidelity_verdict"] == "diverge":
+            findings.append(
+                {
+                    "class": mirror["divergence_class"],
+                    "detail": mirror["divergence_detail"],
+                    "severity": DIVERGENCE_SEVERITY.get(mirror["divergence_class"], "medium"),
+                }
+            )
+        per_fixture.append(
+            {
+                "fixture": fixture,
+                "verdict": mirror["fidelity_verdict"],
+                "divergences": findings,
+                "stream": stream,
+                "arms": [record["mirror"]["fidelity_verdict"] for record in fixture_records],
+            }
+        )
+    if not per_fixture:
+        return None
+    aggregate = servingbackends.aggregate_fidelity(records)
+    return {
+        "available": True,
+        "verdict": aggregate["verdict"],
+        "counts": aggregate["counts"],
+        "divergence_classes": aggregate["divergence_classes"],
+        "severities": {
+            kind: DIVERGENCE_SEVERITY[kind]
+            for kind in aggregate["divergence_classes"]
+            if kind in DIVERGENCE_SEVERITY
+        },
+        "per_fixture": per_fixture,
+        "records": records,
+        "stop_texts": list(stops),
+        "eos_id": eos_id,
+        "min_tokens": min_tokens,
+        "observations_truncated": truncated,
+        "observations_total": observations_total,
+        "observations_processed": len(per_fixture),
+    }
+
+
 class _TokenizerBackend:
     """Decode-only backend adapter over a loaded HF fast tokenizer.
 

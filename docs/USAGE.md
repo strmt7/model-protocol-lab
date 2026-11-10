@@ -3623,6 +3623,127 @@ cell's answer text bound by its digest. Informational
 only: the probe never affects selection, and the stage
 never fails the run.
 
+### 8.65 Serving-stack measurement (`exec-backends`)
+
+```sh
+model-protocol-lab exec-backends \
+  --base-url http://127.0.0.1:8080 \
+  --api-key <operator key> \
+  --gguf path/to/checkpoint.gguf \
+  --model path/to/checkpoint \
+  --out serving-records.json
+```
+
+When a run verdict surprises you, the suspect is sometimes not the
+weights or the template but the serving stack that executed the
+tokens. `exec-backends` measures that stack directly: it sends
+exact token IDs to a running llama.cpp server, proves the server's
+identity and configuration before trusting a generation, and
+records what the stack did with stop texts, EOS, and its prompt
+cache. A template author deciding whether to trust a verdict that
+came through a server — or a release engineer pinning down which
+stack build produced a record — gets a verdict keyed to one stack,
+one checkpoint digest, and one configuration fingerprint, never a
+general claim about a vendor.
+
+Supported window: llama.cpp build **b12182** only (commit
+`fd27b2034905f8dadd8bd6d2cc44595f4929d391`), over the native HTTP
+API. The vLLM-shaped request fields exist in the schema, but there
+is no vLLM adapter yet and no supported vLLM window; see
+`docs/SERVING_BACKENDS_DESIGN.md`.
+
+Start the server yourself, under this launch line (the lab does
+not spawn one). Create the slot-save directory first — the b12182
+argument parser refuses a `--slot-save-path` that does not already
+exist:
+
+```sh
+llama-server \
+  --host 127.0.0.1 --port 8080 \
+  --model path/to/checkpoint.gguf \
+  --parallel 1 \
+  --api-key <operator key> \
+  --no-webui \
+  --slot-save-path path/to/slot-save-dir \
+  --cache-ram 0
+```
+
+Each pin is load-bearing. `--parallel 1` makes slot 0 the whole
+machine. `--api-key` is checked before routing at b12182: the
+probe requires unauthenticated `/props` to answer 401 and the
+authenticated call to answer 200, and an unguarded server is
+refused (`stack_endpoint_refused`), never measured.
+`--slot-save-path` is what makes slot erase exist; the lab erases
+slot 0 around its cache sequences and never invokes slot save or
+restore. `--cache-ram 0` is the only unconditional cold guarantee:
+slot erase alone does not clear a RAM prompt cache, and under the
+default cache size the one pattern that happens not to restore
+after erase does so only because the restore gate computes
+`f_keep = 0/0 = NaN` — an unpinned request restores after the same
+erase. If your server has no `--slot-save-path`, the cache cells
+record `capability_absent` and the stop cells proceed; there is no
+substitute freshness mechanism.
+
+Before any cell runs, the probe checks, in order: the
+authentication gate; identity (the build's commit must match the
+pinned window, the server's model path must resolve to your
+`--gguf` file, and `total_slots` must be 1); a probe erase; the
+configuration echo (the server must echo the full pinned sampler
+tuple — sampler order `top_k, top_p, min_p, temperature`,
+temperature 0.0, top_k 0, top_p 1.0, min_p 0.0, repeat_penalty
+**1.0**, dynatemp_range 0.0, n_probs 0, and the request seed —
+exactly, on the probe and on every later response); the prompt
+echo as text (the response's prompt must equal the local
+detokenization and the server's `/detokenize` of the sent IDs);
+the vocabulary round trip (detokenize then re-tokenize, including
+the GGUF-declared end-of-turn ID); and the cache quantity
+(`timings.cache_n` must discriminate cold from warm;
+`tokens_cached` is recorded as reported and never decides
+anything). A gate failure ends the run with a report that records
+the gate's fixed detail — that is exit 0, because a report was
+produced.
+
+What runs, and what you get:
+
+- `--prompt-ids` (comma-separated token IDs): one standalone cell.
+  Add `--stops` (comma-separated) and `--eos-id` to exercise stop
+  behaviour; `--max-new-tokens` defaults to 64 and is capped at
+  4096; prompts are capped at 131072 IDs.
+- `--results <results.json>` with at least one `--stop`: fidelity
+  mode. Each recorded observation is replayed in a strip arm and a
+  keep arm and compared against the lab's stop predictor; stream
+  differences are reported as `GENERATION_STREAM_DIVERGED` with the
+  first-divergence index, beside the stop verdict. Against
+  llama.cpp the keep arm is `capability_absent` — the stack has no
+  stop-inclusion switch — so the section aggregate is
+  `fidelity_unavailable` when a keep arm was attempted, with the
+  strip arm's verdict standing on its own row.
+- `--cache-cold-ids`, `--cache-shared-ids`,
+  `--cache-divergent-ids` (all three together): the cache
+  protocol. Cold, warm-repeat, shared-prefix, and divergent-control
+  arms run against slot 0 between erases, with identity re-read at
+  both ends. Cold or divergent reuse above one token marks the
+  sequence `cache_protocol_contaminated`, whatever the erase call
+  returned.
+
+Records carry the full prompt IDs and SHA-256 digests of every
+text — stop texts appear only as digests, answer text never
+appears. Unsupported request fields (`--min-tokens` above 0, stop
+token IDs, stop inclusion, a cache salt) record `capability_absent`
+cells instead of executing something degraded. While the run
+executes, the artifact is JSON Lines — one line per finished
+record, so an interrupted run leaves a valid prefix whose missing
+cells read back as `cell_not_executed`; on completion it is
+replaced by the finalized report document, whose `serving_backends`
+section `diff-reports` can compare and recompute.
+
+Exit codes: 0 when a report was produced (including a probe-gate
+failure recorded in the artifact); 2 for invalid input (a refused
+endpoint — anything but plain HTTP on a loopback host — unparsable
+arguments, an unusable results file); 1 when no report could be
+produced (tokenizer or checkpoint load failure, an unwritable
+artifact, an interrupted run).
+
 ## 9. Authoring fixtures (`fixtures build`)
 
 Hand-writing the strict fixture JSON is verbose, and the search/held-out
@@ -4279,6 +4400,8 @@ Per command: `catalog` 0/1; `inspect` 0/1; `doctor` 0 (verdict ok) /
 (abstain or failed) / 130 (cancelled) / 1 (no report); `fixtures
 build` 0/1; `fixtures fuzz` 0 (all cases conform) / 1 (a finding);
 `diff-reports` 0/1; `diff-backends` 0/2 (invalid input)/1;
+`exec-backends` 0 (report produced, including a recorded
+probe-gate failure)/2 (invalid input)/1 (no report);
 `debug` 0/1 (a `--script` run exits 1 when any command in the file
 failed); `surface-noise probe` 0/130/3/1; `surface-noise diff` 0/1;
 `surface-noise protocol` 0; `verify` 0/2/1 (with and without

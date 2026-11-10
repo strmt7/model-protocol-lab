@@ -315,6 +315,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "ablation": {"available": "neither", "changed": False},
         "confidentiality": {"available": "neither", "changed": False},
         "answer_collision": {"available": "neither", "changed": False},
+        "serving_backends": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -439,6 +440,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "confidentiality_asymmetric": False,
             "answer_collision_changed": False,
             "answer_collision_asymmetric": False,
+            "serving_backends_changed": False,
+            "serving_backends_asymmetric": False,
             "identical": True,
         },
     }
@@ -20237,6 +20240,9 @@ def _oracle_diff(
     o_ac, o_ac_changed, o_ac_asymmetric = _o_answer_collision(
         old.get("answer_collision"), new.get("answer_collision")
     )
+    o_sb, o_sb_changed, o_sb_asymmetric = _o_serving_backends(
+        old.get("serving_backends"), new.get("serving_backends")
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -20348,6 +20354,8 @@ def _oracle_diff(
         and not o_cf_asymmetric
         and not o_ac_changed
         and not o_ac_asymmetric
+        and not o_sb_changed
+        and not o_sb_asymmetric
     )
     return {
         "tool": "diff-reports",
@@ -20409,6 +20417,7 @@ def _oracle_diff(
         "ablation": o_ab,
         "confidentiality": o_cf,
         "answer_collision": o_ac,
+        "serving_backends": o_sb,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -20529,6 +20538,8 @@ def _oracle_diff(
             "confidentiality_asymmetric": o_cf_asymmetric,
             "answer_collision_changed": o_ac_changed,
             "answer_collision_asymmetric": o_ac_asymmetric,
+            "serving_backends_changed": o_sb_changed,
+            "serving_backends_asymmetric": o_sb_asymmetric,
             "identical": identical,
         },
     }
@@ -21037,6 +21048,805 @@ def _o_answer_collision(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]
     return diff, changed, False
 
 
+_O_SB_HEX = frozenset("0123456789abcdef")
+_O_SB_FINISH = {
+    "stop",
+    "length",
+    "abort",
+    "error",
+    "repetition",
+    "eos",
+    "word",
+    "none",
+    "unclassified",
+}
+_O_SB_POSITIONS = {"cold", "warm_repeat", "shared_prefix", "divergent_control", "standalone"}
+_O_SB_VERDICTS = {
+    "agree",
+    "diverge",
+    "unobservable",
+    "capability_absent",
+    "predictor_detokenization_mismatch",
+}
+_O_SB_CLASSES = {
+    "KEPT_VS_STRIPPED",
+    "FIRING_STEP_DIFFERS",
+    "STREAM_TRUNCATED_MID_TOKEN",
+    "BYTE_SURFACE_ONLY",
+    "MIN_TOKENS_GATED",
+    "NO_MIN_TOKENS_GATE",
+    "EOS_PRECEDENCE",
+    "STR_OVER_EOS_PRECEDENCE",
+    "EOS_OVER_STR_PRECEDENCE",
+    "MULTI_STOP_SELECTION",
+    "SPURIOUS_STOP",
+    "MISSING_STOP_AT_CAP",
+    "MISSING_EOS_AT_CAP",
+    "HARNESS_NORMALIZATION_RELIED",
+    "OTHER",
+}
+_O_SB_CELL_DETAILS = {
+    "",
+    "capability_absent",
+    "config_echo_mismatch",
+    "prompt_echo_mismatch",
+    "token_vocab_mismatch",
+    "cache_protocol_contaminated",
+    "predictor_detokenization_mismatch",
+    "eos_attribution_mismatch",
+    "stack_response_invalid",
+    "stack_response_unclassified",
+    "stack_execution_failed",
+    "serving_backends_record_budget_exceeded",
+}
+_O_SB_CACHE_DETAILS = {
+    "",
+    "not_attempted",
+    "capability_absent",
+    "cache_protocol_contaminated",
+    "stack_identity_changed_during_run",
+    "serving_backends_record_budget_exceeded",
+}
+_O_SB_TIER_A = {
+    "samplers": ["top_k", "top_p", "min_p", "temperature"],
+    "temperature": 0.0,
+    "top_k": 0,
+    "top_p": 1.0,
+    "min_p": 0.0,
+    "repeat_penalty": 1.0,
+    "dynatemp_range": 0.0,
+    "n_probs": 0,
+}
+
+
+def _o_sb_hex64(value: Any) -> bool:
+    """Oracle hex64 check."""
+    return type(value) is str and len(value) == 64 and all(char in _O_SB_HEX for char in value)
+
+
+def _o_sb_canonical(payload: Any) -> str:
+    """Oracle canonical JSON."""
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _o_sb_sha(text: str) -> str:
+    """Oracle sha256 hex."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _o_sb_int_list(value: Any) -> bool:
+    """Oracle non-negative int list check."""
+    return type(value) is list and all(
+        type(item) is int and not isinstance(item, bool) and item >= 0 for item in value
+    )
+
+
+def _o_sb_winner(value: Any, predicted: bool) -> bool:
+    """Oracle stop-winner shape check."""
+    if type(value) is not dict:
+        return False
+    kind = value.get("kind")
+    if kind in ("eos", "stop_token"):
+        return set(value) == {"kind", "id"} and type(value["id"]) is int and value["id"] >= 0
+    if kind == "stop_text":
+        if predicted:
+            return (
+                set(value) == {"kind", "index"}
+                and type(value["index"]) is int
+                and value["index"] >= 0
+            )
+        index = value.get("index")
+        return (
+            set(value) == {"kind", "index", "digest"}
+            and (index is None or (type(index) is int and index >= 0))
+            and _o_sb_hex64(value["digest"])
+        )
+    return False
+
+
+def _o_sb_record_valid(record: Any, declared: list) -> bool:
+    """Oracle record validator: mirrors diffreports._serving_valid_record."""
+    if type(record) is not dict or set(record) != {
+        "request_digest",
+        "prompt_ids",
+        "prompt_id_digest",
+        "candidate",
+        "fixture",
+        "cache_position",
+        "request_config",
+        "returned_ids",
+        "returned_id_digest",
+        "returned_text_digest",
+        "returned_text_digest_no_special",
+        "finish_class",
+        "stop_winner",
+        "cache_n_reported",
+        "tokens_cached_reported",
+        "tokens_evaluated_reported",
+        "cache_creation_tokens_reported",
+        "mirror",
+        "cell_detail",
+    }:
+        return False
+    if not _o_sb_int_list(record["prompt_ids"]):
+        return False
+    if not _o_sb_hex64(record["prompt_id_digest"]):
+        return False
+    if _o_sb_sha(_o_sb_canonical(record["prompt_ids"])) != record["prompt_id_digest"]:
+        return False
+    if type(record["candidate"]) is not str or not record["candidate"]:
+        return False
+    if type(record["fixture"]) is not str or not record["fixture"]:
+        return False
+    if type(record["cache_position"]) is not str or record["cache_position"] not in _O_SB_POSITIONS:
+        return False
+    config = record["request_config"]
+    if type(config) is not dict or set(config) != {
+        "max_new_tokens",
+        "stop_text_digests",
+        "stop_token_ids",
+        "eos_id",
+        "include_stop_str_in_output",
+        "ignore_eos",
+        "min_tokens",
+        "cache_salt_present",
+        "cache_mode",
+        "seed",
+        "sampler",
+    }:
+        return False
+    if type(config["max_new_tokens"]) is not int or not 1 <= config["max_new_tokens"] <= 4096:
+        return False
+    if type(config["stop_text_digests"]) is not list or not all(
+        _o_sb_hex64(digest) for digest in config["stop_text_digests"]
+    ):
+        return False
+    if not _o_sb_int_list(config["stop_token_ids"]):
+        return False
+    if config["eos_id"] is not None and (type(config["eos_id"]) is not int or config["eos_id"] < 0):
+        return False
+    for flag in ("include_stop_str_in_output", "ignore_eos", "cache_salt_present"):
+        if type(config[flag]) is not bool:
+            return False
+    if type(config["min_tokens"]) is not int or config["min_tokens"] < 0:
+        return False
+    if type(config["cache_mode"]) is not str or config["cache_mode"] not in _O_SB_POSITIONS:
+        return False
+    if type(config["seed"]) is not int or config["seed"] < 0:
+        return False
+    sampler = config["sampler"]
+    if type(sampler) is not dict or set(sampler) != set(_O_SB_TIER_A) | {"seed"}:
+        return False
+    if not _o_recomputed_equal(sampler, {**_O_SB_TIER_A, "seed": config["seed"]}):
+        return False
+    if not _o_sb_hex64(record["request_digest"]):
+        return False
+    expected_digest = _o_sb_sha(
+        _o_sb_canonical({"config": config, "prompt_id_digest": record["prompt_id_digest"]})
+    )
+    if record["request_digest"] != expected_digest:
+        return False
+    returned = record["returned_ids"]
+    if returned is not None and not _o_sb_int_list(returned):
+        return False
+    if returned is None:
+        if record["returned_id_digest"] is not None:
+            return False
+    elif not _o_sb_hex64(record["returned_id_digest"]) or (
+        _o_sb_sha(_o_sb_canonical(returned)) != record["returned_id_digest"]
+    ):
+        return False
+    if record["returned_text_digest"] is not None and not _o_sb_hex64(
+        record["returned_text_digest"]
+    ):
+        return False
+    if record["returned_text_digest_no_special"] is not None:
+        return False
+    if record["cache_creation_tokens_reported"] is not None:
+        return False
+    if type(record["finish_class"]) is not str or record["finish_class"] not in _O_SB_FINISH:
+        return False
+    winner = record["stop_winner"]
+    if winner is not None and not _o_sb_winner(winner, predicted=False):
+        return False
+    for key in ("cache_n_reported", "tokens_cached_reported", "tokens_evaluated_reported"):
+        value = record[key]
+        if value is not None and (type(value) is not int or value < 0):
+            return False
+    if type(record["cell_detail"]) is not str or record["cell_detail"] not in _O_SB_CELL_DETAILS:
+        return False
+    mirror = record["mirror"]
+    if type(mirror) is not dict or set(mirror) != {
+        "predicted_firing_step",
+        "predicted_winner",
+        "precedence_tie",
+        "local_text_digest",
+        "stripped_text_digest",
+        "server_detok_digest",
+        "predicted_disposition",
+        "observed_disposition",
+        "fidelity_verdict",
+        "divergence_class",
+        "divergence_detail",
+        "hf_stream",
+    }:
+        return False
+    step = mirror["predicted_firing_step"]
+    if step is not None and (type(step) is not int or step < 1):
+        return False
+    if mirror["predicted_winner"] is not None and not _o_sb_winner(
+        mirror["predicted_winner"], predicted=True
+    ):
+        return False
+    if type(mirror["precedence_tie"]) is not bool:
+        return False
+    if not _o_sb_hex64(mirror["local_text_digest"]):
+        return False
+    for key in ("stripped_text_digest", "server_detok_digest"):
+        if mirror[key] is not None and not _o_sb_hex64(mirror[key]):
+            return False
+    if mirror["predicted_disposition"] not in (None, "kept", "stripped"):
+        return False
+    if mirror["observed_disposition"] not in (None, "kept", "stripped", "unobservable"):
+        return False
+    if type(mirror["fidelity_verdict"]) is not str or (
+        mirror["fidelity_verdict"] not in _O_SB_VERDICTS
+    ):
+        return False
+    divergence_class = mirror["divergence_class"]
+    if divergence_class is not None and (
+        type(divergence_class) is not str or divergence_class not in _O_SB_CLASSES
+    ):
+        return False
+    if type(mirror["divergence_detail"]) is not str:
+        return False
+    stream = mirror["hf_stream"]
+    if stream is not None:
+        if type(stream) is not dict or set(stream) != {
+            "match",
+            "first_divergence",
+            "shared_prefix",
+            "recorded_length",
+            "replayed_length",
+            "class",
+        }:
+            return False
+        if type(stream["match"]) is not bool:
+            return False
+        if stream["first_divergence"] is not None and (
+            type(stream["first_divergence"]) is not int or stream["first_divergence"] < 0
+        ):
+            return False
+        for key in ("shared_prefix", "recorded_length", "replayed_length"):
+            if type(stream[key]) is not int or stream[key] < 0:
+                return False
+        if stream["match"]:
+            if stream["first_divergence"] is not None or stream["class"] is not None:
+                return False
+        elif stream["class"] != "GENERATION_STREAM_DIVERGED":
+            return False
+    verdict = mirror["fidelity_verdict"]
+    if record["cell_detail"] == "capability_absent" and (
+        returned is not None or verdict != "capability_absent"
+    ):
+        return False
+    if verdict == "capability_absent" and record["cell_detail"] != "capability_absent":
+        return False
+    if (
+        verdict == "diverge"
+        and divergence_class is None
+        and mirror["divergence_detail"] != "eos_attribution_mismatch"
+    ):
+        return False
+    if verdict == "agree" and divergence_class is not None:
+        return False
+    if winner is not None and type(winner) is dict and winner.get("kind") == "stop_text":
+        stack_digest = record["returned_text_digest"]
+        if stack_digest is None:
+            expected_disposition = "unobservable"
+        elif stack_digest == mirror["local_text_digest"]:
+            expected_disposition = "kept"
+        elif (
+            mirror["stripped_text_digest"] is not None
+            and stack_digest == mirror["stripped_text_digest"]
+        ):
+            expected_disposition = "stripped"
+        else:
+            expected_disposition = "unobservable"
+        if mirror["observed_disposition"] != expected_disposition:
+            return False
+    elif mirror["observed_disposition"] is not None:
+        return False
+    if (
+        winner is not None
+        and type(winner) is dict
+        and winner.get("kind") == "eos"
+        and type(winner.get("id")) is int
+        and winner["id"] not in declared
+        and (record["cell_detail"] != "eos_attribution_mismatch" or verdict != "diverge")
+    ):
+        return False
+    if (
+        returned is not None
+        and len(returned) > config["max_new_tokens"] + 1
+        and record["cell_detail"] != "stack_response_invalid"
+    ):
+        return False
+    return not (
+        divergence_class == "FIRING_STEP_DIFFERS"
+        and step is not None
+        and returned is not None
+        and step == len(returned)
+    )
+
+
+def _o_sb_rows(records: list) -> list:
+    """Oracle stop-matrix rows derivation."""
+    rows = []
+    for record in records:
+        if record.get("cache_position") != "standalone":
+            continue
+        mirror = record["mirror"]
+        winner = record.get("stop_winner")
+        fired = winner is not None
+        returned = record.get("returned_ids")
+        config = record.get("request_config") or {}
+        if config.get("include_stop_str_in_output"):
+            arm = "keep"
+        elif mirror.get("hf_stream") is not None:
+            arm = "strip"
+        else:
+            arm = "plain"
+        cell = {
+            "available": record.get("cell_detail") != "capability_absent",
+            "fired": fired,
+            "firing_step": len(returned) if fired and type(returned) is list else None,
+            "disposition": mirror.get("observed_disposition"),
+            "finish_class": record.get("finish_class"),
+            "verdict": mirror.get("fidelity_verdict"),
+            "detail": record.get("cell_detail", ""),
+        }
+        flips = (
+            [mirror["divergence_class"]]
+            if mirror.get("fidelity_verdict") == "diverge" and mirror.get("divergence_class")
+            else []
+        )
+        rows.append(
+            {
+                "fixture": record.get("fixture"),
+                "candidate": record.get("candidate"),
+                "arm": arm,
+                "cells": {"llamacpp": cell},
+                "flips": flips,
+            }
+        )
+    return rows
+
+
+def _o_serving_backends_valid(value: Any) -> bool:
+    """Oracle serving-backends validator: mirrors diffreports._valid_serving_backends."""
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "identity",
+        "capabilities",
+        "records",
+        "stop_matrix",
+        "cache",
+        "fidelity",
+        "audit",
+    }:
+        return False
+    if type(value["detail"]) is not str or value["detail"] not in (
+        "",
+        "serving_backends_record_budget_exceeded",
+    ):
+        return False
+    protocol = value["protocol"]
+    if (
+        type(protocol) is not dict
+        or set(protocol) != {"version"}
+        or protocol["version"] != "exec-backends-protocol-1"
+    ):
+        return False
+    identity = value["identity"]
+    if type(identity) is not dict or set(identity) != {
+        "stack",
+        "stack_version",
+        "checkpoint_digest",
+        "checkpoint_bytes",
+        "tokenizer_fingerprint",
+        "hardware_class",
+        "declared_eos_ids",
+        "config",
+        "config_fingerprint",
+    }:
+        return False
+    if identity["stack"] != "llamacpp":
+        return False
+    if type(identity["stack_version"]) is not str or not identity["stack_version"]:
+        return False
+    if not _o_sb_hex64(identity["checkpoint_digest"]):
+        return False
+    if type(identity["checkpoint_bytes"]) is not int or identity["checkpoint_bytes"] <= 0:
+        return False
+    tok_fp = identity["tokenizer_fingerprint"]
+    if (
+        type(tok_fp) is not str
+        or not tok_fp.startswith("sha256:")
+        or not _o_sb_hex64(tok_fp[len("sha256:") :])
+    ):
+        return False
+    if type(identity["hardware_class"]) is not str or identity["hardware_class"] not in {
+        "cpu",
+        "cuda",
+        "metal",
+        "rocm",
+        "vulkan",
+    }:
+        return False
+    declared = identity["declared_eos_ids"]
+    if not _o_sb_int_list(declared) or not declared:
+        return False
+    if declared != sorted(set(declared)):
+        return False
+    config = identity["config"]
+    if type(config) is not dict or set(config) != {
+        "protocol",
+        "stack",
+        "build_info",
+        "total_slots",
+        "model_path_digest",
+        "checkpoint_sha256",
+        "declared_eos_ids",
+        "generation_settings_digest",
+        "posture",
+        "cache_probe",
+        "tier_a",
+    }:
+        return False
+    if config["protocol"] != "exec-backends-protocol-1" or config["stack"] != "llamacpp":
+        return False
+    if config["build_info"] != identity["stack_version"]:
+        return False
+    if config["total_slots"] != 1 or type(config["total_slots"]) is not int:
+        return False
+    if not _o_sb_hex64(config["model_path_digest"]):
+        return False
+    if config["checkpoint_sha256"] != identity["checkpoint_digest"]:
+        return False
+    if config["declared_eos_ids"] != declared:
+        return False
+    if config["generation_settings_digest"] is not None and not _o_sb_hex64(
+        config["generation_settings_digest"]
+    ):
+        return False
+    posture = config["posture"]
+    if type(posture) is not dict or set(posture) != {
+        "api_key_required",
+        "slot_erase_available",
+        "endpoint_slots",
+        "ui_enabled",
+    }:
+        return False
+    if posture["api_key_required"] is not True:
+        return False
+    for key in ("slot_erase_available", "endpoint_slots", "ui_enabled"):
+        if type(posture[key]) is not bool:
+            return False
+    cache_probe = config["cache_probe"]
+    if type(cache_probe) is not dict or set(cache_probe) != {"cold_cache_n", "warm_cache_n"}:
+        return False
+    for key in ("cold_cache_n", "warm_cache_n"):
+        if cache_probe[key] is not None and (
+            type(cache_probe[key]) is not int or cache_probe[key] < 0
+        ):
+            return False
+    if not _o_recomputed_equal(config["tier_a"], _O_SB_TIER_A):
+        return False
+    if not _o_sb_hex64(identity["config_fingerprint"]):
+        return False
+    if _o_sb_sha(_o_sb_canonical(config)) != identity["config_fingerprint"]:
+        return False
+    capabilities = value["capabilities"]
+    if type(capabilities) is not dict or set(capabilities) != {
+        "raw_token_ids",
+        "stop_token_ids",
+        "cached_token_reporting",
+        "token_id_echo",
+        "prompt_echo",
+        "min_tokens",
+        "include_stop_str_in_output",
+    }:
+        return False
+    if not all(type(item) is bool for item in capabilities.values()):
+        return False
+    records = value["records"]
+    if type(records) is not list or len(records) > 100_000:
+        return False
+    for record in records:
+        if not _o_sb_record_valid(record, declared):
+            return False
+    stop_matrix = value["stop_matrix"]
+    if type(stop_matrix) is not dict or set(stop_matrix) != {"available", "rows"}:
+        return False
+    expected_rows = _o_sb_rows(records)
+    if stop_matrix["available"] is not bool(len(expected_rows)):
+        return False
+    if not _o_recomputed_equal(stop_matrix["rows"], expected_rows):
+        return False
+    cache = value["cache"]
+    if type(cache) is not dict or set(cache) != {"available", "detail", "positions"}:
+        return False
+    if type(cache["detail"]) is not str or cache["detail"] not in _O_SB_CACHE_DETAILS:
+        return False
+    expected_positions = {}
+    cache_records = [r for r in records if r["cache_position"] != "standalone"]
+    for record in cache_records:
+        if record["cell_detail"] in (
+            "capability_absent",
+            "serving_backends_record_budget_exceeded",
+        ):
+            continue
+        expected_positions[record["cache_position"]] = {
+            "cache_n": record["cache_n_reported"],
+            "tokens_cached": record["tokens_cached_reported"],
+            "tokens_evaluated": record["tokens_evaluated_reported"],
+        }
+    if not _o_recomputed_equal(cache["positions"], expected_positions):
+        return False
+    if cache["available"] is not bool(len(expected_positions)):
+        return False
+    if cache["detail"] == "not_attempted" and cache_records:
+        return False
+    cold = next((r for r in cache_records if r["cache_position"] == "cold"), None)
+    divergent = next((r for r in cache_records if r["cache_position"] == "divergent_control"), None)
+    contaminated = any(
+        r is not None and type(r["cache_n_reported"]) is int and r["cache_n_reported"] > 1
+        for r in (cold, divergent)
+    )
+    if contaminated and cache["detail"] != "cache_protocol_contaminated":
+        return False
+    if cache["detail"] == "cache_protocol_contaminated" and not contaminated:
+        return False
+    fidelity = value["fidelity"]
+    if type(fidelity) is not dict or set(fidelity) != {
+        "available",
+        "detail",
+        "verdict",
+        "counts",
+        "divergence_classes",
+        "per_fixture",
+    }:
+        return False
+    counts = {
+        "agree": 0,
+        "diverge": 0,
+        "unobservable": 0,
+        "capability_absent": 0,
+        "predictor_detokenization_mismatch": 0,
+    }
+    classes: dict = {}
+    for record in records:
+        verdict = record["mirror"]["fidelity_verdict"]
+        if verdict in counts:
+            counts[verdict] += 1
+        else:
+            counts["unobservable"] += 1
+        if verdict == "diverge":
+            divergence_class = record["mirror"]["divergence_class"]
+            if type(divergence_class) is str and divergence_class:
+                classes[divergence_class] = classes.get(divergence_class, 0) + 1
+    total = len(records)
+    if total == 0:
+        expected_verdict = "fidelity_unavailable"
+    elif counts["diverge"]:
+        expected_verdict = "fidelity_diverge"
+    elif (
+        counts["unobservable"]
+        or counts["capability_absent"]
+        or counts["predictor_detokenization_mismatch"]
+    ):
+        expected_verdict = "fidelity_unavailable"
+    else:
+        expected_verdict = "fidelity_agree"
+    if fidelity["available"] is not (total > 0):
+        return False
+    if fidelity["verdict"] != expected_verdict:
+        return False
+    if not _o_recomputed_equal(fidelity["counts"], counts):
+        return False
+    if not _o_recomputed_equal(fidelity["divergence_classes"], classes):
+        return False
+    if fidelity["detail"] != ("" if total > 0 else "not_attempted"):
+        return False
+    per_fixture = fidelity["per_fixture"]
+    if type(per_fixture) is not list:
+        return False
+    for row in per_fixture:
+        if type(row) is not dict or set(row) != {
+            "fixture",
+            "verdict",
+            "divergences",
+            "stream",
+            "arms",
+        }:
+            return False
+        if type(row["fixture"]) is not str or not row["fixture"]:
+            return False
+        if type(row["verdict"]) is not str or row["verdict"] not in _O_SB_VERDICTS:
+            return False
+        if type(row["divergences"]) is not list or type(row["arms"]) is not list:
+            return False
+        if not all(type(arm) is str and arm in _O_SB_VERDICTS for arm in row["arms"]):
+            return False
+        for finding in row["divergences"]:
+            if type(finding) is not dict or set(finding) != {"class", "detail", "severity"}:
+                return False
+            if finding["class"] is not None and (
+                type(finding["class"]) is not str or finding["class"] not in _O_SB_CLASSES
+            ):
+                return False
+            if type(finding["detail"]) is not str or finding["severity"] not in (
+                "high",
+                "medium",
+                "low",
+            ):
+                return False
+        stream = row["stream"]
+        if stream is not None:
+            if type(stream) is not dict or set(stream) != {
+                "match",
+                "first_divergence",
+                "shared_prefix",
+                "recorded_length",
+                "replayed_length",
+                "class",
+            }:
+                return False
+            if type(stream["match"]) is not bool:
+                return False
+            if stream["class"] not in (None, "GENERATION_STREAM_DIVERGED"):
+                return False
+    audit = value["audit"]
+    if audit is not None:
+        if type(audit) is not dict or set(audit) != {
+            "n_records",
+            "n_planned_cells",
+            "n_executions",
+            "budget_spent",
+        }:
+            return False
+        for key in ("n_records", "n_planned_cells", "n_executions"):
+            if type(audit[key]) is not int or audit[key] < 0:
+                return False
+        if type(audit["budget_spent"]) is not bool:
+            return False
+        if audit["n_records"] != len(records):
+            return False
+    return True
+
+
+def _o_serving_backends(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle serving-backends section: identity/fidelity/cache/record drift."""
+    old_ok = _o_serving_backends_valid(old)
+    new_ok = _o_serving_backends_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    identity_drift = []
+    for field_name in (
+        "stack",
+        "stack_version",
+        "checkpoint_digest",
+        "tokenizer_fingerprint",
+        "hardware_class",
+        "config_fingerprint",
+    ):
+        if old["identity"][field_name] != new["identity"][field_name]:
+            identity_drift.append(
+                {
+                    "field": field_name,
+                    "old": old["identity"][field_name],
+                    "new": new["identity"][field_name],
+                }
+            )
+    old_records = {record["request_digest"]: record for record in old["records"]}
+    new_records = {record["request_digest"]: record for record in new["records"]}
+    records_added = sorted(set(new_records) - set(old_records))
+    records_removed = sorted(set(old_records) - set(new_records))
+    record_drift = []
+    for digest in sorted(set(old_records) & set(new_records)):
+        old_record = old_records[digest]
+        new_record = new_records[digest]
+        for metric, old_value, new_value in (
+            (
+                "fidelity_verdict",
+                old_record["mirror"]["fidelity_verdict"],
+                new_record["mirror"]["fidelity_verdict"],
+            ),
+            ("finish_class", old_record["finish_class"], new_record["finish_class"]),
+            (
+                "cache_n_reported",
+                old_record["cache_n_reported"],
+                new_record["cache_n_reported"],
+            ),
+            ("cell_detail", old_record["cell_detail"], new_record["cell_detail"]),
+        ):
+            if old_value != new_value:
+                record_drift.append(
+                    {
+                        "request_digest": digest,
+                        "metric": metric,
+                        "old": old_value,
+                        "new": new_value,
+                    }
+                )
+    fidelity_drift = {
+        "old": old["fidelity"]["verdict"],
+        "new": new["fidelity"]["verdict"],
+        "changed": old["fidelity"]["verdict"] != new["fidelity"]["verdict"],
+    }
+    cache_drift = {
+        "old": old["cache"]["detail"],
+        "new": new["cache"]["detail"],
+        "changed": old["cache"]["detail"] != new["cache"]["detail"],
+    }
+    changed = bool(
+        identity_drift
+        or fidelity_drift["changed"]
+        or cache_drift["changed"]
+        or records_added
+        or records_removed
+        or record_drift
+    )
+    diff.update(
+        {
+            "changed": changed,
+            "comparable": not identity_drift,
+            "identity_drift": identity_drift,
+            "fidelity": fidelity_drift,
+            "cache": cache_drift,
+            "records_added": records_added,
+            "records_removed": records_removed,
+            "record_drift": record_drift,
+        }
+    )
+    return diff, changed, asymmetric
+
+
 def _o_tr_valid(value: Any) -> bool:
     """Oracle template-robustness validator: mirrors _valid_template_robustness."""
 
@@ -21515,6 +22325,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "confidentiality_asymmetric": False,
                 "answer_collision_changed": False,
                 "answer_collision_asymmetric": False,
+                "serving_backends_changed": False,
+                "serving_backends_asymmetric": False,
                 "identical": False,
             },
         )
@@ -22885,7 +23697,333 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["confidentiality"] = _fuzz_confidentiality_section(rng)
     if rng.random() < 0.45:
         report["answer_collision"] = _fuzz_answer_collision_section(rng)
+    if rng.random() < 0.45:
+        report["serving_backends"] = _fuzz_serving_backends_section(rng)
     return report
+
+
+def _fuzz_sb_record(rng: random.Random, kind: str, fixture: str) -> dict[str, Any]:
+    """One coherent serving_backends record (digests computed locally)."""
+    prompt_ids = [464, 3139, 286, 4881, 318]
+    seed = rng.choice([0, 7, 1234])
+    sampler = {
+        "samplers": ["top_k", "top_p", "min_p", "temperature"],
+        "temperature": 0.0,
+        "top_k": 0,
+        "top_p": 1.0,
+        "min_p": 0.0,
+        "repeat_penalty": 1.0,
+        "dynatemp_range": 0.0,
+        "n_probs": 0,
+        "seed": seed,
+    }
+    with_stops = kind in ("word",)
+    config = {
+        "max_new_tokens": 16,
+        "stop_text_digests": [_o_sb_sha("STOP")] if with_stops else [],
+        "stop_token_ids": [],
+        "eos_id": 50256,
+        "include_stop_str_in_output": False,
+        "ignore_eos": False,
+        "min_tokens": 0,
+        "cache_salt_present": False,
+        "cache_mode": "cold" if kind == "cache" else "standalone",
+        "seed": seed,
+        "sampler": sampler,
+    }
+    prompt_digest = _o_sb_sha(_o_sb_canonical(prompt_ids))
+    request_digest = _o_sb_sha(
+        _o_sb_canonical({"config": config, "prompt_id_digest": prompt_digest})
+    )
+    base: dict[str, Any] = {
+        "request_digest": request_digest,
+        "prompt_ids": prompt_ids,
+        "prompt_id_digest": prompt_digest,
+        "candidate": "fz",
+        "fixture": fixture,
+        "cache_position": "cold" if kind == "cache" else "standalone",
+        "request_config": config,
+        "returned_ids": None,
+        "returned_id_digest": None,
+        "returned_text_digest": None,
+        "returned_text_digest_no_special": None,
+        "finish_class": "unclassified",
+        "stop_winner": None,
+        "cache_n_reported": None,
+        "tokens_cached_reported": None,
+        "tokens_evaluated_reported": None,
+        "cache_creation_tokens_reported": None,
+        "mirror": {
+            "predicted_firing_step": None,
+            "predicted_winner": None,
+            "precedence_tie": False,
+            "local_text_digest": _o_sb_sha(""),
+            "stripped_text_digest": None,
+            "server_detok_digest": None,
+            "predicted_disposition": None,
+            "observed_disposition": None,
+            "fidelity_verdict": "agree",
+            "divergence_class": None,
+            "divergence_detail": "",
+            "hf_stream": None,
+        },
+        "cell_detail": "",
+    }
+    if kind == "absent":
+        base["mirror"]["fidelity_verdict"] = "capability_absent"
+        base["cell_detail"] = "capability_absent"
+        return base
+    if kind == "eos":
+        returned = [262, 3139, 50256]
+        local = _o_sb_sha(" the capital<|endoftext|>")
+        base.update(
+            {
+                "returned_ids": returned,
+                "returned_id_digest": _o_sb_sha(_o_sb_canonical(returned)),
+                "returned_text_digest": local,
+                "finish_class": "eos",
+                "stop_winner": {"kind": "eos", "id": 50256},
+            }
+        )
+        base["mirror"].update(
+            {
+                "predicted_firing_step": 3,
+                "predicted_winner": {"kind": "eos", "id": 50256},
+                "local_text_digest": local,
+                "server_detok_digest": local,
+            }
+        )
+        return base
+    if kind == "word":
+        returned = [262, 3139, 286]
+        local = _o_sb_sha(" the capitalSTOP")
+        stripped = _o_sb_sha(" the capital")
+        base.update(
+            {
+                "returned_ids": returned,
+                "returned_id_digest": _o_sb_sha(_o_sb_canonical(returned)),
+                "returned_text_digest": stripped,
+                "finish_class": "word",
+                "stop_winner": {"kind": "stop_text", "index": 0, "digest": _o_sb_sha("STOP")},
+            }
+        )
+        base["mirror"].update(
+            {
+                "predicted_firing_step": 3,
+                "predicted_winner": {"kind": "stop_text", "index": 0},
+                "local_text_digest": local,
+                "stripped_text_digest": stripped,
+                "server_detok_digest": local,
+                "predicted_disposition": "stripped",
+                "observed_disposition": "stripped",
+            }
+        )
+        return base
+    if kind == "cache":
+        returned = [262, 3139]
+        local = _o_sb_sha(" the")
+        base.update(
+            {
+                "returned_ids": returned,
+                "returned_id_digest": _o_sb_sha(_o_sb_canonical(returned)),
+                "returned_text_digest": local,
+                "finish_class": "length",
+                "cache_n_reported": rng.choice([0, 0, 14]),
+                "tokens_cached_reported": rng.choice([None, 5]),
+                "tokens_evaluated_reported": rng.choice([None, 15]),
+            }
+        )
+        base["mirror"].update({"local_text_digest": local, "server_detok_digest": local})
+        return base
+    # kind == "length"
+    returned = [262, 3139, 286, 4881]
+    local = _o_sb_sha(" the capital of France")
+    base.update(
+        {
+            "returned_ids": returned,
+            "returned_id_digest": _o_sb_sha(_o_sb_canonical(returned)),
+            "returned_text_digest": local,
+            "finish_class": "length",
+        }
+    )
+    base["mirror"].update({"local_text_digest": local, "server_detok_digest": local})
+    return base
+
+
+def _fuzz_serving_backends_section(rng: random.Random) -> dict[str, Any]:
+    """Fuzz serving_backends section: coherent payloads from a local
+    builder (digests computed with hashlib, companions derived by the
+    section's own rules), then hostile mutations; oracle and
+    implementation must agree on every rejection and every drift."""
+    checkpoint = _o_sb_sha("gguf-bytes")
+    config = {
+        "protocol": "exec-backends-protocol-1",
+        "stack": "llamacpp",
+        "build_info": rng.choice(["b12182-fd27b20", "b1-fd27b20"]),
+        "total_slots": 1,
+        "model_path_digest": _o_sb_sha("/models/gpt2.gguf"),
+        "checkpoint_sha256": checkpoint,
+        "declared_eos_ids": [50256],
+        "generation_settings_digest": _o_sb_sha("settings"),
+        "posture": {
+            "api_key_required": True,
+            "slot_erase_available": True,
+            "endpoint_slots": True,
+            "ui_enabled": False,
+        },
+        "cache_probe": {"cold_cache_n": 0, "warm_cache_n": 14},
+        "tier_a": {
+            "samplers": ["top_k", "top_p", "min_p", "temperature"],
+            "temperature": 0.0,
+            "top_k": 0,
+            "top_p": 1.0,
+            "min_p": 0.0,
+            "repeat_penalty": 1.0,
+            "dynatemp_range": 0.0,
+            "n_probs": 0,
+        },
+    }
+    identity = {
+        "stack": "llamacpp",
+        "stack_version": config["build_info"],
+        "checkpoint_digest": checkpoint,
+        "checkpoint_bytes": 497_800_000,
+        "tokenizer_fingerprint": "sha256:" + _o_sb_sha("tokenizer"),
+        "hardware_class": "cpu",
+        "declared_eos_ids": [50256],
+        "config": config,
+        "config_fingerprint": _o_sb_sha(_o_sb_canonical(config)),
+    }
+    kinds = rng.choice(
+        [
+            ["eos"],
+            ["word"],
+            ["length"],
+            ["eos", "word"],
+            ["absent"],
+            ["cache"],
+            ["eos", "cache"],
+            [],
+        ]
+    )
+    records = [_fuzz_sb_record(rng, kind, f"fz{i}") for i, kind in enumerate(kinds)]
+    rows = _o_sb_rows(records)
+    cache_records = [r for r in records if r["cache_position"] != "standalone"]
+    positions = {}
+    for record in cache_records:
+        if record["cell_detail"] in (
+            "capability_absent",
+            "serving_backends_record_budget_exceeded",
+        ):
+            continue
+        positions[record["cache_position"]] = {
+            "cache_n": record["cache_n_reported"],
+            "tokens_cached": record["tokens_cached_reported"],
+            "tokens_evaluated": record["tokens_evaluated_reported"],
+        }
+    contaminated = any(
+        r["cache_position"] in ("cold", "divergent_control")
+        and type(r["cache_n_reported"]) is int
+        and r["cache_n_reported"] > 1
+        for r in cache_records
+    )
+    if not cache_records:
+        cache = {"available": False, "detail": "not_attempted", "positions": {}}
+    else:
+        cache = {
+            "available": bool(positions),
+            "detail": "cache_protocol_contaminated" if contaminated else "",
+            "positions": positions,
+        }
+    counts = {
+        "agree": 0,
+        "diverge": 0,
+        "unobservable": 0,
+        "capability_absent": 0,
+        "predictor_detokenization_mismatch": 0,
+    }
+    for record in records:
+        counts[record["mirror"]["fidelity_verdict"]] += 1
+    if not records:
+        verdict = "fidelity_unavailable"
+    elif counts["diverge"]:
+        verdict = "fidelity_diverge"
+    elif (
+        counts["unobservable"]
+        or counts["capability_absent"]
+        or counts["predictor_detokenization_mismatch"]
+    ):
+        verdict = "fidelity_unavailable"
+    else:
+        verdict = "fidelity_agree"
+    payload: dict[str, Any] = {
+        "available": True,
+        "detail": "",
+        "protocol": {"version": "exec-backends-protocol-1"},
+        "identity": identity,
+        "capabilities": {
+            "raw_token_ids": True,
+            "stop_token_ids": False,
+            "cached_token_reporting": True,
+            "token_id_echo": True,
+            "prompt_echo": True,
+            "min_tokens": False,
+            "include_stop_str_in_output": False,
+        },
+        "records": records,
+        "stop_matrix": {"available": bool(rows), "rows": rows},
+        "cache": cache,
+        "fidelity": {
+            "available": bool(records),
+            "detail": "" if records else "not_attempted",
+            "verdict": verdict,
+            "counts": counts,
+            "divergence_classes": {},
+            "per_fixture": [],
+        },
+        "audit": {
+            "n_records": len(records),
+            "n_planned_cells": len(records),
+            "n_executions": len(records),
+            "budget_spent": False,
+        },
+    }
+    mutators = [
+        lambda p: p.update({"detail": "bogus"}),
+        lambda p: p["identity"].update({"config_fingerprint": _o_sb_sha("forged")}),
+        lambda p: p["identity"].update({"declared_eos_ids": [50257, 50256]}),
+        lambda p: p["identity"]["config"].update({"total_slots": 2}),
+        lambda p: p["capabilities"].update({"raw_token_ids": 1}),
+        lambda p: p["fidelity"].update({"verdict": "fidelity_agree"}),
+        lambda p: p["fidelity"]["counts"].update({"agree": 99}),
+        lambda p: p["cache"].update({"detail": "cache_protocol_contaminated"}),
+        lambda p: p["stop_matrix"].update({"rows": []}),
+        lambda p: (
+            p["records"][0].update({"prompt_id_digest": _o_sb_sha("x")}) if p["records"] else None
+        ),
+        lambda p: (
+            p["records"][0]["mirror"].update({"observed_disposition": "kept"})
+            if p["records"]
+            else None
+        ),
+        lambda p: (
+            p["records"][0].update({"returned_text_digest_no_special": _o_sb_sha("y")})
+            if p["records"]
+            else None
+        ),
+        lambda p: p["records"][0].update({"cell_detail": []}) if p["records"] else None,
+        lambda p: (
+            p["records"][0]["request_config"]["sampler"].update({"top_k": 0.0})
+            if p["records"]
+            else None
+        ),
+        lambda p: p["records"][0].update({"cache_n_reported": True}) if p["records"] else None,
+        lambda p: p.pop("audit"),
+        lambda p: p.update({"extra": 1}),
+    ]
+    for _ in range(rng.choice([0, 0, 1, 1, 2])):
+        rng.choice(mutators)(payload)
+    return payload
 
 
 def _fuzz_position_section(rng: random.Random) -> dict[str, Any]:
@@ -25559,6 +26697,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             '        and not _payload_section(section_asymmetric, "confidentiality")\n'
             '        and not answer_collision_diff["changed"]\n'
             "        and not answer_collision_asymmetric\n"
+            '        and not serving_backends_diff["changed"]\n'
+            "        and not serving_backends_asymmetric\n"
             '        and not scorerlens_diff["changed"]\n'
             "        and not scorerlens_asymmetric\n"
             '        and not aliasing_diff["changed"]\n'
@@ -25675,6 +26815,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             '        or _payload_section(section_asymmetric, "confidentiality")\n'
             '        or answer_collision_diff["changed"]\n'
             "        or answer_collision_asymmetric\n"
+            '        or serving_backends_diff["changed"]\n'
+            "        or serving_backends_asymmetric\n"
             '        or scorerlens_diff["changed"]\n'
             "        or scorerlens_asymmetric\n"
             '        or aliasing_diff["changed"]\n'

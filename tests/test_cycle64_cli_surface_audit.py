@@ -207,6 +207,7 @@ class TopLevelSurfaceTests(unittest.TestCase):
                 "diff-backends",
                 "diff-reports",
                 "doctor",
+                "exec-backends",
                 "fixtures",
                 "inspect",
                 "pack",
@@ -244,6 +245,7 @@ class HelpSurfaceTests(unittest.TestCase):
             (("fixtures", "build", "--help"), ["usage:", "--output", "source"]),
             (("diff-reports", "--help"), ["usage:", "old_results", "--all"]),
             (("diff-backends", "--help"), ["usage:", "--min-tokens", "--stops"]),
+            (("exec-backends", "--help"), ["usage:", "--base-url", "--api-key", "--gguf"]),
             (("debug", "--help"), ["usage:", "--dataset", "--script"]),
         ]
         for argv, markers in cases:

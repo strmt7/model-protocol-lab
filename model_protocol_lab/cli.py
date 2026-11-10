@@ -1609,6 +1609,114 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="vLLM min_tokens gating applied to the holdback cells",
     )
+    exec_cmd = sub.add_parser(
+        "exec-backends",
+        help="Measure a real serving stack's stop/cache behaviour on exact token ids",
+        allow_abbrev=False,
+        epilog=(
+            "Exit codes: 0 when a report was produced (the artifact is "
+            "the output, whatever it finds, including a stage that "
+            "failed closed at a probe gate); 2 for invalid input; 1 "
+            "when no report could be produced (tokenizer or checkpoint "
+            "problems, or an interrupted run). Output: a one-line JSON "
+            "summary on stdout; the full report is the --out artifact."
+        ),
+    )
+    exec_cmd.add_argument(
+        "--base-url",
+        required=True,
+        help="Loopback base URL of the running llama.cpp server, e.g. http://127.0.0.1:8080",
+    )
+    exec_cmd.add_argument(
+        "--api-key",
+        required=True,
+        help="Operator API key the server was launched with (never recorded)",
+    )
+    exec_cmd.add_argument(
+        "--gguf",
+        required=True,
+        type=Path,
+        help="Local GGUF checkpoint file the server is serving (identity binding)",
+    )
+    exec_cmd.add_argument(
+        "--model",
+        required=True,
+        type=Path,
+        help="Local checkpoint directory (tokenizer only; weights are never loaded)",
+    )
+    exec_cmd.add_argument(
+        "--out",
+        required=True,
+        type=Path,
+        help="Output artifact path (must not exist; records are written incrementally)",
+    )
+    exec_cmd.add_argument(
+        "--prompt-ids",
+        default=None,
+        help="Comma-separated token ids for one standalone stop cell",
+    )
+    exec_cmd.add_argument(
+        "--stops",
+        default=None,
+        help='Comma-separated stop texts, e.g. "STOP,</answer>"',
+    )
+    exec_cmd.add_argument(
+        "--eos-id",
+        type=int,
+        default=None,
+        help="EOS token id for the executed cells (default: the GGUF-declared EOS)",
+    )
+    exec_cmd.add_argument(
+        "--min-tokens",
+        type=int,
+        default=0,
+        help="min_tokens gating for the executed cells (capability-absent on llama.cpp)",
+    )
+    exec_cmd.add_argument(
+        "--max-new-tokens",
+        type=int,
+        default=64,
+        help="Generation cap for the standalone cell",
+    )
+    exec_cmd.add_argument(
+        "--results",
+        type=Path,
+        default=None,
+        help="Run results.json whose recorded generations are replayed in fidelity mode",
+    )
+    exec_cmd.add_argument(
+        "--cache-cold-ids",
+        default=None,
+        help="Comma-separated token ids for the cache protocol's cold/warm prompt",
+    )
+    exec_cmd.add_argument(
+        "--cache-shared-ids",
+        default=None,
+        help="Comma-separated token ids sharing the cold prompt's prefix",
+    )
+    exec_cmd.add_argument(
+        "--cache-divergent-ids",
+        default=None,
+        help="Comma-separated token ids for the cache protocol's divergent control",
+    )
+    exec_cmd.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="Run seed; per-request seeds derive from it deterministically",
+    )
+    exec_cmd.add_argument(
+        "--timeout",
+        type=float,
+        default=120.0,
+        help="Per-request HTTP timeout in seconds",
+    )
+    exec_cmd.add_argument(
+        "--hardware-class",
+        default="cpu",
+        choices=("cpu", "cuda", "metal", "rocm", "vulkan"),
+        help="Hardware class recorded in the stack identity",
+    )
     debug_cmd = sub.add_parser(
         "debug",
         help="Interactive protocol debugger REPL (offline; tokenizer-only)",
@@ -3922,6 +4030,10 @@ def main(argv: list[str] | None = None) -> int:
             from .diffbackends import run_diff_backends
 
             return run_diff_backends(args, parser)
+        if args.command == "exec-backends":
+            from .servingbackends import run_exec_backends
+
+            return run_exec_backends(args, parser)
         if args.command == "debug":
             from .debug import run_debug
 

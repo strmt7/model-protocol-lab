@@ -6,6 +6,50 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (cycle 243 — R3 build cycle 1: serving-stack backends, llama.cpp arm, 2026-11-09)
+
+- New `exec-backends` subcommand and
+  `model_protocol_lab/servingbackends.py` (standard library
+  only): the lab can now measure a running llama.cpp server
+  (pinned build b12182) directly, instead of only emulating
+  other backends' stop semantics from recorded sequences. The
+  command probes the server fail-closed before executing —
+  authentication (401/200), identity (commit window, resolved
+  model path, exactly one slot), a probe slot erase, the full
+  Tier-A sampler echo (repeat_penalty pinned at the executed
+  neutral 1.0), the prompt echo as text, the vocabulary round
+  trip including the GGUF-declared end-of-turn ID, and the
+  `timings.cache_n` cold/warm discrimination — then runs
+  standalone stop/EOS cells, an optional fidelity replay of
+  recorded observations (stream-conditioned verdicts;
+  `GENERATION_STREAM_DIVERGED` reported beside the stop
+  verdict), and an optional four-arm cache protocol (cold,
+  warm repeat, shared prefix, divergent control; reuse above
+  one token on the cold or divergent arm is
+  `cache_protocol_contaminated`). Unsupported request fields
+  record `capability_absent` cells; nothing is executed in a
+  degraded form and nothing falls back silently. Records
+  carry token IDs and SHA-256 digests only — no raw stop or
+  answer text — and persist incrementally, so an interrupted
+  run leaves a readable prefix. The new `serving_backends`
+  report section is opt-in only, never part of selection, and
+  ships with a fresh `diff-reports` mirror (digests,
+  configuration fingerprint, dispositions, EOS attribution,
+  and the fidelity aggregate all recomputed from the stored
+  section) and HTML rendering under its own name. The vLLM
+  adapter, a `serve` extra, and a vLLM version window are
+  deliberately not included; the schema carries their shapes
+  only. Design record: `docs/SERVING_BACKENDS_DESIGN.md`;
+  operator documentation: USAGE §8.65. The command's flags:
+  `--base-url`, `--api-key`, `--gguf`, `--model`, `--out`,
+  `--prompt-ids`, `--stops`, `--eos-id`, `--min-tokens`,
+  `--max-new-tokens`, `--seed`, `--timeout`,
+  `--hardware-class`, `--results`, `--cache-cold-ids`,
+  `--cache-shared-ids`, `--cache-divergent-ids`. Exit codes for
+  `exec-backends`: 0 (report produced, including a recorded
+  probe-gate failure), 2 (invalid input), 1 (no report could
+  be produced).
+
 ### Fixed (cycle 242 — DeepSource fix-down, wave 3, 2026-11-09)
 
 - Twenty-one of the twenty-six enumerated non-PY-R1000

@@ -277,6 +277,7 @@ class CommandNamesTest(unittest.TestCase):
         "debug",  # USAGE sec 10, README
         "diff-backends",  # USAGE sec 11, README
         "diff-reports",  # USAGE sec 12
+        "exec-backends",  # USAGE sec 8.65
     ]
 
     def test_all_documented_commands_exist(self):

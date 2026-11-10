@@ -1,6 +1,6 @@
 # Validation status
 
-## Evidence — continuous development, cycles 10–242 (executed 2026-10-14 → 2026-11-09, Python 3.12.3, Linux x86-64)
+## Evidence — continuous development, cycles 10–243 (executed 2026-10-14 → 2026-11-09, Python 3.12.3, Linux x86-64)
 
 Consolidated record for the continuous autonomous development period
 (2026-10-14 → 2026-10-25). All commands run from the repository root in
@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9516 tests collected**
-  (cycle 242, 2026-11-09). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9602 tests collected**
+  (cycle 243, 2026-11-09). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -25,6 +25,7 @@ doctor's resource fallbacks degrade there.
   phi4, glm4, glm45, glm53, kimi2, kimi3, kolibri, lfm25, nemotron35,
   muse_glimmer, muse_spark, laguna, ling, k2horizon, hy4, minimax3,
   nanbeige42), the `debug` REPL, `diff-backends` (HF/vLLM/SGLang),
+  `exec-backends` (llama.cpp serving-stack measurement, cycle 243),
   `diff-reports`, `doctor --portability-matrix`, the teacher-forced
   log-likelihood diagnostic, the fixture-loader contract fuzzer
   (`fixtures fuzz`), the scorer-lens regrade (`run --scorer-lens`),
@@ -63,6 +64,23 @@ doctor's resource fallbacks degrade there.
   rounded display percentage against 95; the precise figure is
   recorded here so the margin above the 94.5 rounding edge
   (+0.701) is auditable rather than inferred from the display.
+  Cycle 243 moves both figures: the R3 build's first cycle —
+  the serving-stack protocol spine and llama.cpp backend
+  (`servingbackends.py`, the 75th source file; `exec-backends`;
+  the opt-in `serving_backends` section with its fresh
+  diff-reports mirror) — added 1,580 statements
+  (42,652 → 44,232) and 1,552 covered statements
+  (41,116 → 42,668), for a precise figure of
+  95.30249218346842%, with the suite count at 9,602. The new
+  module measures 99.36% — no missing lines; nine branch arcs
+  unexercised, enumerated from the coverage JSON rather than
+  rounded away. The 86 new
+  spec-cited tests in `tests/test_cycle243_serving_backends.py`
+  run against a hostile fake of the documented b12182 surface;
+  the probe and cache claims themselves were executed against
+  the real b12182 binary at build start (C-1: unauthenticated
+  /props, /slots and slot erase all 401; arms cold 0 / warm 14 /
+  post-erase 0 / re-warm 14 under the ratified launch line).
   Cycle 234 moves neither figure: a test-infrastructure and
   dependency-hygiene cycle changed no package code, and its
   gate reproduced the precise figure exactly —
@@ -439,10 +457,10 @@ doctor's resource fallbacks degrade there.
   negation feature added 393 statements, 32,655 → 33,048.)
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (328 files in that CI scope; the repo-root scope counts more.
+  (330 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
-- `mypy model_protocol_lab` — clean (74 source files).
+- `mypy model_protocol_lab` — clean (75 source files).
 - `bandit -r model_protocol_lab` — **no issues identified** at any
   severity/confidence (the targeted `# nosec B105` suppressions on
   report-schema fields carry justifications).

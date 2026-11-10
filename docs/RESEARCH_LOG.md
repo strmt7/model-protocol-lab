@@ -11955,3 +11955,165 @@ The claim this cycle makes is falsified by any one of the
 capture at the same site with the same shape, or by a
 mutant surviving any of the 27 named gate tests under the
 new loader; neither has been observed.
+
+## Cycle 243 — R3 build, cycle 1: the serving-stack protocol spine and the llama.cpp backend (2026-11-09)
+
+The R3 build's first cycle ships the protocol spine and the
+llama.cpp arm, in the order the A10 spike's evidence dictated:
+`model_protocol_lab/servingbackends.py` (new, standard library
+only), an `exec-backends` subcommand beside `diff-backends`, an
+opt-in `serving_backends` experiments section with a fresh
+`diff-reports` mirror and HTML rendering, and a minimal fidelity
+entry point in `diffbackends`. The vLLM adapter, the `serve`
+extra, and the §8.6 vLLM window do not ship; the schema carries
+their shapes only (D-2).
+
+Monday-morning utility, one sentence: a template author or
+release engineer who gets a surprising verdict from a served
+checkpoint can now decide, from a record keyed to one stack build,
+one checkpoint digest, and one configuration fingerprint, whether
+the serving stack or the format hypothesis is the suspect.
+
+Design record: `docs/SERVING_BACKENDS_DESIGN.md` (adjudication
+A1–A11 as amended by D-1..D-9 and the Q1 adjudication). The six
+spike amendments are folded in as specified: R-1 (the Tier-A
+tuple pins repeat_penalty 1.0, the executed neutral at b12182 —
+the "server default 1.1" rationale is deleted wherever it
+appeared), R-2 (the G5 quantity is `timings.cache_n`;
+`tokens_cached` is recorded as reported and decides nothing),
+R-3 (slot erase needs `--slot-save-path` and is incompatible
+with a no-slots posture), R-4 (the A2/A3 contradiction it exposed
+is Q1, below), R-5 (G3 is text equality — response `prompt`
+against local detokenization and the server's `/detokenize` —
+with no IDs-form prompt assertion anywhere), R-6 (the gpt2
+converter's `.attn.bias` strip is an operator-side evidence step;
+the lab ships no converter).
+
+Q1 was ratified before the cycle and re-verified against the
+binary during it: erase-capable posture as amended — loopback
+bind, `--parallel 1`, `--api-key`, `--no-webui`,
+`--slot-save-path <dedicated directory>`, `--cache-ram 0`; the
+lab erases slot 0 after each cache sequence. Two corrections from
+the binary-verification lane are carried into the design doc.
+First, the adjudication's "a prompt-cache load is attempted for
+the cold arm" sentence is refuted for the lab's pinned pattern:
+on the default cache size the restore is suppressed only because
+`f_keep = 0/0 = NaN` closes the gate by accident, and it fires
+(14 tokens) for an unpinned request after the same erase;
+`--cache-ram 0` — the prompt-cache object never constructed — is
+the only unconditional cold guarantee, and the design doc records
+the NaN fragility as the reason the pin is load-bearing. Second,
+`--slot-save-path` requires a pre-existing directory at b12182
+(the parser throws otherwise); the launch procedure in USAGE
+§8.65 and the design doc both say to create it first.
+`--no-webui` is kept knowingly: it is the deprecated spelling at
+b12182 (canonical `--no-ui`, both accepted), it is the ratified
+spelling, and the window is a singleton build.
+
+Condition C-1 was discharged twice over: by the verification
+lane's execution and by this coordinator's own probe runs against
+the real b12182 binary at build start (work log evidence in
+`~/workspace/agents_out/r3_build/`). Unauthenticated `GET /props`,
+`GET /slots`, and `POST /slots/0?action=erase` all answer 401;
+authenticated erase answers 200 with `n_erased` 15; the slot-save
+directory stayed empty through every run (C-2). Under the launch
+line the arms measured: cold `cache_n` 0, warm 14, post-erase 0,
+re-warm 14. Under the default `--cache-ram 8192`, the same erase
+left the pinned pattern at 0 (the NaN gate) and an unpinned
+request restored 14 — the fragility, executed first-hand.
+
+One design expectation did not survive contact with the real
+`/props` payload: adjudication A2 named fingerprint fields
+(cache-RAM size, cache-idle-slots, context-checkpoint count,
+warmup state) that b12182 `/props` does not report. The shipped
+fingerprint binds the probed equivalents — posture proven by
+acting on it (401 probes, a probe erase), a measured cold/warm
+cache probe, the Tier-A tuple, a digest of the default generation
+settings, the declared EOS set, the checkpoint SHA-256, and the
+tokenizer fingerprint — and the design doc states the substitution
+plainly rather than pretending the named fields exist.
+
+What shipped, by surface:
+
+- **Spine.** `StackRequest` (frozen, validated, fixed failure
+  code), `StackCapabilities` (capability-as-data in the probe,
+  the records, and the section — no silent fallback anywhere),
+  `StackIdentity` (verdicts keyed per stack × weights digest ×
+  configuration fingerprint), `StackObservation`, and
+  `ExecutionBackend` beside `core.Backend`, never inside it.
+- **Backend.** `LlamacppHttpBackend`: loopback-only plain HTTP,
+  no redirects, no proxies, API key required. Probe gates A3,
+  G1–G5 in order, fail closed. The G1 window binds the commit
+  prefix and the resolved model path; the build counter is
+  recorded but does not gate (shallow-clone artefact). Every
+  execution re-checks the Tier-A echo on its own response.
+- **Predictor and fidelity.** The shared linear predictor with
+  precedence ties flagged; verdicts `agree` / `diverge` (existing
+  class vocabulary) / `unobservable` / `capability_absent` /
+  `predictor_detokenization_mismatch` (A7, its own aggregation
+  row). EOS attribution binds the GGUF-declared IDs (A11).
+  Fidelity mode is stream-conditioned: `GENERATION_STREAM_DIVERGED`
+  rides beside the stop verdict; against llama.cpp the keep arm
+  is `capability_absent`, so the aggregate is honestly
+  `fidelity_unavailable` when a keep arm was attempted.
+- **Cache companion.** Four arms between erases, identity re-read
+  at both ends (A8(i)), cold defined operationally (C-3):
+  cold or divergent reuse above one quantum is
+  `cache_protocol_contaminated` whatever erase returned.
+- **Persistence.** Incremental JSON Lines with per-record fsync
+  (A8(iv)); interrupted runs read back with `cell_not_executed`
+  (or budget) rows for the planned-but-absent cells; completion
+  replaces the artifact with the finalized section document.
+- **Mirror.** A fresh `diff-reports` validator for execution
+  observations, written to the post-cycle-241 discipline (every
+  stored leaf type-gated before use, fullmatch grammars),
+  recomputing digests, the fingerprint, dispositions from the
+  digest triple, EOS attribution, overshoot, the stop matrix, the
+  cache positions, and the fidelity aggregate. Identity drift is
+  reported as not-comparable, not as a diff.
+
+Tests: `tests/test_cycle243_serving_backends.py`, 86 tests — the
+brief's 21 named spec-cited tests, a hostile-fake battery (HTTP
+500, malformed JSON, wrong-typed tokens, cap overshoot, server
+death mid-run), a wave-6-shaped hostile-leaf battery proving the
+production mirror and cycle 67's independent oracle judge every
+single-leaf mutation identically, GGUF walker malformations, and
+the divergence-class battery (each class produced by a fake that
+differs from the predictor in exactly one way). The suite's
+pattern pins were extended, not bypassed: the subcommand audits
+(cycles 31, 64, 84), the cycle-44 source-file count (74 → 75),
+cycle 46's documented-command list, and the diff summary/oracle
+literals in cycles 27 and 67 (including the minimal-pair summary
+builder, caught by the scoped cycle-67 run).
+
+Verification: full gate on the final tree, figures copied from
+the gate logs — pytest 9,595 passed + 7 skipped (72,898
+subtests); the exact CI command `coverage run -m unittest
+discover -s tests -t .` ran 9,602 tests, OK (skipped=7);
+precise coverage 95.30249218346842% (42,668 of 44,232
+statements), above cycle 242's floor of 95.24124464600655%,
+which it replaces as the standing floor. Ruff 0.17.4 check and
+format clean on both scopes (330 files in the CI scope), mypy
+default and --strict clean (75 source files), bandit 1.9.4
+exit 0. Host notes, recorded rather than hidden: this machine
+restarted three times during the cycle's gate attempts,
+voiding three pytest legs mid-run (each followed by the
+interrupted-run blob and mutant audit); the first voided leg
+left one orphaned cycle-124 mutation-gate mutant in
+`reporting.py` (a tied lead reporting a nonzero margin), which
+the next completed leg's failures exposed, and which was
+reverted and re-proven before the final legs; and the first
+coverage leg's suite was green while its precise figure
+(94.95643991136205%) fell below the floor, which the
+coverage-recovery battery in the test file answers — the final
+legs above are on the recovered tree.
+
+Falsification: this cycle's claims fall if a b12182 server under
+the launch line answers an unauthenticated slot endpoint with
+anything but 401; if a post-erase cold arm under `--cache-ram 0`
+reports `cache_n` above one quantum without the sequence being
+marked contaminated; if any record in any artifact contains a raw
+stop text or answer text; if the mirror accepts a section whose
+stored fingerprint does not recompute; or if a capability the
+stack lacks is ever executed in degraded form instead of recorded
+absent. None has been observed.

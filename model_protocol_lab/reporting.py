@@ -10483,6 +10483,163 @@ def _enumeration_convention_section(result: dict[str, Any]) -> str:
     )
 
 
+def _serving_backends_section(result: dict[str, Any]) -> str:
+    """Serving-stack measurement: what a real serving stack did
+    with exact token ids, measured over HTTP (cycle 243).
+
+    Renders the ``serving_backends`` payload (see
+    experiments.serving_backends_analysis): the stack identity the
+    verdicts are keyed by, the probed capabilities (absence is
+    data, listed as such), the fidelity verdict with its counts,
+    the measured cache companion's positions as reported, and the
+    serving-stack stop matrix rows. Digests and counts only; no
+    prompt or completion text is rendered. Every payload-derived
+    value below goes through _escape_text, never bare escape().
+    """
+    probe: Any = result.get("serving_backends")
+    if type(probe) is not dict or not probe.get("available"):
+        return ""
+
+    def _text(value: Any) -> str:
+        """Return the text."""
+        return _escape_text(value) if type(value) is str else "n/a"
+
+    def _count(value: Any) -> str:
+        """Return the count."""
+        return _escape_text(str(value)) if type(value) is int else "n/a"
+
+    identity = probe.get("identity")
+    if type(identity) is not dict:
+        return ""
+    capabilities = probe.get("capabilities")
+    if type(capabilities) is not dict:
+        return ""
+    present = sorted(name for name, offered in capabilities.items() if offered is True)
+    absent = sorted(name for name, offered in capabilities.items() if offered is False)
+    fidelity = probe.get("fidelity")
+    fidelity_line = ""
+    if type(fidelity) is dict:
+        counts = fidelity.get("counts")
+        count_bits = ""
+        if type(counts) is dict:
+            count_bits = ", ".join(
+                f"{_text(name)} {_count(counts[name])}" for name in sorted(counts, key=str)
+            )
+        fidelity_line = (
+            "<p>Fidelity verdict: <strong>"
+            + _text(fidelity.get("verdict"))
+            + "</strong>"
+            + (f" ({count_bits})" if count_bits else "")
+            + ". The verdict compares the measured stack against the "
+            "lab's stop predictor per execution record; a diverged "
+            "generation stream is reported beside the verdicts, never "
+            "instead of them.</p>"
+        )
+    cache = probe.get("cache")
+    cache_rows = ""
+    if type(cache) is dict and type(cache.get("positions")) is dict:
+        position_rows: list[str] = []
+        for position in ("cold", "warm_repeat", "shared_prefix", "divergent_control"):
+            entry = cache["positions"].get(position)
+            if type(entry) is not dict:
+                continue
+            position_rows.append(
+                "<tr><td>"
+                + _text(position)
+                + "</td><td>"
+                + _count(entry.get("cache_n"))
+                + "</td><td>"
+                + _count(entry.get("tokens_cached"))
+                + "</td><td>"
+                + _count(entry.get("tokens_evaluated"))
+                + "</td></tr>"
+            )
+        if position_rows:
+            cache_rows = (
+                "<p>Measured cache companion (sequence detail: "
+                + _text(cache.get("detail") or "ok")
+                + "). The headline quantity is cache_n, the slot "
+                "layer's own reuse count; the other two columns are "
+                "recorded as reported.</p>"
+                + "<table><thead><tr><th>Position</th><th>cache_n</th>"
+                + "<th>tokens_cached</th><th>tokens_evaluated</th></tr></thead>"
+                + "<tbody>"
+                + "".join(position_rows)
+                + "</tbody></table>"
+            )
+    stop_matrix = probe.get("stop_matrix")
+    matrix_rows = ""
+    if type(stop_matrix) is dict and type(stop_matrix.get("rows")) is list:
+        body_rows: list[str] = []
+        for row in stop_matrix["rows"]:
+            if type(row) is not dict:
+                continue
+            cells = row.get("cells")
+            cell = cells.get("llamacpp") if type(cells) is dict else None
+            if type(cell) is not dict:
+                continue
+            body_rows.append(
+                "<tr><td>"
+                + _text(row.get("fixture"))
+                + "</td><td>"
+                + _text(row.get("candidate"))
+                + "</td><td>"
+                + _text(row.get("arm"))
+                + "</td><td>"
+                + _text("fired" if cell.get("fired") is True else "no fire")
+                + "</td><td>"
+                + _count(cell.get("firing_step"))
+                + "</td><td>"
+                + _text(cell.get("disposition"))
+                + "</td><td>"
+                + _text(cell.get("verdict"))
+                + "</td></tr>"
+            )
+        if body_rows:
+            matrix_rows = (
+                "<table><thead><tr><th>Fixture</th><th>Candidate</th>"
+                + "<th>Arm</th><th>Stop</th><th>Firing step</th>"
+                + "<th>Disposition</th><th>Verdict</th></tr></thead>"
+                + "<tbody>"
+                + "".join(body_rows)
+                + "</tbody></table>"
+            )
+    checkpoint = identity.get("checkpoint_digest")
+    fingerprint = identity.get("config_fingerprint")
+    return (
+        '<section class="card" id="serving-backends">'
+        "<h2>Serving-stack measurement (exec-backends)</h2>"
+        "<p>The lab drove a real serving stack over HTTP with raw "
+        "token ids under a pinned deterministic sampler configuration "
+        "and recorded what the stack did — firing step, stop winner, "
+        "disposition, cache reuse — against the lab's own predictor. "
+        "Verdicts are keyed to the stack identity below: a different "
+        "build, checkpoint, or configuration is a different "
+        "measurement, not a comparable one.</p>"
+        "<p>Stack: "
+        + _text(identity.get("stack"))
+        + " "
+        + _text(identity.get("stack_version"))
+        + " on "
+        + _text(identity.get("hardware_class"))
+        + "; checkpoint sha256 "
+        + _text(checkpoint[:12] if type(checkpoint) is str else None)
+        + "…; configuration fingerprint "
+        + _text(fingerprint[:12] if type(fingerprint) is str else None)
+        + "….</p>"
+        "<p>Capabilities offered: "
+        + _text(", ".join(present) if present else "none")
+        + ". Capabilities absent (recorded as absent cells, never "
+        "silently degraded): "
+        + _text(", ".join(absent) if absent else "none")
+        + ".</p>"
+        + fidelity_line
+        + cache_rows
+        + matrix_rows
+        + "</section>"
+    )
+
+
 def _typographic_emphasis_section(result: dict[str, Any]) -> str:
     """Typographic-emphasis probe: does wrapping one
     topic span of a fact carrier in bold, italic,
@@ -13663,6 +13820,7 @@ def render_html(result: dict[str, Any]) -> str:
     cache_profile_html = _cache_profile_section(result)
     confidentiality_html = _confidentiality_section(result)
     answer_collision_html = _answer_collision_section(result)
+    serving_backends_html = _serving_backends_section(result)
     template_robustness_html = _template_robustness_section(result)
     ablation_html = _ablation_section(result)
     sweep_html = _sweep_section(result)
@@ -13925,6 +14083,11 @@ def render_html(result: dict[str, Any]) -> str:
                 answer_collision_html,
             ),
             (
+                "serving-backends",
+                "Serving-stack measurement (exec-backends)",
+                serving_backends_html,
+            ),
+            (
                 "template-robustness",
                 "Template surface-noise robustness",
                 template_robustness_html,
@@ -14024,6 +14187,7 @@ def render_html(result: dict[str, Any]) -> str:
         + cache_profile_html
         + confidentiality_html
         + answer_collision_html
+        + serving_backends_html
         + template_robustness_html
         + ablation_html
         + sweep_html

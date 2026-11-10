@@ -84,6 +84,7 @@ nav:
           - Rotation: ROTATION_DESIGN.md
           - Scorer lens: SCORER_LENS_DESIGN.md
           - Sealed bundle: SEALED_BUNDLE_DESIGN.md
+          - Serving backends: SERVING_BACKENDS_DESIGN.md
           - Surface noise: SURFACE_NOISE_PROBE_DESIGN.md
           - Template probe: TEMPLATE_PROBE_DESIGN.md
           - Template robustness: TEMPLATE_ROBUSTNESS_DESIGN.md

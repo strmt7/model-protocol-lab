@@ -73,6 +73,7 @@ class SubcommandSurfaceTest(unittest.TestCase):
                 "diff-backends",
                 "diff-reports",
                 "doctor",
+                "exec-backends",
                 "fixtures",
                 "inspect",
                 "pack",

@@ -271,6 +271,7 @@ class TestParserContract(unittest.TestCase):
                 "fixtures",
                 "diff-reports",
                 "diff-backends",
+                "exec-backends",
                 "debug",
                 "verify",
                 "surface-noise",
@@ -398,6 +399,7 @@ class TestParserContract(unittest.TestCase):
             ["fixtures", "build", "--help"],
             ["diff-reports", "--help"],
             ["diff-backends", "--help"],
+            ["exec-backends", "--help"],
             ["debug", "--help"],
         ]
         for argv in argvs:

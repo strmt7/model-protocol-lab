@@ -13319,6 +13319,124 @@ def typographic_emphasis_analysis(
     }
 
 
+def serving_backends_analysis(stage: dict[str, Any]) -> dict[str, Any]:
+    """Aggregate an exec-backends stage into the stored section (cycle 243).
+
+    The stage comes from
+    :func:`model_protocol_lab.servingbackends.run_stage` (or is the
+    fail-closed ``{"available": False, "detail": ...}`` shape a probe
+    gate produced). The section carries the stack identity and
+    capabilities, the execution records, and three readouts derived
+    from the records: the serving-stack stop matrix (§9.1.1 of the
+    design — the stop_matrix row shape with the measured stack as
+    the semantic), the measured cache companion (§9.1.3: the §5.4
+    positions as reported, with the sequence's verdict as its
+    detail), and the fidelity aggregation (§9.3). Post-hoc and
+    opt-in only: the stage is produced by the ``exec-backends``
+    subcommand, never during ``run``, and never feeds selection.
+    Design: docs/SERVING_BACKENDS_DESIGN.md.
+    """
+    from . import servingbackends as _sb
+
+    protocol = {"version": _sb.PROTOCOL_VERSION}
+    if not stage.get("available"):
+        return {
+            "available": False,
+            "detail": str(stage.get("detail", "serving_backends_unavailable")),
+            "protocol": protocol,
+            "identity": None,
+            "capabilities": None,
+            "records": [],
+            "stop_matrix": {"available": False, "rows": []},
+            "cache": {"available": False, "detail": "not_attempted", "positions": {}},
+            "fidelity": {
+                "available": False,
+                "detail": "not_attempted",
+                "verdict": "fidelity_unavailable",
+                "counts": {},
+                "divergence_classes": {},
+                "per_fixture": [],
+            },
+            "audit": stage.get("audit"),
+        }
+    records: list[dict[str, Any]] = stage["records"]
+    rows: list[dict[str, Any]] = []
+    for record in records:
+        if record.get("cache_position") != "standalone":
+            continue
+        mirror = record["mirror"]
+        winner = record.get("stop_winner")
+        fired = winner is not None
+        returned = record.get("returned_ids")
+        config = record.get("request_config") or {}
+        if config.get("include_stop_str_in_output"):
+            arm = "keep"
+        elif mirror.get("hf_stream") is not None:
+            arm = "strip"
+        else:
+            arm = "plain"
+        cell = {
+            "available": record.get("cell_detail") != "capability_absent",
+            "fired": fired,
+            "firing_step": len(returned) if fired and type(returned) is list else None,
+            "disposition": mirror.get("observed_disposition"),
+            "finish_class": record.get("finish_class"),
+            "verdict": mirror.get("fidelity_verdict"),
+            "detail": record.get("cell_detail", ""),
+        }
+        flips = (
+            [mirror["divergence_class"]]
+            if mirror.get("fidelity_verdict") == "diverge" and mirror.get("divergence_class")
+            else []
+        )
+        rows.append(
+            {
+                "fixture": record.get("fixture"),
+                "candidate": record.get("candidate"),
+                "arm": arm,
+                "cells": {"llamacpp": cell},
+                "flips": flips,
+            }
+        )
+    sequence = stage.get("cache_sequence")
+    if sequence is None:
+        cache: dict[str, Any] = {
+            "available": False,
+            "detail": "not_attempted",
+            "positions": {},
+        }
+    else:
+        cache = {
+            "available": bool(sequence.get("available")),
+            "detail": str(sequence.get("detail", "")),
+            "positions": sequence.get("positions") or {},
+        }
+    aggregate = _sb.aggregate_fidelity(records)
+    fidelity_result = stage.get("fidelity")
+    fidelity: dict[str, Any] = {
+        "available": bool(aggregate["available"]),
+        "detail": "" if aggregate["available"] else "not_attempted",
+        "verdict": aggregate["verdict"],
+        "counts": aggregate["counts"],
+        "divergence_classes": aggregate["divergence_classes"],
+        "per_fixture": fidelity_result["per_fixture"] if type(fidelity_result) is dict else [],
+    }
+    audit = dict(stage.get("audit") or {})
+    audit.setdefault("n_records", len(records))
+    return {
+        "available": True,
+        "detail": str(stage.get("detail", "")),
+        "protocol": protocol,
+        "identity": stage.get("identity"),
+        "capabilities": stage.get("capabilities"),
+        "records": records,
+        "stop_matrix": {"available": bool(rows), "rows": rows},
+        "cache": cache,
+        "fidelity": fidelity,
+        "audit": audit,
+    }
+
+
 class _RotationCancelled(Exception):
     """Internal: the run's cancel event fired during the
     rotation stage; the stage unwinds to its fail-closed

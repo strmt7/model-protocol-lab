@@ -4481,6 +4481,15 @@ def oracle_diff_reports(
             return False
         return value.get("any_positive") == bool(expected_positive)
 
+    def _or_serving_backends_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_serving_backends exactly: the
+        # recompute mirror is shared with cycle 67's oracle so the
+        # two oracles can never drift apart on this section.
+        """Or serving backends valid."""
+        from tests.test_cycle67_diffreports_audit import _o_serving_backends_valid
+
+        return _o_serving_backends_valid(value)
+
     def _or_answer_collision_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_answer_collision exactly: the
         # availability-level oracle must agree with the implementation
@@ -9376,6 +9385,17 @@ def oracle_diff_reports(
     else:
         _o_ac_available = "neither"
     _o_ac_asymmetric = _o_ac_available not in ("both", "neither")
+    _sb_old_ok = _or_serving_backends_valid(old.get("serving_backends"))
+    _sb_new_ok = _or_serving_backends_valid(new.get("serving_backends"))
+    if _sb_old_ok and _sb_new_ok:
+        _o_sb_available = "both"
+    elif _sb_old_ok:
+        _o_sb_available = "old"
+    elif _sb_new_ok:
+        _o_sb_available = "new"
+    else:
+        _o_sb_available = "neither"
+    _o_sb_asymmetric = _o_sb_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -9435,6 +9455,7 @@ def oracle_diff_reports(
         and not _o_ab_asymmetric
         and not _o_cf_asymmetric
         and not _o_ac_asymmetric
+        and not _o_sb_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -9551,6 +9572,8 @@ def oracle_diff_reports(
         "confidentiality_asymmetric": _o_cf_asymmetric,
         "answer_collision_changed": False,
         "answer_collision_asymmetric": _o_ac_asymmetric,
+        "serving_backends_changed": False,
+        "serving_backends_asymmetric": _o_sb_asymmetric,
         "identical": identical,
     }
     return {
@@ -9613,6 +9636,7 @@ def oracle_diff_reports(
         "ablation": {"available": _o_ab_available, "changed": False},
         "confidentiality": {"available": _o_cf_available, "changed": False},
         "answer_collision": {"available": _o_ac_available, "changed": False},
+        "serving_backends": {"available": _o_sb_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
