@@ -47,9 +47,7 @@ def report(**sections):
 
 frontier = {
     "max_new_tokens": 2,
-    "candidates": {
-        "a": {"fixture_ids": ["f"], "pass_steps": [[1, 0], [2, 1]]}
-    },
+    "candidates": {"a": {"fixture_ids": ["f"], "pass_steps": [[1, 0], [2, 1]]}},
     "decision_steps": [[1, "no_candidate", None]],
     "budget_robust": True,
     "flip_ranges": [],
@@ -66,10 +64,8 @@ bad_floor = copy.deepcopy(floor)
 bad_floor["budget_robust"] = []
 
 cases = [
-    ("frontier", report(budget_frontier=frontier),
-     report(budget_frontier=bad_frontier)),
-    ("floor", report(held_out_budget_floor=floor),
-     report(held_out_budget_floor=bad_floor)),
+    ("frontier", report(budget_frontier=frontier), report(budget_frontier=bad_frontier)),
+    ("floor", report(held_out_budget_floor=floor), report(held_out_budget_floor=bad_floor)),
 ]
 for name, old, new in cases:
     paths = []
@@ -78,8 +74,15 @@ for name, old, new in cases:
         path.write_text(json.dumps(payload, allow_nan=False), encoding="utf-8")
         paths.append(str(path))
     child = subprocess.run(
-        [sys.executable, "-X", "utf8", "-m", "model_protocol_lab",
-         "diff-reports", *paths],
+        [
+            sys.executable,
+            "-X",
+            "utf8",
+            "-m",
+            "model_protocol_lab",
+            "diff-reports",
+            *paths,
+        ],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -91,12 +94,16 @@ for name, old, new in cases:
         valid_stdout_json = True
     except ValueError:
         valid_stdout_json = False
-    print(json.dumps({
-        "case": name,
-        "exit": child.returncode,
-        "traceback": "Traceback (most recent call last)" in child.stderr,
-        "valid_stdout_json": valid_stdout_json,
-    }))
+    print(
+        json.dumps(
+            {
+                "case": name,
+                "exit": child.returncode,
+                "traceback": "Traceback (most recent call last)" in child.stderr,
+                "valid_stdout_json": valid_stdout_json,
+            }
+        )
+    )
 ```
 
 Observed results: both exit 1 with a traceback. The frontier case has no valid
@@ -153,39 +160,57 @@ class ArithmeticBackend:
 
 
 fmt = Format(
-    name="synthetic", bos="", user_prefix="u:",
-    assistant_prefix="a:", turn_end="</s>",
+    name="synthetic",
+    bos="",
+    user_prefix="u:",
+    assistant_prefix="a:",
+    turn_end="</s>",
 )
 sections = []
 for drop in (False, True):
     backend = ArithmeticBackend(drop)
     stage = experiments.negation_stage(
-        backend, (fmt,), boundary=(7,), max_new_tokens=16,
-        max_context=32768, seed=0,
+        backend,
+        (fmt,),
+        boundary=(7,),
+        max_new_tokens=16,
+        max_context=32768,
+        seed=0,
     )
     section = experiments.negation_analysis(stage, (fmt.name,))
     assert section["available"] is True
     sections.append(section)
-    print(json.dumps({
-        "drop": drop,
-        "calls": backend.calls,
-        "headline": section["candidates"][fmt.name]["headline"]["decision"],
-    }))
+    print(
+        json.dumps(
+            {
+                "drop": drop,
+                "calls": backend.calls,
+                "headline": section["candidates"][fmt.name]["headline"]["decision"],
+            }
+        )
+    )
 
 
 def wrap(section):
     return {
-        "decision": "no_candidate", "selected_candidate": None,
-        "search": [], "held_out": None, "negation": section,
+        "decision": "no_candidate",
+        "selected_candidate": None,
+        "search": [],
+        "held_out": None,
+        "negation": section,
     }
 
 
 assert sections[0] != sections[1]
 diff = diffreports.diff_reports(wrap(sections[0]), wrap(sections[1]))
-print(json.dumps({
-    "identical": diff["summary"]["identical"],
-    "negation_compared": "negation" in diff,
-}))
+print(
+    json.dumps(
+        {
+            "identical": diff["summary"]["identical"],
+            "negation_compared": "negation" in diff,
+        }
+    )
+)
 ```
 
 Observed: 64 generation calls per backend; the headline changes from

@@ -97,7 +97,19 @@ a machine-checkable entry point; never write that its verdict was run before
 it exists. A selected green subset is not the complete release decision.
 
 Do not run the expensive whole suite while another process edits the same
-source. Several existing mutation gates overwrite source and clear bytecode;
+source. Also run `ruff format --check .`: the cycle-44 toolchain test checks
+the whole repository, including Python fences in Markdown under pinned Ruff
+0.17.3. The static CI job's narrower path list does not cover that test's full
+scope. The first audit commit's three Linux legs each ran 9,676 tests and
+failed only on formatting in the new reproduction document; its examples were
+reformatted without changing their parsed Python ASTs or reproduced outcomes.
+The direct whole-tree formatter is separately executable on Windows; the
+existing cycle-44 test helper assumes extensionless executable filenames and
+fails before tool launch there. Do not add an executable shim to hide that
+platform limitation. Read current exact-head GitHub results for the corrective
+documentation commit rather than declaring that failed historical run green.
+
+Several existing mutation gates overwrite source and clear bytecode;
 use a disposable checkout and verify source blobs after an interrupted run.
 A nonzero mutation subprocess exit caused by collection/import/timeout failure
 is inconclusive, not evidence that a behavioral mutant was detected.

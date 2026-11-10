@@ -496,6 +496,7 @@ These are existing commands, not proof that they pass on an arbitrary setup:
 python tools/agent_context.py startup
 ruff check model_protocol_lab tests examples tools fuzz
 ruff format --check model_protocol_lab tests examples
+ruff format --check .
 mypy model_protocol_lab
 bandit -r model_protocol_lab -q
 coverage run -m unittest discover -s tests -t .

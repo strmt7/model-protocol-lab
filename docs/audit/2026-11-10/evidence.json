@@ -351,7 +351,7 @@
     "python": "3.12 audit environment; Windows",
     "current_source": {
       "ruff_check": "exit 0; package/tests/examples/tools/fuzz",
-      "ruff_format_check": "exit 0; package/tests/examples",
+      "ruff_format_check": "exit 0; explicit CI scope and whole-tree scope including Markdown Python fences",
       "bandit": "exit 0; package; existing exclusions/warnings recorded",
       "mypy": "exit 1; 34 errors in 3 files"
     },
@@ -1129,5 +1129,43 @@
     "DeepSource clean exact-head inventory",
     "PyPI upload or release/tag creation"
   ],
-  "publication": "Documentation only. Final commit checks are necessarily newer than this baseline evidence; read GitHub by exact published SHA."
+  "publication": "Documentation only. Final commit checks are necessarily newer than this baseline evidence; read GitHub by exact published SHA.",
+  "documentation_verification_correction": {
+    "initial_audit_commit": "646d248565e23111ecb7b39376b207e120a6463d",
+    "ci_run_id": 42869782607,
+    "ci_url": "https://github.com/strmt7/model-protocol-lab/actions/runs/42869782607",
+    "result": "failed; never relabeled as passing",
+    "legs": [
+      {
+        "python": "3.11",
+        "tests": 9676,
+        "failures": 1,
+        "skipped": 3,
+        "elapsed_seconds": 2684.981,
+        "failure": "whole-tree Ruff formatting of newly added reproduction Markdown"
+      },
+      {
+        "python": "3.12",
+        "tests": 9676,
+        "failures": 1,
+        "skipped": 3,
+        "elapsed_seconds": 1777.364,
+        "failure": "whole-tree Ruff formatting of newly added reproduction Markdown"
+      },
+      {
+        "python": "3.13",
+        "tests": 9676,
+        "failures": 1,
+        "skipped": 3,
+        "elapsed_seconds": 3027.992,
+        "failure": "whole-tree Ruff formatting of newly added reproduction Markdown"
+      }
+    ],
+    "root_cause": "The cycle-44 toolchain test invokes the whole-tree formatter, which includes Markdown Python fences in Ruff 0.17.3; the narrower static CI path list missed that documentation scope.",
+    "correction": "Reformatted only reproduction-document Python fences; all three parsed ASTs and reproduced outcomes unchanged. Added the whole-tree formatter command and recorded this verification limit in the handover.",
+    "local_equivalent_gate": "ruff format --check . exits 0, 421 files already formatted",
+    "windows_test_helper_limitation": "The existing cycle-44 run_tool helper requires an extensionless executable path and rejects the installed ruff.exe before launch; no shim or product fix was applied.",
+    "exact_corrective_commit_results": "Read GitHub for the following documentation-only commit; this historical failed run is not a current-green receipt.",
+    "product_source_changes": false
+  }
 }
