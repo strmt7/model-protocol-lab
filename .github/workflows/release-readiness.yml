@@ -27,8 +27,8 @@ on:
 # Least-privilege default: the verifier only reads workflow runs,
 # jobs and file contents through the API.
 permissions:
-  contents: read
-  actions: read
+  contents: read # checkout the supplied SHA; nothing is published or uploaded
+  actions: read # the verifier reads workflow runs and jobs for the supplied SHA
 
 concurrency:
   group: ${{ github.workflow }}-${{ inputs.sha }}
