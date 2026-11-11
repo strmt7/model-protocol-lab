@@ -463,6 +463,44 @@ class BuildSubwordIdsTests(unittest.TestCase):
             kwargs[key] = bad
             self.assertIsNone(build_subword_ids(**kwargs), f"key={key}")  # type: ignore[arg-type]
 
+    def test_none_when_iterable_raises(self):
+        """An iterable whose iteration raises fails closed, never raises.
+
+        build_subword_ids converts subword and offsets with tuple(...)
+        at its fail-closed boundary; a hostile iterable that raises
+        during iteration must yield None, not propagate the exception
+        (the validator's "never raises" contract).
+        """
+        marker, pair = self._pair()
+
+        class Exploding:
+            """Iterable that raises on iteration."""
+
+            def __iter__(self):
+                """Raise unconditionally."""
+                raise RuntimeError("hostile iterable")
+
+        text = f"a{marker}b"
+        marker_id = pair["reserved"][0]
+        self.assertIsNone(
+            build_subword_ids(
+                scripted_encode, scripted_decode, text, marker, marker_id, Exploding(), [1]
+            ),
+            "subword iterable raises",
+        )
+        self.assertIsNone(
+            build_subword_ids(
+                scripted_encode,
+                scripted_decode,
+                text,
+                marker,
+                marker_id,
+                pair["subword"],
+                Exploding(),
+            ),
+            "offsets iterable raises",
+        )
+
     def test_none_when_encode_fails(self):
         """Test none when encode fails."""
         marker, pair = self._pair()

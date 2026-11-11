@@ -55,7 +55,7 @@ from typing import Any, Literal, NoReturn, cast
 
 from model_protocol_lab import __version__, datasets
 from model_protocol_lab import surfacenoise as sn
-from model_protocol_lab.core import Fixture, Message
+from model_protocol_lab.core import Backend, Fixture, Message
 
 PROTOCOL_VERSIONS = ["2024-11-05", "2026-07-28"]
 SERVER_INFO = {"name": "mpl-surface-noise-probe", "version": "1.0.0"}
@@ -100,7 +100,7 @@ def _reject_surrogates(value: str, field: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _build_backend(spec: dict[str, Any]) -> object:
+def _build_backend(spec: dict[str, Any]) -> Backend:
     """Build backend."""
     if type(spec) is not dict:
         raise MCPError(-32602, "params.backend must be an object")
@@ -281,7 +281,7 @@ def tool_probe(params: dict[str, Any]) -> dict[str, Any]:
     )
     seed = _parse_optional_int(params.get("seed"), "seed", 0, 2**64 - 1, 0)
 
-    fingerprint = backend.fingerprint  # type: ignore[attr-defined]
+    fingerprint = backend.fingerprint
     protocol = sn.freeze_surface_noise_protocol(backend_fingerprint=fingerprint, fixtures=fixtures)
     cancel = threading.Event()
 
@@ -313,7 +313,7 @@ def tool_probe(params: dict[str, Any]) -> dict[str, Any]:
                 report = sn.probe_surface_noise(
                     prompt,
                     fixtures,
-                    backend,  # type: ignore[arg-type]
+                    backend,
                     protocol,
                     boundary=boundary,
                     max_new_tokens=max_new_tokens,

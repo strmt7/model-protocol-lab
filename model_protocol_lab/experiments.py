@@ -2256,7 +2256,7 @@ def _fewshot_arm_verdict(
         passed = sum(1 for v in arm_values if v)
         rates[name] = {"pass": passed == len(arm_values), "pass_rate": passed / len(arm_values)}
     evaluable = [name for name in candidates if rates[name] is not None]
-    winners = [name for name in evaluable if rates[name]["pass"]]  # type: ignore[index]
+    winners = [name for name in evaluable if (entry := rates[name]) is not None and entry["pass"]]
     if not evaluable:
         return "unavailable", None, rates
     if len(winners) == 1:

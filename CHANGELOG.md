@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (exclusion-marker inventory + first removal wave — RR-17, audit work package W1, 2026-11-11)
+
+- The exclusion-marker surface is now inventoried mechanically
+  (occurrence census over every Python file: 1,089 markers repo-wide;
+  314 in the package). Wave 1 removes one bounded class outright: all
+  five `type: ignore` markers in the package are gone, replaced by
+  genuine typing — deliforge's `_valid_ids` is now a `TypeGuard` and
+  its fail-closed conversion boundary narrows with `Iterable`,
+  the experiments selection comprehension narrows with a walrus, and
+  the MCP server's `_build_backend` declares the `Backend` return
+  type it always constructed. `mypy` and `mypy --strict` stay clean,
+  and a 1,176-combination differential run over the restructured
+  validator shows no behaviour change. The remaining marker classes
+  stay enumerated in the ledger (RR-17 remains open).
+
 ### Fixed (secret scan was vacuous — RR-01, audit work package W1, 2026-11-11)
 
 - `.gitleaks.toml` now loads the upstream default rule set through

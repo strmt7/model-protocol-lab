@@ -71,8 +71,9 @@ marker localization, splicing, and gap aggregation need no model.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from threading import Event
+from typing import TypeGuard
 
 from .core import Backend, Fixture, Generation, Message
 
@@ -217,8 +218,8 @@ def build_forged_fixtures(
     return tuple(fixtures)
 
 
-def _valid_ids(ids: object) -> bool:
-    """Return whether ids is valid."""
+def _valid_ids(ids: object) -> TypeGuard[tuple[int, ...]]:
+    """Return whether ids is a nonempty tuple of exact nonnegative ints."""
     return (
         type(ids) is tuple
         and bool(ids)
@@ -400,21 +401,25 @@ def build_subword_ids(
         return None
     if type(marker_id) is not int or isinstance(marker_id, bool) or marker_id < 0:
         return None
+    if not isinstance(subword, Iterable):
+        return None
     try:
-        pieces: tuple[int, ...] = tuple(subword)  # type: ignore[arg-type]
+        pieces = tuple(subword)
     except Exception:  # noqa: BLE001 -- fail-closed: malformed input
         return None
     if not _valid_ids(pieces):
         return None
+    if not isinstance(offsets, Iterable):
+        return None
     try:
-        slots: tuple[int, ...] = tuple(offsets)  # type: ignore[arg-type]
+        slots = tuple(offsets)
     except Exception:  # noqa: BLE001 -- fail-closed: malformed offsets
         return None
+    if not _valid_ids(slots):
+        return None
     if (
-        not slots
-        or any(type(o) is not int or isinstance(o, bool) for o in slots)
-        or tuple(slots) != tuple(sorted(set(slots)))
-        or any(o < 0 or o + len(marker) > len(text) for o in slots)
+        tuple(slots) != tuple(sorted(set(slots)))
+        or any(o + len(marker) > len(text) for o in slots)
         or any(text[o : o + len(marker)] != marker for o in slots)
     ):
         return None
