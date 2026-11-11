@@ -62,7 +62,7 @@ POSITION_SPECS: tuple[dict[str, tuple[str, ...] | str], ...] = (
     {
         "id": "capital",
         "question": "Which of these is a European capital?",
-        "options": ("Lisbon", "Oslo", "Lima", "Quito"),
+        "options": ("Cairo", "Oslo", "Lima", "Quito"),
         "correct": "Oslo",
     },
     {

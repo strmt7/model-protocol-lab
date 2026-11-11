@@ -6,6 +6,41 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (semantic-key repairs — seven defective frozen grading keys, 2026-11-11)
+
+- Seven frozen grading keys whose accepted answers were not uniquely
+  entailed by their fixtures — one of them factually wrong — are
+  repaired with one-line context/distractor changes that preserve
+  every fixture's shape, schema and difficulty:
+  - position `capital` (SCI-B-01): the distractor Lisbon — itself a
+    European capital — is replaced with Cairo, leaving Oslo the
+    unique correct answer.
+  - structured + fieldorder `extract-person`: the context asserted
+    Ada Lovelace was 36 when she wrote the first algorithm; she was
+    27 (the Notes, September 1843; 36 was her age at death). The
+    context, the answer and the canonicalisation worked example now
+    use 27.
+  - structured + fieldorder `route-ticket`: the ticket text now
+    states "(priority 3 of 5)", pinning the previously unstated
+    priority.
+  - structured + fieldorder `route-alert`: the alert now says
+    "Page the on-call engineer", entailing the `pager` channel.
+  - structured + fieldorder `route-order`: the warehouse answer is
+    `north` (Porto is in northern Portugal) and the context states
+    that express delivery was requested.
+  - fieldorder `route-complaint`: the context now states the
+    escalation to the technical team, so `team = technical` is
+    uniquely derivable, with `paired` unchanged.
+  - toolcall `docs-healing`: the query now asks to "show the top 3
+    results", pinning the expected call's `top_k`.
+  The repairs are mirrored in the diff validator's frozen copies
+  (`diffreports.py`), the reporting prose, the field-order design
+  doc and the test mirrors; the new pins in
+  `tests/test_semantic_key_repairs.py` fail on the pre-fix tree for
+  each named defect and pass after it. The `paired` flags and the
+  paired population are unchanged. Finding rows:
+  `docs/STABLE_RELEASE_LEDGER.md` §2.1 (SCI-B-01) and §2.3.
+
 ### Added (W0 — stable-release capability and contract census, 2026-11-10)
 
 - [Stability contract](docs/STABILITY_CONTRACT.md): the capability

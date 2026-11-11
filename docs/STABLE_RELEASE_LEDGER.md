@@ -82,7 +82,7 @@ repo). Priorities and owning packages are the audit's.
 | SA-03 | P2 | Duplicate JSON tool arguments collapse before grading; a conflicting duplicate still grades adherent | open | W2/W6 | audit-executed on a shipped query |
 | SA-04 | P2 | Custom structured `number` schema overflows on a 401-digit integer (float conversion of arbitrary-precision ints) | open | W2/W6 | audit-executed |
 | SA-05 | P2 | Custom schema enums conflate bool and number via Python equality (int field accepts `true` enum match and vice versa); the test oracle repeats the defect | open | W2/W6 | audit-executed; JSON Schema §4.2.2 is the reference |
-| SCI-B-01 | P1 | Position `capital` key is ambiguous: Lisbon and Oslo are both European capitals; only Oslo is accepted | open | W6 (fix scheduled right after W0, alongside W2) | **execution-verified by the semantic-keys lane**: a Lisbon answer scores `exact_match = False` in the default fixture set. Repair specified (distractor Lisbon → Cairo). See §2.3 |
+| SCI-B-01 | P1 | Position `capital` key is ambiguous: Lisbon and Oslo are both European capitals; only Oslo is accepted | fixed-with-evidence | W6 (fix scheduled right after W0, alongside W2) | **execution-verified by the semantic-keys lane**: a Lisbon answer scores `exact_match = False` in the default fixture set. Repair specified (distractor Lisbon → Cairo) and applied 2026-11-11 by the semantic-key repair cycle; the pins in `tests/test_semantic_key_repairs.py` failed on the pre-fix tree and pass after it. See §2.3 |
 | SCI-B-02 | P2 | Cache profile calls prefix sharing exact duplication (distinct prompts sharing a prefix count as duplicates) | open | W6 | audit-executed against an independent oracle (the hit formula itself verified correct) |
 | SCI-B-03 | P2 | Few-shot comparisons mix fixture cohorts (order rates computed on different populations than the headline) | open | W6 | audit-executed (two-fixture stage) |
 | SCI-B-04 | P2 | Cache prefix storage is quadratic in prompt length | open | W4/W6 | audit-measured (256/512/1024 → 32,896/131,328/524,800 retained references) |
@@ -113,17 +113,26 @@ SCI-B-01 is D-1; the six siblings:
 
 | Key | Defect | Status | Repair specified by the lane |
 | --- | --- | --- | --- |
-| `extract-person` (structured + fieldorder) | **Wrong fact**: context asserts Ada Lovelace "was 36 when she wrote the first algorithm" — she was 27 when the Notes were published in Sept 1843; 36 was her age at death | open | 36 → 27 in context and answer, both modules, plus doc/test mirrors |
-| `route-ticket` (structured + fieldorder) | Ambiguous: `priority=3` pinned by nothing in the context (schema allows 1–5, no urgency cue) | open | context carries the priority ("Ticket (priority 3 of 5): …") |
-| `route-alert` (structured + fieldorder) | Ambiguous: `channel=pager` not entailed (email/sms equally defensible); the module itself records `paired=False` yet still scores it | open | context cues the channel ("Page the on-call engineer") |
-| `route-order` (structured + fieldorder) | Ambiguous, arguably wrong: `warehouse=south` for Porto (northern Portugal); `express` unpinned by "by Friday" | open | answer → `north`; context pins express ("express delivery was requested") |
-| `route-complaint` (fieldorder only) | Ambiguous: `team=technical` with `paired=True`, but `support` is defensible (support received and confirmed the complaint) | open | context pins the escalation to the technical team (preferred) or `paired=False` |
-| `docs-healing` (toolcall) | Ambiguous: expected call pins `top_k=3`, an unstated default for an optional argument; any value 1–5 (or omission) is equally defensible | open | query mirrors the sibling's phrasing ("show the top 3 results") |
+| `extract-person` (structured + fieldorder) | **Wrong fact**: context asserts Ada Lovelace "was 36 when she wrote the first algorithm" — she was 27 when the Notes were published in Sept 1843; 36 was her age at death | fixed-with-evidence | 36 → 27 in context and answer, both modules, plus doc/test mirrors (applied 2026-11-11) |
+| `route-ticket` (structured + fieldorder) | Ambiguous: `priority=3` pinned by nothing in the context (schema allows 1–5, no urgency cue) | fixed-with-evidence | context carries the priority ("Ticket (priority 3 of 5): …") (applied 2026-11-11) |
+| `route-alert` (structured + fieldorder) | Ambiguous: `channel=pager` not entailed (email/sms equally defensible); the module itself records `paired=False` yet still scores it | fixed-with-evidence | context cues the channel ("Page the on-call engineer") (applied 2026-11-11) |
+| `route-order` (structured + fieldorder) | Ambiguous, arguably wrong: `warehouse=south` for Porto (northern Portugal); `express` unpinned by "by Friday" | fixed-with-evidence | answer → `north`; context pins express ("express delivery was requested") (applied 2026-11-11) |
+| `route-complaint` (fieldorder only) | Ambiguous: `team=technical` with `paired=True`, but `support` is defensible (support received and confirmed the complaint) | fixed-with-evidence | context pins the escalation to the technical team (preferred option taken 2026-11-11; `paired` unchanged) |
+| `docs-healing` (toolcall) | Ambiguous: expected call pins `top_k=3`, an unstated default for an optional argument; any value 1–5 (or omission) is equally defensible | fixed-with-evidence | query mirrors the sibling's phrasing ("show the top 3 results") (applied 2026-11-11) |
 
 All seven repairs are one-line context/distractor changes preserving
-each fixture's shape and difficulty; the fix cycle runs right after
-W0 alongside W2, sweeping the design docs and pinning tests in the
-same change.
+each fixture's shape and difficulty. **Repaired 2026-11-11** (the
+semantic-key fix cycle, the first post-baseline fix recorded in this
+ledger): the repairs landed in `position.py`, `structured.py`,
+`fieldorder.py` (including its checking-rule worked example) and
+`toolcall.py`, in the diff validator's mirrors in `diffreports.py`,
+in the reporting prose and the field-order design doc, and in the
+test mirrors, with regression pins in
+`tests/test_semantic_key_repairs.py` — every pin failed on the
+pre-fix tree for its named defect and passes after it, under a full
+green verification gate on the repair head. The `paired` flags were
+not changed: the paired population is frozen with fieldorder's
+pre-registered claim.
 
 ### 2.4 Wave-9 findings (bug-hunt wave 9, 2026-11-10)
 
@@ -152,7 +161,10 @@ siblings + 7 RTI + 6 ORCH + 6 wave-9. Of these: **49 open**,
 **1 blocked-external** (RR-05), **2 design-debt-accepted**
 (ORCH-D01, ORCH-D02), **0 fixed** — no finding in this ledger has
 been fixed yet; the program starts here. Every open row names its
-owning work package in its table.
+owning work package in its table. Post-baseline status changes are
+recorded in the rows themselves; the first is the semantic-key
+repair of 2026-11-11 (SCI-B-01 and its six §2.3 siblings: 7 rows
+now fixed-with-evidence, 42 open).
 
 ### 2.6 Independent re-verification (audit-verify lane — landed)
 

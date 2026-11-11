@@ -17,10 +17,14 @@ unchanged and extended with six 3-4-field specs frozen in this
 module (the shipped schemas alone collapse the four arms to at
 most two distinct orders). Each spec designates one answer
 field and a frozen ``paired`` flag; two shipped specs are
-excluded from pairing because their frozen answer labels are
-not entailed by their contexts (route-alert's ``pager``,
-route-order's ``south``) -- the reader-entailment rule and the
-full adjudication are in the design doc. Arms per spec:
+excluded from pairing because their frozen answer labels were
+not entailed by their contexts as originally shipped
+(route-alert's ``pager``, route-order's ``south``). The
+semantic-key repair later made both labels entailed by their
+contexts (and route-order's answer is now ``north``), but the
+paired population is frozen with the claim below and is not
+re-opened by a key repair -- the reader-entailment rule and
+the full adjudication are in the design doc. Arms per spec:
 ``canonical`` (alphabetical, the shipped presentation),
 ``answer_first``, ``answer_last``, ``reversed``; the four orders
 are all distinct only when the answer field sits in a middle
@@ -136,8 +140,8 @@ CHECKING_RULE_TEXT = (
     "Canonical JSON is structured._canonical_json: json.dumps "
     "with sort_keys=True, separators=(', ', ': '), "
     "ensure_ascii=True, allow_nan=False; the document "
-    "{'name': 'Ada Lovelace', 'age': 36} canonicalises to "
-    '\'{"age": 36, "name": "Ada Lovelace"}\'. The answer is '
+    "{'name': 'Ada Lovelace', 'age': 27} canonicalises to "
+    '\'{"age": 27, "name": "Ada Lovelace"}\'. The answer is '
     "parsed once with a duplicate-detecting object_pairs_hook "
     "(last occurrence wins). document_kind is 'object', "
     "'non_object', or 'unparseable' (JSON parse failure only). "
@@ -172,14 +176,14 @@ FIELD_ORDER_SPECS: tuple[dict[str, Any], ...] = (
         "id": "extract-person",
         "shape": "extraction",
         "question": "Extract the person's name and age.",
-        "context": "Ada Lovelace was 36 when she wrote the first algorithm.",
+        "context": "Ada Lovelace was 27 when she wrote the first algorithm.",
         "schema": {
             "type": "object",
             "required": ["name", "age"],
             "properties": {"name": {"type": "string"}, "age": {"type": "integer", "minimum": 0}},
             "additionalProperties": False,
         },
-        "answer": {"name": "Ada Lovelace", "age": 36},
+        "answer": {"name": "Ada Lovelace", "age": 27},
         "answer_field": "name",
         "paired": True,
         "source": "structured",
@@ -274,7 +278,7 @@ FIELD_ORDER_SPECS: tuple[dict[str, Any], ...] = (
         "id": "route-ticket",
         "shape": "routing",
         "question": "Route the support ticket and set its priority.",
-        "context": "Ticket: 'My invoice shows a charge I do not recognize.'",
+        "context": "Ticket (priority 3 of 5): 'My invoice shows a charge I do not recognize.'",
         "schema": {
             "type": "object",
             "required": ["department", "priority"],
@@ -293,7 +297,7 @@ FIELD_ORDER_SPECS: tuple[dict[str, Any], ...] = (
         "id": "route-alert",
         "shape": "routing",
         "question": "Route the alert and say whether it needs acknowledgement.",
-        "context": "Alert: 'Disk usage on db-1 reached 97%.'",
+        "context": "Alert: 'Disk usage on db-1 reached 97%. Page the on-call engineer.'",
         "schema": {
             "type": "object",
             "required": ["channel", "ack_required"],
@@ -312,7 +316,8 @@ FIELD_ORDER_SPECS: tuple[dict[str, Any], ...] = (
         "id": "route-order",
         "shape": "routing",
         "question": "Route the order to a warehouse and flag express shipping.",
-        "context": "Order: 'Customer in Porto needs the parcel by Friday.'",
+        "context": "Order: 'Customer in Porto needs the parcel by Friday; "
+        "express delivery was requested.'",
         "schema": {
             "type": "object",
             "required": ["warehouse", "express"],
@@ -322,7 +327,7 @@ FIELD_ORDER_SPECS: tuple[dict[str, Any], ...] = (
             },
             "additionalProperties": False,
         },
-        "answer": {"warehouse": "south", "express": True},
+        "answer": {"warehouse": "north", "express": True},
         "answer_field": "warehouse",
         "paired": False,
         "source": "structured",
@@ -386,7 +391,8 @@ FIELD_ORDER_SPECS: tuple[dict[str, Any], ...] = (
         "question": "Route the complaint and record whether a defect was "
         "confirmed and whether data was lost.",
         "context": "Complaint: 'The update deleted my saved files.' "
-        "Front-line support confirmed the update itself is defective.",
+        "Front-line support confirmed the update itself is defective "
+        "and escalated the complaint to the technical team.",
         "schema": {
             "type": "object",
             "required": ["team", "defect_confirmed", "data_lost"],

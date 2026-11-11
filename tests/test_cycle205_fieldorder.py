@@ -440,12 +440,12 @@ class TestParsing(unittest.TestCase):
 
     def test_object_document(self):
         """Test object document."""
-        parsed = fieldorder.parse_document('{"name": "Ada Lovelace", "age": 36}')
+        parsed = fieldorder.parse_document('{"name": "Ada Lovelace", "age": 27}')
         self.assertEqual(parsed["kind"], "object")
-        self.assertEqual(parsed["field_values"], {"age": "36", "name": '"Ada Lovelace"'})
+        self.assertEqual(parsed["field_values"], {"age": "27", "name": '"Ada Lovelace"'})
         self.assertEqual(
             parsed["document_digest"],
-            fieldorder.digest_text('{"age": 36, "name": "Ada Lovelace"}'),
+            fieldorder.digest_text('{"age": 27, "name": "Ada Lovelace"}'),
         )
         self.assertFalse(parsed["duplicate_keys"])
 
@@ -520,7 +520,7 @@ class TestDerived(unittest.TestCase):
         # schema_ok; duplication bites through adherence
         # only, and the last-wins values are what is scored.
         spec = fieldorder.spec_by_id("extract-person")
-        dup = _record(spec, "canonical", '{"name": "A", "name": "Ada Lovelace", "age": 36}')
+        dup = _record(spec, "canonical", '{"name": "A", "name": "Ada Lovelace", "age": 27}')
         self.assertTrue(dup["duplicate_keys"])
         derived = fieldorder.record_derived(spec, dup)
         self.assertTrue(derived["schema_ok"])
@@ -993,7 +993,7 @@ class TestDiff(unittest.TestCase):
 
         def noncanonical_value(p):
             """Noncanonical value."""
-            p["candidates"]["fo-a"]["records"][0]["field_values"]["age"] = " 36"
+            p["candidates"]["fo-a"]["records"][0]["field_values"]["age"] = " 27"
 
         def seed_type(p):
             """Seed type."""

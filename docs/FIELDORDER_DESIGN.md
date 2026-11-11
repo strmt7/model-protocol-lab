@@ -78,15 +78,22 @@ duplicate keys.
 **Reader-entailment rule (F1):** a spec may be `paired: yes` only
 if a reader given the question, context, and schema — but not the
 answer table — can derive the answer field's value uniquely.
-Two shipped specs fail it and are `paired: no` (kept as
-adherence/descriptive specs; the shipped set cannot be edited):
-route-alert (`channel = pager` — nothing maps 97% disk usage to
-pager over sms/email) and route-order (`warehouse = south` —
-nothing entails it; Porto is in northern Portugal). Non-answer
-fields of shipped specs may carry frozen judgement values
-(route-ticket's `priority = 3`); they feed descriptive per-field
-readouts only and are named here so the noise is not discovered
-later.
+Two shipped specs failed it as originally shipped and are
+`paired: no` (kept as adherence/descriptive specs): route-alert
+(`channel = pager` — nothing mapped 97% disk usage to pager
+over sms/email) and route-order (`warehouse = south` — nothing
+entailed it; Porto is in northern Portugal). A later audit of
+the frozen answer keys (the semantic-key repair, 2026-11-11)
+repaired the shipped contexts instead of leaving the keys
+ambiguous: the alert now pages the on-call engineer, the
+order's answer is `north` with express delivery stated in the
+context, and route-ticket's `priority = 3` — previously a
+frozen judgement value on a non-answer field, named here so
+the noise would not be discovered later — is now stated in
+the ticket text. Both repaired specs now satisfy the rule,
+but their `paired: no` flags stand: the paired population is
+frozen with the pre-registered claim and is not re-opened by
+a key repair.
 
 The six new specs, frozen in full (schema dialect exactly as in
 `structured.py`; every answer passes `check_schema` against its
@@ -111,13 +118,18 @@ own schema, verified at module load in tests):
   complaint and record whether a defect was confirmed and
   whether data was lost." Context: "Complaint: 'The update
   deleted my saved files.' Front-line support confirmed the
-  update itself is defective." Schema: team (string, enum
+  update itself is defective and escalated the complaint to
+  the technical team." Schema: team (string, enum
   [sales, support, technical]), defect_confirmed (boolean),
   data_lost (boolean). Answer: {team "technical",
   defect_confirmed true, data_lost true}. Answer field: team.
   (Every field is entailed: files deleted, defect confirmed by
-  support, and a confirmed product defect routes past front-line
-  support to technical.)
+  support, and the complaint expressly escalated to the
+  technical team. The escalation clause is the semantic-key
+  repair of 2026-11-11: as originally shipped, the team rested
+  on the routing convention that a confirmed defect leaves
+  support, which the key audit did not accept as unique
+  entailment.)
 - **classify-document** (classification, paired yes). Q:
   "Classify the document's type, language and confidentiality."
   Context: "Document: a German-language internal memo marked
@@ -154,8 +166,8 @@ the answer field within it):
 | classify-urgency | level | level (1/1) | no (one field) |
 | classify-language | language | language (1/1) | no (one field) |
 | route-ticket | department, priority | department (1/2) | yes |
-| route-alert | ack_required, channel | channel (2/2) | **no (unentailed)** |
-| route-order | express, warehouse | warehouse (2/2) | **no (unentailed)** |
+| route-alert | ack_required, channel | channel (2/2) | **no (exclusion frozen)** |
+| route-order | express, warehouse | warehouse (2/2) | **no (exclusion frozen)** |
 | extract-product | brand, in_stock, model, price | model (3/4) | yes |
 | extract-event | attendance, day, venue | venue (3/3) | yes |
 | route-complaint | data_lost, defect_confirmed, team | team (3/3) | yes |
@@ -270,8 +282,8 @@ of the decoded answer text, or None when there was no generation.
 **Canonical JSON, pinned (F2c):** `structured._canonical_json`
 exactly — `json.dumps(value, sort_keys=True,
 separators=(", ", ": "), ensure_ascii=True, allow_nan=False)`.
-Worked example: the document {"name": "Ada Lovelace", "age": 36}
-canonicalises to the string `{"age": 36, "name": "Ada Lovelace"}`
+Worked example: the document {"name": "Ada Lovelace", "age": 27}
+canonicalises to the string `{"age": 27, "name": "Ada Lovelace"}`
 (note the spaced separators — this probe's canonical form is the
 `structured` convention, not density's compact one).
 
@@ -422,10 +434,13 @@ as in cycles 203/204.
 - Canonical coincides with an endpoint arm on 6 of 10 paired
   specs; single-field specs cannot enter the pairing; the
   reversed arm coincides with an endpoint on 2-field specs.
-- Two shipped specs are excluded from pairing because their
-  frozen answer labels are not entailed by their contexts
-  (route-alert, route-order); one shipped non-answer field is a
-  frozen judgement value (route-ticket priority).
+- Two shipped specs are excluded from pairing (route-alert,
+  route-order): their frozen answer labels were not entailed
+  by their contexts as originally shipped, and one shipped
+  non-answer field was a frozen judgement value (route-ticket
+  priority). The semantic-key repair of 2026-11-11 repaired
+  all three contexts, but the paired population is frozen as
+  shipped.
 - Adherence gating selects specs the candidate already handles,
   and selects against discordance; the paired claim is
   conditional on adherence in both endpoint arms, with the

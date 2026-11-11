@@ -144,7 +144,7 @@ TOOLCALL_QUERIES: tuple[dict[str, Any], ...] = (
     },
     {
         "id": "docs-healing",
-        "question": "Find documents about token healing.",
+        "question": "Find documents about token healing; show the top 3 results.",
         "call": {"name": "search_docs", "arguments": {"query": "token healing", "top_k": 3}},
     },
     {

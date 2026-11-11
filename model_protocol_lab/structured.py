@@ -78,7 +78,7 @@ STRUCTURED_SPECS: tuple[dict[str, object], ...] = (
         "id": "extract-person",
         "shape": "extraction",
         "question": "Extract the person's name and age.",
-        "context": "Ada Lovelace was 36 when she wrote the first algorithm.",
+        "context": "Ada Lovelace was 27 when she wrote the first algorithm.",
         "schema": {
             "type": "object",
             "required": ["name", "age"],
@@ -88,7 +88,7 @@ STRUCTURED_SPECS: tuple[dict[str, object], ...] = (
             },
             "additionalProperties": False,
         },
-        "answer": {"name": "Ada Lovelace", "age": 36},
+        "answer": {"name": "Ada Lovelace", "age": 27},
     },
     {
         "id": "extract-city",
@@ -174,7 +174,7 @@ STRUCTURED_SPECS: tuple[dict[str, object], ...] = (
         "id": "route-ticket",
         "shape": "routing",
         "question": "Route the support ticket and set its priority.",
-        "context": "Ticket: 'My invoice shows a charge I do not recognize.'",
+        "context": "Ticket (priority 3 of 5): 'My invoice shows a charge I do not recognize.'",
         "schema": {
             "type": "object",
             "required": ["department", "priority"],
@@ -193,7 +193,7 @@ STRUCTURED_SPECS: tuple[dict[str, object], ...] = (
         "id": "route-alert",
         "shape": "routing",
         "question": "Route the alert and say whether it needs acknowledgement.",
-        "context": "Alert: 'Disk usage on db-1 reached 97%.'",
+        "context": "Alert: 'Disk usage on db-1 reached 97%. Page the on-call engineer.'",
         "schema": {
             "type": "object",
             "required": ["channel", "ack_required"],
@@ -209,7 +209,8 @@ STRUCTURED_SPECS: tuple[dict[str, object], ...] = (
         "id": "route-order",
         "shape": "routing",
         "question": "Route the order to a warehouse and flag express shipping.",
-        "context": "Order: 'Customer in Porto needs the parcel by Friday.'",
+        "context": "Order: 'Customer in Porto needs the parcel by Friday; "
+        "express delivery was requested.'",
         "schema": {
             "type": "object",
             "required": ["warehouse", "express"],
@@ -219,7 +220,7 @@ STRUCTURED_SPECS: tuple[dict[str, object], ...] = (
             },
             "additionalProperties": False,
         },
-        "answer": {"warehouse": "south", "express": True},
+        "answer": {"warehouse": "north", "express": True},
     },
 )
 

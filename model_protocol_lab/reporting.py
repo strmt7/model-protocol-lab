@@ -11803,10 +11803,13 @@ def _field_order_section(result: dict[str, Any]) -> str:
     contrast only, canonical coinciding with an endpoint arm
     on 6 of the 10 paired specs (its numbers there are
     replicates), two shipped specs excluded from pairing
-    because their frozen answer labels are not entailed by
-    their contexts, adherence gating selecting against
-    discordance, and duplicate-key documents scored by their
-    last occurrence outside the pairing. Counts and rates
+    because their frozen answer labels were not entailed by
+    their contexts as originally shipped (the contexts have
+    since been repaired so the labels are entailed; the
+    pairing population is frozen and unchanged), adherence
+    gating selecting against discordance, and duplicate-key
+    documents scored by their last occurrence outside the
+    pairing. Counts and rates
     only; no spec, schema, or answer text is rendered. Every
     interpolation is escaped at this boundary.
     """
@@ -12022,7 +12025,10 @@ def _field_order_section(result: dict[str, Any]) -> str:
         "of the time, so the instrument detects only very large "
         "effects. Two shipped specs (route-alert, route-order) "
         "are excluded from pairing because their frozen answer "
-        "labels are not entailed by their contexts. The level is "
+        "labels were not entailed by their contexts as "
+        "originally shipped; the contexts have since been "
+        "repaired so the labels are entailed, but the pairing "
+        "population is frozen and unchanged. The level is "
         "per candidate: across 24 candidates at alpha 0.05, "
         "about 1.2 false falsifications are expected at the "
         "nominal rate (the probability of at least one is about "
