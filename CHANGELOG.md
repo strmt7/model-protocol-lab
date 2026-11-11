@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (release-policy verifier + non-publishing readiness workflow — RR-06 fence, audit work package W1, 2026-11-11)
+
+- `tools/release_policy.py`: given an exact commit SHA and the
+  version a release would claim, it verifies from the GitHub API
+  that the CI run, the Secret scan run and the CodeQL run for that
+  SHA all completed successfully, that the dependency/static
+  security audit job inside the CI run succeeded, and that the tree
+  at that SHA carries the claimed version — and rejects with a named
+  reason when any evidence is absent, incomplete, failed, cancelled,
+  skipped, bound to a different SHA, or version-mismatched. On
+  acceptance it prints a JSON receipt naming the exact runs that
+  vouch for the exact commit. Covered by recorded-fixture tests for
+  acceptance and every rejection mode (`tests/test_release_policy.py`).
+- `.github/workflows/release-readiness.yml`: a workflow_dispatch-only
+  readiness workflow (no tag triggers, no publish steps, no PyPI
+  environment) that re-runs the full quality gate at a supplied SHA
+  and then runs the verifier. `release.yml` and the owner's
+  publication authority are unchanged; the workflow can produce a
+  readiness receipt and nothing else.
+
 ### Changed (exclusion-marker inventory + first removal wave — RR-17, audit work package W1, 2026-11-11)
 
 - The exclusion-marker surface is now inventoried mechanically
