@@ -1292,6 +1292,17 @@ def _valid_frontier(value: Any) -> bool:
     max_tokens = value.get("max_new_tokens")
     if type(max_tokens) is not int or max_tokens <= 0:
         return False
+    # Shape before consumption (RR-02): the summary renderer maps
+    # budget_robust through a {True/False/None} lookup, so a list
+    # raised TypeError there after the diff itself had succeeded; a
+    # scalar flip_ranges likewise raised inside the floor derivation.
+    # A present, non-None field must carry its recorded type.
+    robust = value.get("budget_robust")
+    if robust is not None and type(robust) is not bool:
+        return False
+    flip_ranges = value.get("flip_ranges")
+    if flip_ranges is not None and type(flip_ranges) is not list:
+        return False
     found = False
     total_points = 0
     for data in candidates.values():
@@ -1469,7 +1480,8 @@ def diff_frontiers(old: Any, new: Any) -> dict[str, Any]:
         """Return the decision points."""
         points = []
         seen_budgets: set[int] = set()
-        for entry in frontier.get("decision_steps") or []:
+        steps = frontier.get("decision_steps")
+        for entry in steps if type(steps) is list else ():
             if (
                 type(entry) is list
                 and len(entry) == 3
@@ -1557,6 +1569,12 @@ def _valid_held_out_floor(value: Any) -> bool:
         return False
     max_tokens = value.get("max_new_tokens")
     if type(max_tokens) is not int or max_tokens <= 0:
+        return False
+    # Shape before consumption (RR-02): the summary renderer maps
+    # budget_robust through a {True/False/None} lookup, so a list
+    # raised TypeError after a valid diff had already been produced.
+    robust = value.get("budget_robust")
+    if robust is not None and type(robust) is not bool:
         return False
     floor = value.get("safe_budget_floor")
     return not (floor is not None and type(floor) is not int)
@@ -26885,8 +26903,11 @@ def _precision_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
     unavailable = payload.get("unavailable_candidates")
     if (
         type(unavailable) is not list
-        or unavailable != sorted(unavailable)
+        # Element types gate before any ordering or set operation
+        # (RR-02): sorted() over mixed types raised TypeError before
+        # the str check could reject the payload.
         or any(type(n) is not str for n in unavailable)
+        or unavailable != sorted(unavailable)
         or set(unavailable) & record_candidates
         or set(unavailable) | record_candidates != set(candidates)
     ):
@@ -31408,8 +31429,15 @@ def run_diff_reports(args: argparse.Namespace, _parser: argparse.ArgumentParser)
         old_label=str(args.old_results),
         new_label=str(args.new_results),
     )
-    print(json.dumps(diff, indent=2, ensure_ascii=True, sort_keys=True))
-    print(render_summary(diff), file=sys.stderr)
+    # Both outputs are fully built before either is emitted (RR-02):
+    # a pair whose summary rendering failed after the JSON had been
+    # printed left a valid JSON artifact next to a traceback and a
+    # nonzero exit -- a partial-success artifact. Building first keeps
+    # the command all-or-nothing.
+    diff_text = json.dumps(diff, indent=2, ensure_ascii=True, sort_keys=True)
+    summary_text = render_summary(diff)
+    print(diff_text)
+    print(summary_text, file=sys.stderr)
     return 0
 
 

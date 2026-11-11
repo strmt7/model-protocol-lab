@@ -1465,7 +1465,8 @@ def _frontier_series(frontier: dict[str, Any]) -> tuple[list[str], int] | None:
         if _fixture_total(data) <= 0:
             continue
         points = 0
-        for point in data.get("pass_steps") or []:
+        steps = data.get("pass_steps")
+        for point in steps if type(steps) is list else ():
             if (
                 type(point) is list
                 and len(point) == 2
@@ -1549,7 +1550,8 @@ def margin_trajectory(frontier: dict[str, Any]) -> list[tuple[int, str | None, i
     for name in names:
         data = candidates[name]
         by_budget: dict[int, int] = {}
-        for point in data.get("pass_steps") or []:
+        steps = data.get("pass_steps")
+        for point in steps if type(steps) is list else ():
             if (
                 type(point) is list
                 and len(point) == 2
@@ -1651,7 +1653,11 @@ def safe_budget_floor(frontier: Any) -> int | None:
     if type(max_tokens) is not int or max_tokens <= 0:
         return None
     spans: list[list[int]] = []
-    for span in frontier.get("flip_ranges") or []:
+    # Shape before consumption (RR-02): a non-list flip_ranges is
+    # treated as absent -- the "never raises" contract above covers
+    # truthy scalars too, which the `or []` idiom iterated or raised on.
+    flip_ranges = frontier.get("flip_ranges")
+    for span in flip_ranges if type(flip_ranges) is list else ():
         if type(span) is not list or len(span) != 2:
             continue
         lo, hi = span
@@ -2296,7 +2302,8 @@ def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
         if total <= 0:
             continue
         by_budget: dict[int, int] = {}
-        for point in data.get("pass_steps") or []:
+        steps = data.get("pass_steps")
+        for point in steps if type(steps) is list else ():
             if (
                 type(point) is list
                 and len(point) == 2
@@ -2317,7 +2324,8 @@ def _frontier_chart_svg(frontier: dict[str, Any]) -> str:
     # Decision spans: (lo, hi, decision) with 1 <= lo <= hi <= max_tokens,
     # derived from the recorded decision_steps; adjacent spans with the
     # same decision merge. Malformed entries are skipped.
-    raw_decisions = frontier.get("decision_steps") or []
+    raw_steps = frontier.get("decision_steps")
+    raw_decisions = raw_steps if type(raw_steps) is list else []
     dec_points: list[tuple[int, str]] = []
     for point in raw_decisions:
         if (
@@ -2941,7 +2949,8 @@ def _frontier_section(result: dict[str, Any]) -> str:
             "identical at every token budget 1&ndash;" + escape(str(max_tokens)) + ".</p>"
         )
     else:
-        steps = frontier.get("decision_steps") or []
+        raw_steps = frontier.get("decision_steps")
+        steps = raw_steps if type(raw_steps) is list else []
         # Flip-span attribution, keyed defensively by span: foreign or older
         # payloads may carry no attribution, or one that does not line up
         # with the rendered spans -- rendering never raises.
@@ -2959,7 +2968,8 @@ def _frontier_section(result: dict[str, Any]) -> str:
                 ):
                     attribution[(entry["span"][0], entry["span"][1])] = entry["crossings"]
         items = []
-        for span in frontier.get("flip_ranges") or []:
+        flip_ranges = frontier.get("flip_ranges")
+        for span in flip_ranges if type(flip_ranges) is list else ():
             if (
                 type(span) is not list
                 or len(span) != 2

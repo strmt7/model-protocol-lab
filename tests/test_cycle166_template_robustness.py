@@ -53,7 +53,8 @@ class MarkerBackend:
         """Generate."""
         prompt = self.decode(input_ids).lower()
         ans = "BLUE" if "say magicword" in prompt else "WRONG"
-        return Generation(tuple(map(ord, ans + chr(7))), "limit")
+        ids = tuple(map(ord, ans + chr(7)))
+        return Generation(ids + (0,) * max(0, max_new_tokens - len(ids)), "limit")
 
 
 class AlwaysWrongBackend(MarkerBackend):
@@ -64,7 +65,8 @@ class AlwaysWrongBackend(MarkerBackend):
     @staticmethod
     def generate(input_ids, *, max_new_tokens, seed, cancel=None):
         """Generate."""
-        return Generation(tuple(map(ord, "WRONG" + chr(7))), "limit")
+        ids = tuple(map(ord, "WRONG" + chr(7)))
+        return Generation(ids + (0,) * max(0, max_new_tokens - len(ids)), "limit")
 
 
 class AlwaysErrorBackend(MarkerBackend):
@@ -994,7 +996,8 @@ class EdgeCaseTests(unittest.TestCase):
                 """Generate."""
                 prompt = self.decode(input_ids)
                 ans = "BLUE" if "Say  MAGICWORD" in prompt else "WRONG"
-                return Generation(tuple(map(ord, ans + chr(7))), "limit")
+                ids = tuple(map(ord, ans + chr(7)))
+                return Generation(ids + (0,) * max(0, max_new_tokens - len(ids)), "limit")
 
         backend = RepairBackend()
         fixtures = _fixtures()
@@ -1666,7 +1669,8 @@ class FailClosedCoverageTests(unittest.TestCase):
                 """Generate."""
                 # Bypass generate's own decode call: the failure under test
                 # is the answer-decode after generation.
-                return Generation(tuple(map(ord, "BLUE" + chr(7))), "limit")
+                ids = tuple(map(ord, "BLUE" + chr(7)))
+                return Generation(ids + (0,) * max(0, max_new_tokens - len(ids)), "limit")
 
         protocol, _, fixtures = _protocol(backend=BadDecodeBackend())
         rep = sn.probe_template_robustness(
@@ -1694,7 +1698,8 @@ class FailClosedCoverageTests(unittest.TestCase):
             @staticmethod
             def generate(input_ids, *, max_new_tokens, seed, cancel=None):
                 """Generate."""
-                return Generation(tuple(map(ord, "BLUE" + chr(7))), "limit")
+                ids = tuple(map(ord, "BLUE" + chr(7)))
+                return Generation(ids + (0,) * max(0, max_new_tokens - len(ids)), "limit")
 
         protocol, _, fixtures = _protocol(backend=NonStrDecodeBackend())
         rep = sn.probe_template_robustness(
@@ -1802,7 +1807,8 @@ class FailClosedCoverageTests(unittest.TestCase):
             @staticmethod
             def generate(input_ids, *, max_new_tokens, seed, cancel=None):
                 """Generate."""
-                return Generation(tuple(map(ord, "BLUE" + chr(7))), "limit")
+                ids = tuple(map(ord, "BLUE" + chr(7)))
+                return Generation(ids + (0,) * max(0, max_new_tokens - len(ids)), "limit")
 
         protocol, _, fixtures = _protocol(backend=ConstantBackend())
         rep = sn.probe_template_robustness(
@@ -2032,7 +2038,8 @@ class FailClosedCoverageTests(unittest.TestCase):
             @staticmethod
             def generate(input_ids, *, max_new_tokens, seed, cancel=None):
                 """Generate."""
-                return Generation(tuple(map(ord, "WRONG" + chr(7))), "limit")
+                ids = tuple(map(ord, "WRONG" + chr(7)))
+                return Generation(ids + (0,) * max(0, max_new_tokens - len(ids)), "limit")
 
         protocol, _, fixtures = _protocol(backend=ConstantWrongBackend())
         rep = sn.probe_template_robustness(

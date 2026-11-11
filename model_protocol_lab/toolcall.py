@@ -407,6 +407,7 @@ def _parse_emitted(text: str) -> tuple[str | None, dict[str, Any] | None, str | 
     try:
         arguments = json.loads(
             args_text,
+            object_pairs_hook=_unique_arguments_object,
             parse_constant=_reject_constant,
             parse_float=_reject_nonfinite_float,
         )
@@ -420,6 +421,24 @@ def _parse_emitted(text: str) -> tuple[str | None, dict[str, Any] | None, str | 
     if type(arguments) is not dict:
         return None, None, "args_not_object"
     return name, arguments, None
+
+
+def _unique_arguments_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """``object_pairs_hook``: duplicate members are invalid here.
+
+    A model emission carrying the same argument twice is ambiguous --
+    plain ``json.loads`` silently kept whichever value came last, so
+    the same emission graded differently depending on member order
+    (SA-03). Every other JSON reader in the tree rejects duplicates
+    the same way; the ValueError lands in the caller's ``bad_json``
+    branch, the existing parse-failure tag.
+    """
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON object member")
+        result[key] = value
+    return result
 
 
 def _reject_nonfinite_float(text: str) -> float:

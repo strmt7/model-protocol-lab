@@ -2076,6 +2076,14 @@ def _evaluate_template_case(
         raise
     except BaseException:  # noqa: BLE001 -- backend boundary; abstain, never crash
         return "abstain"
+    if not _valid_generation(gen, max_new_tokens):
+        # The same core-contract gate _evaluate_one applies (SA-01):
+        # a generation outside the contract (not a Generation, over
+        # the cap, a limit stop short of the cap, an unknown reason)
+        # proves nothing about the prompt and must abstain here too --
+        # pre-fix this evaluator read gen.reason directly, so a None
+        # generation crashed and a short limit generation was scored.
+        return "abstain"
     if gen.reason == "cancelled" or event.is_set() or gen.reason == "error":
         return "abstain"
     if not _valid_ids(gen.token_ids):

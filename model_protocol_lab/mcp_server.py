@@ -271,15 +271,19 @@ def tool_probe(params: dict[str, Any]) -> dict[str, Any]:
     backend_spec = params.get("backend")
     if backend_spec is None:
         backend_spec = {"kind": "selftest"}
+    # Cheap scalar params validate before any backend construction
+    # (RTI-03): construction can load a checkpoint, so an out-of-range
+    # cap or seed must be rejected before it runs -- pre-fix the
+    # backend was built first and the -32602 arrived only afterwards.
+    max_new_tokens = _parse_optional_int(
+        params.get("max_new_tokens"), "max_new_tokens", 1, 4096, 64
+    )
+    seed = _parse_optional_int(params.get("seed"), "seed", 0, 2**64 - 1, 0)
     # _build_backend owns the type check and raises MCPError(-32602)
     # for a non-object spec; a bare ValueError here was mapped to
     # -32603 (internal error) by the generic handler, reporting a
     # client-caused invalid-params error as a server fault (cycle 202).
     backend = _build_backend(backend_spec)
-    max_new_tokens = _parse_optional_int(
-        params.get("max_new_tokens"), "max_new_tokens", 1, 4096, 64
-    )
-    seed = _parse_optional_int(params.get("seed"), "seed", 0, 2**64 - 1, 0)
 
     fingerprint = backend.fingerprint
     protocol = sn.freeze_surface_noise_protocol(backend_fingerprint=fingerprint, fixtures=fixtures)
@@ -499,6 +503,16 @@ TOOLS: dict[str, dict[str, Any]] = {
 # ---------------------------------------------------------------------------
 
 
+def _valid_request_id(value: Any) -> bool:
+    """A JSON-RPC 2.0 id is a string, a number, or null.
+
+    Exact-type checks: a bool is none of those here (``type(True)``
+    is ``bool``, not ``int``), and fractional/exotic objects cannot
+    be echoed back to the client.
+    """
+    return value is None or type(value) is str or type(value) in (int, float)
+
+
 def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
     """Dispatch one JSON-RPC request; notifications are never executed."""
     # JSON-RPC notification discipline (oversight security S-13): a
@@ -511,6 +525,24 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
         return None
     method = request.get("method")
     request_id = request.get("id")
+    # Envelope validation (RTI-06; JSON-RPC 2.0 section 5.1): a frame
+    # that is not a valid Request object -- wrong or missing jsonrpc
+    # version, an id that is not a string/number/null, a non-string
+    # method -- is an Invalid Request (-32600) and never dispatches.
+    # When the id itself is invalid it cannot be echoed, so the error
+    # is reported with a null id, as the spec requires. (Notifications
+    # returned above, before this check: they are never answered, so
+    # their envelope is never judged here.)
+    if (
+        request.get("jsonrpc") != "2.0"
+        or not _valid_request_id(request_id)
+        or type(method) is not str
+    ):
+        return {
+            "jsonrpc": "2.0",
+            "id": request_id if _valid_request_id(request_id) else None,
+            "error": {"code": -32600, "message": "invalid request"},
+        }
 
     try:
         # Stateless: no initialize required. The 2024-11-05 handshake is
@@ -563,7 +595,13 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
             name = params.get("name")
             if type(name) is not str or name not in TOOLS:
                 raise MCPError(-32602, f"unknown tool: {name}")
-            arguments = params.get("arguments") or {}
+            # No falsey coercion (RTI-06): an absent or explicit-null
+            # arguments member means "no arguments"; any other
+            # non-object value ([], false, 0, "") is invalid params,
+            # never silently an empty call that executes the tool.
+            arguments = params.get("arguments")
+            if arguments is None:
+                arguments = {}
             if type(arguments) is not dict:
                 raise MCPError(-32602, "arguments must be an object")
             result = TOOLS[name]["handler"](arguments)

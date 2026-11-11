@@ -129,6 +129,14 @@ MAX_EXECUTIONS_PER_RUN = 512
 MAX_RECORD_BYTES = 16_777_216
 EXECUTION_BUDGET_DETAIL = "serving_backends_record_budget_exceeded"
 
+#: Reader-side bound for load_records_artifact (RTI-04): the sink
+#: budgets the record bytes it writes, but the header/footer envelope
+#: lines and the finalized single-document re-wrap are not inside
+#: that budget, so the reader allows the record budget plus a fixed
+#: envelope allowance. Anything larger was not written by the sink
+#: and is refused before parsing, never read into memory whole.
+_MAX_RECORD_ARTIFACT_BYTES = MAX_RECORD_BYTES + 65_536
+
 #: The fixed hardware-class vocabulary (§6.2). A class outside this
 #: set is refused at construction, never recorded raw.
 HARDWARE_CLASSES = ("cpu", "cuda", "metal", "rocm", "vulkan")
@@ -694,7 +702,10 @@ def _echo_matches(echo: Any, params: Mapping[str, Any]) -> bool:
         elif type(expected) is float:
             if type(seen) not in (int, float) or isinstance(seen, bool):
                 return False
-            if float(seen) != expected:
+            # Exact comparison, never a float() conversion (S3-1):
+            # Python compares int/float mathematically exactly, while
+            # float(10**400) raised OverflowError on a hostile echo.
+            if seen != expected:
                 return False
         elif type(expected) is int:
             if type(seen) is not int or isinstance(seen, bool) or seen != expected:
@@ -1139,6 +1150,29 @@ class LlamacppHttpBackend:
                 **base,
             )
         tokens = tuple(tokens_raw)
+        # The decode is inlined (not _tok_decode) because the two
+        # failure classes must stay distinct: a decoder EXCEPTION on
+        # these ids means the stack returned ids outside the local
+        # vocabulary (S3-2) -- the response is invalid, and pre-fix
+        # the ids were banked as a normal observation whose predictor
+        # decode then raised a raw KeyError out of execute_cell. A
+        # non-str decode RESULT is a tokenizer-health fault, which
+        # keeps raising token_vocab_mismatch exactly as the probe
+        # gates have always required.
+        try:
+            decoded_locally = self._tokenizer.decode(list(tokens), skip_special_tokens=False)
+        except (KeyError, IndexError, ValueError, OverflowError):
+            return StackObservation(
+                returned_ids=None,
+                finish_class="unclassified",
+                stop_winner=None,
+                returned_text_digest=None,
+                server_detok_digest=None,
+                detail="stack_response_invalid",
+                **base,
+            )
+        if type(decoded_locally) is not str:
+            raise ValueError("token_vocab_mismatch")
         detok = self._server_detokenize(tokens)
         common: dict[str, Any] = {
             "returned_ids": tokens,
@@ -1264,6 +1298,12 @@ def predict_stop_outcome(
     digests (local detokenization of the full stream, and of the
     stream truncated at the winning stop's first occurrence).
     """
+    # Stop texts are strings (S4-2): the same invalid_stop_texts code
+    # the CLI validator (diffbackends._checked_stop_texts) raises. A
+    # bytes/int member previously died as a raw TypeError inside the
+    # containment scan, after the caller's decode work had run.
+    if any(type(text) is not str for text in stop_texts):
+        raise ValueError("invalid_stop_texts")
     prefixes: list[str] = []
     for step in range(1, len(returned_ids) + 1):
         prefixes.append(decode(returned_ids[:step]))
@@ -1572,7 +1612,10 @@ def aggregate_fidelity(records: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
         total += 1
         mirror = record.get("mirror") if type(record) is dict else None
         verdict = mirror.get("fidelity_verdict") if type(mirror) is dict else None
-        if verdict in counts:
+        # Only a verdict string can key the counts (S4-1): an
+        # unhashable verdict (list/dict) raised TypeError here; it is
+        # simply not a verdict and counts as unobservable, like None.
+        if type(verdict) is str and verdict in counts:
             counts[verdict] += 1
         else:
             counts["unobservable"] += 1
@@ -1857,6 +1900,15 @@ class RecordSink:
             self._closed = True
 
 
+def _reject_artifact_constant(value: str) -> Any:
+    """``parse_constant`` hook: NaN/Infinity are not strict JSON.
+
+    The ValueError is mapped to the reader's fixed code by both call
+    sites in :func:`load_records_artifact`.
+    """
+    raise ValueError(f"non-finite JSON constant in records artifact: {value!r}")
+
+
 def load_records_artifact(path: Path) -> dict[str, Any]:
     """Read an exec-backends artifact, finalized or interrupted.
 
@@ -1864,14 +1916,27 @@ def load_records_artifact(path: Path) -> dict[str, Any]:
     "missing"}`` where ``missing`` carries the planned cells an
     interrupted run never executed, each with its cause.
     """
+    # Bounded, strict reading (RTI-04): the read is capped at the
+    # sink's own budget plus its envelope allowance, the bytes must
+    # be UTF-8, and both JSON parses reject the non-finite constants
+    # Python's decoder otherwise accepts. Every failure is the one
+    # fixed code -- pre-fix an unbounded read_text leaked
+    # UnicodeDecodeError verbatim and accepted NaN literals.
     try:
-        text = Path(path).read_text(encoding="utf-8")
+        with Path(path).open("rb") as handle:
+            raw = handle.read(_MAX_RECORD_ARTIFACT_BYTES + 1)
     except OSError:
+        raise ValueError("serving_backends_artifact_invalid") from None
+    if len(raw) > _MAX_RECORD_ARTIFACT_BYTES:
+        raise ValueError("serving_backends_artifact_invalid")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
         raise ValueError("serving_backends_artifact_invalid") from None
     stripped = text.strip()
     if stripped.startswith("{") and "\n" not in stripped:
         try:
-            doc = json.loads(stripped)
+            doc = json.loads(stripped, parse_constant=_reject_artifact_constant)
         except ValueError:
             raise ValueError("serving_backends_artifact_invalid") from None
         if type(doc) is dict and type(doc.get("serving_backends")) is dict:
@@ -1893,7 +1958,7 @@ def load_records_artifact(path: Path) -> dict[str, Any]:
         if not line.strip():
             continue
         try:
-            payload = json.loads(line)
+            payload = json.loads(line, parse_constant=_reject_artifact_constant)
         except ValueError:
             raise ValueError("serving_backends_artifact_invalid") from None
         if type(payload) is not dict:
@@ -1909,9 +1974,19 @@ def load_records_artifact(path: Path) -> dict[str, Any]:
     if header is None:
         raise ValueError("serving_backends_artifact_invalid")
     plan = header.get("plan")
+    # Dedup/matching keys are built only from validated string fields
+    # (RTI-04 / wave-9 A8): an unhashable key field (a list candidate)
+    # raised TypeError here. Such a record can never key a plan cell
+    # -- it stays in the records list and its cell, if any, is
+    # accounted missing like any other unexecuted cell; a descriptor
+    # with non-string key fields is likewise unmatchable by
+    # construction and reports missing.
     seen = {
         (record.get("candidate"), record.get("fixture"), record.get("cache_position"))
         for record in records
+        if type(record.get("candidate")) is str
+        and type(record.get("fixture")) is str
+        and type(record.get("cache_position")) is str
     }
     missing: list[dict[str, Any]] = []
     if type(plan) is list:
@@ -1923,7 +1998,7 @@ def load_records_artifact(path: Path) -> dict[str, Any]:
                 descriptor.get("fixture"),
                 descriptor.get("cache_position"),
             )
-            if key not in seen:
+            if not all(type(part) is str for part in key) or key not in seen:
                 detail = EXECUTION_BUDGET_DETAIL if budget_exceeded else "cell_not_executed"
                 missing.append({**descriptor, "cell_detail": detail})
     return {
@@ -2180,6 +2255,81 @@ def run_exec_backends(args: Any, parser: argparse.ArgumentParser) -> int:
     out = Path(args.out)
     if out.exists():
         parser.error(f"exec-backends: output artifact already exists: {out}")
+    # Every CLI-local validation runs before any expensive setup
+    # (RTI-03): the tokenizer load, the checkpoint-bound backend
+    # construction and the probe. Pre-fix an invalid invocation paid
+    # for all three first -- and a probe failure answered
+    # finish_unavailable (exit 0) before an invalid --stops, an
+    # unusable --results file or an out-of-range cap was ever looked
+    # at, so the invalid input was silently masked by the stage
+    # outcome. Each failure below keeps its established exit code.
+    stops: tuple[str, ...] = ()
+    if args.stops is not None:
+        parts = tuple(args.stops.split(","))
+        if any(not part for part in parts):
+            parser.error("--stops must be comma-separated non-empty stop texts")
+        try:
+            stops = diffbackends._checked_stop_texts(parts)
+        except ValueError as exc:
+            print(f"exec-backends: {exc}", file=sys.stderr)
+            return 2
+    prompt_ids: tuple[int, ...] | None = None
+    if args.prompt_ids is not None:
+        prompt_ids = _parse_id_list(args.prompt_ids)
+        if not prompt_ids:
+            parser.error("exec-backends: --prompt-ids must be a comma-separated list of token ids")
+        try:
+            # Provisional construction validates the request's scalar
+            # fields now; the binding construction after the probe
+            # resolves the eos default from the probed identity.
+            StackRequest(
+                prompt_ids=prompt_ids,
+                seed=request_seed_for(int(args.seed), "exec:standalone"),
+                max_new_tokens=int(args.max_new_tokens),
+                stop_texts=stops,
+                eos_id=args.eos_id if args.eos_id is not None else 0,
+                min_tokens=int(args.min_tokens),
+            )
+        except ValueError as exc:
+            print(f"exec-backends: {exc}", file=sys.stderr)
+            return 2
+    observations: list[dict[str, Any]] | None = None
+    if args.results is not None:
+        if not stops:
+            parser.error("exec-backends: --results requires at least one --stop")
+        from .diffreports import MAX_RESULTS_BYTES
+
+        try:
+            with Path(args.results).open("rb") as handle:
+                content = handle.read(MAX_RESULTS_BYTES + 1)
+            if len(content) > MAX_RESULTS_BYTES:
+                raise ValueError("results file exceeds the size budget")
+            doc = json.loads(content.decode("utf-8"))
+        except (OSError, ValueError):
+            print("exec-backends: cannot read the results file", file=sys.stderr)
+            return 2
+        observations = _extract_observations(doc)
+        if not observations:
+            parser.error("exec-backends: the results file carries no observations")
+    cache_prompts: dict[str, tuple[int, ...]] | None = None
+    cache_args = (args.cache_cold_ids, args.cache_shared_ids, args.cache_divergent_ids)
+    if any(value is not None for value in cache_args):
+        if any(value is None for value in cache_args):
+            parser.error(
+                "exec-backends: the cache protocol needs --cache-cold-ids, "
+                "--cache-shared-ids and --cache-divergent-ids together"
+            )
+        parsed: dict[str, tuple[int, ...]] = {}
+        for key, raw in zip(
+            ("cold_ids", "shared_prefix_ids", "divergent_control_ids"),
+            cache_args,
+            strict=True,
+        ):
+            ids = _parse_id_list(str(raw))
+            if not ids:
+                parser.error("exec-backends: --cache-*-ids must be comma-separated token ids")
+            parsed[key] = ids
+        cache_prompts = parsed
     from .doctor import _build_primary_tokenizer, _loader_failure_code
 
     model_dir = Path(args.model)
@@ -2223,21 +2373,8 @@ def run_exec_backends(args: Any, parser: argparse.ArgumentParser) -> int:
         identity = backend.probe()
     except ValueError as exc:
         return finish_unavailable(str(exc))
-    stops: tuple[str, ...] = ()
-    if args.stops is not None:
-        parts = tuple(args.stops.split(","))
-        if any(not part for part in parts):
-            parser.error("--stops must be comma-separated non-empty stop texts")
-        try:
-            stops = diffbackends._checked_stop_texts(parts)
-        except ValueError as exc:
-            print(f"exec-backends: {exc}", file=sys.stderr)
-            return 2
     plan_cells: list[dict[str, Any]] = []
-    if args.prompt_ids is not None:
-        prompt_ids = _parse_id_list(args.prompt_ids)
-        if not prompt_ids:
-            parser.error("exec-backends: --prompt-ids must be a comma-separated list of token ids")
+    if prompt_ids is not None:
         try:
             request = StackRequest(
                 prompt_ids=prompt_ids,
@@ -2259,42 +2396,13 @@ def run_exec_backends(args: Any, parser: argparse.ArgumentParser) -> int:
             }
         )
     fidelity_input: dict[str, Any] | None = None
-    if args.results is not None:
-        if not stops:
-            parser.error("exec-backends: --results requires at least one --stop")
-        try:
-            doc = json.loads(Path(args.results).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            print("exec-backends: cannot read the results file", file=sys.stderr)
-            return 2
-        observations = _extract_observations(doc)
-        if not observations:
-            parser.error("exec-backends: the results file carries no observations")
+    if observations is not None:
         fidelity_input = {
             "observations": observations,
             "stop_texts": stops,
             "eos_id": args.eos_id if args.eos_id is not None else identity.declared_eos_ids[0],
             "min_tokens": int(args.min_tokens),
         }
-    cache_prompts: dict[str, tuple[int, ...]] | None = None
-    cache_args = (args.cache_cold_ids, args.cache_shared_ids, args.cache_divergent_ids)
-    if any(value is not None for value in cache_args):
-        if any(value is None for value in cache_args):
-            parser.error(
-                "exec-backends: the cache protocol needs --cache-cold-ids, "
-                "--cache-shared-ids and --cache-divergent-ids together"
-            )
-        parsed: dict[str, tuple[int, ...]] = {}
-        for key, raw in zip(
-            ("cold_ids", "shared_prefix_ids", "divergent_control_ids"),
-            cache_args,
-            strict=True,
-        ):
-            ids = _parse_id_list(str(raw))
-            if not ids:
-                parser.error("exec-backends: --cache-*-ids must be comma-separated token ids")
-            parsed[key] = ids
-        cache_prompts = parsed
     plan_descriptors = [
         {
             "candidate": cell["candidate"],

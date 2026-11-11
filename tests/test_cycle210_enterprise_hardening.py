@@ -7,7 +7,6 @@ first runs on main after the push (CodeQL, Scorecard, gitleaks, smoke),
 and their results are reported in the cycle closure, not asserted here.
 """
 
-import re
 import tomllib
 import unittest
 from pathlib import Path

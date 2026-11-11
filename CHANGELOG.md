@@ -6,6 +6,73 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (gitleaks allowlist removed — owner no-exceptions order, 2026-11-11)
+
+- The two cycle-210 gitleaks allowlist entries are removed:
+  `.gitleaks.toml` now carries no `[allowlist]` at all (default
+  rules via `[extend]` only, with the two findings enumerated in
+  the config's own comments), and the cycle-210 pin asserts zero
+  allowlist regexes. On the owner's order ("no exceptions — solve
+  the findings or leave them be"), the Secret scan history job
+  reports exactly the two known verified-synthetic fixture
+  findings in pre-W1 history; they stand open and enumerated in
+  `docs/STABLE_RELEASE_LEDGER.md` (RR-01). The working tree scans
+  clean.
+
+### Fixed (input-boundary totality — RR-02, SA-01, SA-03, RTI-03, RTI-04, RTI-06, wave-9 S3/S4, audit work package W2, 2026-11-11)
+
+- Malformed stored reports no longer crash their consumers (RR-02):
+  the frontier differ and the reporting derivations gate the shape of
+  `decision_steps`, `flip_ranges`, `pass_steps` and `budget_robust`
+  before iterating or looking them up (a scalar `decision_steps`, a
+  list `budget_robust`, or a scalar `flip_ranges` degrades the section
+  instead of raising `TypeError`), and the precision recompute checks
+  `unavailable_candidates` element types before sorting them.
+  `diff-reports` now builds both of its outputs fully before emitting
+  either, so a comparison can no longer leave a valid JSON artifact
+  on stdout next to a traceback and a nonzero exit.
+- The surface-noise template evaluator applies the core generation
+  contract (`core._valid_generation`) exactly where the plain
+  evaluator does (SA-01): a missing or contract-violating generation
+  abstains instead of crashing or being scored as a pass.
+- An emitted tool call carrying a duplicated JSON argument member is
+  a parse failure (SA-03): the arguments are parsed with a
+  duplicate-rejecting object hook, so the same emission can no longer
+  grade two ways depending on member order.
+- Cheap validation now precedes expensive work (RTI-03): the MCP
+  probe tool rejects an out-of-range cap or seed before constructing
+  its backend, and `exec-backends` validates its stop texts, id
+  lists, request scalars, results file and cache ids before loading
+  the tokenizer, constructing the backend or probing the stack —
+  every failure keeps its established exit code.
+- `servingbackends.load_records_artifact` is a bounded, strict
+  reader (RTI-04, wave-9 A8-1/A8-2): the read is capped at the record
+  sink's own budget plus its envelope allowance, non-UTF-8 bytes and
+  non-finite JSON constants fail with the fixed
+  `serving_backends_artifact_invalid` code, and dedup/matching keys
+  are built only from validated string fields. The `exec-backends`
+  `--results` ingestion is bounded by the same results-size budget
+  as the report loader.
+- The MCP server validates the JSON-RPC envelope before dispatch
+  (RTI-06): a frame that is not a valid Request object (wrong
+  `jsonrpc` version, an un-echoable id, a non-string method) is an
+  Invalid Request (-32600, with a null id when the id itself is
+  invalid) and never executes; `tools/call` arguments are no longer
+  falsey-coerced — an absent or null member means no arguments, any
+  other non-object value is Invalid params (-32602). Notifications
+  are still never executed or answered.
+- Serving-backend totality (wave-9): a hostile sampler echo compares
+  exactly instead of through `float()` conversion, so an oversized
+  echoed integer is a `config_echo_mismatch`, not an `OverflowError`
+  (S3-1); a returned token id the local tokenizer cannot decode is a
+  `stack_response_invalid` observation, not a `KeyError` out of
+  `execute_cell` (S3-2); the exported `aggregate_fidelity` counts a
+  non-string verdict as unobservable instead of raising `TypeError`
+  (S4-1); and `predict_stop_outcome` rejects non-string stop texts
+  with the module's own `invalid_stop_texts` code (S4-2).
+  Regression coverage: `tests/test_w2_input_boundary.py` (50 tests;
+  every defect case failed on the pre-fix tree, every control passed).
+
 ### Added (release-policy verifier + non-publishing readiness workflow — RR-06 fence, audit work package W1, 2026-11-11)
 
 - `tools/release_policy.py`: given an exact commit SHA and the

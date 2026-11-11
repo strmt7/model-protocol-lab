@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9709 tests collected**
-  (cycle 246, 2026-11-11). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9759 tests collected**
+  (W2 push 1, 2026-11-11). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -476,9 +476,23 @@ doctor's resource fallbacks degrade there.
   before its gap battery, and the module measured 98.3%.
   (Cycle 212's dip from 209's 95.4018% was the same shape: the
   negation feature added 393 statements, 32,655 → 33,048.)
+  W2 push 1 (2026-11-11, input-boundary totality: audit rows
+  RR-02, SA-01, SA-03, RTI-03, RTI-04, RTI-06 and the six
+  wave-9 servingbackends rows) holds the floor: the exact CI
+  command ran 9,753 tests, OK (8 skipped), and `coverage json`
+  on that run measures 95.36108930620132% — above cycle 246's
+  95.35298563869992%. The full pytest leg agrees: 9,746
+  passed, 13 skipped, 73,077 subtests. The regression file
+  `tests/test_w2_input_boundary.py` (50 tests) fails on every
+  defect case and passes on every control against the pre-fix
+  tree. One sibling battery needed its scripted backends
+  aligned to the core generation contract the SA-01 fix now
+  enforces in both evaluators (cycle 166: short `limit`
+  generations padded to the requested cap after the boundary
+  token, which is never scored; assertions unchanged).
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (334 files in that CI scope; the repo-root scope counts more.
+  (335 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (75 source files).
