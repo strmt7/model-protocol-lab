@@ -196,13 +196,18 @@ class TestCommunityFiles(unittest.TestCase):
             self.assertTrue(update.get("groups"))
 
     def test_gitleaks_config(self):
-        """The gitleaks allowlist carries exactly the two adjudicated regexes."""
+        """The gitleaks config extends the default rules and allows NO exceptions.
+
+        Owner order 2026-11-11: no allowlist — a finding is solved or
+        left standing open, never excepted. The two verified-synthetic
+        fixture strings in pre-W1 history are reported by the history
+        scan and stand open, enumerated in .gitleaks.toml itself.
+        """
         with (REPO_ROOT / ".gitleaks.toml").open("rb") as handle:
             doc = tomllib.load(handle)
         patterns = doc.get("allowlist", {}).get("regexes", [])
-        self.assertEqual(len(patterns), 2)
-        for pattern in patterns:
-            re.compile(pattern)
+        self.assertEqual(patterns, [])
+        self.assertTrue(doc.get("extend", {}).get("useDefault"))
 
 
 class TestReadmeSurface(unittest.TestCase):

@@ -14,35 +14,25 @@
 [extend]
 useDefault = true
 
-# Allowlist — exactly two entries, each individually justified below.
-# Both match EXACT strings, never paths and never rules, so any other
-# secret, including a real one in the same files, is still caught.
+# NO allowlist. Owner order, 2026-11-11: no exceptions — a finding is
+# either solved or left standing open, never excepted away.
 #
-# History-only provenance (W1): both strings are verified-synthetic
-# test fixtures — invented for the tests named below, never issued to
-# anyone — that were in the suite before W1 and therefore exist in
-# immutable git history. W1 replaced both at source with
-# non-credential-shaped equivalents, so neither string occurs in the
-# current tree and a working-tree scan needs no allowlist at all; the
-# entries remain solely so the full-history scan does not fail on the
-# historical record. Removing them requires a history rewrite or a
-# permanently failing history scan — an owner decision, recorded in
-# the W1 cycle report.
+# Standing open findings (enumerated, not excepted): the full-history
+# scan reports exactly two findings, both verified-synthetic test
+# fixtures invented before W1 that persist in immutable git history:
 #
-# 1. 'ARBITRARY\-SECRET\-leak\-1' — the arbitrary-error-text fixture in
-#    tests/test_cycle79_evaluate_engine_audit.py: backend error text
-#    must never survive into a report. Replaced at source with
-#    'ARBITRARY-TEXT-leak-1' in W1.
-# 2. 's3cr3t\-hunter2\-leakprobe' — the _PROBE_SECRET constant in
-#    tests/test_cycle55_evaluate_audit.py: probe text a fake backend
-#    raises with; observations must never carry it. Replaced at source
-#    with 'probe-value-hunter2-leakprobe' in W1.
+# 1. 'ARBITRARY-TEXT-leak-1' — the arbitrary-error-text fixture from
+#    tests/test_cycle79_evaluate_engine_audit.py (backend error text
+#    must never survive into a report).
+# 2. 'probe-value-hunter2-leakprobe' — the _PROBE_SECRET constant from
+#    tests/test_cycle55_evaluate_audit.py (probe text a fake backend
+#    raises with; observations must never carry it).
 #
-# Patterns are TOML literal strings so regex backslashes survive
-# verbatim. Any new finding is a genuine triage item, not an allowlist
-# candidate, until proven synthetic the same way.
-[allowlist]
-regexes = [
-    'ARBITRARY\-SECRET\-leak\-1',
-    's3cr3t\-hunter2\-leakprobe',
-]
+# Both strings were replaced at source in W1 with
+# non-credential-shaped equivalents, so neither occurs in the current
+# tree and a working-tree scan is clean with no exceptions. They
+# remain in pre-W1 commits; removing them from the record would
+# require a history rewrite, which the owner has not ordered. Until
+# then the history scan stays red on exactly these two findings —
+# visible in every CI secret-scan run — by the owner's explicit
+# decision. Any FURTHER finding is a genuine triage item.
