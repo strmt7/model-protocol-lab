@@ -1059,6 +1059,42 @@ from PR #7 has landed; its bumps arrive only through
 the torch-lock regeneration cycle, which stays in the
 queue.
 
+### Secret scanning made effective (audit W1 — RR-01, 2026-11-11)
+
+The cycle-210 secret scan was green without being able to find
+anything: `.gitleaks.toml` carried an allowlist and no rules, and a
+supplied gitleaks configuration replaces the upstream default rule
+set instead of merging with it, so the pinned scanner ran with zero
+rules over the full history on every push. The external audit
+(RR-01) proved it with a synthetic canary; W1 reproduced the miss
+locally with the workflow's own checksum-verified gitleaks 8.30.1
+(private-key, JWT and Slack-shaped canaries all missed under the
+repo config, all detected under the default rules, in directory and
+history modes) and repaired it:
+
+- `.gitleaks.toml` now loads the default rules via
+  `[extend] useDefault = true`. Detection is a property of the
+  configuration again, proven continuously:
+  `tests/test_gitleaks_sensitivity.py` plants a never-issued canary
+  in a disposable directory and a disposable git history and
+  requires the exact CI invocation to detect it in both modes,
+  with a benign control staying clean; the Secret scan workflow
+  runs that module with the pinned binary before it scans.
+- The two synthetic fixture strings the default rules flagged were
+  replaced at source with non-credential-shaped equivalents that
+  preserve each test's invariant. A working-tree scan under the
+  default rules is clean with no allowlist at all; a full-history
+  scan finds exactly the two historical occurrences of the
+  replaced strings and nothing else.
+- The two pre-existing exact-regex allowlist entries (cycle 210)
+  are retained and re-documented in the config as history-only
+  provenance for those immutable historical blobs. They match
+  exact strings, never paths, so a real secret in the same files
+  is still caught. Removing them is an owner decision — the
+  alternatives are a history rewrite or a permanently failing
+  history scan — and is recorded as such in the W1 report; they
+  were not expanded, and no new suppression of any kind was added.
+
 ## Reporting defects
 
 For public issues, provide a minimal synthetic reproduction and dependency versions. Exclude credentials, proprietary prompts, private model files and personally identifying data. For sensitive defects, use GitHub's private vulnerability reporting for this repository — it is enabled (verified through the GitHub API, 2026-10-23): open the repository's **Security** tab and choose **Report a vulnerability**, or go to `https://github.com/strmt7/model-protocol-lab/security/advisories/new`. Reports there are visible only to the maintainer until a fix ships.

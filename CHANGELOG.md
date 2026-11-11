@@ -6,6 +6,37 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (secret scan was vacuous — RR-01, audit work package W1, 2026-11-11)
+
+- `.gitleaks.toml` now loads the upstream default rule set through
+  `[extend] useDefault = true`. The previous file carried an allowlist
+  and nothing else; a supplied gitleaks config replaces the default
+  rules instead of merging with them, so the Secret scan workflow ran
+  with zero rules and could not find anything. Verified with the
+  workflow's own pinned, checksum-verified gitleaks 8.30.1: fabricated
+  private-key, JWT and Slack-shaped canaries were missed under the old
+  config and are detected under the repaired one, in directory and
+  history modes, while a benign control stays clean.
+- New permanent proof: `tests/test_gitleaks_sensitivity.py` plants a
+  never-issued canary (assembled from fragments, so the literal never
+  enters the tree) in a disposable directory and a disposable git
+  history and requires the exact CI invocation to detect it; the
+  Secret scan workflow runs it with the pinned binary before scanning.
+  On the pre-repair config exactly the two repo-config canary tests
+  fail; after the repair all six pass.
+- The two synthetic fixture strings the default rules flag were
+  replaced at source with non-credential-shaped equivalents that keep
+  each test's invariant (arbitrary error text / probe text must never
+  survive into a report): `tests/test_cycle79_evaluate_engine_audit.py`
+  and `tests/test_cycle55_evaluate_audit.py`. A full working-tree scan
+  under the default rules is now clean with no allowlist at all, and a
+  full-history scan finds exactly the two historical occurrences of
+  the replaced strings and nothing else. The two pre-existing
+  exact-regex allowlist entries are kept, re-documented as
+  history-only provenance for those immutable historical blobs;
+  removing them is an owner decision (history rewrite or a
+  permanently failing history scan), recorded in the W1 report.
+
 ### Changed (dependency locks — Dependabot batch #9–#16 dispositioned, 2026-11-11)
 
 - Docs lock (`requirements-docs.txt`): watchdog 6.0.0 → 7.0.0,

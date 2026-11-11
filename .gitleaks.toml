@@ -1,14 +1,46 @@
-# Gitleaks allowlist (cycle 210).
+# Gitleaks configuration.
 #
-# These patterns are VERIFIED-SYNTHETIC test fixtures, not credentials:
-# a sanitization test's fake key-shaped string and an aliasing test's
-# _PROBE_SECRET constant. They were found by a local gitleaks 8.30.1
-# run over the working tree (2 findings, both in tests/, both fake
-# by test context) and allowlisted by EXACT regex — never by path, so
-# a future real secret in these files is still caught. Patterns are
-# TOML literal strings so regex backslashes survive verbatim. Any new
-# finding is a genuine triage item, not an allowlist candidate, until
-# proven synthetic the same way.
+# Detection rules come from the pinned scanner's upstream default rule
+# set, loaded through the [extend] section below. A supplied config
+# REPLACES the default rules unless it extends them — the cycle-210
+# version of this file carried an allowlist and nothing else, so the
+# configured scan ran with zero rules and could not find anything
+# (audit finding RR-01, repaired in W1). Whether the rules are really
+# loaded is proven, not asserted: tests/test_gitleaks_sensitivity.py
+# plants a never-issued canary in a disposable directory and a
+# disposable git history and requires the exact CI invocation
+# (gitleaks detect --redact --config .gitleaks.toml, gitleaks 8.30.1)
+# to detect it in both modes, with a benign control staying clean.
+[extend]
+useDefault = true
+
+# Allowlist — exactly two entries, each individually justified below.
+# Both match EXACT strings, never paths and never rules, so any other
+# secret, including a real one in the same files, is still caught.
+#
+# History-only provenance (W1): both strings are verified-synthetic
+# test fixtures — invented for the tests named below, never issued to
+# anyone — that were in the suite before W1 and therefore exist in
+# immutable git history. W1 replaced both at source with
+# non-credential-shaped equivalents, so neither string occurs in the
+# current tree and a working-tree scan needs no allowlist at all; the
+# entries remain solely so the full-history scan does not fail on the
+# historical record. Removing them requires a history rewrite or a
+# permanently failing history scan — an owner decision, recorded in
+# the W1 cycle report.
+#
+# 1. 'ARBITRARY\-SECRET\-leak\-1' — the arbitrary-error-text fixture in
+#    tests/test_cycle79_evaluate_engine_audit.py: backend error text
+#    must never survive into a report. Replaced at source with
+#    'ARBITRARY-TEXT-leak-1' in W1.
+# 2. 's3cr3t\-hunter2\-leakprobe' — the _PROBE_SECRET constant in
+#    tests/test_cycle55_evaluate_audit.py: probe text a fake backend
+#    raises with; observations must never carry it. Replaced at source
+#    with 'probe-value-hunter2-leakprobe' in W1.
+#
+# Patterns are TOML literal strings so regex backslashes survive
+# verbatim. Any new finding is a genuine triage item, not an allowlist
+# candidate, until proven synthetic the same way.
 [allowlist]
 regexes = [
     'ARBITRARY\-SECRET\-leak\-1',
