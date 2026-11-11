@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (dependency locks — Dependabot batch #9–#16 dispositioned, 2026-11-11)
+
+- Docs lock (`requirements-docs.txt`): watchdog 6.0.0 → 7.0.0,
+  platformdirs 4.14.0 → 4.14.3, python-dateutil 3.0.0 → 4.0.0
+  (PRs #9, #10, #11, merged after a hash-locked install proof and a
+  strict docs build).
+- CocoIndex lock (`tools/requirements/cocoindex.txt`): openai
+  2.54.0 → 3.42.1 — the PR #14 bump, landed as a direct lock update
+  once cycle 245's litellm 1.108.4 (which admits `openai<4.0.0`)
+  removed the resolver conflict that had made the PR uninstallable
+  as written. The artifact hashes were re-verified against PyPI;
+  the lock already carried `httpx2` for openai 3.x's new default
+  HTTP client. PRs #12, #13, #15 and #16 were closed with the
+  resolver evidence recorded on each PR (upstream caps in torch /
+  sympy / playwright / litellm / cocoindex-code make their proposed
+  locks uninstallable today).
+
 ### Fixed (semantic-key repairs — seven defective frozen grading keys, 2026-11-11)
 
 - Seven frozen grading keys whose accepted answers were not uniquely
