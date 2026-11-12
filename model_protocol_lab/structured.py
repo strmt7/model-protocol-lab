@@ -228,10 +228,39 @@ _SPEC_KEYS = ("id", "question", "context", "shape", "schema", "answer")
 
 
 def _is_finite_number(value: object) -> bool:
-    """Return whether finite number."""
+    """Return whether finite number.
+
+    An int is finite by construction and must not be converted to
+    float to prove it: the pre-fix ``math.isnan(value)`` raised
+    ``OverflowError`` on a several-hundred-digit integer in a
+    hostile payload (SA-04). Floats go through ``math.isfinite``.
+    """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
-    return not math.isnan(value) and abs(value) != float("inf")
+    if type(value) is int:
+        return True
+    return math.isfinite(value)
+
+
+def _enum_member(value: object, enum: list[Any]) -> bool:
+    """Return whether value is a member of enum under the JSON value model.
+
+    JSON Schema §4.2.2: a boolean is a distinct type from number, so
+    ``True`` is not a member of ``[1]`` and ``1`` is not a member of
+    ``[true]`` — Python's ``in`` compares by ``==`` and conflates
+    them (SA-05). Numbers match mathematically across the int/float
+    spelling; every other value matches by exact type and value.
+    """
+    for member in enum:
+        if type(member) is bool or type(value) is bool:
+            if type(member) is bool and type(value) is bool and member == value:
+                return True
+        elif type(member) in (int, float) and type(value) in (int, float):
+            if member == value:
+                return True
+        elif type(member) is type(value) and member == value:
+            return True
+    return False
 
 
 def validate_field_def(field: object, *, where: str) -> dict[str, Any]:
@@ -554,7 +583,7 @@ def _field_value_ok(value: object, field: dict[str, Any]) -> bool:
     if not ok:
         return False
     enum = field.get("enum")
-    if enum is not None and value not in enum:
+    if enum is not None and not _enum_member(value, enum):
         return False
     minimum = field.get("minimum")
     if minimum is not None and isinstance(minimum, (int, float)):

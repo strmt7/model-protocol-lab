@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9759 tests collected**
-  (W2 push 1, 2026-11-11). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9780 tests collected**
+  (W2 push 2, 2026-11-11). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -490,9 +490,24 @@ doctor's resource fallbacks degrade there.
   enforces in both evaluators (cycle 166: short `limit`
   generations padded to the requested cap after the boundary
   token, which is never scored; assertions unchanged).
+  W2 push 2 (2026-11-11, exact-type admission: audit rows
+  RR-04, SA-04, SA-05) holds the floor: the exact CI command
+  ran 9,774 tests, OK (8 skipped), and `coverage json` on
+  that run measures 95.36971379430003% — above push 1's
+  95.36108930620132%. The full pytest leg agrees: 9,767
+  passed, 13 skipped, 73,077 subtests. The regression file
+  `tests/test_w2_exact_type.py` (21 tests) fails on every
+  defect case and passes on every control against the pre-fix
+  tree. One adjudication was reversed by execution mid-push:
+  number unification across the int/float spelling was first
+  applied to `_recomputed_equal` and then withdrawn — cycle
+  227's pin (a stored `0.0` against a recomputed int `0` is a
+  rejection) fixes the recompute validators' contract as
+  type-strict exactness; unification survives only in JSON
+  Schema enum membership (SA-05), where §4.2.2 governs.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (335 files in that CI scope; the repo-root scope counts more.
+  (336 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (75 source files).

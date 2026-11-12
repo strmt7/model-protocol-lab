@@ -10590,15 +10590,19 @@ def _o_recomputed_equal(stored: Any, expected: Any) -> bool:
 
     Bare ``==`` lets a JSON ``true`` validate as the integer 1 and
     a float ``0.0`` as the integer ``0``; the producer's validators
-    compare recomputed values type-strictly, so the oracle must
-    too, or it certifies payloads the producer rejects (bug-hunt
-    wave 2, BH2B-08). Written independently here -- the oracle
-    never imports the producer's helpers.
+    compare recomputed values type-strictly (every scalar exact in
+    type and value, on either side — RR-04 closed the fallthrough
+    that admitted a stored bool against an expected float), so the
+    oracle must too, or it certifies payloads the producer rejects
+    (bug-hunt wave 2, BH2B-08). Written independently here -- the
+    oracle never imports the producer's helpers.
     """
     if type(expected) is bool:
         return type(stored) is bool and stored == expected
     if type(expected) is int:
         return type(stored) is int and stored == expected
+    if type(expected) is float:
+        return type(stored) is float and stored == expected
     if type(expected) is dict:
         return (
             type(stored) is dict
@@ -10614,7 +10618,7 @@ def _o_recomputed_equal(stored: Any, expected: Any) -> bool:
                 for item, value in zip(stored, expected, strict=True)
             )
         )
-    return bool(stored == expected)
+    return type(stored) is type(expected) and bool(stored == expected)
 
 
 def _o_ic_recompute(payload: Any):

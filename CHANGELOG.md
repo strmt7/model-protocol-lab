@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (exact-type admission — external-audit W2 push 2, 2026-11-11)
+
+- Report validators no longer conflate JSON booleans with numbers
+  (RR-04): `_recomputed_equal` is type-strict for every scalar
+  on both sides — the old fallthrough admitted a stored bool
+  against an expected float — including nested in dicts/lists;
+  the six remaining equality-based boolean-or-null admissions
+  in the distraction, leading-cell, numform, precision and
+  confidence recomputes are exact-type gates, and the precision
+  record loop gates `diverged` as bool-or-None.
+- The custom structured schema no longer overflows on huge
+  integers (SA-04: a 401-digit integer in a `number` field raised
+  `OverflowError` from float conversion; ints are finite by
+  construction and are no longer converted), and enum membership
+  follows JSON Schema §4.2.2 (SA-05: `true` no longer matches an
+  integer field's enum `[1]`, nor `1` a boolean field's `[true]`;
+  numeric enums still match across int/float spelling). The
+  cycle-157 differential oracle and the cycle-67 diff oracle
+  implement both rules independently from the same specs.
+  Regression tests: `tests/test_w2_exact_type.py`.
+
 ### Changed (gitleaks allowlist removed — owner no-exceptions order, 2026-11-11)
 
 - The two cycle-210 gitleaks allowlist entries are removed:

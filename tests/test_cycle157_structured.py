@@ -397,6 +397,24 @@ def _oracle_schema_def_ok(schema):
     return all(_oracle_field_def_ok(field) for field in properties.values())
 
 
+def _oracle_enum_member(value, enum):
+    """Enum membership under the JSON value model (JSON Schema
+    §4.2.2): a boolean only matches a boolean member; numbers match
+    mathematically across int/float; anything else matches by exact
+    type and value. Written from the same spec as the
+    implementation's helper, independently (SA-05)."""
+    for member in enum:
+        if type(member) is bool or type(value) is bool:
+            if type(member) is bool and type(value) is bool and member == value:
+                return True
+        elif type(member) in (int, float) and type(value) in (int, float):
+            if member == value:
+                return True
+        elif type(member) is type(value) and member == value:
+            return True
+    return False
+
+
 def _oracle_field_ok(value, field):
     """Independent reimplementation of the per-field value check."""
     field_type = field["type"]
@@ -412,8 +430,10 @@ def _oracle_field_ok(value, field):
                 return False
             # Non-finite floats are not JSON numbers (RFC 8259 §6); the
             # oracle must share the implementation's rejection, not the
-            # shared blind spot that let F1 through.
-            if math.isnan(value) or abs(value) == float("inf"):
+            # shared blind spot that let F1 through. An int is finite
+            # by construction and is never converted to float (SA-04:
+            # the conversion raises OverflowError on huge ints).
+            if type(value) is float and not math.isfinite(value):
                 return False
         case "boolean":
             if type(value) is not bool:
@@ -424,7 +444,7 @@ def _oracle_field_ok(value, field):
         case _:
             return False
     enum = field.get("enum")
-    if enum is not None and value not in enum:
+    if enum is not None and not _oracle_enum_member(value, enum):
         return False
     minimum = field.get("minimum")
     if minimum is not None and value < minimum:

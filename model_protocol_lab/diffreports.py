@@ -152,22 +152,41 @@ def _valid_primary_pair(payload: dict[str, Any]) -> bool:
     return winner is None
 
 
+def _bool_or_none(value: Any) -> bool:
+    """Return whether a stored field is a JSON boolean or null.
+
+    The admission these gates replace, ``value not in (True, False,
+    None)``, compares by equality, so the numbers 1 and 0 (and 1.0 /
+    0.0) were admitted wherever a boolean-or-null was required
+    (RR-04). Exact-type membership is the only sound test: a bool
+    is not a number and a number is not a bool.
+    """
+    return value is None or type(value) is bool
+
+
 def _recomputed_equal(stored: Any, expected: Any) -> bool:
     """Type-strict equality for validator recompute comparisons.
 
     Bare ``==`` lets a JSON ``true`` validate as the integer 1 (bool
     is an int subclass), so an equality-compared count or version in
     a hostile payload could slip past a recompute check in the wrong
-    type (oversight edge-case F2 — behaviourally inert, since the
-    value is only ever compared, but a strictness wart in validators
-    whose whole contract is exactness). Ints and bools must match in
-    type AND value; dicts and lists recurse; everything else uses
-    plain equality.
+    type. Every scalar must match in type AND value, on either side:
+    the pre-fix fallthrough admitted a stored ``False`` against an
+    expected float ``0.0`` (and a stored int against an expected
+    float) because only the bool and int branches gated the type
+    (RR-04). The float branch now gates too, and the fallthrough is
+    type-exact. Dicts and lists recurse. (Number unification across
+    the int/float spelling applies to JSON Schema enum membership
+    — SA-05 — not to these recompute validators, whose contract is
+    exactness against this package's own producers; cycle 227 pins
+    a stored ``0.0`` against a recomputed int ``0`` as a rejection.)
     """
     if type(expected) is bool:
         return type(stored) is bool and stored == expected
     if type(expected) is int:
         return type(stored) is int and stored == expected
+    if type(expected) is float:
+        return type(stored) is float and stored == expected
     if type(expected) is dict:
         return (
             type(stored) is dict
@@ -182,7 +201,7 @@ def _recomputed_equal(stored: Any, expected: Any) -> bool:
                 _recomputed_equal(item, value) for item, value in zip(stored, expected, strict=True)
             )
         )
-    return bool(stored == expected)
+    return type(stored) is type(expected) and bool(stored == expected)
 
 
 def _reject_constant(_value: Any) -> Any:
@@ -5384,7 +5403,7 @@ def _distraction_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
                 return None
             if type(native.get("boundary_found")) is not bool:
                 return None
-            if native.get("boundary_text_match") not in (True, False, None):
+            if not _bool_or_none(native.get("boundary_text_match")):
                 return None
             if not _distraction_int_ok(native.get("input_tokens")):
                 return None
@@ -5423,7 +5442,7 @@ def _distraction_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
                     return None
                 if type(cell.get("boundary_found")) is not bool:
                     return None
-                if cell.get("boundary_text_match") not in (True, False, None):
+                if not _bool_or_none(cell.get("boundary_text_match")):
                     return None
                 if not _distraction_int_ok(cell.get("input_tokens")):
                     return None
@@ -5918,7 +5937,7 @@ def _leading_cell_consistent(cell: Any, expected_digest: Any) -> bool:
         return False
     if type(cell.get("boundary_found")) is not bool:
         return False
-    if cell.get("boundary_text_match") not in (True, False, None):
+    if not _bool_or_none(cell.get("boundary_text_match")):
         return False
     if not _leading_int_ok(cell.get("input_tokens")):
         return False
@@ -7257,7 +7276,7 @@ def _numform_record_construction(
             return None
         if type(cell["verdict"]) is not bool or type(cell["boundary_found"]) is not bool:
             return None
-        if cell["boundary_text_match"] not in (True, False, None):
+        if not _bool_or_none(cell["boundary_text_match"]):
             return None
         if not _leading_int_ok(cell["input_tokens"]):
             return None
@@ -26891,6 +26910,8 @@ def _precision_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             cell = record[arm]
             if cell is not None and not _precision_cell_ok(cell, str(record["expected_digest"])):
                 return None
+        if not _bool_or_none(record["diverged"]):
+            return None
         both = type(record["fp32"]) is dict and type(record["bf16"]) is dict
         if (record["diverged"] is None) == both:
             return None
@@ -26931,7 +26952,7 @@ def _precision_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
         own = [r for r in ordered if r["candidate"] == name]
         for arm in ("fp32", "bf16"):
             passed = stored.get(f"{arm}_passed")
-            if passed not in (True, False, None):
+            if not _bool_or_none(passed):
                 return None
             arm_fixtures = {str(r["fixture"]) for r in own if type(r[arm]) is dict}
             complete = arm_fixtures == universe
@@ -27588,7 +27609,7 @@ def _confidence_recompute(payload: dict[str, Any]) -> dict[str, Any] | None:
             return None
         if not _confidence_digest_ok(record["expected_digest"]):
             return None
-        if record["native_verdict"] not in (True, False, None):
+        if not _bool_or_none(record["native_verdict"]):
             return None
         cell = record["elicited"]
         if record["screen"] != "" and cell is not None:
