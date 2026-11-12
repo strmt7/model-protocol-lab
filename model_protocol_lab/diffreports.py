@@ -250,11 +250,15 @@ def _section_states(
     evidence-excluded exports for an evidence-bound section, the
     assembly replaces its diff with the documented unavailable
     state (``detail == "evidence_excluded"``) and this function
-    publishes that provenance as-is, with no drift judgement --
-    the comparison was not made, by the exports' own
-    declaration. A one-sided exclusion keeps the ``one_sided``
-    state (its diff carries the detail). Returns the state map
-    (registry order) and the sorted drift list.
+    publishes that provenance. The validation comparison was
+    not made, by the exports' own declaration -- but the drift
+    judgement above still applies (wave-10 F2): drift detection
+    compares the stored payloads and does not need the stripped
+    evidence, so observably different payloads are drift here
+    too, and the degraded diff's ``changed`` says the same. A
+    one-sided exclusion keeps the ``one_sided`` state (its diff
+    carries the detail). Returns the state map (registry order)
+    and the sorted drift list.
     """
     states: dict[str, dict[str, Any]] = {}
     drifted: list[str] = []
@@ -268,7 +272,14 @@ def _section_states(
             and section_diff.get("detail") == "evidence_excluded"
             and available == "neither"
         ):
-            states[diff_key] = {"state": "evidence_excluded", "unvalidated_drift": False}
+            drift = (
+                old_payload is not None
+                and new_payload is not None
+                and not _recomputed_equal(old_payload, new_payload)
+            )
+            states[diff_key] = {"state": "evidence_excluded", "unvalidated_drift": drift}
+            if drift:
+                drifted.append(diff_key)
             continue
         if available == "both":
             state = "compared"
@@ -290,14 +301,18 @@ def _section_states(
     return states, sorted(drifted)
 
 
-#: Sections whose validators recompute from the records' raw
+#: Sections whose validators recompute from evidence the
+#: default export strips: for seven of them, the records' raw
 #: ``answer_text`` (each mirror verifies the text against its
-#: stored digest). An evidence-excluded export carries no
-#: answer_text at all (the field is evidence-only), so these
-#: sections cannot be validated from a default export.
-#: prune_sweep also carries the field in its records but its
-#: validator never reads it, so it is not listed and stays
-#: diffable from default exports.
+#: stored digest); for ``serving_backends``, the records'
+#: ``prompt_ids``/``returned_ids`` streams (its record
+#: validator pins both keys and recomputes both digests from
+#: them -- wave-10 F3). An evidence-excluded export carries
+#: none of that evidence, so these sections cannot be
+#: validated from a default export. prune_sweep also carries
+#: answer_text in its records but its validator never reads
+#: it, so it is not listed and stays diffable from default
+#: exports.
 _EVIDENCE_BOUND_SECTIONS = frozenset(
     {
         "compatibility_form",
@@ -306,6 +321,7 @@ _EVIDENCE_BOUND_SECTIONS = frozenset(
         "invisible_chars",
         "numform",
         "record_notation",
+        "serving_backends",
         "typographic_emphasis",
     }
 )
@@ -351,18 +367,39 @@ def _answer_text_state(section: Any) -> tuple[bool, bool]:
     return saw, carried
 
 
+def _serving_ids_state(section: Any) -> tuple[bool, bool]:
+    """(Any records reachable, any id streams carried) for a
+    ``serving_backends`` section: its records sit at the section
+    level, and the evidence the projection strips is the
+    ``prompt_ids``/``returned_ids`` key pair on each record.
+    """
+    saw = False
+    carried = False
+    if type(section) is dict:
+        records = section.get("records")
+        if type(records) is list:
+            for record in records:
+                if type(record) is dict:
+                    saw = True
+                    if "prompt_ids" in record or "returned_ids" in record:
+                        carried = True
+    return saw, carried
+
+
 def _evidence_excluded(result: Any, section_key: str) -> bool:
     """Whether ``result`` is an evidence-excluded export whose
-    ``section_key`` section lost its answer_text to the projection.
+    ``section_key`` section lost its evidence to the projection.
 
     True only when the results dict declares
     ``raw_evidence_included is False`` (the stamp the exporter
     writes), the section is present with records, and no
-    reachable record or cell carries ``answer_text``. A payload
-    without the stamp is not an export and is judged as-is; an
-    evidence export (stamp true) missing the field is judged
-    as-is too; partial carriage is not the projection's shape
-    (it strips everywhere or nowhere) and is judged as-is.
+    reachable record or cell carries the evidence (the records'
+    ``answer_text``; for ``serving_backends``, the records' id
+    streams). A payload without the stamp is not an export and
+    is judged as-is; an evidence export (stamp true) missing
+    the field is judged as-is too; partial carriage is not the
+    projection's shape (it strips everywhere or nowhere) and is
+    judged as-is.
     """
     if type(result) is not dict:
         return False
@@ -371,7 +408,10 @@ def _evidence_excluded(result: Any, section_key: str) -> bool:
     section = result.get(section_key)
     if type(section) is not dict:
         return False
-    saw, carried = _answer_text_state(section)
+    if section_key == "serving_backends":
+        saw, carried = _serving_ids_state(section)
+    else:
+        saw, carried = _answer_text_state(section)
     return saw and not carried
 
 
@@ -381,16 +421,21 @@ def _degrade_evidence_excluded(
     """Replace a section diff with the documented unavailable
     state when either side is an evidence-excluded export.
 
-    The section's validators bind answer_text to its digests;
-    with the text stripped at export there is nothing to bind,
-    and the honest report is that the comparison was not made
+    The section's validators bind the evidence (answer_text, or
+    the serving records' id streams) to its digests; with the
+    evidence stripped at export there is nothing to bind, and
+    the honest report is that the comparison was not made
     (the CLI documents these diffs as requiring
     --include-evidence on both runs) -- not that the section is
-    invalid. Both sides excluded: the section is not compared
-    (``available`` "neither", ``changed`` False). One side
-    excluded: the comparison is one-sided by construction, so
-    the diff names the side that carries evidence and the
-    section is asymmetric.
+    invalid. Both sides excluded: the validation comparison is
+    not made (``available`` "neither"), but the stored payloads
+    themselves are still compared (wave-10 F2): observably
+    different payloads are a change, exactly as RR-09 requires
+    of every unvalidated section -- drift detection does not
+    need the stripped evidence. One side excluded: the
+    comparison is one-sided by construction, so the diff names
+    the side that carries evidence and the section is
+    asymmetric.
     """
     old_excluded = _evidence_excluded(old, section_key)
     new_excluded = _evidence_excluded(new, section_key)
@@ -402,6 +447,8 @@ def _degrade_evidence_excluded(
         "detail": "evidence_excluded",
     }
     if old_excluded and new_excluded:
+        if not _recomputed_equal(old.get(section_key), new.get(section_key)):
+            degraded["changed"] = True
         return degraded
     other = new if old_excluded else old
     if type(other.get(section_key)) is not dict:
@@ -1203,6 +1250,9 @@ def diff_reports(
     )
     serving_backends_diff = diff_serving_backends(
         old.get("serving_backends"), new.get("serving_backends")
+    )
+    serving_backends_diff = _degrade_evidence_excluded(
+        old, new, "serving_backends", serving_backends_diff
     )
     negation_diff = diff_negation(old.get("negation"), new.get("negation"))
     negation_asymmetric = negation_diff["available"] not in (
@@ -23404,13 +23454,19 @@ def _valid_negation(payload: Any) -> bool:
     The aggregation is a pure data function in its own module
     (``negation.aggregate_candidate``), shared with the stage;
     this validator independently gates the payload's shape --
-    exact key sets, an int protocol seed, candidate/case counts
-    against the frozen case generator -- and compares every
-    stored aggregate against the recomputation from the stored
-    records, so a tampered or drifted aggregate is refused.
-    Malformed records fail closed: the recomputation runs under
-    a guard and any error makes the payload invalid, never a
-    crash (RR-02 totality).
+    exact key sets, candidate/case counts against the frozen
+    case generator -- and compares every stored aggregate
+    against the recomputation from the stored records, so a
+    tampered or drifted aggregate is refused. The protocol is
+    recomputed, not merely type-checked (wave-10 F4): the
+    stored object must equal the frozen instrument for its own
+    seed/backend pair, field for field, and its fingerprint
+    must be that object's fingerprint. The records are bound
+    to the generated case set (wave-10 L4): one record per
+    case, each record's skeleton and digests recomputed
+    against its case. Malformed records fail closed: the
+    recomputation runs under a guard and any error makes the
+    payload invalid, never a crash (RR-02 totality).
     """
     if type(payload) is not dict or payload.get("available") is not True:
         return False
@@ -23429,7 +23485,9 @@ def _valid_negation(payload: Any) -> bool:
     protocol = payload.get("protocol")
     if type(protocol) is not dict:
         return False
-    if type(protocol.get("seed")) is not int:
+    seed = protocol.get("seed")
+    backend_fingerprint = protocol.get("backend_fingerprint")
+    if type(seed) is not int or type(backend_fingerprint) is not str:
         return False
     if type(protocol.get("fingerprint")) is not str:
         return False
@@ -23444,11 +23502,20 @@ def _valid_negation(payload: Any) -> bool:
     from . import negation as _ng
 
     try:
-        expected_cases = len(_ng.cases_for(protocol["seed"]))
+        cases = _ng.cases_for(seed)
+        expected_protocol = _ng.protocol_object(seed, backend_fingerprint)
     except Exception:  # noqa: BLE001 -- fail closed: an ungeneratable seed invalidates
         return False
-    if not _recomputed_equal(payload.get("n_cases"), expected_cases):
+    if set(protocol) != set(expected_protocol) | {"fingerprint"}:
         return False
+    for protocol_key, protocol_value in expected_protocol.items():
+        if not _recomputed_equal(protocol.get(protocol_key), protocol_value):
+            return False
+    if protocol["fingerprint"] != _ng.protocol_fingerprint(seed, backend_fingerprint):
+        return False
+    if not _recomputed_equal(payload.get("n_cases"), len(cases)):
+        return False
+    case_by_id = {case["fixture_id"]: case for case in cases}
     for entry in candidates.values():
         if type(entry) is not dict:
             return False
@@ -23468,6 +23535,26 @@ def _valid_negation(payload: Any) -> bool:
         records = entry.get("records")
         if type(records) is not list:
             return False
+        record_fixtures: list[str] = []
+        for record in records:
+            if type(record) is not dict or type(record.get("fixture")) is not str:
+                return False
+            record_fixtures.append(record["fixture"])
+        if sorted(record_fixtures) != sorted(case_by_id):
+            return False
+        for record in records:
+            case = case_by_id[record["fixture"]]
+            for skeleton_key in ("operands", "larger_first", "stratum", "band"):
+                if not _recomputed_equal(record.get(skeleton_key), case[skeleton_key]):
+                    return False
+            expected_digests = {arm: _ng.digest_text(case["contents"][arm]) for arm in _ng.ARM_KEYS}
+            if not _recomputed_equal(record.get("content_digests"), expected_digests):
+                return False
+            if not _recomputed_equal(
+                record.get("expected_digest"),
+                _ng.digest_text(case["expected"]["direct"]),
+            ):
+                return False
         try:
             expected = _ng.aggregate_candidate(records)
         except Exception:  # noqa: BLE001 -- fail closed on malformed records

@@ -297,12 +297,25 @@ def _failure_diagnosis(result: dict[str, Any]) -> str:
 
 def _public_view(result: dict[str, Any], include_evidence: bool) -> dict[str, Any]:
     """Return the public view."""
-    clean: dict[str, Any] = json.loads(json.dumps(result, ensure_ascii=True, allow_nan=False))
+    try:
+        clean: dict[str, Any] = json.loads(json.dumps(result, ensure_ascii=True, allow_nan=False))
+    except TypeError as exc:
+        # A core value JSON cannot serialize is not a writable
+        # report envelope: refuse it in save_report's documented
+        # vocabulary (wave-10 L1), before anything is written.
+        raise ValueError(f"report payload is not JSON-serializable: {exc}") from exc
     if not include_evidence:
-        for run in clean.get("search", []):
-            run.pop("observations", None)
-        if clean.get("held_out") is not None:
-            clean["held_out"].pop("observations", None)
+        # Shape-guarded like every other consumer of these core
+        # values (wave-10 L1): a malformed ``search``/``held_out``
+        # carries no observations to strip, never a crash.
+        search = clean.get("search")
+        if type(search) is list:
+            for run in search:
+                if type(run) is dict:
+                    run.pop("observations", None)
+        held_out = clean.get("held_out")
+        if type(held_out) is dict:
+            held_out.pop("observations", None)
         _strip_raw_diagnostics(clean)
     clean["raw_evidence_included"] = include_evidence
     return clean
@@ -14755,9 +14768,14 @@ def _check_report_admission(result: dict[str, Any]) -> None:
         if type(version) is not int or version != 1:
             raise ValueError(f"unsupported report schema_version: {version!r}")
     admitted = _REPORT_CORE_KEYS | _REPORT_SECTION_KEYS
-    unknown = sorted(key for key in result if key not in admitted)
+    # The refusal is total over key types (wave-10 F1): a payload
+    # keyed by non-strings is refused with the same ValueError, so
+    # the unknown keys are ordered and rendered by repr where a
+    # plain string sort/join would itself raise TypeError.
+    unknown = sorted((key for key in result if key not in admitted), key=repr)
     if unknown:
-        raise ValueError(f"unknown report section keys: {', '.join(unknown)}")
+        names = ", ".join(key if type(key) is str else repr(key) for key in unknown)
+        raise ValueError(f"unknown report section keys: {names}")
 
 
 def save_report(

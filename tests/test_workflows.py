@@ -199,11 +199,15 @@ class ReportTests(unittest.TestCase):
         result = experiment()
         # The unserializable value rides an admitted envelope key
         # (ORCH-D01): an invented top-level key is now refused at
-        # admission, before serialization is ever reached.
+        # admission, before serialization is ever reached. The
+        # serialization failure itself is refused in save_report's
+        # documented ValueError vocabulary (wave-10 L1: the
+        # projection translates the raw TypeError), still before
+        # any directory is created.
         result["configuration_digest"] = object()
         with TemporaryDirectory() as tmp:
             target = Path(tmp) / "new-report"
-            with self.assertRaises(TypeError):
+            with self.assertRaises(ValueError):
                 save_report(result, target)
             self.assertFalse(target.exists())
 

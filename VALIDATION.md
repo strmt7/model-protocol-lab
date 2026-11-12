@@ -13,7 +13,7 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9854 tests collected**
+- `python -m pytest -q -p no:cacheprovider` — **9881 tests collected**
   (W2 push 5, 2026-11-12). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
@@ -575,9 +575,36 @@ doctor's resource fallbacks degrade there.
   any write. The committed sample report was regenerated
   under the new projection; its only delta is the removal
   of the checkpoint `path` the fix strips.
+  W2 push 6 (2026-11-12, wave-10 repairs: the bug-hunt
+  wave that attacked pushes 1–5's own surfaces) holds the
+  floor: the exact CI command ran 9,875 tests, OK
+  (8 skipped), and `coverage json` on that run measures
+  95.3968016738903% — above push 5's 95.39440203562341%.
+  The full pytest leg agrees: 9,868 passed, 13 skipped,
+  73,088 subtests. The regression file
+  `tests/test_w2_wave10.py` (27 tests) fails on every
+  defect case against the pre-fix tree: drift in a stored
+  field or a removed record on a both-sides
+  evidence-excluded pair still read `identical: true`;
+  seven protocol-field tampers and four record/case
+  mismatches validated as genuine negation payloads;
+  non-string top-level keys crashed the admission refusal
+  with a raw `TypeError`; malformed `search`/`held_out`
+  shapes crashed the projection; and a genuine
+  serving_backends pair diffed from default exports read
+  `unvalidated`. On the fixed tree the evidence-excluded
+  path compares the stored payloads, the negation
+  validator recomputes the full protocol object and binds
+  the records to the generated case set, the refusal and
+  the projection are total over admitted envelopes, and
+  serving_backends degrades to `evidence_excluded` like
+  the other seven evidence-bound sections. Two existing
+  tests were repaired to the new contracts (a genuine
+  second instrument for the protocol-drift scenario; the
+  documented `ValueError` for a serialization failure).
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (339 files in that CI scope; the repo-root scope counts more.
+  (340 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (75 source files).

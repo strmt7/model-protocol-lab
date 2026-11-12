@@ -6,6 +6,38 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (wave-10 repairs — external-audit W2 push 6, 2026-11-12)
+
+- Bug-hunt wave 10 attacked pushes 1–5's own surfaces and
+  proved four defects by execution; all are repaired here.
+  Evidence-excluded diffs now compare the stored payloads
+  (F2, RR-09): on the both-sides `evidence_excluded` path,
+  an `expected_answer` change, an `answer_value` change and
+  a removed record previously still read `identical: true`
+  on default exports; observable drift now sets the section
+  changed and publishes `unvalidated_drift`. The negation
+  validator recomputes its protocol (F4, RR-03): the stored
+  protocol object must equal the frozen instrument for its
+  own seed/backend pair and its fingerprint must recompute,
+  and the records are bound to the generated case set —
+  one record per case, skeleton and digests recomputed
+  (L4). The `save_report` admission refusal is total (F1,
+  ORCH-D01): non-string top-level keys refuse with the
+  documented `ValueError`, never a raw `TypeError`, and
+  malformed core values (`search`/`held_out` shapes, a
+  non-serializable value) can no longer crash the
+  projection — it is total over admitted envelopes (L1).
+  `serving_backends` joins the evidence-excluded
+  degradation (F3): its record validator recomputes both
+  id digests from the stripped id streams, so a genuine
+  default-export pair now publishes `evidence_excluded`
+  instead of `unvalidated`. Regression tests:
+  `tests/test_w2_wave10.py`; two existing tests were
+  repaired to the new contracts (the negation protocol-
+  drift scenario now runs a genuine second instrument;
+  the serialization-failure test expects the documented
+  `ValueError`).
+
 ### Fixed (public-view projections — external-audit W2 push 5, 2026-11-12)
 
 - The default export no longer carries private evidence

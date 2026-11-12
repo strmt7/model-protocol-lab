@@ -63,9 +63,16 @@ class ArithmeticBackend:
 _FORMAT = Format(name="synthetic", bos="", user_prefix="u:", assistant_prefix="a:", turn_end="</s>")
 
 
-def _genuine_section(drop_negation: bool) -> dict:
+class OtherBackend(ArithmeticBackend):
+    """Same arithmetic, a different instrument fingerprint."""
+
+    fingerprint = "synthetic-negation-other"
+
+
+def _genuine_section(drop_negation: bool, backend: ArithmeticBackend | None = None) -> dict:
     """Run the real negation stage + analysis for one backend."""
-    backend = ArithmeticBackend(drop_negation)
+    if backend is None:
+        backend = ArithmeticBackend(drop_negation)
     stage = experiments.negation_stage(
         backend, (_FORMAT,), boundary=(7,), max_new_tokens=16, max_context=32768, seed=0
     )
@@ -409,9 +416,15 @@ class NegationDriftSurfaceTests(unittest.TestCase):
         self.assertIn("Negation measurement drift", diffreports.render_summary(diff))
 
     def test_protocol_drift_is_named_and_rendered(self):
-        """A different instrument fingerprint is not comparable."""
-        new = copy.deepcopy(self.genuine)
-        new["protocol"]["fingerprint"] = "0" * 64
+        """A different instrument fingerprint is not comparable.
+
+        The second run is genuine (a real stage run on a backend
+        with another fingerprint): since push 6 the validator
+        recomputes the protocol fingerprint, so a merely
+        overwritten fingerprint field is a forgery and is refused
+        as invalid rather than compared as drift.
+        """
+        new = _genuine_section(False, backend=OtherBackend(False))
         diff = diffreports.diff_reports(_wrap(self.genuine), _wrap(new))
         self.assertTrue(diff["negation"]["protocol_drift"])
         self.assertFalse(diff["negation"]["comparable"])
