@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9815 tests collected**
-  (W2 push 3, 2026-11-12). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9830 tests collected**
+  (W2 push 4, 2026-11-12). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -528,9 +528,28 @@ doctor's resource fallbacks degrade there.
   owner-authorized git history rewrite that closed RR-01
   (both fixture strings replaced in all historical blobs;
   post-rewrite full-history scan reports zero findings).
+  W2 push 4 (2026-11-12, comparison evidence states: audit
+  rows RR-09, ORCH-04) holds the floor: the exact CI command
+  ran 9,824 tests, OK (8 skipped), and `coverage json` on
+  that run measures 95.39119987986184% — above push 3's
+  95.38299631662031%. The full pytest leg agrees: 9,817
+  passed, 13 skipped, 73,077 subtests. The regression file
+  `tests/test_w2_section_states.py` (16 tests) fails on
+  every defect case against the pre-fix tree: both-invalid
+  sections whose payloads differ (the audit's RR-09
+  reproductions) read `identical: true` there, the held-out
+  1/1 vs 50/50 pair produced no drift signal, and a
+  capability-absent stop-matrix cell recorded
+  `fired: false` and rendered as a measured "no fire". On
+  the fixed tree the diff publishes per-section comparison
+  states for all 56 dispatched sections, the held-out
+  counts drift by name, and the absent cell records
+  `fired: null` and renders "unobservable" while a measured
+  no-fire keeps its wording. The cycle-67 and cycle-27
+  oracles carry independent mirrors of all three fixes.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (337 files in that CI scope; the repo-root scope counts more.
+  (338 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (75 source files).

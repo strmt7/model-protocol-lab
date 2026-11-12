@@ -13366,7 +13366,11 @@ def serving_backends_analysis(stage: dict[str, Any]) -> dict[str, Any]:
             continue
         mirror = record["mirror"]
         winner = record.get("stop_winner")
-        fired = winner is not None
+        available = record.get("cell_detail") != "capability_absent"
+        # An unavailable cell observed nothing (the stack does not
+        # offer the capability): its fired state is unobservable
+        # (None), never a measured negative (ORCH-04).
+        fired = (winner is not None) if available else None
         returned = record.get("returned_ids")
         config = record.get("request_config") or {}
         if config.get("include_stop_str_in_output"):
@@ -13376,7 +13380,7 @@ def serving_backends_analysis(stage: dict[str, Any]) -> dict[str, Any]:
         else:
             arm = "plain"
         cell = {
-            "available": record.get("cell_detail") != "capability_absent",
+            "available": available,
             "fired": fired,
             "firing_step": len(returned) if fired and type(returned) is list else None,
             "disposition": mirror.get("observed_disposition"),

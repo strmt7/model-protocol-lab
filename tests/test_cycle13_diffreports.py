@@ -672,8 +672,22 @@ class DiffreportsTests(unittest.TestCase):
         drift = _drift_fields(payload)
         assert drift["planned:llama3"] == {"field": "planned:llama3", "old": 2, "new": 50}
         assert drift["planned:chatml"] == {"field": "planned:chatml", "old": 2, "new": 50}
+        # RR-09 (W2 push 4): the held-out stage's counts are compared
+        # under the same rule -- this fixture feeds the same planned
+        # value to the held-out summary, so its planned and attempted
+        # counts drift too (2 more warnings, 4 total).
+        assert drift["held_out_planned:llama3"] == {
+            "field": "held_out_planned:llama3",
+            "old": 2,
+            "new": 50,
+        }
+        assert drift["held_out_attempted:llama3"] == {
+            "field": "held_out_attempted:llama3",
+            "old": 2,
+            "new": 50,
+        }
         assert payload["summary"]["identical"] is False
-        assert payload["summary"]["config_drift_warnings"] == 2
+        assert payload["summary"]["config_drift_warnings"] == 4
         rendered = render_summary(payload)
         assert "planned:llama3" in rendered
         assert "2 -> 50" in rendered

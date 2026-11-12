@@ -119,6 +119,29 @@ def _or_held_verdict(result: dict[str, Any]) -> tuple[str | None, str]:
     return winner, _or_verdict(summary)
 
 
+def _or_held_counts(result: dict[str, Any]) -> tuple[str | None, dict[str, int | None]]:
+    """Oracle for ``_held_counts``."""
+    name, _verdict_text = _or_held_verdict(result)
+    if name is None:
+        return None, {}
+    held = result.get("held_out")
+    summary = held.get("summary") if type(held) is dict else None
+    counts: dict[str, int | None] = {}
+    for field in ("planned", "attempted"):
+        value = summary.get(field) if type(summary) is dict else None
+        counts[field] = value if type(value) is int else None
+    return name, counts
+
+
+def _or_section_states(
+    old: dict[str, Any], new: dict[str, Any], diffs: dict[str, Any]
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """Oracle for ``_section_states`` (delegates to the cycle-67 oracle)."""
+    from tests.test_cycle67_diffreports_audit import _o_section_states
+
+    return _o_section_states(old, new, diffs)
+
+
 def _or_fixture_outcomes(observations: Any) -> tuple[dict[str, str], int]:
     """Oracle for ``_fixture_outcomes``: pass requires exact AND boundary.
 
@@ -341,6 +364,18 @@ def oracle_diff_reports(
                     "new": new_planned[name],
                 }
             )
+    old_hc_name, old_hc = _or_held_counts(old)
+    new_hc_name, new_hc = _or_held_counts(new)
+    if old_hc_name is not None and old_hc_name == new_hc_name:
+        for field in ("planned", "attempted"):
+            if old_hc[field] != new_hc[field]:
+                config_drift.append(
+                    {
+                        "field": f"held_out_{field}:{old_hc_name}",
+                        "old": old_hc[field],
+                        "new": new_hc[field],
+                    }
+                )
     if both_present:
         config_drift.extend(_or_fixture_set_drift(old_evidence, new_evidence))
 
@@ -9517,6 +9552,69 @@ def oracle_diff_reports(
     else:
         _o_ng_available = "neither"
     _o_ng_asymmetric = _o_ng_available not in ("both", "neither")
+    _or_availability_by_key = {
+        "frontier": _o_available,
+        "held_out_floor": _o_hof_available,
+        "boundary_audit": _o_ba_available,
+        "selection_robustness": _o_sr_available,
+        "transfer": _o_tr_available,
+        "contamination": _o_ct_available,
+        "perturbation": _o_pb_available,
+        "token_healing": _o_hl_available,
+        "hierarchy": _o_hy_available,
+        "prefill": _o_pf_available,
+        "portfolio": _o_po_available,
+        "synthhistory": _o_sh_available,
+        "batch_invariance": _o_bi_available,
+        "position": _o_pos_available,
+        "stop_cause": _o_sc_available,
+        "ws_canonical": _o_ws_available,
+        "structured": _o_st_available,
+        "deliforge": _o_dl_available,
+        "fewshot": _o_fs_available,
+        "faketurn": _o_ft_available,
+        "toolcall": _o_tc_available,
+        "verbosity": _o_vb_available,
+        "refusals": _o_rf_available,
+        "scorerlens": _o_sl_available,
+        "aliasing": _o_al_available,
+        "repetition": _o_rep_available,
+        "distraction": _o_dst_available,
+        "leading": _o_lead_available,
+        "numform": _o_nf_available,
+        "dateline": _o_dt_available,
+        "multiturn": _o_mt_available,
+        "needle": _o_nd_available,
+        "placement": _o_pl_available,
+        "canonical_form": _o_cform_available,
+        "instruction_distance": _o_idist_available,
+        "history_frame": _o_hf_available,
+        "prune_sweep": _o_ps_available,
+        "record_notation": _o_rnot_available,
+        "invisible_chars": _o_ic_available,
+        "confusable_skeleton": _o_cs_available,
+        "compatibility_form": _o_cxf_available,
+        "enumeration_convention": _o_env_available,
+        "typographic_emphasis": _o_tem_available,
+        "choice_audit": _o_ca_available,
+        "precision": _o_pr_available,
+        "confidence": _o_cn_available,
+        "rotation": _o_rt_available,
+        "density": _o_de_available,
+        "field_order": _o_fo_available,
+        "cache_profile": _o_cp_available,
+        "template_robustness": _o_trob_available,
+        "ablation": _o_ab_available,
+        "confidentiality": _o_cf_available,
+        "answer_collision": _o_ac_available,
+        "serving_backends": _o_sb_available,
+        "negation": _o_ng_available,
+    }
+    _or_section_states_result, _or_unvalidated_drift_sections = _or_section_states(
+        old,
+        new,
+        {key: {"available": value} for key, value in _or_availability_by_key.items()},
+    )
     identical = (
         not decision_changed
         and not winner_changed
@@ -9578,6 +9676,7 @@ def oracle_diff_reports(
         and not _o_ac_asymmetric
         and not _o_sb_asymmetric
         and not _o_ng_asymmetric
+        and not _or_unvalidated_drift_sections
     )
     summary = {
         "decision_changed": decision_changed,
@@ -9699,6 +9798,7 @@ def oracle_diff_reports(
         "negation_changed": False,
         "negation_asymmetric": _o_ng_asymmetric,
         "identical": identical,
+        "unvalidated_drift_sections": _or_unvalidated_drift_sections,
     }
     return {
         "tool": "diff-reports",
@@ -9762,6 +9862,7 @@ def oracle_diff_reports(
         "answer_collision": {"available": _o_ac_available, "changed": False},
         "serving_backends": {"available": _o_sb_available, "changed": False},
         "negation": {"available": _o_ng_available, "changed": False},
+        "section_states": _or_section_states_result,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

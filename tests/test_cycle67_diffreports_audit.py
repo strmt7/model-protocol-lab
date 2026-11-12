@@ -317,6 +317,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "answer_collision": {"available": "neither", "changed": False},
         "serving_backends": {"available": "neither", "changed": False},
         "negation": {"available": "neither", "changed": False},
+        "section_states": _o_section_states(_base_report(), _base_report(), {})[0],
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -446,6 +447,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "negation_changed": False,
             "negation_asymmetric": False,
             "identical": True,
+            "unvalidated_drift_sections": [],
         },
     }
 
@@ -531,6 +533,51 @@ def _o_held_profile(result: dict[str, Any]) -> tuple[str | None, str]:
     held = result.get("held_out")
     summary = held.get("summary") if type(held) is dict else None
     return winner, _o_verdict(summary)
+
+
+def _o_held_counts(result: dict[str, Any]) -> tuple[str | None, dict[str, int | None]]:
+    """O held counts."""
+    name, _v = _o_held_profile(result)
+    if name is None:
+        return None, {}
+    held = result.get("held_out")
+    summary = held.get("summary") if type(held) is dict else None
+    counts: dict[str, int | None] = {}
+    for field in ("planned", "attempted"):
+        raw = summary.get(field) if type(summary) is dict else None
+        counts[field] = raw if type(raw) is int else None
+    return name, counts
+
+
+def _o_section_states(
+    old: dict[str, Any], new: dict[str, Any], diffs: dict[str, Any]
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """O section states."""
+    states: dict[str, dict[str, Any]] = {}
+    drifted: list[str] = []
+    for results_key, diff_key in diffreports.SECTION_DIFF_KEYS.items():
+        sub = diffs.get(diff_key)
+        available = sub.get("available") if type(sub) is dict else None
+        old_payload = old.get(results_key)
+        new_payload = new.get(results_key)
+        if available == "both":
+            state = "compared"
+        elif available in ("old", "new"):
+            state = "one_sided"
+        elif old_payload is None and new_payload is None:
+            state = "absent"
+        else:
+            state = "unvalidated"
+        drift = (
+            state == "unvalidated"
+            and old_payload is not None
+            and new_payload is not None
+            and not _o_recomputed_equal(old_payload, new_payload)
+        )
+        states[diff_key] = {"state": state, "unvalidated_drift": drift}
+        if drift:
+            drifted.append(diff_key)
+    return states, sorted(drifted)
 
 
 def _o_evidence(result: dict[str, Any], stage: str) -> tuple[dict[str, dict[str, str]], int, bool]:
@@ -20201,6 +20248,18 @@ def _oracle_diff(
         for name in sorted(set(old_pl) & set(new_pl))
         if old_pl[name] != new_pl[name]
     )
+    old_hc_name, old_hc = _o_held_counts(old)
+    new_hc_name, new_hc = _o_held_counts(new)
+    if old_hc_name is not None and old_hc_name == new_hc_name:
+        for field in ("planned", "attempted"):
+            if old_hc[field] != new_hc[field]:
+                config_drift.append(
+                    {
+                        "field": f"held_out_{field}:{old_hc_name}",
+                        "old": old_hc[field],
+                        "new": new_hc[field],
+                    }
+                )
     if old_ok and new_ok:
         for stage in ("search", "held_out"):
             old_ids = sorted({fx for cand in old_ev[stage][0].values() for fx in cand})
@@ -20331,6 +20390,65 @@ def _oracle_diff(
         old.get("serving_backends"), new.get("serving_backends")
     )
     o_ng, o_ng_changed, o_ng_asymmetric = _o_negation(old.get("negation"), new.get("negation"))
+    o_diffs_by_key = {
+        "frontier": o_frontier,
+        "held_out_floor": o_hof,
+        "boundary_audit": o_ba,
+        "selection_robustness": o_sr,
+        "transfer": o_tr,
+        "contamination": o_ct,
+        "perturbation": o_pb,
+        "token_healing": o_hl,
+        "hierarchy": o_hy,
+        "prefill": o_pf,
+        "portfolio": o_po,
+        "synthhistory": o_sh,
+        "batch_invariance": o_bi,
+        "position": o_pos,
+        "stop_cause": o_sc,
+        "ws_canonical": o_ws,
+        "structured": o_st,
+        "deliforge": o_dl,
+        "fewshot": o_fs,
+        "faketurn": o_ft,
+        "toolcall": o_tc,
+        "verbosity": o_vb,
+        "refusals": o_rf,
+        "scorerlens": o_sl,
+        "aliasing": o_al,
+        "repetition": o_rep,
+        "distraction": o_dst,
+        "leading": o_lead,
+        "numform": o_nf,
+        "dateline": o_dt,
+        "multiturn": o_mt,
+        "needle": o_nd,
+        "placement": o_pl,
+        "canonical_form": o_cform,
+        "instruction_distance": o_idist,
+        "history_frame": o_hf,
+        "prune_sweep": o_ps,
+        "record_notation": o_rn,
+        "invisible_chars": o_ic,
+        "confusable_skeleton": o_cs,
+        "compatibility_form": o_cxf,
+        "enumeration_convention": o_ec,
+        "typographic_emphasis": o_te,
+        "choice_audit": o_ca,
+        "precision": o_pr,
+        "confidence": o_cfd,
+        "rotation": o_rt,
+        "density": o_de,
+        "field_order": o_fo,
+        "cache_profile": o_cp,
+        "template_robustness": o_trob,
+        "ablation": o_ab,
+        "confidentiality": o_cf,
+        "answer_collision": o_ac,
+        "serving_backends": o_sb,
+        "negation": o_ng,
+    }
+    o_section_states, o_unvalidated_drift_sections = _o_section_states(old, new, o_diffs_by_key)
     identical = (
         not decision_changed
         and not winner_changed
@@ -20446,6 +20564,7 @@ def _oracle_diff(
         and not o_ng_changed
         and not o_ng_asymmetric
         and not o_sb_asymmetric
+        and not o_unvalidated_drift_sections
     )
     return {
         "tool": "diff-reports",
@@ -20509,6 +20628,7 @@ def _oracle_diff(
         "answer_collision": o_ac,
         "serving_backends": o_sb,
         "negation": o_ng,
+        "section_states": o_section_states,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -20634,6 +20754,7 @@ def _oracle_diff(
             "negation_changed": o_ng_changed,
             "negation_asymmetric": o_ng_asymmetric,
             "identical": identical,
+            "unvalidated_drift_sections": o_unvalidated_drift_sections,
         },
     }
 
@@ -21506,7 +21627,8 @@ def _o_sb_rows(records: list) -> list:
             continue
         mirror = record["mirror"]
         winner = record.get("stop_winner")
-        fired = winner is not None
+        available = record.get("cell_detail") != "capability_absent"
+        fired = (winner is not None) if available else None
         returned = record.get("returned_ids")
         config = record.get("request_config") or {}
         if config.get("include_stop_str_in_output"):
@@ -21516,7 +21638,7 @@ def _o_sb_rows(records: list) -> list:
         else:
             arm = "plain"
         cell = {
-            "available": record.get("cell_detail") != "capability_absent",
+            "available": available,
             "fired": fired,
             "firing_step": len(returned) if fired and type(returned) is list else None,
             "disposition": mirror.get("observed_disposition"),
@@ -22600,6 +22722,7 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "negation_changed": False,
                 "negation_asymmetric": False,
                 "identical": False,
+                "unvalidated_drift_sections": [],
             },
         )
 
@@ -27025,6 +27148,7 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not density_asymmetric\n"
             '        and not field_order_diff["changed"]\n'
             "        and not field_order_asymmetric\n"
+            "        and not unvalidated_drift_sections\n"
             "    )\n",
             "    identical = (\n"
             "        decision_changed\n"
@@ -27145,6 +27269,7 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or density_asymmetric\n"
             '        or field_order_diff["changed"]\n'
             "        or field_order_asymmetric\n"
+            "        or unvalidated_drift_sections\n"
             "    )\n",
             scenario,
         )

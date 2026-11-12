@@ -10752,6 +10752,16 @@ def _serving_backends_section(result: dict[str, Any]) -> str:
             cell = cells.get("llamacpp") if type(cells) is dict else None
             if type(cell) is not dict:
                 continue
+            # An unavailable cell observed nothing: it renders as
+            # unobservable, never as a measured "no fire" (ORCH-04).
+            # A genuine unavailable cell never carries fired=True
+            # (the producer records None), so the fired check leads.
+            if cell.get("fired") is True:
+                stop_word = "fired"
+            elif cell.get("available") is not True or cell.get("fired") is None:
+                stop_word = "unobservable"
+            else:
+                stop_word = "no fire"
             body_rows.append(
                 "<tr><td>"
                 + _text(row.get("fixture"))
@@ -10760,7 +10770,7 @@ def _serving_backends_section(result: dict[str, Any]) -> str:
                 + "</td><td>"
                 + _text(row.get("arm"))
                 + "</td><td>"
-                + _text("fired" if cell.get("fired") is True else "no fire")
+                + _text(stop_word)
                 + "</td><td>"
                 + _count(cell.get("firing_step"))
                 + "</td><td>"

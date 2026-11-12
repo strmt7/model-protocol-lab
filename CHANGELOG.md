@@ -6,6 +6,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (comparison evidence states — external-audit W2 push 4, 2026-11-12)
+
+- "identical" no longer omits evidence drift (RR-09): every
+  diff-reports output now publishes `section_states` for all
+  56 dispatched sections — compared / one_sided / absent /
+  unvalidated — and a section that is unvalidated on both
+  sides whose payloads differ is named in
+  `summary.unvalidated_drift_sections`, rendered in the text
+  summary, and breaks the identical verdict. (Identical
+  unvalidated payloads on both sides are state, not drift.)
+- Held-out evidence counts are compared (RR-09): differing
+  planned/attempted counts for the common selected candidate
+  produce `held_out_planned:{name}` /
+  `held_out_attempted:{name}` config-drift entries, the
+  held-out mirror of the search stage's `planned:{name}`
+  rule — a 1/1 held-out pass no longer compares identical
+  to a 50/50 one.
+- Unavailable serving cells are unobservable, not negative
+  (ORCH-04): `serving_backends_analysis` records
+  `fired: null` for capability-absent stop-matrix cells
+  (a measured no-fire keeps `fired: false`), the diff
+  mirror recomputes the same shape, and the HTML report
+  renders such cells "unobservable" instead of "no fire".
+  Regression tests: `tests/test_w2_section_states.py`.
+
 ### Changed (git history rewritten — owner order, 2026-11-12)
 
 - The repository's git history was rewritten under the owner's

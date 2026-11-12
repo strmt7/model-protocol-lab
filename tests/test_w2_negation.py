@@ -224,6 +224,7 @@ _CORE_DIFF_KEYS = {
     "new",
     "decision",
     "winner",
+    "section_states",
     "config_drift",
     "candidate_verdicts",
     "evidence",

@@ -218,6 +218,61 @@ UNDISPATCHED_SECTIONS: dict[str, str] = {
 }
 
 
+def _section_states(
+    old: dict[str, Any], new: dict[str, Any], diffs: dict[str, Any]
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """Per-section comparison states for one diff (RR-09).
+
+    Every dispatched section is published with the state its
+    comparison actually reached, in the differs' own availability
+    vocabulary extended by two payload states:
+
+    * ``compared`` -- both sides validated; the differ compared
+      them (its ``available`` is ``"both"``).
+    * ``one_sided`` -- exactly one side validated (``"old"`` /
+      ``"new"``); the pair is already asymmetric by that fact.
+    * ``absent`` -- neither side records the section (both
+      payloads absent or None) and the differ compared nothing.
+    * ``unvalidated`` -- the differ could compare nothing
+      (``"neither"``) yet at least one side carries a payload:
+      the section was present but failed validation, so no
+      recompute standard judged it.
+
+    ``unvalidated_drift`` is set only in the last state when BOTH
+    payloads are present and not recomputed-equal: two runs whose
+    unvalidated evidence differs observably must not read
+    ``identical`` (the audit's RR-09 reproductions drift stored
+    rates inside sections invalid on both sides). Identical
+    garbage on both sides is unvalidated but not drift. Returns
+    the state map (registry order) and the sorted drift list.
+    """
+    states: dict[str, dict[str, Any]] = {}
+    drifted: list[str] = []
+    for results_key, diff_key in SECTION_DIFF_KEYS.items():
+        section_diff = diffs.get(diff_key)
+        available = section_diff.get("available") if type(section_diff) is dict else None
+        old_payload = old.get(results_key)
+        new_payload = new.get(results_key)
+        if available == "both":
+            state = "compared"
+        elif available in ("old", "new"):
+            state = "one_sided"
+        elif old_payload is None and new_payload is None:
+            state = "absent"
+        else:
+            state = "unvalidated"
+        drift = (
+            state == "unvalidated"
+            and old_payload is not None
+            and new_payload is not None
+            and not _recomputed_equal(old_payload, new_payload)
+        )
+        states[diff_key] = {"state": state, "unvalidated_drift": drift}
+        if drift:
+            drifted.append(diff_key)
+    return states, sorted(drifted)
+
+
 def _float_convertible(value: int) -> bool:
     """Whether an int converts to float without overflowing.
 
@@ -510,6 +565,30 @@ def _held_verdict(result: dict[str, Any]) -> tuple[str | None, str]:
     return winner, _verdict(summary)
 
 
+def _held_counts(result: dict[str, Any]) -> tuple[str | None, dict[str, int | None]]:
+    """The held-out stage's selected candidate plus evidence counts.
+
+    The held-out mirror of ``_search_verdicts``' planned-count
+    discipline: a "pass" verdict means "all *planned* fixtures
+    passed", so a 1/1 held-out pass and a 50/50 held-out pass
+    silently comparing identical would be a lie of omission
+    (RR-09). ``None`` marks a malformed/missing count; it
+    compares as its own distinct value so it still shows up in
+    drift. The candidate is the run's selected candidate, the
+    same name ``_held_verdict`` reports.
+    """
+    name, _verdict_text = _held_verdict(result)
+    if name is None:
+        return None, {}
+    held = result.get("held_out")
+    summary = held.get("summary") if type(held) is dict else None
+    counts: dict[str, int | None] = {}
+    for field in ("planned", "attempted"):
+        value = summary.get(field) if type(summary) is dict else None
+        counts[field] = value if type(value) is int else None
+    return name, counts
+
+
 def _fixture_outcomes(observations: Any) -> tuple[dict[str, str], int]:
     """Map fixture id -> "pass"/"fail" from stored observations.
 
@@ -769,12 +848,26 @@ def diff_reports(
     # identical would be a lie of omission. Candidates present on only one
     # side already produce a verdict flip ("absent"), so this covers only
     # the both-sides intersection. Field order is fixed: after the
-    # _drift() fields, sorted by candidate name.
+    # _drift() fields, sorted by candidate name, then the held-out
+    # stage's counts for the common selected candidate (RR-09: the
+    # held-out stage gets the same evidence-strength comparison).
     for name in sorted(set(old_planned) & set(new_planned)):
         if old_planned[name] != new_planned[name]:
             config_drift.append(
                 {"field": f"planned:{name}", "old": old_planned[name], "new": new_planned[name]}
             )
+    old_held_name_counts, old_held_counts = _held_counts(old)
+    new_held_name_counts, new_held_counts = _held_counts(new)
+    if old_held_name_counts is not None and old_held_name_counts == new_held_name_counts:
+        for field in ("planned", "attempted"):
+            if old_held_counts[field] != new_held_counts[field]:
+                config_drift.append(
+                    {
+                        "field": f"held_out_{field}:{old_held_name_counts}",
+                        "old": old_held_counts[field],
+                        "new": new_held_counts[field],
+                    }
+                )
     if evidence_present["old"] and evidence_present["new"]:
         config_drift.extend(_fixture_set_drift(old_evidence, new_evidence))
 
@@ -1098,6 +1191,69 @@ def diff_reports(
         "both",
         "neither",
     )
+    # Section-state publication (RR-09): the map below carries the
+    # same diff dicts the result dict publishes, keyed by diff key;
+    # the census test pins its keys against the registry so a
+    # section cannot join the result without joining the states.
+    section_diffs_by_key = {
+        "frontier": frontier_diff,
+        "held_out_floor": held_out_floor_diff,
+        "boundary_audit": boundary_audit_diff,
+        "selection_robustness": robustness_diff,
+        "transfer": transfer_diff,
+        "contamination": contamination_diff,
+        "perturbation": perturbation_diff,
+        "token_healing": healing_diff,
+        "hierarchy": hierarchy_diff,
+        "prefill": prefill_diff,
+        "portfolio": portfolio_diff,
+        "synthhistory": synthhistory_diff,
+        "batch_invariance": batchinv_diff,
+        "position": position_diff,
+        "stop_cause": stopcause_diff,
+        "ws_canonical": wscan_diff,
+        "structured": structured_diff,
+        "deliforge": deliforge_diff,
+        "fewshot": fewshot_diff,
+        "faketurn": faketurn_diff,
+        "toolcall": toolcall_diff,
+        "verbosity": verbosity_diff,
+        "refusals": refusals_diff,
+        "scorerlens": scorerlens_diff,
+        "aliasing": aliasing_diff,
+        "repetition": repetition_diff,
+        "distraction": distraction_diff,
+        "leading": leading_diff,
+        "numform": numform_diff,
+        "dateline": dateline_diff,
+        "multiturn": multiturn_diff,
+        "needle": needle_diff,
+        "placement": placement_diff,
+        "canonical_form": canonical_form_diff,
+        "instruction_distance": instruction_distance_diff,
+        "history_frame": history_frame_diff,
+        "prune_sweep": prune_sweep_diff,
+        "record_notation": record_notation_diff,
+        "invisible_chars": invisible_chars_diff,
+        "confusable_skeleton": confusable_skeleton_diff,
+        "compatibility_form": compatibility_form_diff,
+        "enumeration_convention": enumeration_convention_diff,
+        "typographic_emphasis": typographic_emphasis_diff,
+        "choice_audit": choiceaudit_diff,
+        "precision": precision_diff,
+        "confidence": confidence_diff,
+        "rotation": rotation_diff,
+        "density": density_diff,
+        "field_order": field_order_diff,
+        "cache_profile": cache_profile_diff,
+        "template_robustness": template_robustness_diff,
+        "ablation": ablation_diff,
+        "confidentiality": _payload_section(section_diffs, "confidentiality"),
+        "answer_collision": answer_collision_diff,
+        "serving_backends": serving_backends_diff,
+        "negation": negation_diff,
+    }
+    section_states, unvalidated_drift_sections = _section_states(old, new, section_diffs_by_key)
     identical = (
         not decision_changed
         and not winner_changed
@@ -1217,6 +1373,7 @@ def diff_reports(
         and not density_asymmetric
         and not field_order_diff["changed"]
         and not field_order_asymmetric
+        and not unvalidated_drift_sections
     )
     summary = {
         "decision_changed": decision_changed,
@@ -1338,6 +1495,7 @@ def diff_reports(
         "field_order_changed": field_order_diff["changed"],
         "field_order_asymmetric": field_order_asymmetric,
         "identical": identical,
+        "unvalidated_drift_sections": unvalidated_drift_sections,
     }
     return {
         "tool": "diff-reports",
@@ -1401,6 +1559,7 @@ def diff_reports(
         "answer_collision": answer_collision_diff,
         "serving_backends": serving_backends_diff,
         "negation": negation_diff,
+        "section_states": section_states,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -22596,7 +22755,10 @@ def _serving_recompute_rows(records: list[dict[str, Any]]) -> list[dict[str, Any
             continue
         mirror = record["mirror"]
         winner = record.get("stop_winner")
-        fired = winner is not None
+        available = record.get("cell_detail") != "capability_absent"
+        # Mirror of the producer: an unavailable cell's fired state
+        # is unobservable (None), never a measured negative (ORCH-04).
+        fired = (winner is not None) if available else None
         returned = record.get("returned_ids")
         config = record.get("request_config") or {}
         if config.get("include_stop_str_in_output"):
@@ -22606,7 +22768,7 @@ def _serving_recompute_rows(records: list[dict[str, Any]]) -> list[dict[str, Any
         else:
             arm = "plain"
         cell = {
-            "available": record.get("cell_detail") != "capability_absent",
+            "available": available,
             "fired": fired,
             "firing_step": len(returned) if fired and type(returned) is list else None,
             "disposition": mirror.get("observed_disposition"),
@@ -31725,6 +31887,12 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_labeled_block_summary(_payload_section(diff, "confidentiality")))
     lines.extend(_render_answer_collision_summary(diff.get("answer_collision")))
     lines.extend(_render_negation_summary(diff.get("negation")))
+    unvalidated = (diff.get("summary") or {}).get("unvalidated_drift_sections") or []
+    if unvalidated:
+        lines.append(
+            "Unvalidated section drift (payloads differ but neither side "
+            f"validates): {', '.join(_display_id(name) for name in unvalidated)}"
+        )
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")
