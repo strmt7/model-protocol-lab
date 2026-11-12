@@ -6,6 +6,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (public-view projections — external-audit W2 push 5, 2026-11-12)
+
+- The default export no longer carries private evidence
+  (ORCH-01): with `raw_evidence_included=false`, the public
+  view now strips the transfer checkpoints' filesystem
+  `path`, the serving records' exact `prompt_ids` /
+  `returned_ids` token streams, and the raw `answer_text` of
+  all eight instrument sections that record it; the serving
+  identity `config` block is reduced to an allowlist of
+  digest/count/posture keys instead of passing through
+  verbatim. `--include-evidence` exports are unchanged.
+  Diffing two default exports degrades the seven sections
+  whose validators recompute from `answer_text` (all but
+  prune_sweep) to a documented unavailable state
+  (`detail: evidence_excluded`, published in
+  `section_states`) instead of reporting them invalid —
+  those diffs require `--include-evidence` on both runs, as
+  the CLI help already states.
+- `save_report` refuses non-report payloads (ORCH-D01): an
+  admission gate now runs before anything is enriched or
+  written — a `schema_version` other than the integer 1, or
+  any top-level key that is not a core key or a registered
+  section, raises `ValueError` and writes nothing (a
+  `schema_version` of 999 was previously saved silently).
+  Regression tests: `tests/test_w2_projection.py`.
+
 ### Fixed (comparison evidence states — external-audit W2 push 4, 2026-11-12)
 
 - "identical" no longer omits evidence drift (RR-09): every

@@ -243,8 +243,18 @@ def _section_states(
     unvalidated evidence differs observably must not read
     ``identical`` (the audit's RR-09 reproductions drift stored
     rates inside sections invalid on both sides). Identical
-    garbage on both sides is unvalidated but not drift. Returns
-    the state map (registry order) and the sorted drift list.
+    garbage on both sides is unvalidated but not drift.
+
+    A fifth state, ``evidence_excluded``, is not derived here
+    from availability alone: when both sides are
+    evidence-excluded exports for an evidence-bound section, the
+    assembly replaces its diff with the documented unavailable
+    state (``detail == "evidence_excluded"``) and this function
+    publishes that provenance as-is, with no drift judgement --
+    the comparison was not made, by the exports' own
+    declaration. A one-sided exclusion keeps the ``one_sided``
+    state (its diff carries the detail). Returns the state map
+    (registry order) and the sorted drift list.
     """
     states: dict[str, dict[str, Any]] = {}
     drifted: list[str] = []
@@ -253,6 +263,13 @@ def _section_states(
         available = section_diff.get("available") if type(section_diff) is dict else None
         old_payload = old.get(results_key)
         new_payload = new.get(results_key)
+        if (
+            type(section_diff) is dict
+            and section_diff.get("detail") == "evidence_excluded"
+            and available == "neither"
+        ):
+            states[diff_key] = {"state": "evidence_excluded", "unvalidated_drift": False}
+            continue
         if available == "both":
             state = "compared"
         elif available in ("old", "new"):
@@ -271,6 +288,126 @@ def _section_states(
         if drift:
             drifted.append(diff_key)
     return states, sorted(drifted)
+
+
+#: Sections whose validators recompute from the records' raw
+#: ``answer_text`` (each mirror verifies the text against its
+#: stored digest). An evidence-excluded export carries no
+#: answer_text at all (the field is evidence-only), so these
+#: sections cannot be validated from a default export.
+#: prune_sweep also carries the field in its records but its
+#: validator never reads it, so it is not listed and stays
+#: diffable from default exports.
+_EVIDENCE_BOUND_SECTIONS = frozenset(
+    {
+        "compatibility_form",
+        "confusable_skeleton",
+        "enumeration_convention",
+        "invisible_chars",
+        "numform",
+        "record_notation",
+        "typographic_emphasis",
+    }
+)
+
+
+def _answer_text_state(section: Any) -> tuple[bool, bool]:
+    """(Any records reachable, any answer_text carried) for a section.
+
+    Records sit at the section level or under each candidate;
+    the text itself sits on the record (numform) or on its
+    per-arm cells (the other evidence-bound sections).
+    """
+    saw = False
+    carried = False
+
+    def _visit(record: Any) -> None:
+        nonlocal saw, carried
+        if type(record) is not dict:
+            return
+        saw = True
+        if "answer_text" in record:
+            carried = True
+        cells = record.get("cells")
+        if type(cells) is dict:
+            for cell in cells.values():
+                if type(cell) is dict and "answer_text" in cell:
+                    carried = True
+
+    if type(section) is dict:
+        records = section.get("records")
+        if type(records) is list:
+            for record in records:
+                _visit(record)
+        candidates = section.get("candidates")
+        if type(candidates) is dict:
+            for entry in candidates.values():
+                if type(entry) is not dict:
+                    continue
+                entry_records = entry.get("records")
+                if type(entry_records) is list:
+                    for record in entry_records:
+                        _visit(record)
+    return saw, carried
+
+
+def _evidence_excluded(result: Any, section_key: str) -> bool:
+    """Whether ``result`` is an evidence-excluded export whose
+    ``section_key`` section lost its answer_text to the projection.
+
+    True only when the results dict declares
+    ``raw_evidence_included is False`` (the stamp the exporter
+    writes), the section is present with records, and no
+    reachable record or cell carries ``answer_text``. A payload
+    without the stamp is not an export and is judged as-is; an
+    evidence export (stamp true) missing the field is judged
+    as-is too; partial carriage is not the projection's shape
+    (it strips everywhere or nowhere) and is judged as-is.
+    """
+    if type(result) is not dict:
+        return False
+    if result.get("raw_evidence_included") is not False:
+        return False
+    section = result.get(section_key)
+    if type(section) is not dict:
+        return False
+    saw, carried = _answer_text_state(section)
+    return saw and not carried
+
+
+def _degrade_evidence_excluded(
+    old: Any, new: Any, section_key: str, diff: dict[str, Any]
+) -> dict[str, Any]:
+    """Replace a section diff with the documented unavailable
+    state when either side is an evidence-excluded export.
+
+    The section's validators bind answer_text to its digests;
+    with the text stripped at export there is nothing to bind,
+    and the honest report is that the comparison was not made
+    (the CLI documents these diffs as requiring
+    --include-evidence on both runs) -- not that the section is
+    invalid. Both sides excluded: the section is not compared
+    (``available`` "neither", ``changed`` False). One side
+    excluded: the comparison is one-sided by construction, so
+    the diff names the side that carries evidence and the
+    section is asymmetric.
+    """
+    old_excluded = _evidence_excluded(old, section_key)
+    new_excluded = _evidence_excluded(new, section_key)
+    if not old_excluded and not new_excluded:
+        return diff
+    degraded: dict[str, Any] = {
+        "available": "neither",
+        "changed": False,
+        "detail": "evidence_excluded",
+    }
+    if old_excluded and new_excluded:
+        return degraded
+    other = new if old_excluded else old
+    if type(other.get(section_key)) is not dict:
+        return degraded
+    degraded["available"] = "new" if old_excluded else "old"
+    return degraded
 
 
 def _float_convertible(value: int) -> bool:
@@ -994,6 +1131,7 @@ def diff_reports(
     distraction_diff = diff_distraction(old.get("distraction"), new.get("distraction"))
     leading_diff = diff_leading(old.get("leading"), new.get("leading"))
     numform_diff = diff_numform(old.get("numform"), new.get("numform"))
+    numform_diff = _degrade_evidence_excluded(old, new, "numform", numform_diff)
     dateline_diff = diff_dateline(old.get("dateline"), new.get("dateline"))
     multiturn_diff = diff_multiturn(old.get("multiturn"), new.get("multiturn"))
     needle_diff = diff_needle(old.get("needle"), new.get("needle"))
@@ -1007,20 +1145,38 @@ def diff_reports(
     record_notation_diff = diff_record_notation(
         old.get("record_notation"), new.get("record_notation")
     )
+    record_notation_diff = _degrade_evidence_excluded(
+        old, new, "record_notation", record_notation_diff
+    )
     invisible_chars_diff = diff_invisible_chars(
         old.get("invisible_chars"), new.get("invisible_chars")
+    )
+    invisible_chars_diff = _degrade_evidence_excluded(
+        old, new, "invisible_chars", invisible_chars_diff
     )
     confusable_skeleton_diff = diff_confusable_skeleton(
         old.get("confusable_skeleton"), new.get("confusable_skeleton")
     )
+    confusable_skeleton_diff = _degrade_evidence_excluded(
+        old, new, "confusable_skeleton", confusable_skeleton_diff
+    )
     compatibility_form_diff = diff_compatibility_form(
         old.get("compatibility_form"), new.get("compatibility_form")
+    )
+    compatibility_form_diff = _degrade_evidence_excluded(
+        old, new, "compatibility_form", compatibility_form_diff
     )
     enumeration_convention_diff = diff_enumeration_convention(
         old.get("enumeration_convention"), new.get("enumeration_convention")
     )
+    enumeration_convention_diff = _degrade_evidence_excluded(
+        old, new, "enumeration_convention", enumeration_convention_diff
+    )
     typographic_emphasis_diff = diff_typographic_emphasis(
         old.get("typographic_emphasis"), new.get("typographic_emphasis")
+    )
+    typographic_emphasis_diff = _degrade_evidence_excluded(
+        old, new, "typographic_emphasis", typographic_emphasis_diff
     )
     choiceaudit_diff = diff_choiceaudit(old.get("choice_audit"), new.get("choice_audit"))
     precision_diff = diff_precision(old.get("precision"), new.get("precision"))

@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9830 tests collected**
-  (W2 push 4, 2026-11-12). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9854 tests collected**
+  (W2 push 5, 2026-11-12). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -547,9 +547,37 @@ doctor's resource fallbacks degrade there.
   `fired: null` and renders "unobservable" while a measured
   no-fire keeps its wording. The cycle-67 and cycle-27
   oracles carry independent mirrors of all three fixes.
+  W2 push 5 (2026-11-12, public-view projections: audit
+  rows ORCH-01, ORCH-D01) holds the floor: the exact CI
+  command ran 9,848 tests, 8 skipped, with one
+  environment-class failure — a CLI subprocess test whose
+  local backend failed to initialize under full-suite load;
+  the test and its whole file (56 tests) pass in isolation
+  on the same tree, and the full pytest leg is green:
+  9,841 passed, 13 skipped, 73,077 subtests. `coverage
+  json` on that run measures 95.39440203562341% — above
+  push 4's 95.39119987986184%. The regression file
+  `tests/test_w2_projection.py` (24 tests) fails on the
+  defect cases against the pre-fix tree: the default
+  (evidence-excluded) export carried the projection
+  census's leak set (transfer checkpoint paths, the
+  serving records' prompt/returned token-ID streams, raw
+  `answer_text` in eight instrument sections, and the
+  serving identity `config` verbatim) and `save_report`
+  accepted a `schema_version` of 999. On the fixed tree
+  the default view strips exactly that set and reduces
+  `config` to an allowlist (the evidence view is
+  unchanged), the seven sections whose validators
+  recompute from `answer_text` degrade to a documented
+  unavailable state (`evidence_excluded`) when diffed
+  from default exports — never a silent "invalid" — and
+  the admission gate refuses non-envelope payloads before
+  any write. The committed sample report was regenerated
+  under the new projection; its only delta is the removal
+  of the checkpoint `path` the fix strips.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (338 files in that CI scope; the repo-root scope counts more.
+  (339 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (75 source files).

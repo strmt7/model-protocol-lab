@@ -197,7 +197,10 @@ class ReportTests(unittest.TestCase):
 
     def test_serialization_failure_does_not_create_directory(self):
         result = experiment()
-        result["unserializable"] = object()
+        # The unserializable value rides an admitted envelope key
+        # (ORCH-D01): an invented top-level key is now refused at
+        # admission, before serialization is ever reached.
+        result["configuration_digest"] = object()
         with TemporaryDirectory() as tmp:
             target = Path(tmp) / "new-report"
             with self.assertRaises(TypeError):

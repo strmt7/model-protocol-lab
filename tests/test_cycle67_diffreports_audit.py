@@ -560,6 +560,13 @@ def _o_section_states(
         available = sub.get("available") if type(sub) is dict else None
         old_payload = old.get(results_key)
         new_payload = new.get(results_key)
+        if (
+            type(sub) is dict
+            and sub.get("detail") == "evidence_excluded"
+            and available == "neither"
+        ):
+            states[diff_key] = {"state": "evidence_excluded", "unvalidated_drift": False}
+            continue
         if available == "both":
             state = "compared"
         elif available in ("old", "new"):
@@ -578,6 +585,82 @@ def _o_section_states(
         if drift:
             drifted.append(diff_key)
     return states, sorted(drifted)
+
+
+def _o_answer_text_state(section: Any) -> tuple[bool, bool]:
+    """O answer text state: (any records, any text carried)."""
+    saw = False
+    carried = False
+
+    def _visit(record: Any) -> None:
+        nonlocal saw, carried
+        if type(record) is not dict:
+            return
+        saw = True
+        if "answer_text" in record:
+            carried = True
+        cells = record.get("cells")
+        if type(cells) is dict:
+            for cell in cells.values():
+                if type(cell) is dict and "answer_text" in cell:
+                    carried = True
+
+    if type(section) is dict:
+        records = section.get("records")
+        if type(records) is list:
+            for record in records:
+                _visit(record)
+        candidates = section.get("candidates")
+        if type(candidates) is dict:
+            for entry in candidates.values():
+                if type(entry) is not dict:
+                    continue
+                entry_records = entry.get("records")
+                if type(entry_records) is list:
+                    for record in entry_records:
+                        _visit(record)
+    return saw, carried
+
+
+def _o_evidence_excluded(result: Any, section_key: str) -> bool:
+    """O evidence excluded: stamped export, section record-bearing,
+    no answer_text carried anywhere."""
+    if type(result) is not dict:
+        return False
+    if result.get("raw_evidence_included") is not False:
+        return False
+    section = result.get(section_key)
+    if type(section) is not dict:
+        return False
+    saw, carried = _o_answer_text_state(section)
+    return saw and not carried
+
+
+def _o_degrade_evidence_excluded(
+    old: Any,
+    new: Any,
+    section_key: str,
+    diff: dict[str, Any],
+    changed: bool,
+    asymmetric: bool,
+) -> tuple[dict[str, Any], bool, bool]:
+    """O degrade: mirror of diffreports._degrade_evidence_excluded."""
+    old_excluded = _o_evidence_excluded(old, section_key)
+    new_excluded = _o_evidence_excluded(new, section_key)
+    if not old_excluded and not new_excluded:
+        return diff, changed, asymmetric
+    degraded: dict[str, Any] = {
+        "available": "neither",
+        "changed": False,
+        "detail": "evidence_excluded",
+    }
+    if old_excluded and new_excluded:
+        return degraded, False, False
+    other = new if old_excluded else old
+    if type(other.get(section_key)) is not dict:
+        return degraded, False, False
+    degraded["available"] = "new" if old_excluded else "old"
+    return degraded, False, True
 
 
 def _o_evidence(result: dict[str, Any], stage: str) -> tuple[dict[str, dict[str, str]], int, bool]:
@@ -20327,6 +20410,9 @@ def _oracle_diff(
     )
     o_lead, o_lead_changed, o_lead_asymmetric = _o_leading(old.get("leading"), new.get("leading"))
     o_nf, o_nf_changed, o_nf_asymmetric = _o_numform(old.get("numform"), new.get("numform"))
+    o_nf, o_nf_changed, o_nf_asymmetric = _o_degrade_evidence_excluded(
+        old, new, "numform", o_nf, o_nf_changed, o_nf_asymmetric
+    )
     o_dt, o_dt_changed, o_dt_asymmetric = _o_dateline(old.get("dateline"), new.get("dateline"))
     o_mt, o_mt_changed, o_mt_asymmetric = _o_multiturn(old.get("multiturn"), new.get("multiturn"))
     o_nd, o_nd_changed, o_nd_asymmetric = _o_needle(old.get("needle"), new.get("needle"))
@@ -20346,20 +20432,38 @@ def _oracle_diff(
     o_rn, o_rn_changed, o_rn_asymmetric = _o_recordnotation(
         old.get("record_notation"), new.get("record_notation")
     )
+    o_rn, o_rn_changed, o_rn_asymmetric = _o_degrade_evidence_excluded(
+        old, new, "record_notation", o_rn, o_rn_changed, o_rn_asymmetric
+    )
     o_ic, o_ic_changed, o_ic_asymmetric = _o_invisiblechars(
         old.get("invisible_chars"), new.get("invisible_chars")
+    )
+    o_ic, o_ic_changed, o_ic_asymmetric = _o_degrade_evidence_excluded(
+        old, new, "invisible_chars", o_ic, o_ic_changed, o_ic_asymmetric
     )
     o_cs, o_cs_changed, o_cs_asymmetric = _o_confusableskeleton(
         old.get("confusable_skeleton"), new.get("confusable_skeleton")
     )
+    o_cs, o_cs_changed, o_cs_asymmetric = _o_degrade_evidence_excluded(
+        old, new, "confusable_skeleton", o_cs, o_cs_changed, o_cs_asymmetric
+    )
     o_cxf, o_cxf_changed, o_cxf_asymmetric = _o_compatibilityform(
         old.get("compatibility_form"), new.get("compatibility_form")
+    )
+    o_cxf, o_cxf_changed, o_cxf_asymmetric = _o_degrade_evidence_excluded(
+        old, new, "compatibility_form", o_cxf, o_cxf_changed, o_cxf_asymmetric
     )
     o_ec, o_ec_changed, o_ec_asymmetric = _o_enumerationconvention(
         old.get("enumeration_convention"), new.get("enumeration_convention")
     )
+    o_ec, o_ec_changed, o_ec_asymmetric = _o_degrade_evidence_excluded(
+        old, new, "enumeration_convention", o_ec, o_ec_changed, o_ec_asymmetric
+    )
     o_te, o_te_changed, o_te_asymmetric = _o_typographicemphasis(
         old.get("typographic_emphasis"), new.get("typographic_emphasis")
+    )
+    o_te, o_te_changed, o_te_asymmetric = _o_degrade_evidence_excluded(
+        old, new, "typographic_emphasis", o_te, o_te_changed, o_te_asymmetric
     )
     o_ca, o_ca_changed, o_ca_asymmetric = _o_choiceaudit(
         old.get("choice_audit"), new.get("choice_audit")

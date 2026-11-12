@@ -23,11 +23,16 @@ from model_protocol_lab import reporting
 
 
 def _minimal_result() -> dict:
+    # A minimal ADMITTED report envelope (ORCH-D01): save_report
+    # refuses non-envelope payloads before any write, so the
+    # write-failure tests below must start from a payload the
+    # admission gate accepts.
     return {
-        "protocol": "test",
-        "candidates": [],
-        "search_fixtures": [],
-        "heldout_fixtures": [],
+        "schema_version": 1,
+        "decision": "no_candidate",
+        "selected_candidate": None,
+        "search": [],
+        "held_out": None,
     }
 
 

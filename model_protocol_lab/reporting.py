@@ -314,6 +314,83 @@ def _public_view(result: dict[str, Any], include_evidence: bool) -> dict[str, An
 _WITHHELD_DIAGNOSTIC_DETAIL = "[withheld without --include-evidence]"
 
 
+#: Instrument sections whose per-record ``answer_text`` is raw
+#: evidence (projection census): the decoded model answer,
+#: verbatim. It leaves the default export; the evidence export
+#: keeps it. Seven of the eight sections' diff validators
+#: recompute from the text, so diffing default exports degrades
+#: those sections to a documented unavailable state (see
+#: diffreports); prune_sweep's differ never reads it.
+_ANSWER_TEXT_SECTIONS = (
+    "prune_sweep",
+    "record_notation",
+    "invisible_chars",
+    "confusable_skeleton",
+    "compatibility_form",
+    "enumeration_convention",
+    "typographic_emphasis",
+    "numform",
+)
+
+#: The serving identity ``config`` keys the public view may
+#: carry. The block is backend-reported free-form data; anything
+#: outside this allowlist (an endpoint URL or filesystem path
+#: from a future stack) stays out of the default export. The
+#: evidence export keeps the block verbatim: the diff
+#: validators recompute ``config_fingerprint`` from it, and
+#: evidence exports are the documented diff inputs.
+_SERVING_CONFIG_ALLOWLIST = frozenset(
+    {
+        "protocol",
+        "stack",
+        "build_info",
+        "total_slots",
+        "model_path_digest",
+        "checkpoint_sha256",
+        "declared_eos_ids",
+        "generation_settings_digest",
+        "posture",
+        "cache_probe",
+        "tier_a",
+    }
+)
+
+
+def _strip_answer_text(section: dict[str, Any]) -> None:
+    """Remove ``answer_text`` from a section's records.
+
+    The field sits on the record itself (numform) or on the
+    per-arm cells of each record (the other instrument
+    sections); both shapes are walked, plus any section-level
+    record list. Aggregates and digests stay: they carry no raw
+    text.
+    """
+
+    def _from_record(record: Any) -> None:
+        if type(record) is not dict:
+            return
+        record.pop("answer_text", None)
+        cells = record.get("cells")
+        if type(cells) is dict:
+            for cell in cells.values():
+                if type(cell) is dict:
+                    cell.pop("answer_text", None)
+
+    records = section.get("records")
+    if type(records) is list:
+        for record in records:
+            _from_record(record)
+    candidates = section.get("candidates")
+    if type(candidates) is dict:
+        for entry in candidates.values():
+            if type(entry) is not dict:
+                continue
+            entry_records = entry.get("records")
+            if type(entry_records) is list:
+                for record in entry_records:
+                    _from_record(record)
+
+
 def _strip_raw_diagnostics(clean: dict[str, Any]) -> None:
     """Remove raw-evidence carriers from an evidence-excluded public view.
 
@@ -325,7 +402,14 @@ def _strip_raw_diagnostics(clean: dict[str, Any]) -> None:
       decoding them reconstructs the prompt text;
     - ``backend_divergences`` embeds the decoded stop text (the expected
       answer) in ``stop_texts``/``stop_text``, and raw generated text in the
-      free-text ``detail`` of kept-vs-stripped findings.
+      free-text ``detail`` of kept-vs-stripped findings;
+    - ``transfer`` checkpoints carry the operator-supplied filesystem
+      ``path`` of each checkpoint;
+    - ``serving_backends`` records carry the exact prompt/returned
+      token-ID streams, and its identity ``config`` is backend-reported
+      free-form data, reduced here to an allowlist;
+    - the instrument sections in ``_ANSWER_TEXT_SECTIONS`` carry the raw
+      decoded answer in each record's ``answer_text``.
 
     None of these may reach the public JSON without ``--include-evidence``.
     Spans, counts, classes and severities stay: they carry no raw content.
@@ -361,6 +445,32 @@ def _strip_raw_diagnostics(clean: dict[str, Any]) -> None:
                         finding.pop("stop_text", None)
                         if "detail" in finding:
                             finding["detail"] = _WITHHELD_DIAGNOSTIC_DETAIL
+    transfer = clean.get("transfer")
+    if type(transfer) is dict:
+        checkpoints = transfer.get("checkpoints")
+        if type(checkpoints) is list:
+            for checkpoint in checkpoints:
+                if type(checkpoint) is dict:
+                    checkpoint.pop("path", None)
+    serving = clean.get("serving_backends")
+    if type(serving) is dict:
+        records = serving.get("records")
+        if type(records) is list:
+            for record in records:
+                if type(record) is dict:
+                    record.pop("prompt_ids", None)
+                    record.pop("returned_ids", None)
+        identity = serving.get("identity")
+        if type(identity) is dict:
+            config = identity.get("config")
+            if type(config) is dict:
+                identity["config"] = {
+                    key: value for key, value in config.items() if key in _SERVING_CONFIG_ALLOWLIST
+                }
+    for key in _ANSWER_TEXT_SECTIONS:
+        section = clean.get(key)
+        if type(section) is dict:
+            _strip_answer_text(section)
 
 
 def _short_fingerprint(value: object) -> str:
@@ -14521,6 +14631,135 @@ def prepare_report_dir(directory: str | Path, *, _allow_empty_existing: bool = F
     return target
 
 
+#: The instrument section keys a report envelope may carry.
+#: A deliberate literal: ``save_report`` must stay usable when
+#: this module is copy-isolated from the rest of the package
+#: (the cycle-75 determinism gate), so the set cannot be
+#: imported from diffreports. The W2 test suite pins this set
+#: equal to the diff registry (``SECTION_DIFF_KEYS`` plus
+#: ``UNDISPATCHED_SECTIONS``), so the two cannot drift silently.
+_REPORT_SECTION_KEYS = frozenset(
+    {
+        "ablation",
+        "aliasing",
+        "answer_collision",
+        "backend_divergences",
+        "batch_invariance",
+        "boundary_audit",
+        "budget_frontier",
+        "cache_profile",
+        "canonical_form",
+        "choice_audit",
+        "compatibility_form",
+        "confidence",
+        "confidentiality",
+        "confusable_skeleton",
+        "contamination",
+        "dateline",
+        "deliforge",
+        "density",
+        "distraction",
+        "enumeration_convention",
+        "faketurn",
+        "fewshot",
+        "field_order",
+        "held_out_budget_floor",
+        "hierarchy",
+        "history_frame",
+        "instruction_distance",
+        "invisible_chars",
+        "leading",
+        "logprob_diagnostic",
+        "marker_isolation",
+        "multiturn",
+        "needle",
+        "negation",
+        "numform",
+        "perturbation",
+        "placement",
+        "portfolio",
+        "position",
+        "precision",
+        "prefill",
+        "prune_sweep",
+        "record_notation",
+        "refusals",
+        "repetition",
+        "rotation",
+        "scorerlens",
+        "selection_robustness",
+        "sensitivity_sweep",
+        "sensitivity_sweep_tokens",
+        "serving_backends",
+        "stop_cause",
+        "stop_matrix",
+        "structured",
+        "synthhistory",
+        "template_conformance",
+        "template_firewall",
+        "template_robustness",
+        "token_healing",
+        "toolcall",
+        "transfer",
+        "typographic_emphasis",
+        "verbosity",
+        "ws_canonical",
+    }
+)
+
+#: Top-level keys of a results envelope that are not instrument
+#: sections: the run core plus the diagnostics additions.
+_REPORT_CORE_KEYS = frozenset(
+    {
+        "schema_version",
+        "selection_rule",
+        "measurement",
+        "seed",
+        "max_new_tokens",
+        "eos_token_id",
+        "statistical_confidence",
+        "compute_comparison",
+        "decision",
+        "selected_candidate",
+        "boundary_token_ids",
+        "selected_boundary_token_ids",
+        "backend_fingerprint",
+        "configuration_digest",
+        "search",
+        "held_out",
+        "failure_taxonomy",
+        "selection_margin",
+        "token_overhead",
+        "diagnostics_unavailable",
+        "raw_evidence_included",
+    }
+)
+
+
+def _check_report_admission(result: dict[str, Any]) -> None:
+    """Refuse a payload that is not a well-formed report envelope.
+
+    ORCH-D01: ``save_report`` used to write any dict it was
+    handed (a ``schema_version`` of 999 saved silently, and an
+    invented section key was carried into the export where every
+    consumer silently ignored it). The gate runs before
+    enrichment or any file is created: the payload must be a
+    dict, a present ``schema_version`` must be the supported
+    integer 1, and every top-level key must be a core key or a
+    registered section.
+    """
+    if type(result) is not dict:
+        raise ValueError("report payload must be a dict")
+    if "schema_version" in result:
+        version = result["schema_version"]
+        if type(version) is not int or version != 1:
+            raise ValueError(f"unsupported report schema_version: {version!r}")
+    admitted = _REPORT_CORE_KEYS | _REPORT_SECTION_KEYS
+    unknown = sorted(key for key in result if key not in admitted)
+    if unknown:
+        raise ValueError(f"unknown report section keys: {', '.join(unknown)}")
+
+
 def save_report(
     result: dict[str, Any],
     directory: str | Path,
@@ -14536,10 +14775,13 @@ def save_report(
     Python-level failure. The JSON holds the public view (raw
     observations stripped unless include_evidence is set); the HTML is the
     full enriched rendering. Returns the (json_path, html_path) tuple.
-    Raises ValueError if the directory is not fresh and empty, and
+    Raises ValueError if the payload fails the admission gate (not a
+    dict, an unsupported schema_version, or unknown top-level section
+    keys), if the directory is not fresh and empty, and
     FileExistsError if the leaf is (or resolves through) a symlink -- report
     files are never written through a symlinked leaf.
     """
+    _check_report_admission(result)
     # Automatic diagnostics: pure functions of the recorded search
     # outcomes, attached to a copy so the caller's dict is untouched. The
     # JSON keeps them (they are safe aggregates) while _public_view strips
