@@ -13,7 +13,7 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9881 tests collected**
+- `python -m pytest -q -p no:cacheprovider` — **9882 tests collected**
   (W2 push 5, 2026-11-12). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
@@ -602,6 +602,23 @@ doctor's resource fallbacks degrade there.
   tests were repaired to the new contracts (a genuine
   second instrument for the protocol-drift scenario; the
   documented `ValueError` for a serialization failure).
+  The W2 closing push (2026-11-12, documentation) holds
+  the floor: the exact CI command ran 9,876 tests, OK
+  (8 skipped), and `coverage json` on that run measures
+  95.3968016738903% — the push-6 figure, as expected for a
+  documentation-only delta. The full pytest leg agrees:
+  9,869 passed, 13 skipped, 73,088 subtests. The push
+  lands the R4 exit-code documentation corrections
+  (USAGE §6 rows for doctor, diff-backends, verify and
+  the surface-noise probe; the missing `exec-backends`
+  row; §15 restructured to state the code meanings and
+  point at §6, naming `diff-reports` as the documented
+  exception), the post-rewrite `.gitleaks.toml` comment
+  record, and the ledger's W2 closure (wave-10
+  amendments, all six push SHAs, final tallies). The
+  cycle-208 pin that encoded the stale "2 cancelled"
+  text is corrected with the reason recorded, and a new
+  cross-pin test guards the §6/§15 split.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
   (340 files in that CI scope; the repo-root scope counts more.

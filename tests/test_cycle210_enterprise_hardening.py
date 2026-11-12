@@ -199,8 +199,10 @@ class TestCommunityFiles(unittest.TestCase):
 
         Owner order 2026-11-11: no allowlist — a finding is solved or
         left standing open, never excepted. The two verified-synthetic
-        fixture strings in pre-W1 history are reported by the history
-        scan and stand open, enumerated in .gitleaks.toml itself.
+        fixture strings in pre-W1 history were solved by removal: the
+        owner authorized a full history rewrite on 2026-11-12 that
+        replaced both strings in all historical blobs, and the
+        full-history scan now reports zero findings.
         """
         with (REPO_ROOT / ".gitleaks.toml").open("rb") as handle:
             doc = tomllib.load(handle)

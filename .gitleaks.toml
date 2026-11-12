@@ -17,22 +17,19 @@ useDefault = true
 # NO allowlist. Owner order, 2026-11-11: no exceptions — a finding is
 # either solved or left standing open, never excepted away.
 #
-# Standing open findings (enumerated, not excepted): the full-history
-# scan reports exactly two findings, both verified-synthetic test
-# fixtures invented before W1 that persist in immutable git history:
-#
-# 1. 'ARBITRARY-TEXT-leak-1' — the arbitrary-error-text fixture from
-#    tests/test_cycle79_evaluate_engine_audit.py (backend error text
-#    must never survive into a report).
-# 2. 'probe-value-hunter2-leakprobe' — the _PROBE_SECRET constant from
-#    tests/test_cycle55_evaluate_audit.py (probe text a fake backend
-#    raises with; observations must never carry it).
-#
-# Both strings were replaced at source in W1 with
-# non-credential-shaped equivalents, so neither occurs in the current
-# tree and a working-tree scan is clean with no exceptions. They
-# remain in pre-W1 commits; removing them from the record would
-# require a history rewrite, which the owner has not ordered. Until
-# then the history scan stays red on exactly these two findings —
-# visible in every CI secret-scan run — by the owner's explicit
-# decision. Any FURTHER finding is a genuine triage item.
+# The two historical findings this file once enumerated are closed
+# by removal, not exception. Both were verified-synthetic test
+# fixtures invented before W1: the arbitrary-error-text fixture in
+# tests/test_cycle79_evaluate_engine_audit.py (backend error text
+# must never survive into a report) and the probe constant in
+# tests/test_cycle55_evaluate_audit.py (probe text a fake backend
+# raises with; observations must never carry it). Both strings were
+# replaced at source in W1 with non-credential-shaped equivalents,
+# and on 2026-11-12 the owner authorized a full git history
+# rewrite: both strings were replaced in all historical blobs
+# (366 commits preserved; the head tree is unchanged apart from
+# these comments). A full-history scan under this config now
+# reports zero findings, and the Secret scan workflow is green at
+# the rewritten head. Commit SHAs cited in records written before
+# 2026-11-12 are pre-rewrite and historical. Any FURTHER finding
+# is a genuine triage item.

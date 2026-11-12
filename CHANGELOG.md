@@ -6,6 +6,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Documentation (exit-code contract + closure records — external-audit W2 closing, 2026-11-12)
+
+- USAGE §6's exit-code table is corrected to the code (R4
+  adjudication D1/D2/D3/D5/D6): `doctor` answers 2 on a
+  non-ok verdict (1 only when no report could be produced);
+  `diff-backends` answers 2 on invalid input; the missing
+  `exec-backends` row is added, in the table and in the
+  stdout output-contract list; the `surface-noise probe`
+  cancellation code is 130, not 2; the `verify` row covers
+  all unreadable/invalid input. §15 no longer restates the
+  per-command rows (D7): it states the code meanings, points
+  at §6 as the one per-command contract, and names
+  `diff-reports` as the documented exception to the verdict
+  philosophy (D4). The cycle-208 pin that encoded the stale
+  "2 cancelled" text is corrected with the reason recorded,
+  and a cross-pin now guards the §6/§15 split.
+- `.gitleaks.toml`'s comments now record the executed
+  history rewrite (owner-authorized 2026-11-12; both
+  synthetic fixture strings replaced in all historical
+  blobs; the full-history scan reports zero findings)
+  instead of the superseded standing-open enumeration; the
+  no-allowlist rule is unchanged.
+- The stable-release ledger records W2's closure: the
+  wave-10 amendments on RR-09, RR-03 and ORCH-D01, the F3
+  extension on ORCH-01, all six push SHAs, and the final
+  tallies (27 fixed-with-evidence, 23 open, 1
+  design-debt-accepted, 1 blocked-external).
+
 ### Fixed (wave-10 repairs — external-audit W2 push 6, 2026-11-12)
 
 - Bug-hunt wave 10 attacked pushes 1–5's own surfaces and

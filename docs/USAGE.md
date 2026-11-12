@@ -237,16 +237,17 @@ on stderr, never a traceback):
 | --- | --- | --- |
 | `catalog` | listed the catalog | — (no failure code; misuse is an argparse error, 2) |
 | `inspect` | fixture file valid | 1 invalid fixture file |
-| `doctor` | verdict `ok` | 1 any other verdict |
+| `doctor` | verdict `ok` | 2 any other verdict; 1 when no report could be produced |
 | `run` | decision `compatible_on_fixture_set` | 2 negative or ambiguous decision; 130 cancellation; 1 recorded evaluator failure or caught initialization, loading, or filesystem error |
 | `fixtures build` | fixture file written | 1 invalid authoring source or output collision |
 | `fixtures fuzz` | report `ok` | 1 otherwise |
 | `diff-reports` | comparison written, even when it finds differences | 1 input load failure |
-| `diff-backends` | comparison written | 1 tokenizer, encode, or validation failure |
+| `diff-backends` | comparison written | 2 invalid input; 1 tokenizer or encode failure |
+| `exec-backends` | report produced, including a recorded probe-gate failure | 2 invalid input; 1 no report produced |
 | `debug` | session or script completed | 1 invalid dataset, tokenizer, or script |
-| `surface-noise probe` | probe completed | 2 cancelled; 3 unavailable; 1 invalid input |
+| `surface-noise probe` | probe completed | 130 cancelled; 3 unavailable; 1 invalid input |
 | `surface-noise diff`, `surface-noise protocol` | completed | 1 invalid input |
-| `verify` | verdict `ok` | 2 any other verdict; 1 when the determinism-audit backend cannot initialize, or on a bundle `ValueError` |
+| `verify` | verdict `ok` | 2 any other verdict; 1 unreadable or invalid input (including a bundle `ValueError` and a determinism backend that cannot initialize) |
 | `pack` | bundle written | 1 fixed-vocabulary failure (unreadable entry, unwritable output, or similar) |
 
 The `run` code 2 is deliberately shared: a negative or ambiguous
@@ -256,7 +257,8 @@ the decision field — not the exit code alone — is the verdict for
 
 Output contract: machine-parseable JSON goes to stdout for
 `catalog`, `inspect`, `doctor`, `fixtures`, `run`, `verify`,
-`pack`, `diff-reports`, `diff-backends`, and `surface-noise`;
+`pack`, `diff-reports`, `diff-backends`, `exec-backends`, and
+`surface-noise`;
 human-readable summaries, warnings, and progress notes go to
 stderr, so stdout stays parseable when stderr is discarded. A
 long `run` prints nothing until it finishes — there is no
@@ -4381,11 +4383,15 @@ to verify it before wiring it up.
 
 ## 15. Exit codes and output formats
 
-One table governs every command (each subcommand's `--help` restates
-its own row). The split that matters: a command that produced a
-report answers with the report's verdict (0 or 2); a command that
-could not produce one fails operationally (1); cancellation is
-always 130.
+The per-command contract lives in §6's exit-code table (each
+subcommand's `--help` restates its own row); this section states
+what the codes mean. The split that matters: a command that
+produced a report answers with the report's verdict (0 or 2); a
+command that could not produce one fails operationally (1);
+cancellation is always 130. One documented exception:
+`diff-reports` answers 0 whenever its comparison was written,
+even when the comparison finds differences — a diff is an
+answer, not a verdict.
 
 | Code | Meaning |
 | --- | --- |
@@ -4395,19 +4401,9 @@ always 130.
 | 3 | `surface-noise probe` only: the baseline was unavailable, so no score was produced |
 | 130 | Cancelled or interrupted (128 + SIGINT), including a cancelled `surface-noise probe` |
 
-Per command: `catalog` 0/1; `inspect` 0/1; `doctor` 0 (verdict ok) /
-2 (verdict not ok) / 1 (no report); `run` 0 (compatible) / 2
-(abstain or failed) / 130 (cancelled) / 1 (no report); `fixtures
-build` 0/1; `fixtures fuzz` 0 (all cases conform) / 1 (a finding);
-`diff-reports` 0/1; `diff-backends` 0/2 (invalid input)/1;
-`exec-backends` 0 (report produced, including a recorded
-probe-gate failure)/2 (invalid input)/1 (no report);
-`debug` 0/1 (a `--script` run exits 1 when any command in the file
-failed); `surface-noise probe` 0/130/3/1; `surface-noise diff` 0/1;
-`surface-noise protocol` 0; `verify` 0/2/1 (with and without
-`--bundle`); `pack` 0/1. The MCP server is not a shell command, but
-its own arguments follow the same discipline: `--help` and
-`--version` exit 0, an unknown argument exits 2.
+The MCP server is not a shell command, but its own arguments
+follow the same discipline: `--help` and `--version` exit 0, an
+unknown argument exits 2.
 
 Output contract: machine-readable output (JSON reports, verdicts,
 diffs, descriptors) goes to stdout; human summaries, progress and

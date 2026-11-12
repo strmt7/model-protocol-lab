@@ -166,10 +166,35 @@ class DocsPolicyTests(unittest.TestCase):
         section6 = USAGE.split("## 6. Read the outputs")[1].split("## 7.")[0]
         self.assertIn("Exit codes for every subcommand", section6)
         self.assertIn("surface-noise probe", section6)
-        self.assertIn("2 cancelled; 3", section6)
+        # R4 D5: the pin previously read "2 cancelled; 3" — it
+        # encoded §6's stale cancellation code; the probe's
+        # cancellation code is 130 (epilog, §15 and code agree).
+        self.assertIn("130 cancelled; 3", section6)
         self.assertIn("stdout stays parseable", section6)
         self.assertIn('"schema_version": 1', section6)
         self.assertIn("unsupported_schema_version", section6)
+
+    def test_usage_section15_points_at_section6(self) -> None:
+        """R4 D7: one per-command table (§6); §15 states code meanings."""
+        section6 = USAGE.split("## 6. Read the outputs")[1].split("## 7.")[0]
+        section15 = USAGE.split("## 15. Exit codes and output formats")[1]
+        self.assertIn("The per-command contract lives in §6", section15)
+        self.assertNotIn("Per command:", section15)
+        self.assertNotIn("One table governs every command", section15)
+        # The amended §6 rows (R4 D1/D2/D3/D6).
+        self.assertIn("2 any other verdict; 1 when no report could be produced", section6)
+        self.assertIn("2 invalid input; 1 tokenizer or encode failure", section6)
+        self.assertIn(
+            "`exec-backends` | report produced, including a recorded probe-gate failure",
+            section6,
+        )
+        self.assertIn(
+            "1 unreadable or invalid input (including a bundle `ValueError`",
+            section6,
+        )
+        # §15 keeps the code-meaning table and names the exception (D4).
+        self.assertIn("| 130 |", section15)
+        self.assertIn("diff-reports` answers 0 whenever its comparison was written", section15)
 
 
 if __name__ == "__main__":
