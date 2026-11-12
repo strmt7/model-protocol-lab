@@ -13,8 +13,8 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9780 tests collected**
-  (W2 push 2, 2026-11-11). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9815 tests collected**
+  (W2 push 3, 2026-11-12). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -505,9 +505,32 @@ doctor's resource fallbacks degrade there.
   rejection) fixes the recompute validators' contract as
   type-strict exactness; unification survives only in JSON
   Schema enum membership (SA-05), where §4.2.2 governs.
+  W2 push 3 (2026-11-12, negation coverage: audit row RR-03)
+  holds the floor: the exact CI command ran 9,809 tests, OK
+  (8 skipped), and `coverage json` on that run measures
+  95.38299631662031% — above push 2's 95.36971379430003%.
+  The full pytest leg agrees: 9,802 passed, 13 skipped,
+  73,077 subtests. The regression file
+  `tests/test_w2_negation.py` (35 tests) shows the audit
+  reproducer's collapse pair (16/16 joint passes to 0/16)
+  returning `identical: true` on the pre-fix tree (17 of its
+  18 dispatch/admission tests failed there; the one pass is
+  the producer precondition) and the full drift surface —
+  protocol, status, headline, per-arm and discordance drift,
+  roster changes — on the fixed tree; 17 further tests cover
+  the validator's shape gates and the summary renderer's
+  lines. The push also makes the diff instrument census
+  mechanical (56 dispatched sections in the
+  `SECTION_DIFF_KEYS` registry; the 8 intentionally
+  undispatched sections named with reasons in
+  `UNDISPATCHED_SECTIONS`, pinned by a census test against
+  the actual diff surface), and its docs record the
+  owner-authorized git history rewrite that closed RR-01
+  (both fixture strings replaced in all historical blobs;
+  post-rewrite full-history scan reports zero findings).
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (336 files in that CI scope; the repo-root scope counts more.
+  (337 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (75 source files).

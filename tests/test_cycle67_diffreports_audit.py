@@ -316,6 +316,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "confidentiality": {"available": "neither", "changed": False},
         "answer_collision": {"available": "neither", "changed": False},
         "serving_backends": {"available": "neither", "changed": False},
+        "negation": {"available": "neither", "changed": False},
         "config_drift": [],
         "candidate_verdicts": [],
         "evidence": {
@@ -442,6 +443,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "answer_collision_asymmetric": False,
             "serving_backends_changed": False,
             "serving_backends_asymmetric": False,
+            "negation_changed": False,
+            "negation_asymmetric": False,
             "identical": True,
         },
     }
@@ -20327,6 +20330,7 @@ def _oracle_diff(
     o_sb, o_sb_changed, o_sb_asymmetric = _o_serving_backends(
         old.get("serving_backends"), new.get("serving_backends")
     )
+    o_ng, o_ng_changed, o_ng_asymmetric = _o_negation(old.get("negation"), new.get("negation"))
     identical = (
         not decision_changed
         and not winner_changed
@@ -20439,6 +20443,8 @@ def _oracle_diff(
         and not o_ac_changed
         and not o_ac_asymmetric
         and not o_sb_changed
+        and not o_ng_changed
+        and not o_ng_asymmetric
         and not o_sb_asymmetric
     )
     return {
@@ -20502,6 +20508,7 @@ def _oracle_diff(
         "confidentiality": o_cf,
         "answer_collision": o_ac,
         "serving_backends": o_sb,
+        "negation": o_ng,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {"old": old_ok, "new": new_ok, "skipped_observations": skipped},
@@ -20624,6 +20631,8 @@ def _oracle_diff(
             "answer_collision_asymmetric": o_ac_asymmetric,
             "serving_backends_changed": o_sb_changed,
             "serving_backends_asymmetric": o_sb_asymmetric,
+            "negation_changed": o_ng_changed,
+            "negation_asymmetric": o_ng_asymmetric,
             "identical": identical,
         },
     }
@@ -21936,6 +21945,178 @@ def _o_serving_backends(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]
     return diff, changed, asymmetric
 
 
+def _o_negation_valid(value: Any) -> bool:
+    """Oracle negation validator: mirrors diffreports._valid_negation.
+
+    Written from the same recompute standard (RR-03): exact key
+    sets, an int protocol seed, candidate/case counts against the
+    frozen case generator, and every stored aggregate compared
+    against the recomputation from the stored records. The
+    aggregation itself is the producer module's pure data
+    function -- shared ground truth, as with the confidentiality
+    and collision imports elsewhere in this oracle; the gates and
+    comparisons here are the oracle's own.
+    """
+    from model_protocol_lab import negation as _ng
+
+    if type(value) is not dict or value.get("available") is not True:
+        return False
+    if set(value) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if value.get("detail") != "":
+        return False
+    protocol = value.get("protocol")
+    if type(protocol) is not dict:
+        return False
+    if type(protocol.get("seed")) is not int or type(protocol.get("fingerprint")) is not str:
+        return False
+    if value.get("audit") is not None and type(value.get("audit")) is not dict:
+        return False
+    candidates = value.get("candidates")
+    if type(candidates) is not dict:
+        return False
+    if not _o_recomputed_equal(value.get("n_candidates"), len(candidates)):
+        return False
+    try:
+        n_cases = len(_ng.cases_for(protocol["seed"]))
+    except Exception:  # noqa: BLE001 -- fail closed, mirroring the implementation
+        return False
+    if not _o_recomputed_equal(value.get("n_cases"), n_cases):
+        return False
+    aggregate_keys = {
+        "arms",
+        "headline",
+        "descriptive",
+        "ids",
+        "discordance",
+        "operating_characteristics",
+        "n_cases",
+        "n_incomplete",
+    }
+    for entry in candidates.values():
+        if type(entry) is not dict:
+            return False
+        if entry.get("status") == "unavailable":
+            if set(entry) != {"status", "detail", "records"}:
+                return False
+            if type(entry.get("detail")) is not str or entry.get("records") != []:
+                return False
+            continue
+        if entry.get("status") != "available":
+            return False
+        if set(entry) != aggregate_keys | {"status", "detail", "records"}:
+            return False
+        if entry.get("detail") != "" or type(entry.get("records")) is not list:
+            return False
+        try:
+            expected = _ng.aggregate_candidate(entry["records"])
+        except Exception:  # noqa: BLE001 -- fail closed on malformed records
+            return False
+        for key, expected_value in expected.items():
+            if not _o_recomputed_equal(entry.get(key), expected_value):
+                return False
+    return True
+
+
+def _o_negation(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle negation differ: mirrors diffreports.diff_negation."""
+    old_ok = _o_negation_valid(old)
+    new_ok = _o_negation_valid(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    candidates_added = sorted(set(new["candidates"]) - set(old["candidates"]))
+    candidates_removed = sorted(set(old["candidates"]) - set(new["candidates"]))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old["candidates"]) & set(new["candidates"])):
+        old_entry = old["candidates"][name]
+        new_entry = new["candidates"][name]
+        if old_entry.get("status") != new_entry.get("status"):
+            candidate_drift.append(
+                {
+                    "candidate": name,
+                    "metric": "status",
+                    "old": old_entry.get("status"),
+                    "new": new_entry.get("status"),
+                }
+            )
+            continue
+        if old_entry.get("status") != "available":
+            continue
+        metrics: list[tuple[str, Any, Any]] = []
+        for key in ("decision", "joint", "direct_passes", "n_population", "flipped_rate_on_d"):
+            metrics.append(
+                (f"headline.{key}", old_entry["headline"].get(key), new_entry["headline"].get(key))
+            )
+        for arm in ("direct", "negated", "flipped", "negated_alt"):
+            for key in ("rate", "n_completed", "n_pass"):
+                metrics.append(
+                    (
+                        f"arms.{arm}.{key}",
+                        old_entry["arms"][arm].get(key),
+                        new_entry["arms"][arm].get(key),
+                    )
+                )
+        for key in ("boundary_only", "exact_only", "mixed"):
+            metrics.append(
+                (
+                    f"discordance.{key}",
+                    old_entry["discordance"].get(key),
+                    new_entry["discordance"].get(key),
+                )
+            )
+        metrics.append(
+            ("n_incomplete", old_entry.get("n_incomplete"), new_entry.get("n_incomplete"))
+        )
+        for metric, old_value, new_value in metrics:
+            if not _o_recomputed_equal(old_value, new_value):
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    n_cases = {
+        "old": old["n_cases"],
+        "new": new["n_cases"],
+        "changed": old["n_cases"] != new["n_cases"],
+    }
+    changed = bool(
+        protocol_drift
+        or candidates_added
+        or candidates_removed
+        or candidate_drift
+        or n_cases["changed"]
+    )
+    diff.update(
+        {
+            "changed": changed,
+            "comparable": not protocol_drift,
+            "protocol_drift": protocol_drift,
+            "candidates_added": candidates_added,
+            "candidates_removed": candidates_removed,
+            "candidate_drift": candidate_drift,
+            "n_cases": n_cases,
+        }
+    )
+    return diff, changed, asymmetric
+
+
 def _o_tr_valid(value: Any) -> bool:
     """Oracle template-robustness validator: mirrors _valid_template_robustness."""
 
@@ -22416,6 +22597,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "answer_collision_asymmetric": False,
                 "serving_backends_changed": False,
                 "serving_backends_asymmetric": False,
+                "negation_changed": False,
+                "negation_asymmetric": False,
                 "identical": False,
             },
         )
@@ -26788,6 +26971,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not answer_collision_asymmetric\n"
             '        and not serving_backends_diff["changed"]\n'
             "        and not serving_backends_asymmetric\n"
+            '        and not negation_diff["changed"]\n'
+            "        and not negation_asymmetric\n"
             '        and not scorerlens_diff["changed"]\n'
             "        and not scorerlens_asymmetric\n"
             '        and not aliasing_diff["changed"]\n'
@@ -26906,6 +27091,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or answer_collision_asymmetric\n"
             '        or serving_backends_diff["changed"]\n'
             "        or serving_backends_asymmetric\n"
+            '        or negation_diff["changed"]\n'
+            "        or negation_asymmetric\n"
             '        or scorerlens_diff["changed"]\n'
             "        or scorerlens_asymmetric\n"
             '        or aliasing_diff["changed"]\n'

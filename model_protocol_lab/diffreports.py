@@ -101,6 +101,122 @@ _PRIMARY_DECISIONS = frozenset(
 )
 _PRIMARY_WINNER_DECISIONS = frozenset({"compatible_on_fixture_set", "held_out_failed"})
 
+# ---------------------------------------------------------------------
+# Section registry (RR-03 census): every section key a results
+# payload can carry is either dispatched by diff_reports (mapped
+# here from its results-side key to its diff-side key) or listed
+# in UNDISPATCHED_SECTIONS with the reason it is intentionally
+# not diffed. The census test (tests/test_w2_negation.py) pins
+# this table against the bare-pair diff dict and the cycle-67
+# oracle's expected-identical dict, so a new producer section
+# cannot silently go undispatched. Push 4's section-state
+# publication and reporting's save_report admission gate consume
+# the same table.
+# ---------------------------------------------------------------------
+
+_SECTION_PAIRS: list[tuple[str, str]] = [
+    ("budget_frontier", "frontier"),
+    ("held_out_budget_floor", "held_out_floor"),
+    ("boundary_audit", "boundary_audit"),
+    ("selection_robustness", "selection_robustness"),
+    ("transfer", "transfer"),
+    ("contamination", "contamination"),
+    ("perturbation", "perturbation"),
+    ("token_healing", "token_healing"),
+    ("hierarchy", "hierarchy"),
+    ("prefill", "prefill"),
+    ("portfolio", "portfolio"),
+    ("synthhistory", "synthhistory"),
+    ("batch_invariance", "batch_invariance"),
+    ("position", "position"),
+    ("stop_cause", "stop_cause"),
+    ("ws_canonical", "ws_canonical"),
+    ("structured", "structured"),
+    ("deliforge", "deliforge"),
+    ("fewshot", "fewshot"),
+    ("faketurn", "faketurn"),
+    ("toolcall", "toolcall"),
+    ("verbosity", "verbosity"),
+    ("refusals", "refusals"),
+    ("scorerlens", "scorerlens"),
+    ("aliasing", "aliasing"),
+    ("repetition", "repetition"),
+    ("distraction", "distraction"),
+    ("leading", "leading"),
+    ("numform", "numform"),
+    ("dateline", "dateline"),
+    ("multiturn", "multiturn"),
+    ("needle", "needle"),
+    ("placement", "placement"),
+    ("canonical_form", "canonical_form"),
+    ("instruction_distance", "instruction_distance"),
+    ("history_frame", "history_frame"),
+    ("prune_sweep", "prune_sweep"),
+    ("record_notation", "record_notation"),
+    ("invisible_chars", "invisible_chars"),
+    ("confusable_skeleton", "confusable_skeleton"),
+    ("compatibility_form", "compatibility_form"),
+    ("enumeration_convention", "enumeration_convention"),
+    ("typographic_emphasis", "typographic_emphasis"),
+    ("choice_audit", "choice_audit"),
+    ("precision", "precision"),
+    ("confidence", "confidence"),
+    ("rotation", "rotation"),
+    ("density", "density"),
+    ("field_order", "field_order"),
+    ("cache_profile", "cache_profile"),
+    ("template_robustness", "template_robustness"),
+    ("ablation", "ablation"),
+    ("confidentiality", "confidentiality"),
+    ("answer_collision", "answer_collision"),
+    ("serving_backends", "serving_backends"),
+    ("negation", "negation"),
+]
+SECTION_DIFF_KEYS: dict[str, str] = dict(_SECTION_PAIRS)
+
+UNDISPATCHED_SECTIONS: dict[str, str] = {
+    "sensitivity_sweep": (
+        "opt-in single-run CLI diagnostic attached in cli.py's fail-softened "
+        "diagnostics block (the code's own contract: diagnostics must not "
+        "fail the run); it describes the winning candidate of one run, is "
+        "not a per-candidate measurement stage, and has no cross-run "
+        "recompute standard to diff against"
+    ),
+    "sensitivity_sweep_tokens": (
+        "opt-in single-run CLI diagnostic attached in cli.py's fail-softened "
+        "diagnostics block, token-axis twin of sensitivity_sweep; same "
+        "disposition"
+    ),
+    "stop_matrix": (
+        "opt-in single-run CLI diagnostic attached in cli.py's fail-softened "
+        "diagnostics block; a per-run stop-behaviour matrix with no "
+        "cross-run recompute standard"
+    ),
+    "logprob_diagnostic": (
+        "opt-in single-run CLI diagnostic attached in cli.py's fail-softened "
+        "diagnostics block; free-prose diagnostic output, not a structured "
+        "measurement stage"
+    ),
+    "template_conformance": (
+        "doctor / diff-backends diagnostic surface: it is compared, where "
+        "applicable, by the diff-backends tool's own conformance logic; it "
+        "is not a per-run measurement section of results.json"
+    ),
+    "template_firewall": (
+        "doctor diagnostic surface (template firewall audit); no stored "
+        "per-run measurement payload is produced for diff-reports"
+    ),
+    "marker_isolation": (
+        "doctor diagnostic surface (chat-marker isolation audit); no "
+        "stored per-run measurement payload is produced for diff-reports"
+    ),
+    "backend_divergences": (
+        "diff-backends diagnostic surface: the divergence listing is the "
+        "output of the backend-comparison tool itself, not an input "
+        "section two runs can be diffed on"
+    ),
+}
+
 
 def _float_convertible(value: int) -> bool:
     """Whether an int converts to float without overflowing.
@@ -839,6 +955,11 @@ def diff_reports(
     serving_backends_diff = diff_serving_backends(
         old.get("serving_backends"), new.get("serving_backends")
     )
+    negation_diff = diff_negation(old.get("negation"), new.get("negation"))
+    negation_asymmetric = negation_diff["available"] not in (
+        "both",
+        "neither",
+    )
     ablation_asymmetric = ablation_diff["available"] not in (
         "both",
         "neither",
@@ -1042,6 +1163,8 @@ def diff_reports(
         and not answer_collision_asymmetric
         and not serving_backends_diff["changed"]
         and not serving_backends_asymmetric
+        and not negation_diff["changed"]
+        and not negation_asymmetric
         and not scorerlens_diff["changed"]
         and not scorerlens_asymmetric
         and not aliasing_diff["changed"]
@@ -1160,6 +1283,8 @@ def diff_reports(
         "answer_collision_asymmetric": answer_collision_asymmetric,
         "serving_backends_changed": serving_backends_diff["changed"],
         "serving_backends_asymmetric": serving_backends_asymmetric,
+        "negation_changed": negation_diff["changed"],
+        "negation_asymmetric": negation_asymmetric,
         "scorerlens_changed": scorerlens_diff["changed"],
         "scorerlens_asymmetric": scorerlens_asymmetric,
         "aliasing_changed": aliasing_diff["changed"],
@@ -1275,6 +1400,7 @@ def diff_reports(
         "confidentiality": _payload_section(section_diffs, "confidentiality"),
         "answer_collision": answer_collision_diff,
         "serving_backends": serving_backends_diff,
+        "negation": negation_diff,
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {
@@ -22939,6 +23065,204 @@ def diff_serving_backends(old: Any, new: Any) -> dict[str, Any]:
     return result
 
 
+_NEGATION_ARM_KEYS: tuple[str, ...] = ("direct", "negated", "flipped", "negated_alt")
+_NEGATION_AGGREGATE_KEYS = frozenset(
+    {
+        "arms",
+        "headline",
+        "descriptive",
+        "ids",
+        "discordance",
+        "operating_characteristics",
+        "n_cases",
+        "n_incomplete",
+    }
+)
+
+
+def _valid_negation(payload: Any) -> bool:
+    """Recompute-standard check for a ``negation`` payload (RR-03).
+
+    The aggregation is a pure data function in its own module
+    (``negation.aggregate_candidate``), shared with the stage;
+    this validator independently gates the payload's shape --
+    exact key sets, an int protocol seed, candidate/case counts
+    against the frozen case generator -- and compares every
+    stored aggregate against the recomputation from the stored
+    records, so a tampered or drifted aggregate is refused.
+    Malformed records fail closed: the recomputation runs under
+    a guard and any error makes the payload invalid, never a
+    crash (RR-02 totality).
+    """
+    if type(payload) is not dict or payload.get("available") is not True:
+        return False
+    if set(payload) != {
+        "available",
+        "detail",
+        "protocol",
+        "audit",
+        "candidates",
+        "n_candidates",
+        "n_cases",
+    }:
+        return False
+    if payload.get("detail") != "":
+        return False
+    protocol = payload.get("protocol")
+    if type(protocol) is not dict:
+        return False
+    if type(protocol.get("seed")) is not int:
+        return False
+    if type(protocol.get("fingerprint")) is not str:
+        return False
+    audit = payload.get("audit")
+    if audit is not None and type(audit) is not dict:
+        return False
+    candidates = payload.get("candidates")
+    if type(candidates) is not dict:
+        return False
+    if not _recomputed_equal(payload.get("n_candidates"), len(candidates)):
+        return False
+    from . import negation as _ng
+
+    try:
+        expected_cases = len(_ng.cases_for(protocol["seed"]))
+    except Exception:  # noqa: BLE001 -- fail closed: an ungeneratable seed invalidates
+        return False
+    if not _recomputed_equal(payload.get("n_cases"), expected_cases):
+        return False
+    for entry in candidates.values():
+        if type(entry) is not dict:
+            return False
+        status = entry.get("status")
+        if status == "unavailable":
+            if set(entry) != {"status", "detail", "records"}:
+                return False
+            if type(entry.get("detail")) is not str or entry.get("records") != []:
+                return False
+            continue
+        if status != "available":
+            return False
+        if set(entry) != _NEGATION_AGGREGATE_KEYS | {"status", "detail", "records"}:
+            return False
+        if entry.get("detail") != "":
+            return False
+        records = entry.get("records")
+        if type(records) is not list:
+            return False
+        try:
+            expected = _ng.aggregate_candidate(records)
+        except Exception:  # noqa: BLE001 -- fail closed on malformed records
+            return False
+        for key, value in expected.items():
+            if not _recomputed_equal(entry.get(key), value):
+                return False
+    return True
+
+
+def diff_negation(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two ``negation`` payloads; deterministic.
+
+    Answers "did the measured negation story change between
+    runs?": protocol drift (a different seed/backend instrument
+    means the two runs measured different case sets -- the
+    comparison is then not comparable, with the drift still
+    listed), the case-count axis, candidates added/removed,
+    per-candidate status changes, headline decision and joint
+    counts, per-arm rates and completions, discordance counts,
+    and incomplete-case counts. A side without a valid payload
+    is reported plainly.
+    """
+    old_ok = _valid_negation(old)
+    new_ok = _valid_negation(new)
+    if old_ok and new_ok:
+        available = "both"
+    elif old_ok:
+        available = "old"
+    elif new_ok:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if available != "both":
+        return result
+    protocol_drift = old["protocol"].get("fingerprint") != new["protocol"].get("fingerprint")
+    old_candidates = old["candidates"]
+    new_candidates = new["candidates"]
+    candidates_added = sorted(set(new_candidates) - set(old_candidates))
+    candidates_removed = sorted(set(old_candidates) - set(new_candidates))
+    candidate_drift: list[dict[str, Any]] = []
+    for name in sorted(set(old_candidates) & set(new_candidates)):
+        old_entry = old_candidates[name]
+        new_entry = new_candidates[name]
+        if old_entry.get("status") != new_entry.get("status"):
+            candidate_drift.append(
+                {
+                    "candidate": name,
+                    "metric": "status",
+                    "old": old_entry.get("status"),
+                    "new": new_entry.get("status"),
+                }
+            )
+            continue
+        if old_entry.get("status") != "available":
+            continue
+        metrics: list[tuple[str, Any, Any]] = []
+        for key in ("decision", "joint", "direct_passes", "n_population", "flipped_rate_on_d"):
+            metrics.append(
+                (f"headline.{key}", old_entry["headline"].get(key), new_entry["headline"].get(key))
+            )
+        for arm in _NEGATION_ARM_KEYS:
+            for key in ("rate", "n_completed", "n_pass"):
+                metrics.append(
+                    (
+                        f"arms.{arm}.{key}",
+                        old_entry["arms"][arm].get(key),
+                        new_entry["arms"][arm].get(key),
+                    )
+                )
+        for key in ("boundary_only", "exact_only", "mixed"):
+            metrics.append(
+                (
+                    f"discordance.{key}",
+                    old_entry["discordance"].get(key),
+                    new_entry["discordance"].get(key),
+                )
+            )
+        metrics.append(
+            ("n_incomplete", old_entry.get("n_incomplete"), new_entry.get("n_incomplete"))
+        )
+        for metric, old_value, new_value in metrics:
+            if not _recomputed_equal(old_value, new_value):
+                candidate_drift.append(
+                    {"candidate": name, "metric": metric, "old": old_value, "new": new_value}
+                )
+    n_cases = {
+        "old": old["n_cases"],
+        "new": new["n_cases"],
+        "changed": old["n_cases"] != new["n_cases"],
+    }
+    changed = bool(
+        protocol_drift
+        or candidates_added
+        or candidates_removed
+        or candidate_drift
+        or n_cases["changed"]
+    )
+    result.update(
+        {
+            "changed": changed,
+            "comparable": not protocol_drift,
+            "protocol_drift": protocol_drift,
+            "candidates_added": candidates_added,
+            "candidates_removed": candidates_removed,
+            "candidate_drift": candidate_drift,
+            "n_cases": n_cases,
+        }
+    )
+    return result
+
+
 def _rotation_digest(text: str) -> str:
     """SHA-256 hex digest (local copy; no imports from
     rotation.py anywhere in this mirror).
@@ -30035,6 +30359,55 @@ def _render_stop_cause_summary(stopcause_diff: dict[str, Any] | None) -> list[st
     return lines
 
 
+def _render_negation_summary(negation_diff: dict[str, Any] | None) -> list[str]:
+    """Negation comparison lines for the stderr summary."""
+    if type(negation_diff) is not dict:
+        return []
+    available = negation_diff.get("available")
+    if available == "neither":
+        return []
+    if available != "both":
+        missing = "new" if available == "old" else "old"
+        return [
+            f"Negation comparison unavailable: {missing} run did not record the negation probe."
+        ]
+    lines: list[str] = []
+    if negation_diff.get("protocol_drift"):
+        lines.append(
+            "Negation protocol drift: the runs used different negation instruments "
+            "(seed or backend) -- not comparable."
+        )
+    drift = negation_diff.get("candidate_drift") or []
+    decisions = [entry for entry in drift if entry.get("metric") == "headline.decision"]
+    if decisions:
+        lines.append(f"Negation headline decision drift ({len(decisions)}):")
+        for entry in decisions[:5]:
+            lines.append(
+                f"  {_display_id(entry['candidate'])}: "
+                f"{_display_id(entry.get('old'))} -> {_display_id(entry.get('new'))}"
+            )
+    others = [entry for entry in drift if entry.get("metric") != "headline.decision"]
+    if others:
+        lines.append(f"Negation measurement drift ({len(others)}):")
+        for entry in others[:5]:
+            lines.append(
+                f"  {_display_id(entry['candidate'])}/{_display_id(entry.get('metric'))}: "
+                f"{entry.get('old')} -> {entry.get('new')}"
+            )
+        if len(others) > 5:
+            lines.append(f"  ... and {len(others) - 5} more")
+    n_cases = negation_diff.get("n_cases") or {}
+    if n_cases.get("changed"):
+        lines.append(f"Negation case count changed: {n_cases.get('old')} -> {n_cases.get('new')}")
+    added = negation_diff.get("candidates_added") or []
+    removed = negation_diff.get("candidates_removed") or []
+    if added:
+        lines.append(f"Negation candidates added: {', '.join(_display_id(c) for c in added)}")
+    if removed:
+        lines.append(f"Negation candidates removed: {', '.join(_display_id(c) for c in removed)}")
+    return lines
+
+
 def _render_ws_canonical_summary(wscan_diff: dict[str, Any] | None) -> list[str]:
     """Whitespace-canonicalization comparison lines for the stderr summary."""
     if type(wscan_diff) is not dict:
@@ -31351,6 +31724,7 @@ def render_summary(diff: dict[str, Any]) -> str:
     lines.extend(_render_ablation_summary(diff.get("ablation")))
     lines.extend(_render_labeled_block_summary(_payload_section(diff, "confidentiality")))
     lines.extend(_render_answer_collision_summary(diff.get("answer_collision")))
+    lines.extend(_render_negation_summary(diff.get("negation")))
     verdicts = diff["candidate_verdicts"]
     if verdicts:
         lines.append(f"Candidate verdict changes ({len(verdicts)}):")

@@ -6,6 +6,42 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (git history rewritten — owner order, 2026-11-12)
+
+- The repository's git history was rewritten under the owner's
+  authorization to remove the two historical gitleaks fixture
+  strings from all historical blobs: they were replaced with
+  the same replacement strings used at source in W1
+  (`ARBITRARY-TEXT-leak-1`, `probe-value-hunter2-leakprobe`),
+  and the enumeration comments in `.gitleaks.toml` were updated
+  to match. The current tree is byte-identical apart from those
+  comments; a post-rewrite full-history scan with the pinned
+  gitleaks 8.30.1 reports zero findings and the Secret scan
+  history job is green. All commit SHAs from the earliest
+  affected commit onward changed; SHAs cited in records written
+  before 2026-11-12 are pre-rewrite and historical.
+
+### Fixed (negation coverage — external-audit W2 push 3, 2026-11-12)
+
+- The `negation` section is now compared by diff-reports
+  (RR-03): a headline collapse (16/16 joint passes to 0/16)
+  previously read `identical: true` because the section was
+  produced but never dispatched. The new differ validates each
+  side under the recompute standard — exact key sets, the int
+  protocol seed, candidate/case counts against the frozen case
+  generator, and every stored aggregate recomputed from the
+  stored records — and reports protocol, candidate, headline,
+  per-arm and discordance drift; the text summary names it.
+- The diff instrument census is now a mechanical registry
+  (`SECTION_DIFF_KEYS` / `UNDISPATCHED_SECTIONS` in
+  diffreports): 56 dispatched sections, and the 8 sections
+  intentionally not diffed are named with their reasons (four
+  fail-softened CLI diagnostics; four doctor/diff-backends
+  diagnostic surfaces). A census test pins the registry against
+  the actual diff surface so a future section cannot silently
+  go undispatched. Regression tests:
+  `tests/test_w2_negation.py`.
+
 ### Fixed (exact-type admission — external-audit W2 push 2, 2026-11-11)
 
 - Report validators no longer conflate JSON booleans with numbers

@@ -4552,6 +4552,15 @@ def oracle_diff_reports(
 
         return _o_serving_backends_valid(value)
 
+    def _or_negation_valid(value: Any) -> bool:
+        # Mirrors diffreports._valid_negation exactly: the recompute
+        # mirror is shared with cycle 67's oracle so the two oracles
+        # can never drift apart on this section.
+        """Or negation valid."""
+        from tests.test_cycle67_diffreports_audit import _o_negation_valid
+
+        return _o_negation_valid(value)
+
     def _or_answer_collision_valid(value: Any) -> bool:
         # Mirrors diffreports._valid_answer_collision exactly: the
         # availability-level oracle must agree with the implementation
@@ -9497,6 +9506,17 @@ def oracle_diff_reports(
     else:
         _o_sb_available = "neither"
     _o_sb_asymmetric = _o_sb_available not in ("both", "neither")
+    _ng_old_ok = _or_negation_valid(old.get("negation"))
+    _ng_new_ok = _or_negation_valid(new.get("negation"))
+    if _ng_old_ok and _ng_new_ok:
+        _o_ng_available = "both"
+    elif _ng_old_ok:
+        _o_ng_available = "old"
+    elif _ng_new_ok:
+        _o_ng_available = "new"
+    else:
+        _o_ng_available = "neither"
+    _o_ng_asymmetric = _o_ng_available not in ("both", "neither")
     identical = (
         not decision_changed
         and not winner_changed
@@ -9557,6 +9577,7 @@ def oracle_diff_reports(
         and not _o_cf_asymmetric
         and not _o_ac_asymmetric
         and not _o_sb_asymmetric
+        and not _o_ng_asymmetric
     )
     summary = {
         "decision_changed": decision_changed,
@@ -9675,6 +9696,8 @@ def oracle_diff_reports(
         "answer_collision_asymmetric": _o_ac_asymmetric,
         "serving_backends_changed": False,
         "serving_backends_asymmetric": _o_sb_asymmetric,
+        "negation_changed": False,
+        "negation_asymmetric": _o_ng_asymmetric,
         "identical": identical,
     }
     return {
@@ -9738,6 +9761,7 @@ def oracle_diff_reports(
         "confidentiality": {"available": _o_cf_available, "changed": False},
         "answer_collision": {"available": _o_ac_available, "changed": False},
         "serving_backends": {"available": _o_sb_available, "changed": False},
+        "negation": {"available": _o_ng_available, "changed": False},
         "config_drift": config_drift,
         "candidate_verdicts": verdict_changes,
         "evidence": {

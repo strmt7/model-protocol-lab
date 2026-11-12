@@ -1083,17 +1083,20 @@ history modes) and repaired it:
 - The two synthetic fixture strings the default rules flagged were
   replaced at source with non-credential-shaped equivalents that
   preserve each test's invariant. A working-tree scan under the
-  default rules is clean with no allowlist at all; a full-history
-  scan finds exactly the two historical occurrences of the
-  replaced strings and nothing else.
+  default rules is clean with no allowlist at all.
 - The two pre-existing exact-regex allowlist entries (cycle 210)
-  are retained and re-documented in the config as history-only
-  provenance for those immutable historical blobs. They match
-  exact strings, never paths, so a real secret in the same files
-  is still caught. Removing them is an owner decision — the
-  alternatives are a history rewrite or a permanently failing
-  history scan — and is recorded as such in the W1 report; they
-  were not expanded, and no new suppression of any kind was added.
+  were removed on 2026-11-11 under the owner's no-exceptions
+  order (`.gitleaks.toml` now carries no allowlist at all; the
+  cycle-210 pin asserts zero allowlist regexes), and on
+  2026-11-12 the owner authorized a full git history rewrite
+  that replaced the two historical fixture strings in all
+  historical blobs with the same replacement strings used at
+  source above. A full-history scan of the rewritten history
+  with the pinned gitleaks 8.30.1 reports zero findings, and
+  the Secret scan history job is green. All commit SHAs from
+  the earliest affected commit onward changed in the rewrite;
+  SHAs cited in records written before 2026-11-12 are
+  pre-rewrite and historical.
 
 ## Reporting defects
 
