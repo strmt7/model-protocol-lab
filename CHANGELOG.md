@@ -2123,7 +2123,7 @@ All notable changes to this project are documented here. The format follows
   and prefill/id-rewriting composition caveats, verifier
   re-execution of every load-bearing claim) and is
   `docs/TOKENDEPTH_DESIGN.md`. Tests in
-  `tests/test_cycle206_tokendepth.py`.
+  `tests/test_cycle206_depth.py`.
 
 ### Fixed (cycle 206 — per-probe HTML escaping, 2026-10-25)
 
