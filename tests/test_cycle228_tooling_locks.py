@@ -273,6 +273,98 @@ class TestClosedPreexistingLocks(unittest.TestCase):
         self.assertEqual(set(audit_pip[0][1]), set(own_pip[0][1]))
 
 
+class TestPlatformMarkerLines(unittest.TestCase):
+    """RR-07: hand-maintained platform gates a Linux resolution flattens."""
+
+    _CUDA_CLUSTER = {
+        "cuda-bindings": "13.4.4",
+        "cuda-toolkit": "13.2.2",
+        "nvidia-cublas": "13.4.1.3",
+        "nvidia-cuda-cccl": "13.3.4.3.1",
+        "nvidia-cuda-cupti": "13.2.86",
+        "nvidia-cuda-nvrtc": "13.2.86",
+        "nvidia-cuda-runtime": "13.2.86",
+        "nvidia-cudnn-cu13": "9.26.0.51",
+        "nvidia-cufft": "12.2.0.57",
+        "nvidia-cufile": "1.17.1.22",
+        "nvidia-cusolver": "12.2.0.11",
+        "nvidia-cusparse": "12.7.10.12",
+        "nvidia-cusparselt-cu13": "0.8.1",
+        "nvidia-nccl-cu13": "2.30.7",
+        "nvidia-nvjitlink": "13.4.92",
+        "nvidia-nvshmem-cu13": "3.7.2",
+        "nvidia-nvtx": "13.2.86",
+        "triton": "3.9.0",
+    }
+
+    @staticmethod
+    def _names_with_marker(entries: list[tuple[str, list[str]]], marker: str) -> set[str]:
+        """Return package names whose requirement line carries marker."""
+        return {
+            requirement.split("==", 1)[0].strip().lower()
+            for requirement, _hashes in entries
+            if marker in requirement
+        }
+
+    def test_torch_cuda_cluster_linux_marker_lines(self) -> None:
+        """Purpose: Pin every torch CUDA cluster line to upstream's Linux gate
+        Inputs: dev-hf.txt and cocoindex.txt entries
+        Outputs: Each named pin appears once at its pinned version with
+            ``platform_system == "Linux"``.
+        """
+        marker = 'platform_system == "Linux"'
+        for filename in ("dev-hf.txt", "cocoindex.txt"):
+            entries = _entries(REQ_DIR / filename)
+            for name, version in self._CUDA_CLUSTER.items():
+                found = _entry(entries, name)
+                self.assertEqual(len(found), 1, f"{filename}: {name}")
+                self.assertIn(f"=={version}; {marker}", found[0][0], f"{filename}: {name}")
+
+    def test_linux_marker_sets_are_exact(self) -> None:
+        """Purpose: Prevent regeneration from dropping or over-applying gates
+        Inputs: dev-hf.txt, cocoindex.txt and fuzz.txt entries
+        Outputs: The Linux-gated name sets are exactly the torch CUDA
+            cluster in the two torch locks and exactly atheris in fuzz.txt;
+            pure cuda-pathfinder remains unmarked.
+        """
+        cluster_marker = 'platform_system == "Linux"'
+        for filename in ("dev-hf.txt", "cocoindex.txt"):
+            entries = _entries(REQ_DIR / filename)
+            self.assertEqual(
+                self._names_with_marker(entries, cluster_marker),
+                set(self._CUDA_CLUSTER),
+                filename,
+            )
+            pathfinder = _entry(entries, "cuda-pathfinder")
+            self.assertEqual(len(pathfinder), 1, filename)
+            self.assertNotIn(";", pathfinder[0][0], filename)
+        fuzz_entries = _entries(REQ_DIR / "fuzz.txt")
+        self.assertEqual(
+            self._names_with_marker(fuzz_entries, 'sys_platform == "linux"'),
+            {"atheris"},
+        )
+        atheris = _entry(fuzz_entries, "atheris")
+        self.assertEqual(len(atheris), 1)
+        self.assertIn('==3.1.0; sys_platform == "linux"', atheris[0][0])
+
+    def test_platform_marker_headers_document_hand_maintenance(self) -> None:
+        """Purpose: Keep the regeneration instruction attached to the gates
+        Inputs: Header comment blocks in dev-hf.txt, cocoindex.txt, fuzz.txt
+        Outputs: Each header names its platform marker and states that the
+            lines are maintained by hand.
+        """
+        expectations = {
+            "dev-hf.txt": 'platform_system == "Linux"',
+            "cocoindex.txt": 'platform_system == "Linux"',
+            "fuzz.txt": 'sys_platform == "linux"',
+        }
+        for filename, marker in expectations.items():
+            lines = (REQ_DIR / filename).read_text(encoding="utf-8").splitlines()
+            header = "\n".join(line for line in lines[:45] if line.startswith("#"))
+            self.assertIn(marker, header, filename)
+            self.assertIn("maintained by hand", header, filename)
+
+
 class TestPylockEnvironmentAndMechanismText(unittest.TestCase):
     """B-06/B-07: the PEP 751 lock declares its target; text is true."""
 
