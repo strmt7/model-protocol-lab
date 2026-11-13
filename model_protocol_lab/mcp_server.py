@@ -6,7 +6,7 @@ built-in controls, and surface hardening counterfactuals — all
 deterministic, local, and offline, with zero LLM calls beyond the
 backend under test.
 
-Standard library only (json, sys, threading, signal). Speaks MCP over
+Standard library only (json, sys, threading). Speaks MCP over
 stdio using newline-delimited JSON-RPC 2.0. Protocol acceptance is
 liberal on purpose: ``tools/list`` / ``tools/call`` work with no prior
 ``initialize`` (stateless servers must not require it), the 2024-11-05
@@ -48,12 +48,11 @@ import argparse
 import json
 import math
 import os
-import signal
 import sys
 import threading
 from typing import Any, Literal, NoReturn, cast
 
-from model_protocol_lab import __version__, datasets
+from model_protocol_lab import __version__, datasets, platform_caps
 from model_protocol_lab import surfacenoise as sn
 from model_protocol_lab.core import Backend, Fixture, Message
 
@@ -289,49 +288,28 @@ def tool_probe(params: dict[str, Any]) -> dict[str, Any]:
     protocol = sn.freeze_surface_noise_protocol(backend_fingerprint=fingerprint, fixtures=fixtures)
     cancel = threading.Event()
 
+    # The budget deadline is platform_caps.alarm_deadline -- the single
+    # typed implementation doctor's render watchdog also uses.
     # SIGALRM/ITIMER_REAL do not exist on Windows, and signal calls are
-    # main-thread-only: guard the POSIX-only enforcement and degrade to
-    # an unbounded sweep elsewhere (documented above) rather than
-    # letting signal.signal's ValueError escape as -32603 from a worker
-    # thread (BH2B-10). A pre-existing host timer is saved before arming
-    # and re-armed at teardown, like the handler (BH2B-09; the cycle-116
-    # doctor convention) -- the host's alarm is never silently eaten.
-    _has_alarm = (
-        getattr(signal, "SIGALRM", None) is not None
-        and hasattr(signal, "setitimer")
-        and hasattr(signal, "getitimer")
-        and threading.current_thread() is threading.main_thread()
-    )
-
-    def _on_alarm(_signum: int, _frame: object) -> None:
-        """On alarm."""
-        cancel.set()
-
-    with _sweep_lock:
-        previous = signal.signal(signal.SIGALRM, _on_alarm) if _has_alarm else None
-        old_timer = signal.getitimer(signal.ITIMER_REAL) if _has_alarm else (0.0, 0.0)
-        try:
-            if _has_alarm:
-                signal.setitimer(signal.ITIMER_REAL, SWEEP_TIMEOUT_SECONDS)
-            try:
-                report = sn.probe_surface_noise(
-                    prompt,
-                    fixtures,
-                    backend,
-                    protocol,
-                    boundary=boundary,
-                    max_new_tokens=max_new_tokens,
-                    seed=seed,
-                    cancel=cancel,
-                )
-            finally:
-                if _has_alarm:
-                    signal.setitimer(signal.ITIMER_REAL, 0)
-        finally:
-            if _has_alarm:
-                signal.signal(signal.SIGALRM, previous)
-                if old_timer[0] > 0:
-                    signal.setitimer(signal.ITIMER_REAL, old_timer[0], old_timer[1])
+    # main-thread-only: where the deadline cannot arm, the context
+    # manager yields unarmed and the sweep runs unbounded (the
+    # best-effort degradation documented above) rather than letting a
+    # signal error escape as -32603 from a worker thread (BH2B-10).
+    # Expiry only sets the cancel event; the sweep polls it between
+    # forwards. A pre-existing host timer is saved before arming and
+    # re-armed at teardown by the context manager (BH2B-09) -- the
+    # host's alarm is never silently eaten.
+    with _sweep_lock, platform_caps.alarm_deadline(SWEEP_TIMEOUT_SECONDS, cancel.set):
+        report = sn.probe_surface_noise(
+            prompt,
+            fixtures,
+            backend,
+            protocol,
+            boundary=boundary,
+            max_new_tokens=max_new_tokens,
+            seed=seed,
+            cancel=cancel,
+        )
 
     status = report.get("status")
     if status == "cancelled":

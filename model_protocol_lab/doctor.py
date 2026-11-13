@@ -14,13 +14,12 @@ import math
 import os
 import re
 import shlex
-import signal
 import struct
-import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from . import platform_caps
 from .backends import (
     _directory,
     _manifest,
@@ -58,8 +57,9 @@ _TOKENIZER_JSON_CAP = 128 * 1024 * 1024
 # both capped and oversized pairs degrade to "unavailable" instead of
 # feeding a memory bomb to the encoder. The render itself runs under a
 # transient address-space cap (memory bombs -> MemoryError) and a SIGALRM
-# wall-clock budget (CPU-burn loops -> _RenderTimeBudgetExceeded); both
-# degrade the pair to "unavailable". (Jinja still executes inside
+# wall-clock budget (CPU-burn loops -> _RenderTimeBudgetExceeded), both
+# provided by platform_caps; both degrade the pair to "unavailable".
+# (Jinja still executes inside
 # transformers' sandbox; resource exhaustion beyond these bounds -- e.g. on
 # non-Unix platforms or off the main thread, where the OS guards cannot be
 # installed -- is the same exposure as HF's own apply_chat_template. Run
@@ -818,51 +818,17 @@ def _render_with_memory_cap(tokenizer: Any, conversation: list[dict[str, str]]) 
             raise ValueError("chat_template_did_not_render_text")
         return rendered
 
-    try:
-        import resource
-    except ImportError:
+    # The cap itself lives in platform_caps (the single typed home for
+    # the POSIX primitives); the budget exception is named in
+    # reraise_on_restore so a watchdog alarm landing mid-restore still
+    # retries the restore and then reaches the caller, instead of
+    # being swallowed by the cleanup guard (it is a ValueError
+    # subclass) and leaving the cap lowered process-wide.
+    with platform_caps.address_space_cap(
+        256 * 1024 * 1024,
+        reraise_on_restore=(_RenderTimeBudgetExceeded,),
+    ):
         return render()
-    vmsize: int | None = None
-    try:
-        with open("/proc/self/status", encoding="ascii") as status:
-            for line in status:
-                if line.startswith("VmSize:"):
-                    vmsize = int(line.split()[1]) * 1024
-                    break
-    except OSError:
-        vmsize = None
-    if vmsize is None:
-        return render()
-    try:
-        old_soft, old_hard = resource.getrlimit(resource.RLIMIT_AS)
-    except OSError:
-        return render()
-    if old_soft != resource.RLIM_INFINITY:
-        # A tighter ambient limit already governs; respect it, don't touch.
-        return render()
-    new_soft = vmsize + 256 * 1024 * 1024
-    try:
-        resource.setrlimit(resource.RLIMIT_AS, (new_soft, old_hard))
-    except (OSError, ValueError):
-        return render()
-    try:
-        return render()
-    finally:
-        try:
-            resource.setrlimit(resource.RLIMIT_AS, (old_soft, old_hard))
-        except _RenderTimeBudgetExceeded:
-            # The watchdog alarm landed mid-restore. The one-shot alarm is
-            # consumed, so retry the restore, then re-raise: the render's
-            # budget expiry must reach the caller (which degrades the pair
-            # to "unavailable"). Swallowing it here -- the budget exception
-            # is a ValueError subclass, exactly what the cleanup guard
-            # below tolerates -- would leave the address-space cap lowered
-            # process-wide with nothing signaling the corruption.
-            with contextlib.suppress(OSError, ValueError):
-                resource.setrlimit(resource.RLIMIT_AS, (old_soft, old_hard))
-            raise
-        except (OSError, ValueError):
-            pass
 
 
 class _RenderTimeBudgetExceeded(ValueError):
@@ -904,55 +870,18 @@ def _render_with_time_budget(
     a ``ValueError``, which the cleanup guards would otherwise swallow,
     leaving the handler inconsistent).
     """
-    if budget_s <= 0 or not math.isfinite(budget_s):
-        return _render_with_memory_cap(tokenizer, conversation)
-    if not hasattr(signal, "setitimer"):
-        return _render_with_memory_cap(tokenizer, conversation)
-    if threading.current_thread() is not threading.main_thread():
-        # SIGALRM is delivered to the main thread only; arming a timer here
-        # would never fire.
-        return _render_with_memory_cap(tokenizer, conversation)
 
-    def _on_alarm(signum: int, frame: Any) -> None:
-        """On alarm."""
+    def _raise_budget() -> None:
+        """Raise the budget exception."""
         raise _RenderTimeBudgetExceeded(f"chat template render exceeded {budget_s:g}s CPU budget")
 
-    old_handler = signal.getsignal(signal.SIGALRM)
-    old_delay, old_interval = signal.getitimer(signal.ITIMER_REAL)
-    try:
-        signal.signal(signal.SIGALRM, _on_alarm)
-    except (OSError, ValueError, RuntimeError):
+    # The deadline itself is platform_caps.alarm_deadline -- the single
+    # typed implementation the MCP sweep deadline also uses. Where it
+    # cannot arm (non-positive/non-finite budget, no SIGALRM, non-main
+    # thread) the render below runs unbounded, exactly the degradation
+    # the docstring above documents.
+    with platform_caps.alarm_deadline(budget_s, _raise_budget):
         return _render_with_memory_cap(tokenizer, conversation)
-    try:
-        signal.setitimer(signal.ITIMER_REAL, budget_s)
-    except (OSError, ValueError):
-        with contextlib.suppress(OSError, ValueError, RuntimeError):
-            signal.signal(signal.SIGALRM, old_handler)
-        return _render_with_memory_cap(tokenizer, conversation)
-    try:
-        return _render_with_memory_cap(tokenizer, conversation)
-    finally:
-        # Block SIGALRM across teardown: disarming the timer does not retract
-        # an already-pending alarm, which would otherwise fire mid-restore.
-        # A pending alarm delivered here is deferred until the mask is lifted
-        # and then reaches the restored previous handler -- honest Unix
-        # semantics, and the handler/timer restoration stays atomic.
-        try:
-            saved_mask = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGALRM})
-        except (AttributeError, OSError, ValueError, RuntimeError):
-            saved_mask = None
-        try:
-            with contextlib.suppress(OSError, ValueError):
-                signal.setitimer(signal.ITIMER_REAL, 0)
-            with contextlib.suppress(OSError, ValueError, RuntimeError):
-                signal.signal(signal.SIGALRM, old_handler)
-            if old_delay > 0:
-                with contextlib.suppress(OSError, ValueError):
-                    signal.setitimer(signal.ITIMER_REAL, old_delay, old_interval)
-        finally:
-            if saved_mask is not None:
-                with contextlib.suppress(OSError, ValueError, RuntimeError):
-                    signal.pthread_sigmask(signal.SIG_SETMASK, saved_mask)
 
 
 def template_firewall(model_path: str | Path) -> dict[str, Any]:

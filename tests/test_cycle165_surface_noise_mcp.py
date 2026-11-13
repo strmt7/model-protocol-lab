@@ -420,23 +420,34 @@ class MCPPosixGuardTests(unittest.TestCase):
         # still run instead of raising AttributeError.
         import signal as real_signal
 
+        from model_protocol_lab import platform_caps
+
         server = self._load_server()
-        # _load_server returns the shared module now, not a fresh
-        # spec-loaded copy: restore the real signal module so later
-        # tests in this process see unpatched globals.
-        self.addCleanup(setattr, server, "signal", real_signal)
+        # The deadline lives in platform_caps since W3-2, so the
+        # simulation patches platform_caps.signal (patching
+        # server.signal would silently do nothing). Restore the real
+        # signal module so later tests in this process see unpatched
+        # globals.
+        self.addCleanup(setattr, platform_caps, "signal", real_signal)
 
         class NoAlarmSignal:
             """No alarm signal."""
 
             ITIMER_REAL = real_signal.ITIMER_REAL
 
+            def __init__(self):
+                self.setitimer_calls = []
+
+            def setitimer(self, *args):
+                self.setitimer_calls.append(args)
+
             def __getattr__(self, name):
                 if name == "SIGALRM":
                     raise AttributeError("no SIGALRM on this platform")
                 return getattr(real_signal, name)
 
-        server.signal = NoAlarmSignal()
+        fake_signal = NoAlarmSignal()
+        platform_caps.signal = fake_signal
         result = server.tool_probe(
             {
                 "prompt": "MAGICWORD please",
@@ -452,6 +463,10 @@ class MCPPosixGuardTests(unittest.TestCase):
             }
         )
         self.assertEqual(result["structuredContent"]["status"], "ok")
+        # The deadline must never have been armed against the fake:
+        # without SIGALRM the sweep runs unbounded by construction,
+        # not by an exception swallowed somewhere.
+        self.assertEqual(fake_signal.setitimer_calls, [])
 
     def test_timeout_doc_mentions_posix_only(self):
         """Test timeout doc mentions posix only."""

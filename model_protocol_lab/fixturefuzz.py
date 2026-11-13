@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from . import platform_caps
 from .core import Split
 from .datasets import load_dataset, parse_dataset
 from .fixtures import parse_fixture_csv, read_authoring_file
@@ -219,7 +220,12 @@ def _materialize(case: FuzzCase, workdir: Path) -> Path:
         return workdir / f"absent-{case.name}"
     path = workdir / f"{case.name}.fixture"
     if case.file_kind == "fifo":
-        os.mkfifo(path)
+        if not platform_caps.make_fifo(path):
+            # Unreachable through evaluate_case, which short-circuits
+            # unsupported platforms before observing; a direct caller
+            # gets a rejection-class error rather than a path whose
+            # shape was never created.
+            raise ValueError(f"{case.name}: fifo unsupported on this platform")
         return path
     payload = case.payload
     if type(payload) is not bytes:  # constructor-enforced
@@ -302,6 +308,21 @@ def evaluate_case(
     class name -- never exception message text, whose wording varies
     by interpreter version even when the outcome does not.
     """
+    if case.file_kind == "fifo" and not platform_caps.FIFO_SUPPORTED:
+        # The shape cannot be created on this platform, so the loader
+        # never sees a fifo. Record that honestly as its own kind --
+        # conforming because both fifo cases expect rejection -- rather
+        # than crashing on a missing os.mkfifo or silently pointing the
+        # loader at a missing path and conforming for the wrong reason.
+        return CaseResult(
+            case.name,
+            case.target,
+            case.expected,
+            "reject",
+            True,
+            "platform_unsupported",
+            "fifo unsupported on this platform; loader rejection not exercised",
+        )
     observed, split, warnings, exc = _observe(
         case, workdir, parse_json, parse_csv, load_json_file, read_csv_file
     )
