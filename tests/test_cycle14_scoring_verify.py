@@ -48,6 +48,7 @@ import random
 import struct
 import unittest
 
+import pytest
 import torch
 
 from model_protocol_lab.scoring import (
@@ -58,6 +59,8 @@ from model_protocol_lab.scoring import (
     score_span_from_logits,
     score_target_logprobs,
 )
+
+pytestmark = pytest.mark.hf
 
 # ---------------------------------------------------------------------------
 # Independent reference (math definition, no torch, no max-shift).

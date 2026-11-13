@@ -178,6 +178,9 @@ class WeightHeaderRobustnessTests(unittest.TestCase):
         self.assertEqual(result["status"], "failed")
         self.assertIn("invalid_safetensors_header", result["detail"])
 
+    @unittest.skipUnless(
+        hasattr(os, "mkfifo"), "POSIX-only: os.mkfifo does not exist on this platform"
+    )
     def test_fifo_shard_fails_closed_without_hang(self):
         """Test fifo shard fails closed without hang."""
         from model_protocol_lab.doctor import _check_weight_headers
@@ -196,6 +199,9 @@ class WeightHeaderRobustnessTests(unittest.TestCase):
         self.assertFalse(thread.is_alive(), "FIFO open hung")
         self.assertEqual(outcome["result"]["status"], "failed")
 
+    @unittest.skipUnless(
+        hasattr(os, "mkfifo"), "POSIX-only: os.mkfifo does not exist on this platform"
+    )
     def test_read_json_fifo_fails_closed_without_hang(self):
         """Test read json fifo fails closed without hang."""
         from model_protocol_lab.backends import _read_json
@@ -270,6 +276,12 @@ class ConfigOutputBoundTests(unittest.TestCase):
 class ChatTemplateMemoryCapTests(unittest.TestCase):
     """A hostile chat_template must not transiently OOM the process."""
 
+    @unittest.skipUnless(
+        os.name == "posix",
+        "POSIX-only: resource.getrusage(RUSAGE_SELF) measurement and the "
+        "RLIMIT_AS memory cap it verifies do not exist on win32 "
+        "(the render degrades to an uncapped render there)",
+    )
     def test_bomb_render_raises_memory_error_without_rss_growth(self):
         """Test bomb render raises memory error without rss growth."""
         import resource

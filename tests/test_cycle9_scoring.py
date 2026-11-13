@@ -18,6 +18,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
 import torch
 
 from model_protocol_lab.scoring import (
@@ -29,6 +30,8 @@ from model_protocol_lab.scoring import (
     score_span_from_logits,
     score_target_logprobs,
 )
+
+pytestmark = pytest.mark.hf
 
 REQUIRED = ("torch", "transformers", "safetensors", "tokenizers")
 HAS_HF = all(importlib.util.find_spec(name) is not None for name in REQUIRED)

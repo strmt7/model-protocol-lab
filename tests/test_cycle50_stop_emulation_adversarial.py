@@ -106,6 +106,7 @@ from __future__ import annotations
 import random
 import unittest
 
+import pytest
 import torch
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers
 from transformers import PreTrainedTokenizerFast
@@ -116,6 +117,8 @@ from model_protocol_lab.backends import (
     _hf_byte_token_mapper,
     emulate_hf_stop_string,
 )
+
+pytestmark = pytest.mark.hf
 
 HAS_HF = True  # torch + transformers imported above; fail loudly otherwise.
 

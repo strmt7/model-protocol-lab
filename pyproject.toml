@@ -91,6 +91,16 @@ show_error_codes = true
 module = ["torch", "transformers", "jinja2"]
 ignore_missing_imports = true
 
+[tool.pytest.ini_options]
+# Marker registrations only (W3-3): no addopts, no testpaths, no
+# deselection -- the default collection is unchanged. The normative
+# layer selection is explicit paths from tests/test_layers.json via
+# tools/layer_paths.py (markers are inert under unittest discovery).
+markers = [
+  "hf: requires the .[hf] extra (top-level torch/transformers import); see tests/test_layers.json",
+  "posix: requires POSIX (resource/RLIMIT/SIGALRM semantics); see tests/test_layers.json",
+]
+
 [tool.coverage.run]
 source = ["model_protocol_lab"]
 branch = true

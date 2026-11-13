@@ -91,6 +91,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
+import pytest
 import torch
 
 from model_protocol_lab import core as real_core
@@ -105,6 +106,8 @@ from model_protocol_lab.experiments import (
     prompt_sensitivity_sweep,
     run_experiment,
 )
+
+pytestmark = pytest.mark.hf
 
 _SENTINEL = object()
 

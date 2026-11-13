@@ -39,6 +39,7 @@ import sys
 import unittest
 from threading import Event
 
+import pytest
 import torch
 
 from model_protocol_lab.core import Generation
@@ -51,6 +52,8 @@ from model_protocol_lab.scoring import (
     score_span_from_logits,
     score_target_logprobs,
 )
+
+pytestmark = pytest.mark.hf
 
 
 def _oracle_f32(value: float) -> float:

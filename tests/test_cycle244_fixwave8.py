@@ -45,8 +45,12 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from model_protocol_lab import diffreports, mcp_server, reporting, surfacenoise
 from tests.test_cycle195_choiceaudit import _run_stage as _choiceaudit_run_stage
+
+pytestmark = pytest.mark.hf
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

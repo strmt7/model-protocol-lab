@@ -27,6 +27,7 @@ import json
 import unittest
 from contextlib import redirect_stdout
 
+import pytest
 import torch
 
 from model_protocol_lab.cli import build_parser
@@ -38,6 +39,8 @@ from model_protocol_lab.experiments import (
 )
 from model_protocol_lab.reporting import render_html
 from model_protocol_lab.scoring import TargetScore
+
+pytestmark = pytest.mark.hf
 
 
 class ScriptTokenizer:

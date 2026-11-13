@@ -31,6 +31,7 @@ import random
 import struct
 import unittest
 
+import pytest
 import torch
 
 from model_protocol_lab.core import Fixture, Message
@@ -44,6 +45,8 @@ from model_protocol_lab.experiments import (
     logprob_diagnostic,
 )
 from model_protocol_lab.scoring import TargetScore
+
+pytestmark = pytest.mark.hf
 
 DERAILED = LOGPROB_DERAILED_MEAN_THRESHOLD  # -2.0
 UNKNOWN = LOGPROB_UNKNOWN_MEAN_THRESHOLD  # -5.0

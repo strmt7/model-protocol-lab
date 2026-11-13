@@ -13,7 +13,7 @@ CLI on macOS and Windows —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9907 tests collected**
+- `python -m pytest -q -p no:cacheprovider` — **9914 tests collected**
   (W3 push 2, 2026-11-13). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
@@ -621,7 +621,7 @@ doctor's resource fallbacks degrade there.
   cross-pin test guards the §6/§15 split.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (342 files in that CI scope; the repo-root scope counts more.
+  (344 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (76 source files).

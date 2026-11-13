@@ -101,6 +101,7 @@ from collections.abc import Callable
 from threading import Event
 from typing import Any
 
+import pytest
 import torch
 
 from model_protocol_lab.core import (
@@ -113,6 +114,8 @@ from model_protocol_lab.core import (
 )
 from model_protocol_lab.experiments import FAILURE_MODES, failure_taxonomy, run_experiment
 from model_protocol_lab.scoring import score_target_logprobs
+
+pytestmark = pytest.mark.hf
 
 _SENTINEL = object()
 

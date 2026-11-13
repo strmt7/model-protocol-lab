@@ -56,6 +56,7 @@ import sys
 import unittest
 
 import numpy as np
+import pytest
 import torch
 
 from model_protocol_lab.scoring import (
@@ -76,6 +77,8 @@ from model_protocol_lab.scoring import (
     check_alignment,
     score_span_from_logits,
 )
+
+pytestmark = pytest.mark.hf
 
 # ---------------------------------------------------------------------------
 # Independent oracles (written from the definitions, not from the engine).

@@ -43,6 +43,7 @@ import threading
 import unittest
 from pathlib import Path
 
+import pytest
 import torch
 
 from model_protocol_lab import choiceaudit, cli, diffreports, reporting, scorerlens
@@ -63,6 +64,8 @@ from model_protocol_lab.choiceaudit import (
 )
 from model_protocol_lab.core import Fixture, Format, Message
 from model_protocol_lab.experiments import choiceaudit_analysis, choiceaudit_stage
+
+pytestmark = pytest.mark.hf
 
 _SENTINEL = object()
 

@@ -9,12 +9,16 @@ tree. Every test fails on the pre-fix code and passes after.
 
 import math
 import os
-import resource
 import signal
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
+
+try:
+    import resource
+except ImportError:  # the resource module does not exist on Windows
+    resource = None
 
 from model_protocol_lab import cli, doctor, reporting
 from model_protocol_lab.reporting import (
@@ -230,7 +234,11 @@ class FakeTokenizer:
         return "hello"
 
 
-@unittest.skipIf(not hasattr(signal, "SIGALRM"), "needs POSIX SIGALRM")
+@unittest.skipIf(
+    resource is None or not hasattr(signal, "SIGALRM"),
+    "POSIX-only: resource/RLIMIT_AS + SIGALRM semantics (finding 2); "
+    "the resource module does not exist on win32",
+)
 class TestRlimitRestoreRace(unittest.TestCase):
     """Finding 2: a budget alarm landing mid-restore must not be swallowed."""
 

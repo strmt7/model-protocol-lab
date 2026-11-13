@@ -1,0 +1,416 @@
+{
+ "schema": 1,
+ "about": "Test-layer partition for W3-3 (RR-08). Re-derived from an AST import scan and pinned by tests/test_w3_test_layers.py; regenerate with the scan in that test, never by hand-waving. Layer = collection requirement: base collects and runs on .[dev] alone; hf needs .[dev,hf]; posix needs a POSIX platform. Collection requirement is transitive through top-level test-tree imports (a base module importing an hf test module is hf). The default full-suite collection ignores this file entirely (no conftest, no deselection).",
+ "tracked_imports": [
+  "numpy",
+  "resource",
+  "tokenizers",
+  "torch",
+  "transformers"
+ ],
+ "blocked_in_simulation": [
+  "numpy",
+  "resource",
+  "tokenizers",
+  "torch",
+  "transformers"
+ ],
+ "layers": {
+  "base": [
+   "test_adapter_integration.py",
+   "test_backend_assets.py",
+   "test_ci_portability_guard.py",
+   "test_core.py",
+   "test_cycle1.py",
+   "test_cycle100_html_injection_audit.py",
+   "test_cycle101_warning_cleanliness.py",
+   "test_cycle102_oserror_branches.py",
+   "test_cycle105_optional_dependency_audit.py",
+   "test_cycle109_split_properties.py",
+   "test_cycle10_families.py",
+   "test_cycle10_security.py",
+   "test_cycle10_sglang.py",
+   "test_cycle110_truncate_properties.py",
+   "test_cycle111_determinism_audit.py",
+   "test_cycle114_bidi_sanitization_audit.py",
+   "test_cycle115_manifest_fingerprint_audit.py",
+   "test_cycle116_render_cpu_budget_audit.py",
+   "test_cycle117_local_loading_invariant_audit.py",
+   "test_cycle118_render_watchdog_hardening_audit.py",
+   "test_cycle119_pickle_deserialization_invariant_audit.py",
+   "test_cycle11_bounds.py",
+   "test_cycle11_families.py",
+   "test_cycle120_selection_rule_properties.py",
+   "test_cycle121_frontier_chart_audit.py",
+   "test_cycle122_decision_ribbon_audit.py",
+   "test_cycle124_margin_trajectory_audit.py",
+   "test_cycle125_frontier_diff_audit.py",
+   "test_cycle126_safe_budget_floor_audit.py",
+   "test_cycle127_flip_attribution_audit.py",
+   "test_cycle128_attribution_diff_audit.py",
+   "test_cycle129_selection_consistency_audit.py",
+   "test_cycle12_portability.py",
+   "test_cycle130_held_out_floor_audit.py",
+   "test_cycle131_verify_audit.py",
+   "test_cycle132_contamination.py",
+   "test_cycle133_docs_coherence_audit.py",
+   "test_cycle134_boundary_audit.py",
+   "test_cycle135_marker_isolation.py",
+   "test_cycle136_template_firewall.py",
+   "test_cycle137_selection_robustness.py",
+   "test_cycle138_transfer.py",
+   "test_cycle13_diffreports.py",
+   "test_cycle13_families.py",
+   "test_cycle144_perturbation.py",
+   "test_cycle145_wave2_hardening.py",
+   "test_cycle146_token_healing.py",
+   "test_cycle147_hierarchy.py",
+   "test_cycle148_prefill.py",
+   "test_cycle149_portfolio.py",
+   "test_cycle14_hfstop.py",
+   "test_cycle14_holdback.py",
+   "test_cycle14_k2horizon_families.py",
+   "test_cycle14_sglang_verify.py",
+   "test_cycle150_synthhistory.py",
+   "test_cycle153_batchinv.py",
+   "test_cycle154_position.py",
+   "test_cycle155_stopcause.py",
+   "test_cycle156_wscanonical.py",
+   "test_cycle157_structured.py",
+   "test_cycle158_fixups.py",
+   "test_cycle159_deliforge.py",
+   "test_cycle15_budget_frontier.py",
+   "test_cycle15_divergence_verify.py",
+   "test_cycle15_hy4_minimax_nanbeige_families.py",
+   "test_cycle160_fewshot.py",
+   "test_cycle161_agent_context.py",
+   "test_cycle161_cocoindex_agent_search.py",
+   "test_cycle161_crawl4ai_tool.py",
+   "test_cycle162_faketurn.py",
+   "test_cycle163_toolcall.py",
+   "test_cycle164_verbosity.py",
+   "test_cycle165_surface_noise_mcp.py",
+   "test_cycle165_surfacenoise.py",
+   "test_cycle166_template_robustness.py",
+   "test_cycle167_ablation.py",
+   "test_cycle168_cacheprofile.py",
+   "test_cycle168_cacheprofile_gaps.py",
+   "test_cycle169_confidentiality.py",
+   "test_cycle169_confidentiality_gaps.py",
+   "test_cycle16_stop_matrix_verify.py",
+   "test_cycle170_answer_collision.py",
+   "test_cycle170_answer_collision_gaps.py",
+   "test_cycle171_pack.py",
+   "test_cycle171_pack_gaps.py",
+   "test_cycle172_fixturefuzz.py",
+   "test_cycle173_determinism.py",
+   "test_cycle174_refusals.py",
+   "test_cycle175_wave7_fixes.py",
+   "test_cycle176_wave7_fixes.py",
+   "test_cycle177_wave7_fixes.py",
+   "test_cycle178_docs_currency.py",
+   "test_cycle179_cli_dispatch.py",
+   "test_cycle17_sensitivity_sweep_verify.py",
+   "test_cycle180_scorerlens.py",
+   "test_cycle181_aliasing.py",
+   "test_cycle182_templateprobe.py",
+   "test_cycle183_repetition.py",
+   "test_cycle184_distraction.py",
+   "test_cycle185_leading.py",
+   "test_cycle186_numform.py",
+   "test_cycle188_dateline.py",
+   "test_cycle189_multiturn.py",
+   "test_cycle190_numform_f3.py",
+   "test_cycle191_needle.py",
+   "test_cycle192_batchpath.py",
+   "test_cycle193_placement.py",
+   "test_cycle196_oversight_fixes.py",
+   "test_cycle198_precision.py",
+   "test_cycle199_confidence.py",
+   "test_cycle19_failure_taxonomy_verify.py",
+   "test_cycle2.py",
+   "test_cycle201_readiness.py",
+   "test_cycle202_wave9_fixes.py",
+   "test_cycle203_rotation.py",
+   "test_cycle204_density.py",
+   "test_cycle205_fieldorder.py",
+   "test_cycle206_depth.py",
+   "test_cycle207_corrections.py",
+   "test_cycle208_release_readiness2.py",
+   "test_cycle209_canonicalform.py",
+   "test_cycle20_evaluate_verify.py",
+   "test_cycle210_enterprise_hardening.py",
+   "test_cycle211_windows_open_flags.py",
+   "test_cycle212_negation.py",
+   "test_cycle213_toc_body.py",
+   "test_cycle214_docs_site.py",
+   "test_cycle215_enterprise_polish2.py",
+   "test_cycle216_corrections.py",
+   "test_cycle217_codeql_logging.py",
+   "test_cycle217_deepsource_inventory.py",
+   "test_cycle217_findings_guard.py",
+   "test_cycle217_workflow_pinning.py",
+   "test_cycle218_instructiondistance.py",
+   "test_cycle219_historyframe.py",
+   "test_cycle21_run_experiment_verify.py",
+   "test_cycle220_prunesweep.py",
+   "test_cycle221_recordnotation.py",
+   "test_cycle223_invisiblechars.py",
+   "test_cycle224_confusableskeleton.py",
+   "test_cycle225_findings_integrity.py",
+   "test_cycle226_json_discipline.py",
+   "test_cycle226_operability.py",
+   "test_cycle226_pack_container.py",
+   "test_cycle227_findings.py",
+   "test_cycle228_package_fixes.py",
+   "test_cycle228_release_tooling.py",
+   "test_cycle228_tooling_locks.py",
+   "test_cycle229_fixdown_wave1.py",
+   "test_cycle22_reporting_verify.py",
+   "test_cycle231_compatibilityform.py",
+   "test_cycle233_enumerationconvention.py",
+   "test_cycle237_typographicemphasis.py",
+   "test_cycle23_debug_helpers_verify.py",
+   "test_cycle241_fixwaves.py",
+   "test_cycle243_serving_backends.py",
+   "test_cycle24_leak_sweep.py",
+   "test_cycle25_doctor_assets_verify.py",
+   "test_cycle27_diffreports_verify.py",
+   "test_cycle28_docstring_contract.py",
+   "test_cycle29_fixtures_verify.py",
+   "test_cycle3.py",
+   "test_cycle30_datasets_verify.py",
+   "test_cycle31_cli_verify.py",
+   "test_cycle32_core_verify.py",
+   "test_cycle33_reporting_verify.py",
+   "test_cycle34_experiments_verify.py",
+   "test_cycle35_backends_verify.py",
+   "test_cycle36_debug_repl_verify.py",
+   "test_cycle37_diffbackends_verify.py",
+   "test_cycle39_catalog_integrity.py",
+   "test_cycle4.py",
+   "test_cycle40_doctor_verify.py",
+   "test_cycle41_api_surface_verify.py",
+   "test_cycle42_core_helpers_verify.py",
+   "test_cycle43_leak_sweep.py",
+   "test_cycle44_validation_audit.py",
+   "test_cycle45_run_experiment_audit.py",
+   "test_cycle46_docs_accuracy_audit.py",
+   "test_cycle47_sample_report_audit.py",
+   "test_cycle48_evidence_leak_sweep3.py",
+   "test_cycle52_muse_spark.py",
+   "test_cycle53_ling_template_audit.py",
+   "test_cycle54_qwen38.py",
+   "test_cycle55_evaluate_audit.py",
+   "test_cycle56_sensitivity_sweep_audit.py",
+   "test_cycle57_budget_frontier_audit.py",
+   "test_cycle58_html_escaping_audit.py",
+   "test_cycle59_boundary_portability_audit.py",
+   "test_cycle5_audit.py",
+   "test_cycle5_catalog.py",
+   "test_cycle5_report.py",
+   "test_cycle5_stop.py",
+   "test_cycle60_concurrency_robustness.py",
+   "test_cycle62_doctor_portability_audit.py",
+   "test_cycle63_heldout_separation_audit.py",
+   "test_cycle64_cli_surface_audit.py",
+   "test_cycle65_backend_determinism_audit.py",
+   "test_cycle66_fixture_loading_audit.py",
+   "test_cycle67_diffreports_audit.py",
+   "test_cycle68_pipeline_e2e_audit.py",
+   "test_cycle6_debug.py",
+   "test_cycle6_diff.py",
+   "test_cycle6_families.py",
+   "test_cycle71_debug_repl_audit.py",
+   "test_cycle72_doctor_integration_audit.py",
+   "test_cycle73_diffbackends_audit.py",
+   "test_cycle74_catalog_render_audit.py",
+   "test_cycle75_reporting_determinism_audit.py",
+   "test_cycle77_classification_taxonomy_audit.py",
+   "test_cycle78_run_experiment_audit.py",
+   "test_cycle79_evaluate_engine_audit.py",
+   "test_cycle7_divergence.py",
+   "test_cycle7_families.py",
+   "test_cycle7_properties.py",
+   "test_cycle80_token_literal_audit.py",
+   "test_cycle81_localhf_backend_audit.py",
+   "test_cycle82_fixture_serialization_audit.py",
+   "test_cycle83_cli_wiring_audit.py",
+   "test_cycle84_release_readiness.py",
+   "test_cycle85_readme_quickstart_audit.py",
+   "test_cycle86_serialization_properties.py",
+   "test_cycle87_docs_coherence_audit.py",
+   "test_cycle88_parser_hostile_properties.py",
+   "test_cycle89_signal_handling_audit.py",
+   "test_cycle8_selection.py",
+   "test_cycle90_cancel_responsiveness_audit.py",
+   "test_cycle96_redteam_sweep.py",
+   "test_cycle97_hostile_environment.py",
+   "test_cycle98_boundary_properties.py",
+   "test_cycle99_plan_currency.py",
+   "test_cycle9_diagnostics.py",
+   "test_cycle9_families.py",
+   "test_doctor.py",
+   "test_e2e.py",
+   "test_fuzz_boundary.py",
+   "test_gitleaks_sensitivity.py",
+   "test_hardening.py",
+   "test_release_policy.py",
+   "test_round3.py",
+   "test_sample_report.py",
+   "test_semantic_key_repairs.py",
+   "test_w2_exact_type.py",
+   "test_w2_input_boundary.py",
+   "test_w2_negation.py",
+   "test_w2_projection.py",
+   "test_w2_section_states.py",
+   "test_w2_wave10.py",
+   "test_w3_platform_caps.py",
+   "test_w3_test_layers.py",
+   "test_workflows.py"
+  ],
+  "hf": [
+   "test_cycle10_logprob.py",
+   "test_cycle14_scoring_verify.py",
+   "test_cycle18_logprob_diagnostic_verify.py",
+   "test_cycle195_choiceaudit.py",
+   "test_cycle244_fixwave8.py",
+   "test_cycle38_scoring_verify.py",
+   "test_cycle49_logprob_numerics_audit.py",
+   "test_cycle50_stop_emulation_adversarial.py",
+   "test_cycle69_diagnostics_audit.py",
+   "test_cycle76_scoring_semantics_audit.py",
+   "test_cycle91_hostile_backend_audit.py",
+   "test_cycle9_scoring.py"
+  ],
+  "posix": [
+   "test_cycle132_security_findings.py"
+  ]
+ },
+ "func_level": {
+  "test_adapter_integration.py": [
+   "tokenizers",
+   "torch",
+   "transformers"
+  ],
+  "test_cycle1.py": [
+   "tokenizers",
+   "torch",
+   "transformers"
+  ],
+  "test_cycle105_optional_dependency_audit.py": [
+   "torch"
+  ],
+  "test_cycle12_portability.py": [
+   "tokenizers"
+  ],
+  "test_cycle135_marker_isolation.py": [
+   "tokenizers"
+  ],
+  "test_cycle14_hfstop.py": [
+   "torch",
+   "transformers"
+  ],
+  "test_cycle182_templateprobe.py": [
+   "tokenizers"
+  ],
+  "test_cycle192_batchpath.py": [
+   "tokenizers",
+   "torch",
+   "transformers"
+  ],
+  "test_cycle198_precision.py": [
+   "torch"
+  ],
+  "test_cycle24_leak_sweep.py": [
+   "tokenizers"
+  ],
+  "test_cycle25_doctor_assets_verify.py": [
+   "tokenizers",
+   "transformers"
+  ],
+  "test_cycle34_experiments_verify.py": [
+   "torch"
+  ],
+  "test_cycle36_debug_repl_verify.py": [
+   "tokenizers"
+  ],
+  "test_cycle40_doctor_verify.py": [
+   "tokenizers"
+  ],
+  "test_cycle41_api_surface_verify.py": [
+   "numpy",
+   "tokenizers"
+  ],
+  "test_cycle43_leak_sweep.py": [
+   "tokenizers"
+  ],
+  "test_cycle44_validation_audit.py": [
+   "torch",
+   "transformers"
+  ],
+  "test_cycle46_docs_accuracy_audit.py": [
+   "tokenizers"
+  ],
+  "test_cycle48_evidence_leak_sweep3.py": [
+   "tokenizers",
+   "transformers"
+  ],
+  "test_cycle64_cli_surface_audit.py": [
+   "tokenizers"
+  ],
+  "test_cycle65_backend_determinism_audit.py": [
+   "torch"
+  ],
+  "test_cycle67_diffreports_audit.py": [
+   "torch"
+  ],
+  "test_cycle71_debug_repl_audit.py": [
+   "tokenizers"
+  ],
+  "test_cycle72_doctor_integration_audit.py": [
+   "tokenizers"
+  ],
+  "test_cycle81_localhf_backend_audit.py": [
+   "tokenizers",
+   "torch",
+   "transformers"
+  ],
+  "test_cycle89_signal_handling_audit.py": [
+   "tokenizers",
+   "transformers"
+  ],
+  "test_cycle96_redteam_sweep.py": [
+   "resource"
+  ],
+  "test_doctor.py": [
+   "tokenizers"
+  ],
+  "test_round3.py": [
+   "tokenizers",
+   "torch",
+   "transformers"
+  ],
+  "test_w3_platform_caps.py": [
+   "resource"
+  ]
+ },
+ "posix_classes": {
+  "test_cycle132_security_findings.py": [
+   "TestRlimitRestoreRace"
+  ]
+ },
+ "posix_methods": {
+  "test_cycle96_redteam_sweep.py": [
+   "ChatTemplateMemoryCapTests.test_bomb_render_raises_memory_error_without_rss_growth",
+   "WeightHeaderRobustnessTests.test_fifo_shard_fails_closed_without_hang",
+   "WeightHeaderRobustnessTests.test_read_json_fifo_fails_closed_without_hang"
+  ]
+ },
+ "module_counts": {
+  "total": 264,
+  "base": 251,
+  "hf": 12,
+  "posix": 1
+ }
+}
