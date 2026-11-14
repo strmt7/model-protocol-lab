@@ -15,7 +15,7 @@ the base test layer there (collection only, not a suite run) —
 the Jinja render watchdog, the MCP server's SIGALRM budget, and
 doctor's resource fallbacks degrade there.
 
-- `python -m pytest -q -p no:cacheprovider` — **9920 tests collected**
+- `python -m pytest -q -p no:cacheprovider` — **9921 tests collected**
   (W3-6 windows cell, 2026-11-14). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,

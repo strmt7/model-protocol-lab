@@ -50,11 +50,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--format", choices=("paths", "modules"), default="paths")
     args = parser.parse_args(argv)
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    for name in layer_members(manifest, args.layer):
-        if args.format == "paths":
-            print(f"tests/{name}")
-        else:
-            print(f"tests.{Path(name).stem}")
+    lines = [
+        f"tests/{name}" if args.format == "paths" else f"tests.{Path(name).stem}"
+        for name in layer_members(manifest, args.layer)
+    ]
+    # Byte-exact output is the contract: the documented use is shell
+    # command substitution (`pytest $(python tools/layer_paths.py
+    # ...)`), and a Windows text-mode stdout translates "\n" to
+    # "\r\n", gluing a carriage return onto every printed path so
+    # the consumer rejects paths that exist (proven by the first
+    # Windows portable run, W3-6). Write bytes so the output is
+    # identical on every platform.
+    data = ("\n".join(lines) + "\n").encode("utf-8")
+    buffer = getattr(sys.stdout, "buffer", None)
+    if buffer is not None:
+        buffer.write(data)
+        buffer.flush()
+    else:
+        sys.stdout.write(data.decode("utf-8"))
     return 0
 
 

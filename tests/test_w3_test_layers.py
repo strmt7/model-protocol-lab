@@ -33,6 +33,8 @@ execution), nor anything about other platform absences.
 from __future__ import annotations
 
 import ast
+import importlib.util
+import io
 import json
 import os
 import re
@@ -40,6 +42,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent
@@ -280,6 +283,48 @@ class ManifestContractTests(unittest.TestCase):
                 [f"tests.{Path(n).stem}" for n in names],
                 layer,
             )
+
+    def test_layer_paths_output_is_byte_exact_under_translating_stdout(self):
+        """Regression (W3-6, first Windows portable run): the tool's
+        output feeds shell command substitution, so it must be
+        byte-exact even when sys.stdout is a Windows text-mode
+        stream that translates newlines to CRLF on write(). The
+        pre-fix tool printed through write(), and pytest on Windows
+        rejected every printed path as not found (a carriage return
+        glued to each name). The tool must write bytes to the raw
+        buffer instead; this fake reproduces the translation so the
+        defect is exercised on any host."""
+
+        class _TranslatingStdout:
+            """A Windows text-mode stdout stand-in: write() encodes
+            with CRLF translation; .buffer is the raw byte sink."""
+
+            def __init__(self) -> None:
+                self.buffer = io.BytesIO()
+
+            def write(self, text: str) -> int:
+                self.buffer.write(text.replace("\n", "\r\n").encode("utf-8"))
+                return len(text)
+
+            def flush(self) -> None:
+                pass
+
+        spec = importlib.util.spec_from_file_location(
+            "layer_paths_under_test", REPO_ROOT / "tools" / "layer_paths.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        fake = _TranslatingStdout()
+        with mock.patch.object(sys, "stdout", fake):
+            rc = module.main(["--layer", "base"])
+        self.assertEqual(rc, 0)
+        raw = fake.buffer.getvalue()
+        self.assertNotIn(b"\r", raw)
+        manifest = _load_manifest()
+        self.assertEqual(
+            raw.decode("utf-8").split(),
+            [f"tests/{n}" for n in sorted(manifest["layers"]["base"])],
+        )
 
 
 @unittest.skipIf(
