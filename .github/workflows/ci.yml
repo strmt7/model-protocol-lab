@@ -48,7 +48,7 @@ jobs:
       - run: mypy model_protocol_lab
 
   test:
-    name: tests (Python ${{ matrix.python-version }}, with hf extra)
+    name: tests (Python ${{ matrix.python-version }}, hashed dev-hf lock)
     runs-on: ubuntu-latest
     timeout-minutes: 180
     # Least privilege: checkout needs contents:read; the Codecov OIDC

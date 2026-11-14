@@ -85,7 +85,7 @@ optional verification step — it is thorough rather than quick:
 python -m unittest discover -s tests -t .   # optional; expect roughly 20–55 minutes
 ```
 
-To run a model you also need the optional dependencies and a trusted,
+User route: to run a model you also need the optional dependencies and a trusted,
 already-downloaded checkpoint directory (the adapter never downloads models):
 
 ```sh
@@ -93,7 +93,7 @@ python -m pip install -e ".[hf]"
 python -m model_protocol_lab doctor --model path/to/checkpoint --dataset examples/fixtures.json
 ```
 
-Contributors: the dev toolchain (`.[dev]`, for lint, types, tests, and coverage) is a separate install — see [CONTRIBUTING.md](CONTRIBUTING.md). It is not needed to run the tool.
+Contributors: development uses a separate, hash-pinned setup (the locks CI installs) — see [CONTRIBUTING.md](CONTRIBUTING.md). The installs on this page are the user route: they run the tool, they are not the development environment, and their results are not gate-equivalent. The dev toolchain is not needed to run the tool.
 
 `doctor` validates the checkpoint assets and fixture file before any run and
 never loads model weights. It even suggests the exact `run` command to use
@@ -126,8 +126,9 @@ https://strmt7.github.io/model-protocol-lab/. The same pages live in
 this repository under [docs/](docs/index.md), starting from the
 [documentation index](docs/index.md); [docs/USAGE.md](docs/USAGE.md)
 remains the complete command reference. To build the site locally:
-`python -m pip install -r requirements-docs.txt`, then
-`mkdocs build --strict`. The build tooling is documentation-only —
+`python -m pip install --require-hashes -r requirements-docs.txt`, then
+`mkdocs build --strict` (the documentation toolchain's own pinned lock —
+the same file the Docs workflow installs). The build tooling is documentation-only —
 the package itself keeps zero runtime dependencies in the core install;
 measuring a checkpoint requires the optional `hf` extra
 (torch/transformers/safetensors/jinja2).

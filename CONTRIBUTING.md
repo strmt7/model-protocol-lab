@@ -23,20 +23,63 @@ the direction is agreed before the work is done.
 ## Setup
 
 Python 3.11 or newer is required (CI tests 3.11, 3.12 and 3.13). Use a
-dedicated virtual environment:
+dedicated virtual environment. The canonical setup installs the same
+hash-pinned requirement locks CI installs, in the same order — this is
+the only setup whose tool versions are the versions the gate is
+enforced with:
 
 ```sh
 python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e ".[dev]"      # lint, types, tests, coverage
-python -m pip install -e ".[dev,hf]"   # additionally: the local HF adapter stack
+source .venv/bin/activate            # POSIX
+# .venv\Scripts\activate             # Windows (cmd.exe)
+# .venv\Scripts\Activate.ps1         # Windows (PowerShell)
+python -m pip install --require-hashes -r tools/requirements/pip.txt
+python -m pip install --require-hashes -r tools/requirements/dev.txt
+python -m pip install --no-deps -e .
 ```
 
-The `[hf]` extra pulls in PyTorch; on a CPU-only Linux machine, install
-the CPU wheel first (`python -m pip install torch --index-url
+The first install line installs the pinned pip itself, so the
+hash-verified installs below it run under a known pip (CI does the
+same). `dev.txt` carries the lint, type, test and coverage toolchain.
+For the full test gate, install the HF lock instead of `dev.txt` — it
+is the lock the CI test job installs, and it also pins the local HF
+adapter stack (PyTorch/transformers):
+
+```sh
+python -m pip install --require-hashes -r tools/requirements/dev-hf.txt
+python -m pip install --no-deps -e .
+```
+
+To run the complete verification gate below — including `bandit`,
+which ships in neither lock above — add the audit lock exactly as the
+CI security job does:
+
+```sh
+python -m pip install --require-hashes -r tools/requirements/pip-setuptools.txt
+python -m pip install --require-hashes -r tools/requirements/audit.txt
+```
+
+On Windows, every command in this document is run with `python -m …`
+in the activated environment, exactly as written; the hashed locks
+resolve on Windows (the Linux-only CUDA pins are platform-marked), and
+§ "The verification gate" is the Linux/CI gate — the Windows evidence
+boundary is stated in the support matrix in
+`docs/STABILITY_CONTRACT.md`.
+
+The package itself has zero runtime dependencies — every lock is
+development- or adapter-only.
+
+Quick route (not gate-equivalent): `python -m pip install -e ".[dev]"`
+or `".[dev,hf]"` installs the same extras as open version ranges from
+`pyproject.toml`, i.e. whatever the newest admissible versions are on
+the day you install. That is fine for a first look, but a lint, type
+or test result from it can differ from CI's in either direction, and
+it is not the setup to debug a CI failure with. On a CPU-only Linux
+machine using this quick route, install the CPU wheel first
+(`python -m pip install torch --index-url
 https://download.pytorch.org/whl/cpu`) so the CUDA build is not
-downloaded. The package itself has zero runtime dependencies — every
-extra is development- or adapter-only.
+downloaded; the hashed route above installs the lock's pinned torch
+build as-is.
 
 Optional: the repository ships a pre-commit configuration
 (`.pre-commit-config.yaml`, ruff hooks) if you want the lint and format
@@ -45,8 +88,9 @@ checks to run on every commit.
 ## The verification gate
 
 Run the full verification from the repository root before opening a
-pull request. This is the same gate CI enforces; all of it must be
-clean:
+pull request. With the canonical setup above, this is the same gate
+CI enforces — same commands, same pinned tool versions; all of it
+must be clean:
 
 ```sh
 ruff check model_protocol_lab tests examples

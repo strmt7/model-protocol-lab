@@ -279,12 +279,18 @@ layout.
 From the repository root, in a disposable environment:
 
 ```sh
-python -m pip install -e ".[dev]"
+python -m pip install --require-hashes -r tools/requirements/pip.txt
+python -m pip install --require-hashes -r tools/requirements/dev.txt
+python -m pip install --no-deps -e .
 python -m unittest discover -s tests -t .
 ruff check model_protocol_lab tests examples
 ruff format --check model_protocol_lab tests examples
 mypy model_protocol_lab
 ```
+
+This is the contributor setup from CONTRIBUTING.md (canonical,
+hash-pinned); the full gate — coverage floor and bandit — is specified
+there.
 
 The core tests use fake backends and do not require model weights. They do not establish Hugging Face adapter compatibility, CPU/GPU parity or real-model effectiveness. Follow the staged plan for those checks and preserve exact dependency versions, model hashes and logs.
 

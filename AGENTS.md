@@ -49,7 +49,9 @@ Setup and the verification gate — the same commands CI enforces
 (`CONTRIBUTING.md` carries the contributor-facing version):
 
 ```sh
-python -m pip install -e ".[dev,hf]"     # dev toolchain + HF adapter stack
+python -m pip install --require-hashes -r tools/requirements/pip.txt
+python -m pip install --require-hashes -r tools/requirements/dev-hf.txt
+python -m pip install --no-deps -e .     # canonical hashed setup; CONTRIBUTING.md § Setup is the contributor-facing version (dev.txt suffices without the HF stack)
 tools/agent_context.py startup           # mandatory skills gate (fail-closed)
 ruff check model_protocol_lab tests examples
 ruff format --check model_protocol_lab tests examples
@@ -59,6 +61,11 @@ coverage run -m unittest discover -s tests -t .   # the exact CI test command
 coverage report                          # gate: 95% line coverage
 python -m pytest -q                      # same suite, for iteration only
 ```
+
+The agent code-search venv is separate: `tools/cocoindex_agent_search.py`
+provisions `tools/requirements/cocoindex.txt` into its own venv; it shares
+the dev-hf torch closure, so the platform-marked lock lines apply to it
+too — it is agent tooling, not a contributor setup step.
 
 Before any push: linters first, the full suite last, and no source
 edits while a full-suite run is in flight (mutation gates rewrite
