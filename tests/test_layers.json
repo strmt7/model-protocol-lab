@@ -267,6 +267,7 @@
    "test_w2_wave10.py",
    "test_w3_platform_caps.py",
    "test_w3_test_layers.py",
+   "test_w3_windows_workflow.py",
    "test_workflows.py"
   ],
   "hf": [
@@ -408,8 +409,8 @@
   ]
  },
  "module_counts": {
-  "total": 264,
-  "base": 251,
+  "total": 265,
+  "base": 252,
   "hf": 12,
   "posix": 1
  }
