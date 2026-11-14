@@ -509,7 +509,9 @@ class ExitCodeContractTests(unittest.TestCase):
             proc = run_cli("inspect", str(blocker / "fixture.json"))
         self._assert_failure(proc, 1, "inspect: invalid fixture file:")
 
-    @unittest.skipIf(os.geteuid() == 0, "permission bits do not block root")
+    @unittest.skipIf(
+        hasattr(os, "geteuid") and os.geteuid() == 0, "permission bits do not block root"
+    )
     def test_unreadable_fixture_mode_000_exits_1(self):
         """Test unreadable fixture mode 000 exits 1."""
         with TemporaryDirectory() as tmp:

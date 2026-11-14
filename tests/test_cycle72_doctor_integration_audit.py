@@ -710,7 +710,10 @@ class AdversarialEdgeTests(_Base, unittest.TestCase):
         self.assertEqual(report["verdict"], "failed")
         self.assertEqual(self.checks(report)["asset_layout"]["detail"], "adapters_not_supported")
 
-    @unittest.skipIf(os.geteuid() == 0, "root bypasses file permission checks; nothing to deny")
+    @unittest.skipIf(
+        hasattr(os, "geteuid") and os.geteuid() == 0,
+        "root bypasses file permission checks; nothing to deny",
+    )
     def test_unreadable_config_fails_closed(self):
         """Test unreadable config fails closed."""
         root = self.healthy()

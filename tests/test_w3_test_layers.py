@@ -226,6 +226,33 @@ class ManifestContractTests(unittest.TestCase):
                 text = decorator_text(TESTS_DIR / filename, class_name, method_name)
                 self.assertIn(needle, text, f"{filename}:{dotted} lost its POSIX guard")
 
+    def test_geteuid_root_guards_are_attribute_guarded(self):
+        """Regression (W3-6, second Windows portable run): the two
+        root-skip decorators in cycle72/cycle83 evaluated
+        os.geteuid() at class-definition time; the attribute does
+        not exist on Windows, so both base modules errored during
+        Windows collection (9181 collected, 2 errors) while every
+        other base module collected cleanly. The guards must test
+        hasattr(os, "geteuid") before evaluating it."""
+        for filename in (
+            "test_cycle72_doctor_integration_audit.py",
+            "test_cycle83_cli_wiring_audit.py",
+        ):
+            path = TESTS_DIR / filename
+            source = path.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=str(path))
+            guarded = 0
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    for dec in node.decorator_list:
+                        segment = ast.get_source_segment(source, dec) or ""
+                        if "geteuid" in segment:
+                            self.assertIn(
+                                "hasattr", segment, f"{filename}: unguarded geteuid decorator"
+                            )
+                            guarded += 1
+            self.assertEqual(guarded, 1, f"{filename}: expected exactly one geteuid root guard")
+
     def test_hf_marks_and_marker_registration(self):
         """Test hf marks and marker registration."""
         import tomllib
