@@ -22,7 +22,9 @@ Formats: paths (tests/<file>) or modules (tests.<stem>, for unittest).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -62,13 +64,36 @@ def main(argv: list[str] | None = None) -> int:
     # Windows portable run, W3-6). Write bytes so the output is
     # identical on every platform.
     data = ("\n".join(lines) + "\n").encode("utf-8")
-    buffer = getattr(sys.stdout, "buffer", None)
-    if buffer is not None:
-        buffer.write(data)
-        buffer.flush()
-    else:
+    return _emit(data)
+
+
+def _emit(data: bytes) -> int:
+    """Write ``data`` to stdout; 0 on success, 1 on a dead consumer.
+
+    A filter whose consumer has gone away -- a pipe whose read end
+    closed (`| head`, a dead downstream), or fd 1 closed before the
+    interpreter started, which leaves ``sys.stdout`` as None -- must
+    die quietly: no BrokenPipeError traceback, and fd 1 redirected
+    to devnull so the interpreter-shutdown flush cannot print one
+    either (the CPython documentation's BrokenPipeError idiom).
+    The exit code is the conventional 1: the tool produced no
+    output, so it must not report success.
+    """
+    try:
+        buffer = getattr(sys.stdout, "buffer", None)
+        if buffer is not None:
+            buffer.write(data)
+            buffer.flush()
+            return 0
+        if sys.stdout is None:
+            raise BrokenPipeError("standard output is closed")
         sys.stdout.write(data.decode("utf-8"))
-    return 0
+        sys.stdout.flush()
+        return 0
+    except BrokenPipeError:
+        with contextlib.suppress(OSError):
+            os.dup2(os.open(os.devnull, os.O_WRONLY), 1)
+        return 1
 
 
 if __name__ == "__main__":

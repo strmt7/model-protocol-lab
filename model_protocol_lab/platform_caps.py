@@ -157,10 +157,14 @@ def address_space_cap(
 
     Yields ``True`` iff the cap was installed. Every not-installed
     path yields ``False`` with no limit state touched: the platform
-    has no ``resource`` module, ``/proc/self/status`` has no readable
-    VmSize, the current limit cannot be read, the ambient soft limit
-    is already finite (respected, never loosened), or installing the
-    cap fails. The hard limit is carried through unchanged.
+    has no ``resource`` module, ``headroom_bytes`` is out of domain
+    (negative, or VmSize + headroom beyond ``sys.maxsize`` -- a
+    finite limit must convert to a C long for ``setrlimit``, and
+    anything larger escapes that conversion), ``/proc/self/status``
+    has no readable or parseable VmSize, the current limit cannot
+    be read, the ambient soft limit is already finite (respected,
+    never loosened), or installing the cap fails. The hard limit
+    is carried through unchanged.
 
     On exit the previous soft/hard pair is restored. A restore
     failure of type ``OSError``/``ValueError`` is swallowed -- except
@@ -179,6 +183,13 @@ def address_space_cap(
     except ImportError:
         yield False
         return
+    if headroom_bytes < 0:
+        # Out of domain, rejected before any state is read: the cap
+        # it names sits below the current size by construction, and
+        # an extreme negative makes the C conversion's result an
+        # undefined wrapped limit that would report as installed.
+        yield False
+        return
     vmsize: int | None = None
     try:
         with open("/proc/self/status", encoding="ascii") as status:
@@ -186,7 +197,10 @@ def address_space_cap(
                 if line.startswith("VmSize:"):
                     vmsize = int(line.split()[1]) * 1024
                     break
-    except OSError:
+    except (OSError, ValueError, IndexError):
+        # Unreadable, or present but unparsable (a VmSize line with
+        # no value, or a non-numeric one): both are the documented
+        # "no readable VmSize" not-installed path.
         vmsize = None
     if vmsize is None:
         yield False
@@ -201,6 +215,12 @@ def address_space_cap(
         yield False
         return
     new_soft = vmsize + headroom_bytes
+    if new_soft > sys.maxsize:
+        # A finite limit must convert to a C long for setrlimit;
+        # beyond sys.maxsize the conversion raises OverflowError.
+        # Out of domain yields False, before setrlimit is called.
+        yield False
+        return
     try:
         resource.setrlimit(resource.RLIMIT_AS, (new_soft, old_hard))
     except (OSError, ValueError):

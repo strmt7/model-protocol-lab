@@ -33,6 +33,11 @@ def _run_steps(doc: dict) -> list[str]:
     return [step["run"] for step in job["steps"] if "run" in step]
 
 
+def _steps(doc: dict) -> list[dict]:
+    """Return the job's step dicts, in order."""
+    return doc["jobs"]["windows-base"]["steps"]
+
+
 class TestWindowsPortableWorkflow(unittest.TestCase):
     """The windows.yml Phase-1 shape, pinned."""
 
@@ -90,6 +95,75 @@ class TestWindowsPortableWorkflow(unittest.TestCase):
         self.assertEqual(len(collect), 1)
         self.assertIn("tools/layer_paths.py --layer base", collect[0])
         self.assertIn("pytest", collect[0])
+
+    def test_collect_step_shell_is_bash(self) -> None:
+        """Purpose: The collect step runs under bash, not pwsh
+        Inputs: The job's steps
+        Outputs: The single --collect-only step declares
+            shell: bash. Its script is bash ($RUNNER_TEMP
+            expansion, a tee pipeline); under PowerShell the step
+            dies before collecting anything (wave-11 mutant).
+            The shell choice is also what makes the pipeline's
+            exit status honest: GitHub's bash shell already runs
+            -eo pipefail, so the script's own `set -o pipefail`
+            line is deliberately NOT pinned -- removing it is
+            behaviourally neutral on a real runner, and pinning
+            it would bind the test to text, not semantics
+            (wave-11 adjudication).
+        """
+        collect = [s for s in _steps(self.doc) if "--collect-only" in s.get("run", "")]
+        self.assertEqual(len(collect), 1)
+        self.assertEqual(collect[0].get("shell"), "bash")
+
+    def test_step_order_install_check_mypy_collect(self) -> None:
+        """Purpose: The evidence steps run in dependency order
+        Inputs: The job's run steps, in order
+        Outputs: pip.txt install < dev-hf install < editable
+            install < pip check < mypy < collect, each exactly
+            once. A pip check moved before the installs (wave-11
+            mutant) would verify the stock environment instead
+            of the installed closure and pass vacuously.
+        """
+        runs = _run_steps(self.doc)
+
+        def index_of(needle: str) -> int:
+            """Index of the first run step containing needle."""
+            for i, script in enumerate(runs):
+                if needle in script:
+                    return i
+            self.fail(f"no run step contains {needle!r}")
+
+        order = [
+            index_of("pip.txt"),
+            index_of("dev-hf.txt"),
+            index_of("--no-deps -e ."),
+            index_of("pip check"),
+            index_of("mypy"),
+            index_of("--collect-only"),
+        ]
+        self.assertEqual(len(set(order)), len(order))
+        self.assertEqual(order, sorted(order))
+
+    def test_upload_collect_log_step_survives(self) -> None:
+        """Purpose: A failed collect stays diagnosable
+        Inputs: The job's steps
+        Outputs: Exactly one actions/upload-artifact step, gated
+            on failure(), ordered after the collect step, and
+            uploading the collect log (the windows-base-collect
+            path the collect step tees to). Job logs are not
+            API-accessible, so deleting this step (wave-11
+            mutant) loses the only failure evidence.
+        """
+        steps = _steps(self.doc)
+        uploads = [
+            s for s in steps if str(s.get("uses", "")).startswith("actions/upload-artifact@")
+        ]
+        self.assertEqual(len(uploads), 1)
+        upload = uploads[0]
+        self.assertEqual(upload.get("if"), "failure()")
+        self.assertIn("windows-base-collect", upload["with"]["path"])
+        collect_index = next(i for i, s in enumerate(steps) if "--collect-only" in s.get("run", ""))
+        self.assertGreater(steps.index(upload), collect_index)
 
     def test_not_the_gate_guard(self) -> None:
         """Purpose: This workflow must never grow into the gate

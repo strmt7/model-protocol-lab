@@ -6,6 +6,41 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (wave-11 repairs — W3 machinery honesty, 2026-11-14)
+
+- The test-layer classifier no longer calls class-body imports
+  deferred: a class body executes at class-definition time, so
+  an import directly in one is top-level, and one inside a
+  method stays deferred. Literal `importlib.import_module(...)`
+  and `__import__(...)` calls now classify at the level where
+  they sit, and `from . import test_x` records its
+  transitivity edge. No current module uses the newly
+  classified shapes; the layer manifest is unchanged.
+- `platform_caps.address_space_cap` validates `headroom_bytes`
+  against its documented domain before touching any state:
+  negative values, and VmSize + headroom beyond `sys.maxsize`,
+  now take the documented yield-False path instead of
+  installing an undefined limit or escaping as a raw
+  OverflowError. A `/proc` VmSize line that is present but
+  unparsable takes the same path instead of escaping as
+  IndexError/ValueError.
+- `tools/layer_paths.py` dies quietly when its consumer goes
+  away: a broken pipe or a stdout closed before start-up exits
+  1 with no traceback (the output was not delivered, so the
+  exit code does not claim success), with fd 1 redirected to
+  devnull for the interpreter-shutdown flush.
+- The suite's simulated-absence blocker now raises
+  `ModuleNotFoundError` — the exception a genuinely absent
+  module raises — instead of plain `ImportError`, so guards
+  catching the narrower type behave identically under
+  simulation and reality.
+- The Windows-workflow shape tests pin semantics, not just
+  text: the collect step's bash shell, the
+  install → pip check → mypy → collect step order, and the
+  failure-gated collect-log upload step, each verified to
+  kill the corresponding wave-11 mutant. The workflow file
+  itself is unchanged.
+
 ### Documentation (support matrix + closure records — external-audit W3 closing, 2026-11-14)
 
 - `docs/STABILITY_CONTRACT.md` gains §1.5.1, the platform

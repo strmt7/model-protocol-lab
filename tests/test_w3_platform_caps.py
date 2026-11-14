@@ -272,6 +272,113 @@ class AddressSpaceCapTests(unittest.TestCase):
                 self.assertTrue(result.conform)
 
 
+class AddressSpaceCapDomainTests(unittest.TestCase):
+    """Wave-11 BH11-3/BH11-4: address_space_cap's domain totality.
+
+    The docstring promises every not-installed path yields False
+    with no exception and no state touched. Wave 11 executed two
+    escapes: an unvalidated headroom_bytes (2**63 left as a raw
+    OverflowError from the setrlimit C conversion; a hugely
+    negative value installed an undefined wrapped limit and yielded
+    True), and a /proc VmSize parse that caught only OSError (a
+    present-but-malformed line escaped as IndexError/ValueError).
+    """
+
+    def test_headroom_out_of_domain_yields_uninstalled(self):
+        """Test headroom out of domain yields uninstalled."""
+        if sys.platform == "win32":
+            self.skipTest("POSIX host expected")
+        import resource
+
+        old_soft, old_hard = resource.getrlimit(resource.RLIMIT_AS)
+        if old_soft != resource.RLIM_INFINITY:
+            self.skipTest("ambient soft limit is finite; install path not exercisable")
+        for headroom in (-1, -(2**63), 2**63, 2**64, 2**100):
+            with self.subTest(headroom=headroom):
+                with platform_caps.address_space_cap(headroom) as installed:
+                    self.assertFalse(installed)
+                self.assertEqual(resource.getrlimit(resource.RLIMIT_AS), (old_soft, old_hard))
+
+    def test_headroom_boundary_at_c_long_max(self):
+        """Test headroom boundary at c long max."""
+        if sys.platform == "win32":
+            self.skipTest("POSIX host expected")
+        import io
+        import resource
+
+        # A finite RLIMIT_AS value must convert to a C long for
+        # setrlimit: sys.maxsize is the largest installable limit
+        # and sys.maxsize + 1 is out of domain (probed on this host
+        # class: 2**63 - 1 accepted, 2**63 OverflowError). Serve a
+        # fixed VmSize (1024 kB) so the boundary is exact, and
+        # record setrlimit calls instead of making them.
+        vmsize = 1024 * 1024
+        real_open = open
+
+        def fake_open(path, *args, **kwargs):
+            """Fake open."""
+            if str(path) == "/proc/self/status":
+                return io.StringIO("VmSize:\t1024 kB\n")
+            return real_open(path, *args, **kwargs)
+
+        calls: list[tuple[int, tuple[int, int]]] = []
+
+        def recording_setrlimit(which, limits):
+            """Recording setrlimit."""
+            calls.append((which, limits))
+
+        with (
+            mock.patch("builtins.open", side_effect=fake_open),
+            mock.patch.object(
+                resource,
+                "getrlimit",
+                return_value=(resource.RLIM_INFINITY, resource.RLIM_INFINITY),
+            ),
+            mock.patch.object(resource, "setrlimit", side_effect=recording_setrlimit),
+        ):
+            with platform_caps.address_space_cap(sys.maxsize - vmsize) as installed:
+                self.assertTrue(installed)
+            self.assertEqual(
+                calls[0],
+                (resource.RLIMIT_AS, (sys.maxsize, resource.RLIM_INFINITY)),
+            )
+            calls.clear()
+            with platform_caps.address_space_cap(sys.maxsize - vmsize + 1) as installed:
+                self.assertFalse(installed)
+            self.assertEqual(calls, [], "out-of-domain headroom must not reach setrlimit")
+
+    def test_proc_status_malformed_yields_uninstalled(self):
+        """Test proc status malformed yields uninstalled."""
+        if sys.platform == "win32":
+            self.skipTest("POSIX host expected")
+        import io
+
+        real_open = open
+
+        # The shipped unreadable test covers only the OSError arm;
+        # a present-but-unparsable VmSize line is the same
+        # documented not-installed path (no readable VmSize).
+        for content in (
+            "VmSize:\n",
+            "VmSize: notanumber kB\n",
+            "VmSize: 12x kB\n",
+            "Name:\tno vmsize line at all\n",
+        ):
+            with self.subTest(content=content):
+
+                def fake_open(path, *args, _content=content, **kwargs):
+                    """Fake open."""
+                    if str(path) == "/proc/self/status":
+                        return io.StringIO(_content)
+                    return real_open(path, *args, **kwargs)
+
+                with (
+                    mock.patch("builtins.open", side_effect=fake_open),
+                    platform_caps.address_space_cap(1024) as installed,
+                ):
+                    self.assertFalse(installed)
+
+
 class PlatformSimulationTests(unittest.TestCase):
     """Simulated-platform and fault-injection paths of platform_caps.
 

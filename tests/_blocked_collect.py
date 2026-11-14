@@ -17,7 +17,9 @@ import of ``resource`` is conditional; its POSIX need is a runtime
 skip, not a collection error) and the control collects too. That is
 the negative control that proves the blocker actually blocks.
 
-Fidelity note: a genuinely absent module makes ``import`` raise but
+Fidelity note: a genuinely absent module makes ``import`` raise
+``ModuleNotFoundError`` (the ``ImportError`` subclass -- code that
+catches the narrower type must behave the same in simulation) but
 ``importlib.util.find_spec`` return ``None`` (the suite's HAS_*
 probes rely on the second shape). The meta-path blocker alone would
 raise through find_spec too and over-block two dozen base modules,
@@ -45,6 +47,25 @@ REPO_ROOT = TESTS_DIR.parent
 CONTROL = "test_workflows.py"
 
 
+class Blocker:
+    """Import hook raising ModuleNotFoundError for blocked roots.
+
+    Module-level (not nested in main) so the suite can pin the
+    fidelity contract directly: the exception is the subclass a
+    real absence raises, so ``except ModuleNotFoundError`` guards
+    behave identically under simulation and reality, while every
+    ``except ImportError`` consumer sees no change.
+    """
+
+    def __init__(self, blocked: set[str]) -> None:
+        self.blocked = blocked
+
+    def find_spec(self, name: str, path=None, target=None):  # noqa: ANN001, ANN202
+        if name.split(".")[0] in self.blocked:
+            raise ModuleNotFoundError(f"No module named '{name}' (simulated absence)", name=name)
+        return None
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run one blocked collection."""
     parser = argparse.ArgumentParser(description="Blocked-import collection simulation")
@@ -59,15 +80,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         names = list(layers["hf"]) + list(layers["posix"]) + [CONTROL]
 
-    class Blocker:
-        """Import hook raising ImportError for blocked roots."""
-
-        def find_spec(self, name: str, path=None, target=None):  # noqa: ANN001, ANN202
-            if name.split(".")[0] in blocked:
-                raise ImportError(f"No module named '{name}' (simulated absence)")
-            return None
-
-    sys.meta_path.insert(0, Blocker())
+    sys.meta_path.insert(0, Blocker(blocked))
     for name in list(sys.modules):
         if name.split(".")[0] in blocked:
             del sys.modules[name]
