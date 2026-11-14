@@ -97,6 +97,97 @@ No other platform cell is claimed. In particular, nothing in this
 document asserts Windows or macOS support for the measurement path
 beyond the smoke cell above.
 
+The per-layer evidence matrix that supersedes these summary rows is
+§1.5.1.
+
+### 1.5.1 Platform support matrix (W3 addendum)
+
+Measured at: main `8260cb516c0b`, 2026-11-14. The §1.5 table above
+remains the W0 baseline record; where this addendum differs — the
+§1.5 rows "Windows, full install from the checked-in locks:
+**broken**" and "Windows, pinned mypy: **failing**", and §1.4's
+`LocalHFBackend` note "Windows install currently broken (RR-07)" —
+this addendum supersedes them by statement; the baseline rows
+themselves are not edited. Axes: OS × Python (3.11 / 3.12 / 3.13) ×
+layer. Layers: `base` (zero-dependency install + offline CLI);
+`base/core tests` (the test-layer manifest's base layer: modules
+with no top-level heavy or POSIX-only import); `HF tests` (the
+modules requiring the dev-hf lock); `agent-tool / POSIX` (the
+POSIX-marked test classes and tooling contracts); `gate tooling`
+(ruff / mypy / bandit / coverage); `docs` and `build` (the per-tool
+locks); `fuzz` (the atheris layer).
+
+Every cell carries exactly one evidence class:
+
+| Class | Meaning |
+| --- | --- |
+| `CI-executed` | A named workflow/job runs this cell on every push to main; workflow + job named in the cell. |
+| `executed-on-this-host` | Run by the project on its Linux dev host at the addendum's source SHA; not a CI guarantee. |
+| `proxy-proven` | Not executed on the target platform; a named proxy executed elsewhere stands in (uv `--python-platform` resolution, `mypy --platform win32`, simulated-absence collection). Never upgradeable to `CI-executed` by wording. |
+| `documented-unverifiable` | No execution and no proxy; the cell is a stated gap with its closing item named. `unsupported` and `broken` are status words used *with* a class, never instead of one. |
+
+Two honesty rules govern every cell:
+
+1. Resolution is not installation: uv dry-runs prove the edited
+   locks *resolve* for windows/x86_64; pip actually installing
+   them, pytest collecting, and tests passing on Windows are
+   separate claims with separate evidence.
+2. The full gate (the exact CI command + the 95% coverage floor)
+   is a Linux-only claim until a Windows cell runs it — which the
+   Windows Phase 1 cell deliberately does not; no cell below
+   implies otherwise.
+
+Windows-on-ARM is **unsupported**: several pins, including torch,
+ship no win_arm64 wheel.
+
+Linux x86_64:
+
+| Layer \ Python | 3.11 | 3.12 | 3.13 |
+| --- | --- | --- | --- |
+| base | CI-executed (CI test legs install the package) | CI-executed (+ smoke wheel) | CI-executed |
+| base/core + HF tests (full suite) | CI-executed (CI `test`) | CI-executed | CI-executed |
+| gate tooling | executed-on-this-host (the CI static job is 3.12-only) | CI-executed (CI `static` + `security`) | executed-on-this-host |
+| docs / build | — | CI-executed (Docs; CI `package`) | — |
+| fuzz | — | CI-executed (Fuzz, scheduled) | — |
+| agent-tool (cocoindex venv) | — | executed-on-this-host | — |
+
+Windows x86_64 (win_amd64):
+
+| Layer \ Python | 3.11 | 3.12 | 3.13 |
+| --- | --- | --- | --- |
+| base | documented-unverifiable (smoke is 3.12-only) | CI-executed (Cross-OS smoke: wheel build + install + `catalog`/`inspect`/`--help`) | documented-unverifiable |
+| dev-hf lock resolution | proxy-proven (uv `--python-platform` windows dry-run matrix, W3-1) | proxy-proven (same matrix) | proxy-proven (same matrix) |
+| dev-hf lock installation | documented-unverifiable | CI-executed (Windows portable, `windows-base` job: hashed install + `pip check`, green 2026-11-14) | documented-unverifiable |
+| base/core collection | proxy-proven in part (simulated-absence collection executed on Linux, W3-3) | CI-executed (Windows portable: 9,296 tests collected, 0 errors, 2026-11-14) | proxy-proven in part (same simulation) |
+| base/core run | documented-unverifiable — Phase 2; promotion requires the Phase 1 cell green on ≥3 consecutive main pushes plus a timed local Linux base run for reference | documented-unverifiable — same Phase 2 item | documented-unverifiable — same Phase 2 item |
+| HF tests | documented-unverifiable — no Windows execution exists; a resolving torch win_amd64 wheel is not an adapter proof | documented-unverifiable — same | documented-unverifiable — same |
+| gate tooling (mypy) | proxy-proven (`mypy --platform win32` on Linux, W3-2: 0 errors; pre-W3-2 the native run failed with 34 errors in 3 files) | CI-executed (Windows portable: native mypy clean) and proxy-proven (same `--platform` run) | proxy-proven (same `--platform` run) |
+| agent-tool / POSIX | unsupported by design (`sys_platform` markers; on Windows these report skips-with-reasons post-W3-3). The cocoindex lock nevertheless resolves for Windows — proxy-proven (uv matrix, W3-1) — resolution is not support (rule 1) | unsupported — same | unsupported — same |
+| fuzz | unsupported (atheris is Linux-only; W3-1 marks it `sys_platform == "linux"`) | unsupported — same | unsupported — same |
+| docs / build | documented-unverifiable | CI-executed in part (Cross-OS smoke builds the wheel with the build lock on Windows; the docs *site* build is Linux CI only) | documented-unverifiable |
+
+The Windows cell earned its claims the hard way: its first two runs
+failed on genuine defects the Linux proxies could not see — the
+layer-paths tool's output was not byte-exact under a Windows
+text-mode stdout (carriage returns glued to every printed path),
+and two test modules evaluated the POSIX-only `os.geteuid` at
+class-definition time. Both are fixed in-tree with regression pins;
+the third run is the green one recorded above.
+
+macOS (the smoke runner is macos-latest, arm64; 3.12 is the only
+smoked version):
+
+| Layer | 3.12 |
+| --- | --- |
+| base | CI-executed (Cross-OS smoke, same scope as the Windows base cell) |
+| everything else | documented-unverifiable |
+
+Standing degradation note (carried from the README/VALIDATION
+record): the Jinja render watchdog, the MCP SIGALRM budget and the
+doctor resource fallbacks degrade on non-Unix platforms; W3's
+`platform_caps` module formalises the fallbacks, it does not remove
+the degradation.
+
 ### 1.6 Schemas, versions, artifacts
 
 | Artifact | Version identity | Producer → consumer |

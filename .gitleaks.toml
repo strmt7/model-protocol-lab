@@ -33,3 +33,18 @@ useDefault = true
 # the rewritten head. Commit SHAs cited in records written before
 # 2026-11-12 are pre-rewrite and historical. Any FURTHER finding
 # is a genuine triage item.
+#
+# Third finding, closed by removal the same way (2026-11-13): a
+# false positive of the same generic-api-key rule on the W3-3
+# test-layer manifest — the scanner read the substring "token"
+# inside a test filename and treated the next sorted manifest
+# entry as a credential value. No credential existed (reproduced
+# and adjudicated on a fresh clone with the pinned scanner);
+# under the no-exceptions order above the file was renamed so
+# the tree scans clean, and the owner authorized a second,
+# surgical history rewrite that replaced only the one affected
+# manifest blob (375 commits preserved; the head tree is
+# unchanged). A fresh clone at the rewritten head scans zero
+# findings in history and directory modes, and the Secret scan
+# workflow is green there. The full record is in
+# docs/STABLE_RELEASE_LEDGER.md (RR-01) and docs/SECURITY.md.

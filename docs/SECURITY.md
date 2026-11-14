@@ -1097,6 +1097,23 @@ history modes) and repaired it:
   the earliest affected commit onward changed in the rewrite;
   SHAs cited in records written before 2026-11-12 are
   pre-rewrite and historical.
+- A third finding (2026-11-13, W3) was a false positive of the
+  same `generic-api-key` rule on a generated test-layer
+  manifest: the scanner read the substring "token" inside a
+  test filename and treated the next sorted manifest entry as
+  a credential value. It was reproduced exactly (one finding,
+  pinned gitleaks 8.30.1, fresh clone) and adjudicated: no
+  credential exists. It was closed by removal under the same
+  no-exceptions order — the test file was renamed
+  (`tests/test_cycle206_depth.py`; contents byte-identical),
+  which made the working tree scan clean, and the owner
+  authorized a second, surgical history rewrite the same day
+  that replaced only the one affected manifest blob (375
+  commits preserved; the head tree unchanged). A fresh clone
+  at the rewritten head scans zero findings in history and
+  directory modes, and the Secret scan workflow is green
+  there. The full record is in the stable-release ledger
+  (RR-01).
 
 ## Reporting defects
 

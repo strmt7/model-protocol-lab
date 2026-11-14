@@ -6,6 +6,74 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Documentation (support matrix + closure records — external-audit W3 closing, 2026-11-14)
+
+- `docs/STABILITY_CONTRACT.md` gains §1.5.1, the platform
+  support matrix: OS × Python × layer, every cell carrying an
+  evidence class (`CI-executed`, `executed-on-this-host`,
+  `proxy-proven`, `documented-unverifiable`) and the two
+  honesty rules (resolution is not installation; the full gate
+  is a Linux-only claim). The W0 §1.5 rows stay untouched; the
+  addendum supersedes their Windows claims by statement.
+- The stable-release ledger records W3's closure: RR-07 and
+  RR-08 fixed-with-evidence, RR-18's W3 evidence recorded
+  in-row (the finding stays open; completion moves to W8),
+  and the tallies at 29 fixed-with-evidence, 21 open, 1
+  design-debt-accepted, 1 blocked-external.
+- `.gitleaks.toml`'s comments and `docs/SECURITY.md` record
+  the third secret-scan finding and its closure by removal:
+  a `generic-api-key` false positive on the W3-3 test-layer
+  manifest (the substring "token" inside a test filename,
+  read with the next sorted entry as a credential value; no
+  credential exists). The test file was renamed to
+  `tests/test_cycle206_depth.py`, and an owner-authorized
+  surgical history rewrite (2026-11-13) replaced the single
+  affected manifest blob — 375 commits preserved, head tree
+  unchanged, fresh-clone scans at zero findings in both
+  modes, Secret scan green at the rewritten head. No
+  allowlist was added; the no-exceptions rule is unchanged.
+
+### Fixed (portable setup — external-audit W3, 2026-11-13/14)
+
+- Windows installs from the checked-in locks work (RR-07):
+  the platform-specific pins in the dev-hf, cocoindex and
+  fuzz locks (37 marker sites) carry platform markers, so a
+  wrong-OS closure member is excluded by its marker instead
+  of breaking the solve; no version or hash changed. Proven
+  by an 8/8 uv `--python-platform` resolution matrix and by
+  execution: the new Windows portable CI cell
+  (`.github/workflows/windows.yml`) installs both hashed
+  locks on a real windows-latest runner and `pip check`
+  passes.
+- Typing and collection at the Windows boundary work
+  (RR-08): the three POSIX-capability seams live in one typed
+  `platform_caps` module (`mypy --platform win32`: 34 errors
+  → 0; native Windows mypy also clean); the suite is split
+  into a pinned test-layer manifest (base / hf / posix) whose
+  base layer collects on Windows — 9,296 tests, 0 errors —
+  with the heavy imports verifiably blocked in the Linux
+  simulated-absence check. Two defects the Windows cell
+  itself caught are fixed with regression pins:
+  `tools/layer_paths.py` now writes byte-exact output (a
+  Windows text-mode stdout glued carriage returns onto every
+  printed path), and the two `os.geteuid` root-skip
+  decorators are `hasattr`-guarded (the attribute does not
+  exist on Windows).
+- Setup documentation matches the enforced route (RR-08):
+  CONTRIBUTING's canonical setup is the hashed lock sequence
+  CI runs (with the floating extras route labelled
+  quick/not-gate-equivalent and Windows activation lines
+  added), the repo agent instructions point at it, USAGE §7
+  is scoped to match, and the README labels its user route
+  as such.
+- `soupsieve` 3.0.4 → 4.0.0 in the crawl4ai tool lock
+  (Dependabot alert #14, CVE-2026-126190: polynomial-time
+  DoS in the descendant combinator). The pinned
+  beautifulsoup4 4.15.0 admits any soupsieve ≥ 1.6.1, so the
+  single pin moved; hashes recomputed from live PyPI and the
+  lock's own resolver check is green. The alert auto-closed
+  as fixed on the push.
+
 ### Documentation (exit-code contract + closure records — external-audit W2 closing, 2026-11-12)
 
 - USAGE §6's exit-code table is corrected to the code (R4
