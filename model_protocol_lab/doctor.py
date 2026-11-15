@@ -19,7 +19,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import platform_caps
 from .backends import (
     _directory,
     _manifest,
@@ -38,6 +37,7 @@ from .core import (
 )
 from .datasets import load_dataset
 from .fixtures import _extract_special_tokens, audit_special_token_literals
+from .render_worker import RenderSession, WorkerUnavailable
 
 _SUPPORTED_TYPES = ("gpt2", "llama")
 _REJECTED_CONFIG_KEYS = (
@@ -55,24 +55,21 @@ _TOKENIZER_JSON_CAP = 128 * 1024 * 1024
 # are a few KB; a hostile one can render unbounded text (e.g.
 # "{{ 'x' * 10**9 }}"), so the template source and its rendered output are
 # both capped and oversized pairs degrade to "unavailable" instead of
-# feeding a memory bomb to the encoder. The render itself runs under a
-# transient address-space cap (memory bombs -> MemoryError) and a SIGALRM
-# wall-clock budget (CPU-burn loops -> _RenderTimeBudgetExceeded), both
-# provided by platform_caps; both degrade the pair to "unavailable".
-# (Jinja still executes inside
-# transformers' sandbox; resource exhaustion beyond these bounds -- e.g. on
-# non-Unix platforms or off the main thread, where the OS guards cannot be
-# installed -- is the same exposure as HF's own apply_chat_template. Run
-# unfamiliar checkpoints with resource limits.)
+# feeding a memory bomb to the encoder. The render itself executes in an
+# owned worker process (model_protocol_lab.render_worker, W4/RR-10): the
+# parent enforces the per-render deadline on every platform and thread,
+# and the address-space cap now constrains the worker, so a memory bomb
+# or a CPU burn can kill at most the worker — never this process. A
+# worker that cannot start fails the section closed
+# ("render_worker_failed"); there is no in-process fallback.
 _CHAT_TEMPLATE_MAX_CHARS = 1_000_000
 _RENDERED_MAX_CHARS = 1_000_000
-# Wall-clock budget for a single checkpoint-controlled Jinja render. The
-# address-space cap in _render_with_memory_cap bounds memory bombs, but a
-# template can also burn CPU without allocating (e.g.
-# "{% for i in range(10**12) %}{% set x = i %}{% endfor %}"); the SIGALRM
-# watchdog in _render_with_time_budget aborts such renders. 10 s matches the
-# template_diff fragmentation budget; legitimate renders complete in
-# milliseconds, so the budget only ever fires on hostile templates.
+# Per-render deadline enforced on the worker by the parent session. A
+# template can burn CPU without allocating (nested loops inside the
+# sandbox's range bound), so the length caps cannot bound it; the
+# deadline can. 10 s matches the template_diff fragmentation budget;
+# legitimate renders complete in milliseconds, so the deadline only
+# ever fires on hostile templates.
 _RENDER_CPU_BUDGET_S = 10.0
 
 
@@ -787,103 +784,6 @@ def examine_dataset(path: str | Path) -> dict[str, Any]:
     }
 
 
-def _render_with_memory_cap(tokenizer: Any, conversation: list[dict[str, str]]) -> str:
-    """Render ``apply_chat_template`` with a transient address-space cap.
-
-    A hostile ``chat_template`` (e.g. ``{{ 'x' * 10**11 }}``) materializes
-    its full output *before* the ``_RENDERED_MAX_CHARS`` length check can
-    degrade the pair -- the 1MB template-source cap does not bound the
-    *rendered* size, so a 26-byte template can transiently allocate
-    gigabytes and OOM-kill the process. This bounds the render itself: a
-    temporary ``RLIMIT_AS`` of (current virtual size + 256MB headroom) is
-    installed around the single render call, so a bomb raises ``MemoryError``
-    (caught by the caller's ``except Exception`` -> ``"unavailable"``)
-    instead of killing the process. Legitimate renders peak far below the
-    headroom (output is capped at 1MB chars by the post-render check).
-
-    On platforms without ``resource(3)``/``/proc`` (non-Unix) or when the
-    limit cannot be installed, the render runs unbounded -- the pre-existing
-    behavior -- and the post-render length check still applies. An already
-    tighter ambient limit is respected, never loosened.
-    """
-
-    def render() -> str:
-        """Return the render."""
-        rendered = tokenizer.apply_chat_template(
-            conversation,
-            tokenize=False,
-            add_generation_prompt=True,
-        )
-        if type(rendered) is not str:
-            raise ValueError("chat_template_did_not_render_text")
-        return rendered
-
-    # The cap itself lives in platform_caps (the single typed home for
-    # the POSIX primitives); the budget exception is named in
-    # reraise_on_restore so a watchdog alarm landing mid-restore still
-    # retries the restore and then reaches the caller, instead of
-    # being swallowed by the cleanup guard (it is a ValueError
-    # subclass) and leaving the cap lowered process-wide.
-    with platform_caps.address_space_cap(
-        256 * 1024 * 1024,
-        reraise_on_restore=(_RenderTimeBudgetExceeded,),
-    ):
-        return render()
-
-
-class _RenderTimeBudgetExceeded(ValueError):
-    """A checkpoint's Jinja chat template exceeded the render CPU budget.
-
-    A ``ValueError`` -- not ``KeyboardInterrupt`` -- so the per-pair handler
-    in :func:`template_conformance` degrades the pair to ``"unavailable"``
-    exactly like the memory-bomb path, and a budget expiry is never mistaken
-    for a user interrupt.
-    """
-
-
-def _render_with_time_budget(
-    tokenizer: Any,
-    conversation: list[dict[str, str]],
-    budget_s: float = _RENDER_CPU_BUDGET_S,
-) -> str:
-    """Render with a wall-clock budget around :func:`_render_with_memory_cap`.
-
-    The address-space cap bounds memory bombs, but a hostile ``chat_template``
-    can burn CPU without allocating -- e.g.
-    ``{% for i in range(10**12) %}{% set x = i %}{% endfor %}``. On Unix, in
-    the main thread, a one-shot ``SIGALRM`` (``setitimer(ITIMER_REAL)``)
-    bounds the render: Jinja compiles templates to Python bytecode, so the
-    interpreter services the signal promptly and the render aborts with
-    :class:`_RenderTimeBudgetExceeded`, which the caller's ``except
-    Exception`` degrades to ``"unavailable"``.
-
-    The previous ``SIGALRM`` handler and timer are saved and restored, so a
-    caller-owned alarm is never lost (its remaining time may shift by the
-    render duration -- acceptable for a lab tool). A non-positive or
-    non-finite ``budget_s`` disables the watchdog (documented escape hatch;
-    ``inf``/``nan`` cannot arm ``setitimer``). Outside the main thread or on
-    platforms without ``setitimer`` (Windows), the render runs unbounded --
-    the pre-existing behavior -- and only the memory cap and the post-render
-    length check apply. Teardown blocks ``SIGALRM`` while the timer is
-    disarmed and the previous handler restored, so an alarm that becomes
-    pending in that window cannot fire mid-restore (the budget exception is
-    a ``ValueError``, which the cleanup guards would otherwise swallow,
-    leaving the handler inconsistent).
-    """
-
-    def _raise_budget() -> None:
-        """Raise the budget exception."""
-        raise _RenderTimeBudgetExceeded(f"chat template render exceeded {budget_s:g}s CPU budget")
-
-    # The deadline itself is platform_caps.alarm_deadline -- the single
-    # typed implementation the MCP sweep deadline also uses. Where it
-    # cannot arm (non-positive/non-finite budget, no SIGALRM, non-main
-    # thread) the render below runs unbounded, exactly the degradation
-    # the docstring above documents.
-    with platform_caps.alarm_deadline(budget_s, _raise_budget):
-        return _render_with_memory_cap(tokenizer, conversation)
-
-
 def template_firewall(model_path: str | Path) -> dict[str, Any]:
     """Static firewall scan of the checkpoint's ``chat_template``.
 
@@ -993,64 +893,64 @@ def template_conformance(
                 "findings": [{"rule": f.rule, "detail": f.detail} for f in firewall_findings],
                 "diffs": [],
             }
-        from transformers import PreTrainedTokenizerFast
-
-        # Untyped transformers boundary: bind through a typed Callable so
-        # strict mode stays clean with or without transformers installed.
-        _factory: Callable[..., Any] = PreTrainedTokenizerFast
-        tokenizer: Any = _factory(
-            tokenizer_file=str(_tokenizer_file(root)),
-            clean_up_tokenization_spaces=False,
-        )
-        tokenizer.chat_template = template
         # The template may reference bos_token; take it from the same config
         # document when it is a plain string (or a {"content": ...} mapping).
         bos_token = config_doc.get("bos_token")
         if type(bos_token) is dict:
             bos_token = bos_token.get("content")
-        if type(bos_token) is str and bos_token:
-            # The template may not reference bos_token; a setter failure
-            # must not fail the check.
-            with contextlib.suppress(Exception):
-                tokenizer.bos_token = bos_token
-    except ImportError:
-        return {"status": "unavailable", "detail": "transformers_not_installed", "diffs": []}
+        # Rendering happens in the owned worker (RR-10): the tokenizer is
+        # constructed there, never here, and the session's init handshake
+        # reports the same fixed details this block used to produce.
+        session = RenderSession(
+            str(_tokenizer_file(root)),
+            template,
+            bos_token if type(bos_token) is str and bos_token else None,
+            budget_s=_RENDER_CPU_BUDGET_S,
+        )
+        session.start()
+    except WorkerUnavailable as exc:
+        return {"status": "unavailable", "detail": exc.code, "diffs": []}
     except Exception:  # noqa: BLE001 -- conformance must not fail the run
         return {"status": "unavailable", "detail": "tokenizer_load_failed", "diffs": []}
 
     diffs: list[dict[str, Any]] = []
-    for fmt in formats:
-        for case in cases:
-            entry: dict[str, Any] = {
-                "format": fmt.name,
-                "fixture": case.id,
-                "status": "ok",
-                "diff": [],
-                "hand_tokens": 0,
-                "template_tokens": 0,
-            }
-            try:
-                hand_ids = tuple(
-                    tokenizer.encode(fmt.render(case.messages), add_special_tokens=False)
-                )
-                rendered = _render_with_time_budget(
-                    tokenizer,
-                    [{"role": m.role, "content": m.content} for m in case.messages],
-                )
-                if len(rendered) > _RENDERED_MAX_CHARS:
-                    # Checkpoint-controlled template rendered unbounded text;
-                    # degrade the pair instead of encoding a memory bomb.
-                    # (The render itself was already memory-capped, so this
-                    # only sees outputs that fit comfortably.)
-                    entry["status"] = "unavailable"
-                else:
-                    template_ids = tuple(tokenizer.encode(rendered, add_special_tokens=False))
-                    entry["diff"] = list(template_diff(hand_ids, template_ids))
-                    entry["hand_tokens"] = len(hand_ids)
-                    entry["template_tokens"] = len(template_ids)
-            except Exception:  # noqa: BLE001 -- one bad pair degrades, not the run
-                entry["status"] = "unavailable"
-            diffs.append(entry)
+    try:
+        with session:
+            for fmt in formats:
+                for case in cases:
+                    entry: dict[str, Any] = {
+                        "format": fmt.name,
+                        "fixture": case.id,
+                        "status": "ok",
+                        "diff": [],
+                        "hand_tokens": 0,
+                        "template_tokens": 0,
+                    }
+                    try:
+                        hand_ids = session.encode(fmt.render(case.messages))
+                        rendered = session.render(
+                            [{"role": m.role, "content": m.content} for m in case.messages],
+                        )
+                        if len(rendered) > _RENDERED_MAX_CHARS:
+                            # The worker enforces the same cap before the
+                            # text crosses the wire, so this only fires if
+                            # a worker misbehaves; keep the parent's own
+                            # check as the last word.
+                            entry["status"] = "unavailable"
+                        else:
+                            template_ids = session.encode(rendered)
+                            entry["diff"] = list(template_diff(hand_ids, template_ids))
+                            entry["hand_tokens"] = len(hand_ids)
+                            entry["template_tokens"] = len(template_ids)
+                    except WorkerUnavailable:
+                        raise
+                    except Exception:  # noqa: BLE001 -- one bad pair degrades, not the run
+                        entry["status"] = "unavailable"
+                    diffs.append(entry)
+    except WorkerUnavailable as exc:
+        # The circuit breaker tripped: the section fails closed rather
+        # than reporting a partial sweep as if it were complete.
+        return {"status": "unavailable", "detail": exc.code, "diffs": []}
     return {"status": "ok", "diffs": diffs}
 
 
@@ -1120,6 +1020,7 @@ def template_probe_section(model_path: str | Path) -> dict[str, Any]:
     if firewall["status"] != "allowed":
         section["detail"] = str(firewall.get("detail", "firewall_unavailable"))
         return section
+    session: RenderSession | None = None
     try:
         root = _directory(model_path)
         config_doc = _read_json(_member(root, "tokenizer_config.json"))
@@ -1130,38 +1031,50 @@ def template_probe_section(model_path: str | Path) -> dict[str, Any]:
         section["sentinel_in_template_source"] = any(
             sentinel in template for sentinel in tp.all_sentinels()
         )
+        bos_token = config_doc.get("bos_token")
+        if type(bos_token) is dict:
+            bos_token = bos_token.get("content")
+        # Rendering happens in the owned worker (RR-10), as in
+        # template_conformance: the session's init handshake reports the
+        # same fixed details the in-process load used to produce.
         try:
-            from transformers import PreTrainedTokenizerFast
-
-            _factory: Callable[..., Any] = PreTrainedTokenizerFast
-            tokenizer: Any = _factory(
-                tokenizer_file=str(_tokenizer_file(root)),
-                clean_up_tokenization_spaces=False,
+            session = RenderSession(
+                str(_tokenizer_file(root)),
+                template,
+                bos_token if type(bos_token) is str and bos_token else None,
+                budget_s=_RENDER_CPU_BUDGET_S,
             )
-        except ImportError:
-            section["detail"] = "transformers_not_installed"
+            session.start()
+        except WorkerUnavailable as exc:
+            section["detail"] = exc.code
             return section
         except Exception:  # noqa: BLE001 -- an unloadable tokenizer degrades
             section["detail"] = "tokenizer_load_failed"
             return section
-        tokenizer.chat_template = template
-        bos_token = config_doc.get("bos_token")
-        if type(bos_token) is dict:
-            bos_token = bos_token.get("content")
-        if type(bos_token) is str and bos_token:
-            with contextlib.suppress(Exception):
-                tokenizer.bos_token = bos_token
 
         deadline = time.monotonic() + tp.WALL_CLOCK_S
         renders = 0
+        worker_failure: str | None = None
 
         def _render(conversation: list[dict[str, str]]) -> str:
             """Return the render."""
-            nonlocal renders
+            nonlocal renders, worker_failure
             if renders >= tp.MAX_RENDERS or time.monotonic() > deadline:
                 raise _TemplateProbeBudgetExceeded
+            try:
+                text = session.render(conversation)
+            except WorkerUnavailable as exc:
+                # Latched by the session before any render was
+                # attempted, so it does not consume the render budget;
+                # recorded here so the section fails closed once the
+                # current pair has degraded.
+                worker_failure = exc.code
+                raise
+            except Exception:
+                renders += 1
+                raise
             renders += 1
-            return _render_with_time_budget(tokenizer, conversation)
+            return text
 
         outcomes: list[dict[str, Any]] = []
         budget_hit = False
@@ -1185,6 +1098,10 @@ def template_probe_section(model_path: str | Path) -> dict[str, Any]:
                 )
                 continue
             outcomes.append(tp.classify_pair(spec, base_a, base_b, swapped_a, swapped_b))
+        if worker_failure is not None:
+            section["detail"] = worker_failure
+            section["renders_used"] = renders
+            return section
         role_results: list[dict[str, Any]] = []
         if not budget_hit:
             for arm in tp.ROLE_ARMS:
@@ -1206,6 +1123,10 @@ def template_probe_section(model_path: str | Path) -> dict[str, Any]:
                     )
                     continue
                 role_results.append(tp.role_arm_facts(arm, base_a, arm_a))
+        if worker_failure is not None:
+            section["detail"] = worker_failure
+            section["renders_used"] = renders
+            return section
         summary = tp.summarize(outcomes)
         section["counts"] = summary["counts"]
         section["findings"] = summary["findings"]
@@ -1227,6 +1148,9 @@ def template_probe_section(model_path: str | Path) -> dict[str, Any]:
     except Exception:  # noqa: BLE001 -- the probe must never fail the report
         section["detail"] = "template_probe_failed"
         return section
+    finally:
+        if session is not None:
+            session.close()
 
 
 def marker_isolation(

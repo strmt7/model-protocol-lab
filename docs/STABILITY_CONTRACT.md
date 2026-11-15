@@ -183,10 +183,14 @@ smoked version):
 | everything else | documented-unverifiable |
 
 Standing degradation note (carried from the README/VALIDATION
-record): the Jinja render watchdog, the MCP SIGALRM budget and the
-doctor resource fallbacks degrade on non-Unix platforms; W3's
-`platform_caps` module formalises the fallbacks, it does not remove
-the degradation.
+record): the MCP SIGALRM budget and the doctor resource fallbacks
+degrade on non-Unix platforms; W3's `platform_caps` module
+formalises the fallbacks, it does not remove the degradation. The
+Jinja render watchdog no longer belongs on this list: W4 (RR-10)
+moved rendering into an owned worker process whose per-render
+deadline the parent enforces on every platform; what still degrades
+off-Unix is only the worker's own memory cap, whose absence can kill
+the worker but never the parent process.
 
 ### 1.6 Schemas, versions, artifacts
 

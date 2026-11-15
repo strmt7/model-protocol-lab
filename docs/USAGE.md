@@ -609,8 +609,10 @@ and the findings surface as a "Template firewall" section in the report.
 An `allowed` verdict is not a safety proof: it means none of the known
 primitives were found, and the render still runs inside transformers'
 `ImmutableSandboxedEnvironment` (the lab pins `jinja2>=3.1.6` for the
-sandbox-escape fix) under the existing CPU watchdog and memory cap. The
-stack is: static firewall -> sandboxed render -> watchdog + memory cap.
+sandbox-escape fix) inside the owned render worker, under a
+parent-enforced per-render deadline and a worker-local memory cap. The
+stack is: static firewall -> sandboxed render in the worker -> deadline
++ memory cap.
 
 ### 8.13 Selection robustness under stop semantics (`selection_robustness`)
 

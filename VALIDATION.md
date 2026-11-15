@@ -12,11 +12,13 @@ workflow (cycle 210) additionally verifies install plus the offline
 CLI on macOS and Windows; a Windows portable workflow (W3-6)
 additionally installs the hashed dev-hf lock on Windows and collects
 the base test layer there (collection only, not a suite run) —
-the Jinja render watchdog, the MCP server's SIGALRM budget, and
-doctor's resource fallbacks degrade there.
+the MCP server's SIGALRM budget and doctor's resource fallbacks
+degrade there (checkpoint-template rendering does not: since
+W4/RR-10 it runs in an owned worker process whose deadline the
+parent enforces on every platform).
 
-- `python -m pytest -q -p no:cacheprovider` — **9937 tests collected**
-  (W3-6 windows cell, 2026-11-14). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **9995 tests collected**
+  (measured 2026-11-15, W4 push 1). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -623,10 +625,10 @@ doctor's resource fallbacks degrade there.
   cross-pin test guards the §6/§15 split.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (345 files in that CI scope; the repo-root scope counts more.
+  (347 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
-- `mypy model_protocol_lab` — clean (76 source files).
+- `mypy model_protocol_lab` — clean (77 source files).
 - `bandit -r model_protocol_lab` — **no issues identified** at any
   severity/confidence (the targeted `# nosec B105` suppressions on
   report-schema fields carry justifications).

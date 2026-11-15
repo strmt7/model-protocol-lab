@@ -111,10 +111,11 @@ marker semantics are not definable from the render.
 ## Budgets and failure mapping
 
 The section is capped at 128 renders and a 120 s cooperative
-wall-clock deadline checked between renders (a single render remains
-bounded only by the render watchdog where one exists — SIGALRM is
-Unix/main-thread only; the docs state this rather than papering over
-it). Exceeding either cap fails closed to
+wall-clock deadline checked between renders (a single render is
+bounded by the render worker's per-render deadline, enforced by the
+parent on every platform and thread since W4/RR-10 — before that it
+rested on a SIGALRM watchdog that could not arm off the main thread
+or off Unix). Exceeding either cap fails closed to
 `unavailable / template_probe_budget_exceeded` with partial counts
 preserved. If `span_unresolvable` + `unexercised` +
 `nondeterministic_render` exceed half of all pairs, the section is

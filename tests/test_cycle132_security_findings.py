@@ -225,25 +225,33 @@ class TestSymlinkReportDir(unittest.TestCase):
             self.assertEqual(claimed, target)
 
 
-class FakeTokenizer:
-    """Fake tokenizer."""
-
-    @staticmethod
-    def apply_chat_template(conversation, tokenize=False, add_generation_prompt=True):
-        """Apply chat template."""
-        return "hello"
-
-
 @unittest.skipIf(
     resource is None or not hasattr(signal, "SIGALRM"),
     "POSIX-only: resource/RLIMIT_AS + SIGALRM semantics (finding 2); "
     "the resource module does not exist on win32",
 )
 class TestRlimitRestoreRace(unittest.TestCase):
-    """Finding 2: a budget alarm landing mid-restore must not be swallowed."""
+    """Finding 2: a budget alarm landing mid-restore must not be swallowed.
+
+    The seam moved twice since this audit: W3 consolidated the cap into
+    ``platform_caps.address_space_cap`` and W4 moved rendering into the
+    worker (``render_worker._render_once`` applies that same cap inside
+    the worker). The race lives entirely in the capability now, so the
+    pin drives it directly; test_w3_platform_caps carries the same
+    three-call shape at the capability's home.
+    """
 
     def test_budget_exception_during_restore_propagates(self):
         """Test budget exception during restore propagates."""
+        from model_protocol_lab import platform_caps
+
+        old_soft, _old_hard = resource.getrlimit(resource.RLIMIT_AS)
+        if old_soft != resource.RLIM_INFINITY:
+            self.skipTest("ambient soft limit is finite; install path not exercisable")
+
+        class BudgetBlow(ValueError):
+            """Budget blow."""
+
         calls = []
         real_setrlimit = resource.setrlimit
 
@@ -253,22 +261,26 @@ class TestRlimitRestoreRace(unittest.TestCase):
             if len(calls) == 2:
                 # Simulate the SIGALRM handler firing inside the restore:
                 # the budget exception is a ValueError subclass.
-                raise doctor._RenderTimeBudgetExceeded("simulated mid-restore alarm")
+                raise BudgetBlow("simulated mid-restore alarm")
             return real_setrlimit(which, limits)
 
         with (
             mock.patch("resource.setrlimit", spy),
-            self.assertRaises(doctor._RenderTimeBudgetExceeded),
+            self.assertRaises(BudgetBlow),
+            platform_caps.address_space_cap(256 * 1024 * 1024, reraise_on_restore=(BudgetBlow,)),
         ):
-            doctor._render_with_memory_cap(FakeTokenizer(), [{"role": "user", "content": "x"}])
+            pass
         # Install cap, restore attempt, retry after the alarm: the restore
         # was ensured before the exception propagated.
         self.assertEqual(len(calls), 3)
 
     def test_normal_path_restores_limit(self):
         """Test normal path restores limit."""
+        from model_protocol_lab import platform_caps
+
         old_soft, _ = resource.getrlimit(resource.RLIMIT_AS)
-        doctor._render_with_memory_cap(FakeTokenizer(), [{"role": "user", "content": "x"}])
+        with platform_caps.address_space_cap(256 * 1024 * 1024):
+            pass
         new_soft, _ = resource.getrlimit(resource.RLIMIT_AS)
         self.assertEqual(old_soft, new_soft)
 

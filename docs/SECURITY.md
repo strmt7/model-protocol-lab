@@ -246,18 +246,22 @@ crashes on non-string dict keys fixed fail-closed).
 6. A hostile Jinja chat template can burn CPU inside the render itself
    (transformers' sandbox restricts code execution, not resource use).
    Template source and rendered output are capped at 1 MB each (round-3
-   fix); on Unix, in the main thread, each render additionally runs under
-   a 10 s SIGALRM wall-clock budget (`_render_with_time_budget`) and
-   aborts with `_RenderTimeBudgetExceeded`, degrading the pair to
-   `"unavailable"` (cycle-116 fix). Residual: off the main thread or on
-   non-Unix platforms the watchdog cannot be installed and the render
-   runs unbounded -- the same exposure as HF's own `apply_chat_template`.
-   Run unfamiliar checkpoints with resource limits. (Re-verified
-   dynamically in the 2026-10-22 oversight audit: rendering a
-   CPU-bomb template (a `{% for %}` loop over a 200k range, ~1.6e10
-   inner steps) from a worker thread left the render still running
-   after 16 s while the calling thread proceeded — confirming the
-   watchdog never arms off the main thread, exactly as stated here.)
+   fix). Since W4 (audit RR-10), renders execute in an owned worker
+   process (`model_protocol_lab.render_worker`), never in the CLI's own
+   process: the parent enforces a 10 s per-render deadline on every
+   platform and from every thread, the worker renders under the same
+   address-space cap as before (now worker-local), the rendered cap is
+   enforced before the text leaves the worker, and a worker that
+   cannot start — or dies three times in a row — fails the section
+   closed with detail `render_worker_failed` instead of falling back
+   to an in-process render. The pre-W4 design (a SIGALRM watchdog,
+   cycle-116 fix) degraded silently off the main thread and off Unix —
+   re-verified dynamically in the 2026-10-22 oversight audit — which
+   is why it was replaced rather than patched. Honest residual: on
+   platforms without `resource`/`/proc` the worker's own allocation
+   is uncapped, so a memory bomb can kill the worker (the pair
+   degrades to `"unavailable"`); it cannot kill the parent. Run
+   unfamiliar checkpoints with resource limits anyway.
 7. `template_diff` degrades (not hangs) after a 10 s budget per
    (format, fixture) pair on adversarially fragmented inputs; a fully
    hostile checkpoint can still cost ~10 s per pair before each degrades.

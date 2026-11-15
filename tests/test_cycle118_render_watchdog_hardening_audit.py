@@ -1,124 +1,157 @@
 """Cycle 118: hardening audit of the render watchdog (cycle 116).
 
-``_render_with_time_budget`` bounds checkpoint-controlled Jinja CPU burns
-with a SIGALRM watchdog. Red-team review found two robustness gaps:
+``_render_with_time_budget`` bounded checkpoint-controlled Jinja CPU
+burns with a SIGALRM watchdog. Red-team review found two robustness
+gaps:
 
 1. A non-finite ``budget_s`` (``float("inf")``) reached ``setitimer``,
    which raises ``OverflowError`` -- not covered by the ``except
    (OSError, ValueError)`` fallback, so the defensive "fall back to the
-   unbounded render" contract was violated. Non-finite budgets now disable
-   the watchdog, like non-positive ones.
+   unbounded render" contract was violated.
 2. Teardown disarmed the timer but did not block ``SIGALRM``: an alarm
-   that became pending in that window would fire mid-restore, and because
-   ``_RenderTimeBudgetExceeded`` is a ``ValueError`` the cleanup
-   ``contextlib.suppress`` guards would swallow it, leaving the previous
-   handler/timer inconsistent. Teardown now blocks ``SIGALRM`` across the
-   restore (``pthread_sigmask``); a pending alarm is then delivered to the
-   restored previous handler after unblocking -- honest Unix semantics.
+   that became pending in that window would fire mid-restore, and
+   because the budget exception was a ``ValueError`` the cleanup
+   guards would swallow it, leaving the previous handler/timer
+   inconsistent.
 
-These tests pin both fixes.
+W4 (RR-10) retired the watchdog itself: rendering moved into an owned
+worker process (``model_protocol_lab.render_worker``) whose deadline
+the parent enforces with a timed queue wait. Both hazards are gone by
+construction — there is no ``setitimer`` call to feed a bad budget to,
+and no handler is ever installed, so there is no teardown window.
+These tests pin the successor surface so neither hazard can regrow:
+
+* the session refuses a non-positive or non-finite budget at
+  construction (the old "non-finite disables the watchdog" escape
+  hatch is deliberately gone — the deadline is structural now);
+* the render path never touches the caller's signal mask, handler, or
+  timer, and a caller's own alarm firing mid-render is delivered to
+  the caller's handler and changes nothing.
 """
 
 from __future__ import annotations
 
+import json
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+CLEAN_TEMPLATE = (
+    "{% for message in messages %}"
+    "<|im_start|>{{ message.role }}\n{{ message.content }}<|im_end|>\n"
+    "{% endfor %}"
+    "{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}"
+)
 
 
-class _OkTokenizer:
-    """Ok tokenizer."""
+def _write_checkpoint(root: Path, template: str) -> Path:
+    """Write checkpoint."""
+    from tokenizers import Tokenizer
+    from tokenizers.models import WordLevel
 
-    @staticmethod
-    def apply_chat_template(
-        conversation: object, tokenize: bool = False, add_generation_prompt: bool = True
-    ) -> str:
-        """Apply chat template."""
-        return "<|user|>hi<|assistant|>"
+    root.mkdir(parents=True, exist_ok=True)
+    vocab = {f"tok{i}": i for i in range(15)}
+    vocab["[UNK]"] = 15
+    tokenizer = Tokenizer(WordLevel(vocab=vocab, unk_token="[UNK]"))
+    tokenizer.add_special_tokens(["[UNK]", "[BOS]", "[EOS]"])
+    tokenizer.save(str(root / "tokenizer.json"))
+    (root / "tokenizer_config.json").write_text(
+        json.dumps({"chat_template": template}), encoding="utf-8"
+    )
+    return root
 
 
 class TestWatchdogHardening(unittest.TestCase):
     """Test watchdog hardening."""
 
-    def test_infinite_budget_disables_watchdog(self) -> None:
-        """Test infinite budget disables watchdog."""
-        # setitimer(inf) raises OverflowError, which the old except clause
-        # did not catch. inf now means "no budget", like budget_s <= 0.
-        from model_protocol_lab.doctor import _render_with_time_budget
+    def test_infinite_budget_refused(self) -> None:
+        """Test infinite budget refused."""
+        # setitimer(inf) raised OverflowError in the old design; the
+        # session boundary refuses the value before it can reach any
+        # wait, and "no deadline" is not an option anymore.
+        from model_protocol_lab.render_worker import RenderSession
 
-        self.assertEqual(
-            _render_with_time_budget(
-                _OkTokenizer(), [{"role": "user", "content": "hi"}], budget_s=float("inf")
-            ),
-            "<|user|>hi<|assistant|>",
-        )
+        with self.assertRaises(ValueError):
+            RenderSession("unused.json", "t", None, budget_s=float("inf"))
 
-    def test_nan_budget_disables_watchdog(self) -> None:
-        """Test nan budget disables watchdog."""
-        # nan cannot arm setitimer either; it must not raise.
-        from model_protocol_lab.doctor import _render_with_time_budget
+    def test_nan_budget_refused(self) -> None:
+        """Test nan budget refused."""
+        from model_protocol_lab.render_worker import RenderSession
 
-        self.assertEqual(
-            _render_with_time_budget(
-                _OkTokenizer(), [{"role": "user", "content": "hi"}], budget_s=float("nan")
-            ),
-            "<|user|>hi<|assistant|>",
-        )
+        with self.assertRaises(ValueError):
+            RenderSession("unused.json", "t", None, budget_s=float("nan"))
+
+    def test_nonpositive_budget_refused(self) -> None:
+        """Test nonpositive budget refused."""
+        # budget_s <= 0 used to disable the watchdog (a documented
+        # escape hatch). The worker deadline is structural; the hatch
+        # is gone and the value is a programming error.
+        from model_protocol_lab.render_worker import RenderSession
+
+        for bad in (0.0, -1.0):
+            with self.assertRaises(ValueError):
+                RenderSession("unused.json", "t", None, budget_s=bad)
 
     def test_signal_mask_not_leaked(self) -> None:
         """Test signal mask not leaked."""
-        # The pthread_sigmask used across teardown must be restored; the
-        # process must not leave SIGALRM blocked.
+        # The old teardown blocked SIGALRM across its restore and had
+        # to prove the mask was put back. The worker path never touches
+        # the mask; pin that it stays exactly as the caller left it.
         import signal
 
-        from model_protocol_lab.doctor import _render_with_time_budget
+        from model_protocol_lab.render_worker import RenderSession
 
         if not hasattr(signal, "pthread_sigmask"):
             self.skipTest("requires pthread_sigmask (Unix)")
         before = signal.pthread_sigmask(signal.SIG_BLOCK, set())
-        _render_with_time_budget(_OkTokenizer(), [], budget_s=5.0)
+        with TemporaryDirectory() as tmp:
+            root = _write_checkpoint(Path(tmp), CLEAN_TEMPLATE)
+            with RenderSession(
+                str(root / "tokenizer.json"), CLEAN_TEMPLATE, None, budget_s=5.0
+            ) as session:
+                session.start()
+                session.render([{"role": "user", "content": "hi"}])
         after = signal.pthread_sigmask(signal.SIG_BLOCK, set())
-        self.assertEqual(before, after, "signal mask changed by the watchdog")
-        self.assertNotIn(signal.SIGALRM, after, "SIGALRM left blocked after teardown")
+        self.assertEqual(before, after, "signal mask changed by the render path")
+        self.assertNotIn(signal.SIGALRM, after, "SIGALRM left blocked after render")
 
-    def test_stale_alarm_mid_render_restores_handler(self) -> None:
-        """Test stale alarm mid render restores handler."""
-        # A SIGALRM that becomes pending during the render (e.g. a stale
-        # alarm, not the watchdog's own) is delivered to the watchdog
-        # handler and must not corrupt the handler restoration.
-        import os
+    def test_caller_alarm_mid_render_is_the_callers(self) -> None:
+        """Test caller alarm mid render is the callers."""
+        # A SIGALRM becoming pending during a render (a caller's own
+        # stale alarm, not the render path's — the render path has
+        # none) is delivered to the caller's handler and corrupts
+        # nothing: the render completes, the handler stays installed,
+        # and no timer is left armed by the render path.
         import signal
 
-        from model_protocol_lab.doctor import _render_with_time_budget, _RenderTimeBudgetExceeded
+        from model_protocol_lab.render_worker import RenderSession
 
         if not hasattr(signal, "setitimer"):
             self.skipTest("requires setitimer (Unix)")
 
+        fired: list[int] = []
+
         def old_handler(signum: int, frame: object) -> None:
-            """No-op stand-in for the previously installed SIGALRM handler."""
+            """Record the caller's own alarm delivery."""
+            fired.append(signum)
 
         prev = signal.signal(signal.SIGALRM, old_handler)
         try:
-
-            class StaleAlarmTokenizer:
-                """Stale alarm tokenizer."""
-
-                @staticmethod
-                def apply_chat_template(
-                    conversation: object,
-                    tokenize: bool = False,
-                    add_generation_prompt: bool = True,
-                ) -> str:
-                    """Apply chat template."""
-                    os.kill(os.getpid(), signal.SIGALRM)
-                    return "ok"
-
-            with self.assertRaises(_RenderTimeBudgetExceeded):
-                _render_with_time_budget(StaleAlarmTokenizer(), [], budget_s=60.0)
-            self.assertIs(
-                signal.getsignal(signal.SIGALRM),
-                old_handler,
-                "previous SIGALRM handler not restored after mid-render alarm",
-            )
+            with TemporaryDirectory() as tmp:
+                root = _write_checkpoint(Path(tmp), CLEAN_TEMPLATE)
+                with RenderSession(
+                    str(root / "tokenizer.json"), CLEAN_TEMPLATE, None, budget_s=5.0
+                ) as session:
+                    signal.setitimer(signal.ITIMER_REAL, 0.3)
+                    session.start()
+                    text = session.render([{"role": "user", "content": "hi"}])
+            self.assertIn("<|im_start|>user", text)
+            self.assertEqual(fired, [signal.SIGALRM])
+            self.assertIs(signal.getsignal(signal.SIGALRM), old_handler)
+            delay, _interval = signal.getitimer(signal.ITIMER_REAL)
+            self.assertEqual(delay, 0.0)
         finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
             signal.signal(signal.SIGALRM, prev)
 
 

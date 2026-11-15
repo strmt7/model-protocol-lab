@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (external-audit W4 push 1 — render containment, RR-10, 2026-11-15)
+
+- Checkpoint chat templates are no longer rendered in the
+  CLI's own process. `doctor`'s template conformance and
+  template probe now render through an owned worker process
+  (`model_protocol_lab.render_worker`, one per section
+  invocation, on the same interpreter): the parent enforces
+  the 10 s per-render deadline on every platform and from
+  every thread — the previous SIGALRM watchdog could not arm
+  off the main thread or on Windows and the render ran
+  unbounded there — and the address-space cap constrains the
+  worker, so a memory bomb can kill at most the worker.
+  Behaviour changes to note: renders are no longer subject
+  to the *caller's* ambient address-space limit (the worker
+  sets its own); the `budget_s <= 0` watchdog-disable escape
+  hatch is gone (the deadline is structural); a worker that
+  cannot start, or dies three times in a row, fails the
+  section closed with the new detail `render_worker_failed`
+  — there is no in-process fallback; and doctor renders from
+  non-main threads are now contained like main-thread ones.
+  A `run` now spawns a short-lived child process per doctor
+  section that renders. A worker that dies between requests
+  is detected before any write (liveness poll plus channel
+  drain), so the CLI's own SIGPIPE convention can never turn
+  the internal worker pipe into a process kill — the pair
+  degrades instead.
+
 ### Fixed (wave-11 repairs — W3 machinery honesty, 2026-11-14)
 
 - The test-layer classifier no longer calls class-body imports

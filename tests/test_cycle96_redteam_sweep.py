@@ -274,7 +274,12 @@ class ConfigOutputBoundTests(unittest.TestCase):
 
 
 class ChatTemplateMemoryCapTests(unittest.TestCase):
-    """A hostile chat_template must not transiently OOM the process."""
+    """A hostile chat_template must not transiently OOM the process.
+
+    The capped render helper moved with W4: it is now
+    ``render_worker._render_once``, executed inside the owned render
+    worker; the cap semantics these tests pin are unchanged.
+    """
 
     @unittest.skipUnless(
         os.name == "posix",
@@ -286,7 +291,7 @@ class ChatTemplateMemoryCapTests(unittest.TestCase):
         """Test bomb render raises memory error without rss growth."""
         import resource
 
-        from model_protocol_lab.doctor import _render_with_memory_cap
+        from model_protocol_lab.render_worker import _render_once
 
         class BombTokenizer:
             """Bomb tokenizer."""
@@ -302,13 +307,13 @@ class ChatTemplateMemoryCapTests(unittest.TestCase):
 
         before = rss_mb()
         with self.assertRaises(MemoryError):
-            _render_with_memory_cap(BombTokenizer(), [{"role": "user", "content": "hi"}])
+            _render_once(BombTokenizer(), [{"role": "user", "content": "hi"}])
         growth = rss_mb() - before
         self.assertLess(growth, 100, f"RSS grew {growth:.0f}MB on a capped render")
 
     def test_legitimate_render_unaffected(self):
         """Test legitimate render unaffected."""
-        from model_protocol_lab.doctor import _render_with_memory_cap
+        from model_protocol_lab.render_worker import _render_once
 
         class OkTokenizer:
             """Ok tokenizer."""
@@ -319,13 +324,13 @@ class ChatTemplateMemoryCapTests(unittest.TestCase):
                 return "<|user|>hi<|assistant|>"
 
         self.assertEqual(
-            _render_with_memory_cap(OkTokenizer(), [{"role": "user", "content": "hi"}]),
+            _render_once(OkTokenizer(), [{"role": "user", "content": "hi"}]),
             "<|user|>hi<|assistant|>",
         )
 
     def test_non_str_render_rejected(self):
         """Test non str render rejected."""
-        from model_protocol_lab.doctor import _render_with_memory_cap
+        from model_protocol_lab.render_worker import _render_once
 
         class WeirdTokenizer:
             """Weird tokenizer."""
@@ -336,7 +341,7 @@ class ChatTemplateMemoryCapTests(unittest.TestCase):
                 return ["not", "a", "string"]
 
         with self.assertRaises(ValueError):
-            _render_with_memory_cap(WeirdTokenizer(), [])
+            _render_once(WeirdTokenizer(), [])
 
 
 class BaseExceptionBoundaryTests(unittest.TestCase):

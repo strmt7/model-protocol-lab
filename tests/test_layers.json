@@ -268,6 +268,7 @@
    "test_w3_platform_caps.py",
    "test_w3_test_layers.py",
    "test_w3_windows_workflow.py",
+   "test_w4_render_worker.py",
    "test_workflows.py"
   ],
   "hf": [
@@ -301,6 +302,12 @@
   ],
   "test_cycle105_optional_dependency_audit.py": [
    "torch"
+  ],
+  "test_cycle116_render_cpu_budget_audit.py": [
+   "tokenizers"
+  ],
+  "test_cycle118_render_watchdog_hardening_audit.py": [
+   "tokenizers"
   ],
   "test_cycle12_portability.py": [
    "tokenizers"
@@ -394,6 +401,11 @@
   ],
   "test_w3_platform_caps.py": [
    "resource"
+  ],
+  "test_w4_render_worker.py": [
+   "resource",
+   "tokenizers",
+   "transformers"
   ]
  },
  "posix_classes": {
@@ -409,8 +421,8 @@
   ]
  },
  "module_counts": {
-  "total": 265,
-  "base": 252,
+  "total": 266,
+  "base": 253,
   "hf": 12,
   "posix": 1
  }

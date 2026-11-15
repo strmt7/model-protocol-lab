@@ -661,9 +661,28 @@ class DriverTests(unittest.TestCase):
 
     def test_transformers_not_installed(self):
         """Test transformers not installed."""
+        # Pre-W4 this blocked the transformers import in-process. The
+        # tokenizer load now happens in the render worker, so absence
+        # is simulated at the worker seam: a scripted worker whose init
+        # handshake reports the fixed code — exactly what the real
+        # worker sends when its own transformers import fails.
+        from model_protocol_lab import render_worker
+
+        script = (
+            "import json, struct, sys\n"
+            "header = sys.stdin.buffer.read(4)\n"
+            "(n,) = struct.unpack('>I', header)\n"
+            "sys.stdin.buffer.read(n)\n"
+            "body = json.dumps({'status': 'init_error', "
+            "'code': 'transformers_not_installed'}).encode()\n"
+            "sys.stdout.buffer.write(struct.pack('>I', len(body)) + body)\n"
+            "sys.stdout.buffer.flush()\n"
+        )
         with TemporaryDirectory() as tmp:
             root = _write_checkpoint(Path(tmp) / "ckpt", CLEAN_TEMPLATE)
-            with mock.patch.dict(sys.modules, {"transformers": None}):
+            fake = Path(tmp) / "fake_worker.py"
+            fake.write_text(script, encoding="utf-8")
+            with mock.patch.object(render_worker, "WORKER_ARGV", (sys.executable, str(fake))):
                 section = template_probe_section(root)
         self.assertEqual(section["status"], "unavailable")
         self.assertEqual(section["detail"], "transformers_not_installed")
