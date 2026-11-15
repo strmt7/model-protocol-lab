@@ -280,7 +280,7 @@ class SectionCensusTests(unittest.TestCase):
         """Negation itself moved from undispatched to dispatched."""
         self.assertEqual(diffreports.SECTION_DIFF_KEYS["negation"], "negation")
         self.assertNotIn("negation", diffreports.UNDISPATCHED_SECTIONS)
-        self.assertEqual(len(diffreports.SECTION_DIFF_KEYS), 56)
+        self.assertEqual(len(diffreports.SECTION_DIFF_KEYS), 57)
 
 
 def _genuine_two_candidate_section() -> dict:

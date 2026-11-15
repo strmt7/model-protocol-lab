@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (external-audit W4 push 2 — run budget ledger, RR-14 budget half, 2026-11-15)
+
+- `run` gained a run-level token budget. `--max-total-tokens N`
+  refuses the run before any generation when a preflight bound
+  on total spend — every planned search cell at its rendered
+  input length plus `--max-new-tokens`, each held-out fixture
+  at its longest input over candidates plus `--max-new-tokens`
+  — exceeds the cap (`run_budget_exceeded_preflight`, exit 1,
+  no report written). The bound is a true upper bound, so a
+  started run cannot overrun mid-flight; enforcement is
+  preflight-only, with no wall-clock cutoff anywhere. Every
+  `results.json` now carries a `budget` ledger (cap, preflight
+  estimate — `null` when uncapped — actual tokens spent, and
+  planned vs executed cells) on every return path, including
+  cancelled and failed runs. `diff-reports` compares ledgers
+  between runs in a new `budget` section and re-derives each
+  side's actuals from its stored observations before believing
+  them, so a hand-edited ledger shows up as one-sided rather
+  than as a match. Behaviour change to note: a capped run
+  whose plan cannot be certified (a render or encode failure
+  during preflight) is refused with
+  `run_budget_preflight_failed` instead of degrading per-cell;
+  uncapped runs are byte-for-byte unaffected.
+
 ### Fixed (external-audit W4 push 1 — render containment, RR-10, 2026-11-15)
 
 - Checkpoint chat templates are no longer rendered in the

@@ -242,6 +242,13 @@ def build_parser() -> argparse.ArgumentParser:
         "minimax3/thinking-disabled, minimax3/thinking-enabled).",
     )
     run.add_argument("--max-new-tokens", type=int, default=64)
+    run.add_argument(
+        "--max-total-tokens",
+        type=int,
+        default=None,
+        help="Refuse the run before any generation if its preflight token "
+        "bound exceeds this total (default: no run-level cap)",
+    )
     run.add_argument("--max-context", type=int, default=2048)
     run.add_argument("--seed", type=int, default=0)
     run.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
@@ -4276,6 +4283,7 @@ def main(argv: list[str] | None = None) -> int:
                     seed=args.seed,
                     cancel=cancel,
                     eos_id=eos_id,
+                    max_total_tokens=args.max_total_tokens,
                 )
             finally:
                 signal.signal(signal.SIGINT, previous_int)

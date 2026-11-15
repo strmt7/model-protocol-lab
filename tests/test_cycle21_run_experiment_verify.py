@@ -470,6 +470,34 @@ def oracle_failure_taxonomy(result, eos_id):
     }
 
 
+def oracle_budget(result, formats, split):
+    """Per the budget ledger contract (W4-2): the oracle's runs are
+    uncapped, so cap and estimate are None; actuals are summed from
+    the stored observations and planned cells are the plan's
+    arithmetic (formats x search fixtures + held-out fixtures).
+    """
+    actual = 0
+    executed = 0
+    lists = [
+        entry.get("observations") for entry in result.get("search") or [] if type(entry) is dict
+    ]
+    held = result.get("held_out")
+    if type(held) is dict:
+        lists.append(held.get("observations"))
+    for observations in lists:
+        for obs in observations if type(observations) is list else ():
+            actual += len(obs["input_ids"]) + len(obs["output_ids"])
+            executed += 1
+    return {
+        "max_total_tokens": None,
+        "estimated_total_tokens": None,
+        "actual_total_tokens": actual,
+        "cells_planned": len(formats) * len(split.search) + len(split.held_out),
+        "cells_executed": executed,
+        "estimate_includes_held_out": True,
+    }
+
+
 def oracle_run_experiment(
     backend, plan, formats, split, *, boundary, boundary_map, max_new_tokens, seed, eos_id
 ):
@@ -512,6 +540,7 @@ def oracle_run_experiment(
     def finish():
         """Finish."""
         output["failure_taxonomy"] = oracle_failure_taxonomy(output, eos_id)
+        output["budget"] = oracle_budget(output, formats, split)
         return output
 
     winners = []

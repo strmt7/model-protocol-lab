@@ -468,6 +468,75 @@ def oracle_diff_reports(
         _o_hof_available = "neither"
     _o_hof_asymmetric = _o_hof_available not in ("both", "neither")
 
+    # Budget ledger axis: availability from recomputation, mirroring
+    # the implementation — a side counts only when its recorded
+    # actuals match the sum over its own stored observations.
+    def _or_budget_valid(payload: Any, result: Any) -> bool:
+        """Or budget valid."""
+        if type(payload) is not dict or type(result) is not dict:
+            return False
+        cap = payload.get("max_total_tokens")
+        estimate = payload.get("estimated_total_tokens")
+        actual = payload.get("actual_total_tokens")
+        planned = payload.get("cells_planned")
+        executed = payload.get("cells_executed")
+        if cap is not None and (type(cap) is not int or cap < 1):
+            return False
+        if estimate is not None and (type(estimate) is not int or estimate < 0):
+            return False
+        if (cap is None) != (estimate is None):
+            return False
+        if cap is not None and estimate is not None and estimate > cap:
+            return False
+        if type(actual) is not int or actual < 0:
+            return False
+        if type(planned) is not int or planned < 0:
+            return False
+        if type(executed) is not int or executed < 0 or executed > planned:
+            return False
+        if payload.get("estimate_includes_held_out") is not True:
+            return False
+        search = result.get("search")
+        if type(search) is not list:
+            return False
+        lists = []
+        for entry in search:
+            if type(entry) is not dict or type(entry.get("observations")) is not list:
+                return False
+            lists.append(entry["observations"])
+        held = result.get("held_out")
+        if type(held) is dict:
+            if type(held.get("observations")) is not list:
+                return False
+            lists.append(held["observations"])
+        total = 0
+        count = 0
+        for observations in lists:
+            for obs in observations:
+                if type(obs) is not dict:
+                    return False
+                if type(obs.get("input_ids")) not in (list, tuple) or type(
+                    obs.get("output_ids")
+                ) not in (list, tuple):
+                    return False
+                total += len(obs["input_ids"]) + len(obs["output_ids"])
+                count += 1
+        if total != actual or count != executed:
+            return False
+        return not (estimate is not None and actual > estimate)
+
+    _bg_old_ok = _or_budget_valid(old.get("budget"), old)
+    _bg_new_ok = _or_budget_valid(new.get("budget"), new)
+    if _bg_old_ok and _bg_new_ok:
+        _o_bg_available = "both"
+    elif _bg_old_ok:
+        _o_bg_available = "old"
+    elif _bg_new_ok:
+        _o_bg_available = "new"
+    else:
+        _o_bg_available = "neither"
+    _o_bg_asymmetric = _o_bg_available not in ("both", "neither")
+
     def _or_ba_valid(value: Any) -> bool:
         """Or ba valid."""
         if type(value) is not dict or value.get("available", True) is False:
@@ -9555,6 +9624,7 @@ def oracle_diff_reports(
     _or_availability_by_key = {
         "frontier": _o_available,
         "held_out_floor": _o_hof_available,
+        "budget": _o_bg_available,
         "boundary_audit": _o_ba_available,
         "selection_robustness": _o_sr_available,
         "transfer": _o_tr_available,
@@ -9624,6 +9694,7 @@ def oracle_diff_reports(
         and not evidence_asymmetric
         and not _o_frontier_asymmetric
         and not _o_hof_asymmetric
+        and not _o_bg_asymmetric
         and not _o_ba_asymmetric
         and not _o_sr_asymmetric
         and not _o_tr_asymmetric
@@ -9689,6 +9760,8 @@ def oracle_diff_reports(
         "frontier_asymmetric": _o_frontier_asymmetric,
         "held_out_floor_changed": False,
         "held_out_floor_asymmetric": _o_hof_asymmetric,
+        "budget_changed": False,
+        "budget_asymmetric": _o_bg_asymmetric,
         "boundary_audit_changed": False,
         "boundary_audit_asymmetric": _o_ba_asymmetric,
         "selection_robustness_changed": False,
@@ -9808,6 +9881,7 @@ def oracle_diff_reports(
         "winner": {"old": old_winner, "new": new_winner, "changed": winner_changed},
         "frontier": {"available": _o_available, "changed": False},
         "held_out_floor": {"available": _o_hof_available, "changed": False},
+        "budget": {"available": _o_bg_available, "changed": False},
         "boundary_audit": {"available": _o_ba_available, "changed": False},
         "selection_robustness": {"available": _o_sr_available, "changed": False},
         "transfer": {"available": _o_tr_available, "changed": False},

@@ -3994,6 +3994,47 @@ def _require_native_match(
         raise ValueError("native configuration_digest does not match this sweep configuration")
 
 
+def _preflight_estimate(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    split: Split,
+    *,
+    max_new_tokens: int,
+) -> int:
+    """Upper bound on a run's token spend, from renders + encodes only.
+
+    Mirrors :func:`model_protocol_lab.core.evaluate`'s per-cell input
+    construction exactly (render the candidate's format over the
+    fixture's messages, then encode). Search cells are exact: every
+    candidate runs every search fixture. The held-out stage runs only
+    the winner, unknown at preflight, so each held-out fixture
+    contributes its maximum input over candidates. Generation is
+    hard-capped per cell at ``max_new_tokens``, so the sum is a true
+    upper bound on the run's actual spend. Any cell whose input
+    cannot be constructed (render/encode failure, invalid token IDs)
+    refuses the capped run with ``run_budget_preflight_failed``: a
+    bound that cannot be certified is not a bound.
+    """
+
+    def input_len(fmt: Format, case: Fixture) -> int:
+        """Input len."""
+        try:
+            encoded = backend.encode(fmt.render(case.messages))
+        except Exception:  # noqa: BLE001 -- sanitization boundary, see pyproject
+            raise ValueError("run_budget_preflight_failed") from None
+        if not _valid_token_ids(encoded):
+            raise ValueError("run_budget_preflight_failed")
+        return len(encoded)
+
+    total = 0
+    for fmt in formats:
+        for case in split.search:
+            total += input_len(fmt, case) + max_new_tokens
+    for case in split.held_out:
+        total += max(input_len(fmt, case) for fmt in formats) + max_new_tokens
+    return total
+
+
 def run_experiment(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -4005,6 +4046,7 @@ def run_experiment(
     seed: int = 0,
     cancel: Event | None = None,
     eos_id: int | None = None,
+    max_total_tokens: int | None = None,
 ) -> dict[str, Any]:
     """Run the full protocol experiment and return the result dict.
 
@@ -4019,6 +4061,18 @@ def run_experiment(
     ``_configuration_digest``), stamped on every return path so a
     later consumer can prove a baseline belongs to this
     configuration before comparing against it.
+
+    ``max_total_tokens`` optionally caps the run's total token spend
+    (the run budget ledger, RR-14a). The cap is enforced at a single
+    preflight refusal point: :func:`_preflight_estimate` computes a
+    true upper bound on spend from renders + encodes alone, and a
+    run whose bound exceeds the cap is refused with
+    ``run_budget_exceeded_preflight`` before any generation — a run
+    that starts can therefore never exceed its estimate. Every
+    return path carries the ``budget`` ledger (cap, estimate —
+    ``None`` when no cap was set, since accounting without
+    enforcement does not pay for a preflight pass — actual spend,
+    planned vs executed cells).
     """
     if type(formats) is not tuple or not 1 <= len(formats) <= 24:
         raise ValueError("Supply between 1 and 24 candidates")
@@ -4032,6 +4086,8 @@ def run_experiment(
         raise ValueError("cancel must be a threading.Event")
     if eos_id is not None and (type(eos_id) is not int or eos_id < 0):
         raise ValueError("eos_id must be a nonnegative integer or None")
+    if max_total_tokens is not None and (type(max_total_tokens) is not int or max_total_tokens < 1):
+        raise ValueError("max_total_tokens must be a positive integer or None")
     if type(getattr(backend, "fingerprint", None)) is not str:
         # Fail fast on protocol-violating backends before any compute: a
         # non-string fingerprint would otherwise explode in json.dumps inside
@@ -4055,6 +4111,18 @@ def run_experiment(
         seed=seed,
         eos_id=eos_id,
     )
+    cells_planned = len(formats) * len(split.search) + len(split.held_out)
+    estimated_total_tokens: int | None = None
+    if max_total_tokens is not None:
+        # The single budget refusal point (RR-14a): the preflight
+        # bound is a true upper bound on spend, so a run that passes
+        # here can never exceed it, and a run refused here has spent
+        # nothing on generation.
+        estimated_total_tokens = _preflight_estimate(
+            backend, formats, split, max_new_tokens=max_new_tokens
+        )
+        if estimated_total_tokens > max_total_tokens:
+            raise ValueError("run_budget_exceeded_preflight")
     output: dict[str, Any] = {
         "schema_version": 1,
         "selection_rule": "unique_all_search_pass",
@@ -4078,6 +4146,27 @@ def run_experiment(
         # banner can cite it; it is deterministic from the stored records.
         """Return the finish."""
         output["failure_taxonomy"] = failure_taxonomy(output, eos_id)
+        # The budget ledger rides the same every-return-path discipline:
+        # actuals are summed from the stored observations, so a
+        # cancelled or failed run still reports what it spent.
+        actual_total_tokens = 0
+        cells_executed = 0
+        observation_lists: list[Any] = [entry["observations"] for entry in output["search"]]
+        held = output["held_out"]
+        if type(held) is dict:
+            observation_lists.append(held["observations"])
+        for observations in observation_lists:
+            for obs in observations:
+                actual_total_tokens += len(obs["input_ids"]) + len(obs["output_ids"])
+                cells_executed += 1
+        output["budget"] = {
+            "max_total_tokens": max_total_tokens,
+            "estimated_total_tokens": estimated_total_tokens,
+            "actual_total_tokens": actual_total_tokens,
+            "cells_planned": cells_planned,
+            "cells_executed": cells_executed,
+            "estimate_includes_held_out": True,
+        }
         return output
 
     winners = []

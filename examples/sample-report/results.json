@@ -220,6 +220,14 @@
     "held_out": null,
     "eos_id_considered": false
   },
+  "budget": {
+    "max_total_tokens": null,
+    "estimated_total_tokens": null,
+    "actual_total_tokens": 2882,
+    "cells_planned": 12,
+    "cells_executed": 12,
+    "estimate_includes_held_out": true
+  },
   "budget_frontier": {
     "max_new_tokens": 16,
     "native_decision": "compatible_on_fixture_set",

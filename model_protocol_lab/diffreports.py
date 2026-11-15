@@ -117,6 +117,7 @@ _PRIMARY_WINNER_DECISIONS = frozenset({"compatible_on_fixture_set", "held_out_fa
 _SECTION_PAIRS: list[tuple[str, str]] = [
     ("budget_frontier", "frontier"),
     ("held_out_budget_floor", "held_out_floor"),
+    ("budget", "budget"),
     ("boundary_audit", "boundary_audit"),
     ("selection_robustness", "selection_robustness"),
     ("transfer", "transfer"),
@@ -1073,6 +1074,11 @@ def diff_reports(
         "both",
         "neither",
     )
+    # The budget ledger differ takes the whole results dicts: its
+    # recorded actuals are validated by recomputation from each side's
+    # own observations before comparison (see diff_budgets).
+    budget_diff = diff_budgets(old.get("budget"), new.get("budget"), old, new)
+    budget_asymmetric = budget_diff["available"] not in ("both", "neither")
     boundary_audit_diff = diff_boundary_audit(old.get("boundary_audit"), new.get("boundary_audit"))
     boundary_audit_asymmetric = boundary_audit_diff["available"] not in (
         "both",
@@ -1404,6 +1410,7 @@ def diff_reports(
     section_diffs_by_key = {
         "frontier": frontier_diff,
         "held_out_floor": held_out_floor_diff,
+        "budget": budget_diff,
         "boundary_audit": boundary_audit_diff,
         "selection_robustness": robustness_diff,
         "transfer": transfer_diff,
@@ -1471,6 +1478,8 @@ def diff_reports(
         and not frontier_asymmetric
         and not held_out_floor_diff["changed"]
         and not held_out_floor_asymmetric
+        and not budget_diff["changed"]
+        and not budget_asymmetric
         and not boundary_audit_diff["changed"]
         and not boundary_audit_asymmetric
         and not robustness_diff["changed"]
@@ -1592,6 +1601,8 @@ def diff_reports(
         "frontier_asymmetric": frontier_asymmetric,
         "held_out_floor_changed": held_out_floor_diff["changed"],
         "held_out_floor_asymmetric": held_out_floor_asymmetric,
+        "budget_changed": budget_diff["changed"],
+        "budget_asymmetric": budget_asymmetric,
         "boundary_audit_changed": boundary_audit_diff["changed"],
         "boundary_audit_asymmetric": boundary_audit_asymmetric,
         "selection_robustness_changed": robustness_diff["changed"],
@@ -1711,6 +1722,7 @@ def diff_reports(
         "winner": {"old": old_winner, "new": new_winner, "changed": winner_changed},
         "frontier": frontier_diff,
         "held_out_floor": held_out_floor_diff,
+        "budget": budget_diff,
         "boundary_audit": boundary_audit_diff,
         "selection_robustness": robustness_diff,
         "transfer": transfer_diff,
@@ -1941,6 +1953,136 @@ def _diff_spans(
         else:
             spans.append([budget, end, old_value, new_value])
     return spans
+
+
+def _budget_side(payload: Any, result: Any) -> dict[str, Any] | None:
+    """Validate one side's budget ledger against its own observations.
+
+    Returns the recorded ledger fields, or ``None`` when the payload
+    is missing/malformed OR its recorded actuals disagree with the
+    run's stored observations: a ledger that contradicts its own
+    evidence is not comparable. The cross-field invariants are the
+    producer's (``experiments.run_experiment``): an estimate is
+    recorded exactly when a cap was set, a started run's estimate
+    never exceeded its cap, and its actual spend never exceeded the
+    estimate (the preflight bound is a true upper bound).
+    """
+    if type(payload) is not dict or type(result) is not dict:
+        return None
+    cap = payload.get("max_total_tokens")
+    estimate = payload.get("estimated_total_tokens")
+    actual = payload.get("actual_total_tokens")
+    planned = payload.get("cells_planned")
+    executed = payload.get("cells_executed")
+    if cap is not None and (type(cap) is not int or cap < 1):
+        return None
+    if estimate is not None and (type(estimate) is not int or estimate < 0):
+        return None
+    if (cap is None) != (estimate is None):
+        return None
+    if cap is not None and estimate is not None and estimate > cap:
+        return None
+    if type(actual) is not int or actual < 0:
+        return None
+    if type(planned) is not int or planned < 0:
+        return None
+    if type(executed) is not int or executed < 0 or executed > planned:
+        return None
+    if payload.get("estimate_includes_held_out") is not True:
+        return None
+    search = result.get("search")
+    if type(search) is not list:
+        return None
+    observation_lists: list[Any] = []
+    for entry in search:
+        if type(entry) is not dict or type(entry.get("observations")) is not list:
+            return None
+        observation_lists.append(entry["observations"])
+    held = result.get("held_out")
+    if type(held) is dict:
+        if type(held.get("observations")) is not list:
+            return None
+        observation_lists.append(held["observations"])
+    recomputed_actual = 0
+    recomputed_cells = 0
+    for observations in observation_lists:
+        for obs in observations:
+            if type(obs) is not dict:
+                return None
+            input_ids = obs.get("input_ids")
+            output_ids = obs.get("output_ids")
+            # Loaded documents carry lists; in-memory results carry
+            # the tuples asdict produced. Both are the same document
+            # at different pipeline stages, so both are accepted.
+            # (isinstance, not type(): mypy narrows Any | None through
+            # isinstance only — see the workspace lessons file.)
+            if not isinstance(input_ids, (list, tuple)) or not isinstance(
+                output_ids, (list, tuple)
+            ):
+                return None
+            recomputed_actual += len(input_ids) + len(output_ids)
+            recomputed_cells += 1
+    if recomputed_actual != actual or recomputed_cells != executed:
+        return None
+    if estimate is not None and actual > estimate:
+        return None
+    return {
+        "max_total_tokens": cap,
+        "estimated_total_tokens": estimate,
+        "actual_total_tokens": actual,
+        "cells_planned": planned,
+        "cells_executed": executed,
+    }
+
+
+def diff_budgets(old: Any, new: Any, old_result: Any, new_result: Any) -> dict[str, Any]:
+    """Compare two runs' budget ledgers (the RR-14a mirror).
+
+    Unlike the other section differs, this one receives the whole
+    results dicts: the ledger's recorded actuals are only meaningful
+    against the observations they claim to sum, so each side is
+    first validated by recomputation from its own search/held-out
+    observations (:func:`_budget_side`). A side whose ledger
+    contradicts its observations — or is malformed or absent — is
+    reported through the availability enum instead of compared, so a
+    one-sided tamper surfaces as asymmetry and breaks the identical
+    verdict rather than passing as a match. On evidence-excluded
+    exports (the default public view strips observations) neither
+    side can be recomputed, so the section degrades to unvalidated —
+    the same documented behaviour as the other
+    observation-recomputing sections; evidence exports are the
+    diff inputs that carry the full check.
+    """
+    old_side = _budget_side(old, old_result)
+    new_side = _budget_side(new, new_result)
+    if old_side is not None and new_side is not None:
+        available = "both"
+    elif old_side is not None:
+        available = "old"
+    elif new_side is not None:
+        available = "new"
+    else:
+        available = "neither"
+    result: dict[str, Any] = {"available": available, "changed": False}
+    if old_side is None or new_side is None:
+        return result
+    changed = False
+    for field in (
+        "max_total_tokens",
+        "estimated_total_tokens",
+        "actual_total_tokens",
+        "cells_planned",
+        "cells_executed",
+    ):
+        field_changed = old_side[field] != new_side[field]
+        result[field] = {
+            "old": old_side[field],
+            "new": new_side[field],
+            "changed": field_changed,
+        }
+        changed = changed or field_changed
+    result["changed"] = changed
+    return result
 
 
 def diff_frontiers(old: Any, new: Any) -> dict[str, Any]:
@@ -32171,6 +32313,8 @@ def render_summary(diff: dict[str, Any]) -> str:
             axes.append("token-budget frontier")
         if diff["held_out_floor"]["available"] == "both":
             axes.append("held-out budget floor")
+        if diff["budget"]["available"] == "both":
+            axes.append("run budget ledger")
         if diff["perturbation"]["available"] == "both":
             axes.append("fixture-perturbation robustness")
         if diff["token_healing"]["available"] == "both":

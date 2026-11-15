@@ -263,6 +263,7 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
         "winner": {"old": "alpha", "new": "alpha", "changed": False},
         "frontier": {"available": "neither", "changed": False},
         "held_out_floor": {"available": "neither", "changed": False},
+        "budget": {"available": "neither", "changed": False},
         "boundary_audit": {"available": "neither", "changed": False},
         "selection_robustness": {"available": "neither", "changed": False},
         "transfer": {"available": "neither", "changed": False},
@@ -338,6 +339,8 @@ def _identical_expected(all_fixtures: bool = False) -> dict[str, Any]:
             "frontier_asymmetric": False,
             "held_out_floor_changed": False,
             "held_out_floor_asymmetric": False,
+            "budget_changed": False,
+            "budget_asymmetric": False,
             "boundary_audit_changed": False,
             "boundary_audit_asymmetric": False,
             "selection_robustness_changed": False,
@@ -820,6 +823,107 @@ def _o_held_out_floor(old: Any, new: Any) -> tuple[dict[str, Any], bool, bool]:
         "changed": robust_changed,
     }
     changed = bool(floor_changed or robust_changed)
+    diff["changed"] = changed
+    return diff, changed, asymmetric
+
+
+def _o_budget_side(payload: Any, result: Any) -> dict[str, Any] | None:
+    """Oracle budget-side validation: mirrors diffreports._budget_side.
+
+    Independent reimplementation: recomputation via generator sums
+    over the side's flattened observation lists rather than the
+    implementation's accumulation loops.
+    """
+    if type(payload) is not dict or type(result) is not dict:
+        return None
+    cap = payload.get("max_total_tokens")
+    estimate = payload.get("estimated_total_tokens")
+    actual = payload.get("actual_total_tokens")
+    planned = payload.get("cells_planned")
+    executed = payload.get("cells_executed")
+    ints_ok = (
+        (cap is None or (type(cap) is int and cap >= 1))
+        and (estimate is None or (type(estimate) is int and estimate >= 0))
+        and type(actual) is int
+        and actual >= 0
+        and type(planned) is int
+        and planned >= 0
+        and type(executed) is int
+        and 0 <= executed <= planned
+    )
+    if not ints_ok:
+        return None
+    if (cap is None) != (estimate is None):
+        return None
+    if cap is not None and estimate is not None and estimate > cap:
+        return None
+    if payload.get("estimate_includes_held_out") is not True:
+        return None
+    search = result.get("search")
+    if type(search) is not list:
+        return None
+    lists: list[Any] = []
+    for entry in search:
+        if type(entry) is not dict or type(entry.get("observations")) is not list:
+            return None
+        lists.append(entry["observations"])
+    held = result.get("held_out")
+    if type(held) is dict:
+        if type(held.get("observations")) is not list:
+            return None
+        lists.append(held["observations"])
+    flat = [obs for lst in lists for obs in lst]
+    if any(
+        type(obs) is not dict
+        or type(obs.get("input_ids")) not in (list, tuple)
+        or type(obs.get("output_ids")) not in (list, tuple)
+        for obs in flat
+    ):
+        return None
+    if sum(len(o["input_ids"]) + len(o["output_ids"]) for o in flat) != actual:
+        return None
+    if len(flat) != executed:
+        return None
+    if estimate is not None and actual > estimate:
+        return None
+    return {
+        "max_total_tokens": cap,
+        "estimated_total_tokens": estimate,
+        "actual_total_tokens": actual,
+        "cells_planned": planned,
+        "cells_executed": executed,
+    }
+
+
+def _o_budget(
+    old: Any, new: Any, old_result: Any, new_result: Any
+) -> tuple[dict[str, Any], bool, bool]:
+    """Oracle budget section: per-field ledger drift after recomputation."""
+    old_side = _o_budget_side(old, old_result)
+    new_side = _o_budget_side(new, new_result)
+    if old_side is not None and new_side is not None:
+        available = "both"
+    elif old_side is not None:
+        available = "old"
+    elif new_side is not None:
+        available = "new"
+    else:
+        available = "neither"
+    diff: dict[str, Any] = {"available": available, "changed": False}
+    asymmetric = available not in ("both", "neither")
+    if available != "both":
+        return diff, False, asymmetric
+    changed = False
+    for field in (
+        "max_total_tokens",
+        "estimated_total_tokens",
+        "actual_total_tokens",
+        "cells_planned",
+        "cells_executed",
+    ):
+        f_changed = old_side[field] != new_side[field]
+        diff[field] = {"old": old_side[field], "new": new_side[field], "changed": f_changed}
+        changed = changed or f_changed
     diff["changed"] = changed
     return diff, changed, asymmetric
 
@@ -20357,6 +20461,7 @@ def _oracle_diff(
     o_hof, o_hof_changed, o_hof_asymmetric = _o_held_out_floor(
         old.get("held_out_budget_floor"), new.get("held_out_budget_floor")
     )
+    o_bg, o_bg_changed, o_bg_asymmetric = _o_budget(old.get("budget"), new.get("budget"), old, new)
     o_ba, o_ba_changed, o_ba_asymmetric = _o_boundary_audit(
         old.get("boundary_audit"), new.get("boundary_audit")
     )
@@ -20497,6 +20602,7 @@ def _oracle_diff(
     o_diffs_by_key = {
         "frontier": o_frontier,
         "held_out_floor": o_hof,
+        "budget": o_bg,
         "boundary_audit": o_ba,
         "selection_robustness": o_sr,
         "transfer": o_tr,
@@ -20564,6 +20670,8 @@ def _oracle_diff(
         and not o_frontier_asymmetric
         and not o_hof_changed
         and not o_hof_asymmetric
+        and not o_bg_changed
+        and not o_bg_asymmetric
         and not o_ba_changed
         and not o_ba_asymmetric
         and not o_sr_changed
@@ -20678,6 +20786,7 @@ def _oracle_diff(
         "winner": {"old": old_w, "new": new_w, "changed": winner_changed},
         "frontier": o_frontier,
         "held_out_floor": o_hof,
+        "budget": o_bg,
         "boundary_audit": o_ba,
         "selection_robustness": o_sr,
         "transfer": o_tr,
@@ -20749,6 +20858,8 @@ def _oracle_diff(
             "frontier_asymmetric": o_frontier_asymmetric,
             "held_out_floor_changed": o_hof_changed,
             "held_out_floor_asymmetric": o_hof_asymmetric,
+            "budget_changed": o_bg_changed,
+            "budget_asymmetric": o_bg_asymmetric,
             "boundary_audit_changed": o_ba_changed,
             "boundary_audit_asymmetric": o_ba_asymmetric,
             "selection_robustness_changed": o_sr_changed,
@@ -22717,6 +22828,8 @@ class DiffreportsAuditTest(unittest.TestCase):
                 "frontier_asymmetric": False,
                 "held_out_floor_changed": False,
                 "held_out_floor_asymmetric": False,
+                "budget_changed": False,
+                "budget_asymmetric": False,
                 "boundary_audit_changed": False,
                 "boundary_audit_asymmetric": False,
                 "selection_robustness_changed": False,
@@ -24198,6 +24311,8 @@ def _fuzz_report(rng: random.Random) -> dict[str, Any]:
         report["answer_collision"] = _fuzz_answer_collision_section(rng)
     if rng.random() < 0.45:
         report["serving_backends"] = _fuzz_serving_backends_section(rng)
+    if rng.random() < 0.45:
+        report["budget"] = _fuzz_budget_section(rng, report)
     return report
 
 
@@ -26719,6 +26834,50 @@ def _fuzz_numform_section(rng: random.Random) -> dict[str, Any]:
     return payload
 
 
+def _fuzz_budget_section(rng: random.Random, report: dict[str, Any]) -> dict[str, Any]:
+    # Coherent ledgers are computed from the report's own stored
+    # observations (the definition the differ recomputes); hostile
+    # mutations then break the recorded fields, and oracle and
+    # implementation must agree on every rejection.
+    """Fuzz budget section."""
+    total = 0
+    cells = 0
+    lists: list[Any] = [
+        entry.get("observations") for entry in report.get("search", []) if type(entry) is dict
+    ]
+    held = report.get("held_out")
+    if type(held) is dict:
+        lists.append(held.get("observations"))
+    for observations in lists:
+        for obs in observations if type(observations) is list else ():
+            if (
+                type(obs) is dict
+                and type(obs.get("input_ids")) in (list, tuple)
+                and type(obs.get("output_ids")) in (list, tuple)
+            ):
+                total += len(obs["input_ids"]) + len(obs["output_ids"])
+                cells += 1
+    capped = rng.random() < 0.5
+    estimate = total + rng.randint(0, 500) if capped else None
+    section: dict[str, Any] = {
+        "max_total_tokens": (estimate + rng.randint(0, 100)) if capped else None,
+        "estimated_total_tokens": estimate,
+        "actual_total_tokens": total,
+        "cells_planned": cells + rng.randint(0, 3),
+        "cells_executed": cells,
+        "estimate_includes_held_out": True,
+    }
+    if rng.random() < 0.15:
+        section["actual_total_tokens"] = total + rng.randint(1, 50)  # contradicts observations
+    if rng.random() < 0.1:
+        section["estimate_includes_held_out"] = False  # unrecorded accounting definition
+    if rng.random() < 0.1:
+        section["cells_executed"] = cells + rng.randint(1, 5)  # exceeds recomputation
+    if rng.random() < 0.1:
+        section["max_total_tokens"] = "lots"  # wrong type
+    return section
+
+
 def _fuzz_cache_profile_section(rng: random.Random) -> dict[str, Any]:
     # Coherent cells are produced by the real implementation over
     # random prompt sets (guaranteeing the integer identities and
@@ -27144,6 +27303,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        and not frontier_asymmetric\n"
             '        and not held_out_floor_diff["changed"]\n'
             "        and not held_out_floor_asymmetric\n"
+            '        and not budget_diff["changed"]\n'
+            "        and not budget_asymmetric\n"
             '        and not boundary_audit_diff["changed"]\n'
             "        and not boundary_audit_asymmetric\n"
             '        and not robustness_diff["changed"]\n'
@@ -27265,6 +27426,8 @@ class DiffreportsMutationGateTest(unittest.TestCase):
             "        or frontier_asymmetric\n"
             '        or held_out_floor_diff["changed"]\n'
             "        or held_out_floor_asymmetric\n"
+            '        or budget_diff["changed"]\n'
+            "        or budget_asymmetric\n"
             '        or boundary_audit_diff["changed"]\n'
             "        or boundary_audit_asymmetric\n"
             '        or robustness_diff["changed"]\n'

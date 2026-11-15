@@ -14659,6 +14659,7 @@ _REPORT_SECTION_KEYS = frozenset(
         "backend_divergences",
         "batch_invariance",
         "boundary_audit",
+        "budget",
         "budget_frontier",
         "cache_profile",
         "canonical_form",
