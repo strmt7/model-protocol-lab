@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import struct
 import threading
@@ -833,9 +834,17 @@ class LlamacppHttpBackend:
                 raw = response.read(_MAX_RESPONSE_BYTES + 1)
                 status = int(response.status)
         except urllib.error.HTTPError as exc:
-            raw = exc.read(_MAX_RESPONSE_BYTES + 1)
+            # A fault reading the error body is a transport failure
+            # like any other (RTI-08): http.client.IncompleteRead is
+            # an HTTPException, not an OSError, and must not escape
+            # the _StackUnreachable classification every caller
+            # handles.
+            try:
+                raw = exc.read(_MAX_RESPONSE_BYTES + 1)
+            except (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException):
+                raise _StackUnreachable from None
             status = int(exc.code)
-        except (urllib.error.URLError, TimeoutError, OSError):
+        except (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException):
             raise _StackUnreachable from None
         if len(raw) > _MAX_RESPONSE_BYTES:
             return status, None
@@ -1712,7 +1721,9 @@ def run_cache_sequence(
 
     Identity re-read at the start (A8(i)); erase; the four arms
     (cold, warm repeat, shared prefix, divergent control); erase
-    again; identity re-read at the end. Cold follows C-3: the first
+    again; identity re-read at the end. The end erase and re-read
+    are the sequence's teardown and run on every exit from the arm
+    loop, including aborts (RTI-05). Cold follows C-3: the first
     arm after a completed erase on the probed server — a cold or
     divergent arm reporting reuse above one quantum marks the
     sequence ``cache_protocol_contaminated`` whatever erase returned.
@@ -1792,22 +1803,36 @@ def run_cache_sequence(
             "records": records,
             "positions": {},
         }
-    for position, ids in prompts.items():
-        if cancel is not None and cancel.is_set():
-            raise ExecutionCancelled
-        emit(
-            execute_cell(
-                backend,
-                request=request_for(position, ids),
-                decode=decode,
-                candidate=candidate,
-                fixture=f"cache-{position}",
-                cache_position=position,
+    identity_changed = False
+    try:
+        for position, ids in prompts.items():
+            if cancel is not None and cancel.is_set():
+                raise ExecutionCancelled
+            emit(
+                execute_cell(
+                    backend,
+                    request=request_for(position, ids),
+                    decode=decode,
+                    candidate=candidate,
+                    fixture=f"cache-{position}",
+                    cache_position=position,
+                )
             )
-        )
-    backend.erase_slot()
+    finally:
+        # RTI-05: the end teardown (final erase + identity re-read)
+        # runs on EVERY exit from the arm loop -- normal completion,
+        # a raised arm, cancellation, or a failing on_record
+        # persistence callback -- so an aborted sequence never
+        # leaves the probed slot holding cached prompt state and
+        # never skips the end identity recheck. Both teardown calls
+        # are total (they report failure as False, never raise on a
+        # transport fault), so the aborting exception, when there is
+        # one, still propagates unchanged after teardown.
+        backend.erase_slot()
+        if not backend.verify_identity():
+            identity_changed = True
     detail = ""
-    if not backend.verify_identity():
+    if identity_changed:
         detail = "stack_identity_changed_during_run"
     by_position = {record["cache_position"]: record for record in records}
     cold_n = by_position["cold"]["cache_n_reported"]

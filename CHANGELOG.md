@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (external-audit W4 push 7 — serving teardown + transport classification, RTI-05/RTI-08, 2026-11-16)
+
+- **Aborted cache sequences now run their end teardown.** The
+  cache companion sequence's final slot erase and identity
+  re-read previously ran only on normal completion; a raised
+  arm, a cancellation, or a failing record-persistence callback
+  left the probed server's slot holding cached prompt state.
+  The teardown now runs on every exit from the arm loop, with
+  the aborting exception still propagating.
+- **HTTP body-read faults join the transport classification.**
+  In the llama.cpp HTTP backend, a fault while reading a
+  response body — including `http.client.IncompleteRead`, which
+  is not an `OSError` — escaped as a raw exception instead of
+  the `_StackUnreachable` classification every caller handles.
+  Both the success-body and error-body reads now classify
+  transport faults identically.
+
 ### Added (external-audit W4 push 6 — lazy transfer backends, ORCH-03, 2026-11-16)
 
 - **Transfer backends now load one at a time and are released.**

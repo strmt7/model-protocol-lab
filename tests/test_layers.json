@@ -275,6 +275,7 @@
    "test_w4_progress_resume.py",
    "test_w4_render_worker.py",
    "test_w4_report_pair.py",
+   "test_w4_serving_teardown.py",
    "test_workflows.py"
   ],
   "hf": [
@@ -435,9 +436,9 @@
   ]
  },
  "module_counts": {
-  "base": 259,
+  "base": 260,
   "hf": 12,
   "posix": 1,
-  "total": 272
+  "total": 273
  }
 }
