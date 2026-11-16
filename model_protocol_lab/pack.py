@@ -340,6 +340,17 @@ def pack_bundle(report_dir: Path, includes: list[Path]) -> tuple[bytes, dict[str
     directory contents): returns ``(bundle_bytes, manifest, digest)``.
     """
     entries, results_data = collect_pack_files(report_dir, includes)
+    # ORCH-D02: never seal a stamped pair whose HTML sibling is
+    # missing or mismatched — the bundle would certify an
+    # incomplete report. Legacy pairs (no stamp) seal as before.
+    if "report_pair" in results_data:
+        from .diffreports import report_pair_incomplete
+
+        by_name = dict(entries)
+        html_bytes = by_name.get("report.html")
+        html_sha256 = _sha256_hex(html_bytes) if html_bytes is not None else None
+        if report_pair_incomplete(results_data, html_sha256):
+            raise ValueError("report_pair_incomplete")
     fingerprint = results_data.get("backend_fingerprint")
     if type(fingerprint) is not str or not fingerprint:
         raise ValueError("pack_results_missing_fingerprint")
@@ -724,11 +735,30 @@ def verify_bundle_bytes(data: bytes, expect_digest: str | None = None) -> dict[s
     seal_failed = any(c["status"] == "failed" for c in checks)
     context = manifest.get("context") if manifest is not None else None
     if seal_failed:
+        _record(checks, "report_pair", "unavailable", "seal_failed")
         for replay_check in verify_results(None)["checks"]:
             _record(checks, replay_check["id"], "unavailable", "seal_failed")
     else:
         results_bytes = stored[RESULTS_NAME][0]
         results_data = parse_results_bytes(results_bytes)
+        # ORCH-D02: the sealed pair carries the same completion
+        # stamp the loader checks; a legacy bundle (no stamp) is
+        # reported as unstamped, never as failed. The HTML digest
+        # is the manifest's, which seal_file_hashes has just
+        # verified against the bundled bytes in this same run.
+        from .diffreports import report_pair_incomplete
+
+        html_sha256 = None
+        if manifest is not None:
+            html_sha256 = {entry["path"]: entry["sha256"] for entry in manifest["files"]}.get(
+                "report.html"
+            )
+        if "report_pair" not in results_data:
+            _record(checks, "report_pair", "unavailable", "legacy_unstamped")
+        elif report_pair_incomplete(results_data, html_sha256):
+            _record(checks, "report_pair", "failed", "report_pair_incomplete")
+        else:
+            _record(checks, "report_pair", "passed")
         for replay_check in verify_results(results_data)["checks"]:
             checks.append(replay_check)
     verdict = "ok" if all(c["status"] != "failed" for c in checks) else "failed"

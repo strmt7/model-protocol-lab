@@ -6030,5 +6030,9 @@
     "cheapest_candidate": "llama3/no-bos",
     "winner_tax_vs_cheapest_pct": 8.25242718446602
   },
-  "raw_evidence_included": false
+  "raw_evidence_included": false,
+  "report_pair": {
+    "html_sha256": "7017b5f4e36b7bab321c92fbc54bb7590be26bd90ce095b8780fad9687d982b6",
+    "complete": true
+  }
 }

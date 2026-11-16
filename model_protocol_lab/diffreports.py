@@ -626,6 +626,61 @@ def parse_results_bytes(content: bytes) -> dict[str, Any]:
     return value
 
 
+def report_pair_incomplete(data: dict[str, Any], html_sha256: str | None) -> bool:
+    """Whether a stamped report pair fails its completion check.
+
+    ORCH-D02: ``save_report`` stamps ``results.json`` with
+    ``report_pair = {"html_sha256": ..., "complete": true}`` over
+    the exact sibling ``report.html`` bytes, and publishes the
+    JSON last as the pair's commit point. A document WITHOUT the
+    stamp is a legacy pair and is never incomplete by this rule
+    (absence is not incompleteness). A present stamp is
+    incomplete when it is malformed, when ``complete`` is not
+    true, when the sibling digest is unavailable (``None`` — the
+    HTML is missing, unreadable or not a regular file), or when
+    the digests differ.
+    """
+    if "report_pair" not in data:
+        return False
+    stamp = data["report_pair"]
+    if type(stamp) is not dict:
+        return True
+    if stamp.get("complete") is not True:
+        return True
+    expected = stamp.get("html_sha256")
+    if type(expected) is not str or html_sha256 is None:
+        return True
+    return expected != html_sha256
+
+
+def _sha256_regular_file(path: Path) -> str | None:
+    """SHA-256 of a regular file's bytes, or None when unavailable.
+
+    Same single-fd discipline as :func:`load_results`: O_NONBLOCK
+    open, fstat regular-file check on the opened fd, chunked
+    reads (the HTML sibling is not size-capped the way
+    ``results.json`` is, so it is never held whole in memory).
+    """
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+    except OSError:
+        return None
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return None
+        digest = hashlib.sha256()
+        with os.fdopen(fd, "rb") as handle:
+            fd = -1  # ownership moved to the file object
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except OSError:
+        return None
+    finally:
+        if fd != -1:
+            os.close(fd)
+
+
 def load_results(path: str | Path) -> dict[str, Any]:
     """Read a ``results.json`` (or a report directory holding one).
 
@@ -634,7 +689,12 @@ def load_results(path: str | Path) -> dict[str, Any]:
     FIFOs, devices and sockets are refused), at
     most ``MAX_RESULTS_BYTES`` are read, and every failure mode maps to a
     fixed error code raised as ``ValueError`` -- never a traceback and never
-    file content echoed into the message.
+    file content echoed into the message. A ``report_pair`` stamp
+    (ORCH-D02) is verified against the sibling ``report.html``
+    before the document is returned when the document is
+    presented as a pair (a report directory, or a file named
+    ``results.json``); a legacy document without the stamp loads
+    as it always has.
     """
     target = Path(path)
     if not target.exists():
@@ -657,7 +717,19 @@ def load_results(path: str | Path) -> dict[str, Any]:
     finally:
         if fd != -1:
             os.close(fd)
-    return parse_results_bytes(content)
+    data = parse_results_bytes(content)
+    if "report_pair" in data and resolved.name == "results.json":
+        # ORCH-D02: a stamped pair is trusted only when the
+        # sibling report.html matches the stamped digest; the
+        # stamp's absence (a legacy pair) is not incompleteness.
+        # The check binds documents presented AS a pair — a
+        # report directory, or a file named results.json; a lone
+        # JSON under any other name is loaded as data (its stamp
+        # describes a pair it is no longer part of).
+        html_sha256 = _sha256_regular_file(resolved.parent / "report.html")
+        if report_pair_incomplete(data, html_sha256):
+            raise ValueError("report_pair_incomplete")
+    return data
 
 
 def _require_shape(value: dict[str, Any]) -> None:

@@ -894,7 +894,8 @@ def _check_json_shape(rep):
         json_path, _html_path = rep.save_report(copy.deepcopy(result), Path(tmp) / "r")
         payload = json.loads(json_path.read_text(encoding="utf-8"))
         raw = json_path.read_bytes()
-    # Exact top-level key order: input keys, then diagnostics, then the flag.
+    # Exact top-level key order: input keys, then diagnostics, then the
+    # flag, then the ORCH-D02 pair stamp save_report appends last.
     assert list(payload.keys()) == [
         "decision",
         "seed",
@@ -902,6 +903,7 @@ def _check_json_shape(rep):
         "selection_margin",
         "token_overhead",
         "raw_evidence_included",
+        "report_pair",
     ]
     assert payload["raw_evidence_included"] is False
     assert payload["selection_margin"] == rep.selection_margin(result)

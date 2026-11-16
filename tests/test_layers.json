@@ -272,6 +272,7 @@
    "test_w4_budget_ledger.py",
    "test_w4_progress_resume.py",
    "test_w4_render_worker.py",
+   "test_w4_report_pair.py",
    "test_workflows.py"
   ],
   "hf": [
@@ -428,8 +429,8 @@
   ]
  },
  "module_counts": {
-  "total": 269,
-  "base": 256,
+  "total": 270,
+  "base": 257,
   "hf": 12,
   "posix": 1
  }

@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (external-audit W4 push 4 — report-pair completion boundary, ORCH-D02, 2026-11-16)
+
+- Report pairs now publish atomically and carry a completion
+  stamp. `save_report` writes `report.html` and `results.json`
+  to fsynced staging files and renames them into place — HTML
+  first, JSON last — stamping the JSON with
+  `report_pair: {html_sha256, complete: true}` over the exact
+  HTML bytes. A crash mid-save leaves an orphan, never a
+  plausible-but-wrong pair: the shared report loader (used by
+  `diff-reports` and `verify`) and `pack` refuse a stamped pair
+  whose sibling is missing or mismatched with
+  `report_pair_incomplete`, and bundle verification reports the
+  pair as a `report_pair` check. Reports saved before the stamp
+  existed load and seal exactly as before.
+
 ### Added (external-audit W4 push 3 — durable run progress + resume, RR-14, 2026-11-15)
 
 - `run` now journals its progress and can resume an interrupted

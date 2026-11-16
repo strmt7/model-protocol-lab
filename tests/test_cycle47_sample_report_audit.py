@@ -97,6 +97,9 @@ EXPECTED_TOP_LEVEL_KEYS = [
     "selection_margin",
     "token_overhead",
     "raw_evidence_included",
+    # W4 push 4 (ORCH-D02): save_report stamps the pair binding
+    # last; regenerated in the same push.
+    "report_pair",
 ]
 
 EXPECTED_SEARCH_ENTRY_KEYS = {"boundary_token_ids", "candidate_fingerprint", "format", "summary"}

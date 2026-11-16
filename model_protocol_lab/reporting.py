@@ -14761,6 +14761,7 @@ _REPORT_CORE_KEYS = frozenset(
         "held_out",
         "failure_taxonomy",
         "resumed",
+        "report_pair",
         "selection_margin",
         "token_overhead",
         "diagnostics_unavailable",
@@ -14798,6 +14799,50 @@ def _check_report_admission(result: dict[str, Any]) -> None:
         raise ValueError(f"unknown report section keys: {names}")
 
 
+def _write_staged(path: Path, text: str) -> None:
+    """Write ``text`` to a staging file, flushed and fsynced.
+
+    Same fd discipline as a final report file (O_EXCL, 0o600); a
+    failed write unlinks the partial staging file.
+    """
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        handle = os.fdopen(fd, "w", encoding="utf-8")
+    except BaseException:
+        os.close(fd)
+        with contextlib.suppress(OSError):
+            os.unlink(path)
+        raise
+    try:
+        with handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(path)
+        raise
+
+
+def _fsync_directory(path: Path) -> None:
+    """Best-effort fsync of a directory after rename publication.
+
+    POSIX only: Windows exposes no directory fsync through this
+    API. The rename order (HTML first, JSON last) carries the
+    commit-point semantics on every platform; the fsync only
+    orders durability, so its failure never fails a save whose
+    files are already published.
+    """
+    if os.name != "posix":
+        return
+    with contextlib.suppress(OSError):
+        fd = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+
 def save_report(
     result: dict[str, Any],
     directory: str | Path,
@@ -14808,10 +14853,17 @@ def save_report(
 ) -> tuple[Path, Path]:
     """Write the report as results.json + report.html into a fresh directory.
 
-    The directory is created with owner-only permissions and both files are
-    written with O_EXCL (no overwrite) and 0o600, since reports may contain
-    sensitive evidence; a partially written file is unlinked on any
-    Python-level failure. The JSON holds the public view (raw
+    The directory is created with owner-only permissions. Publication
+    is staged (ORCH-D02): both texts are rendered in memory, written
+    to ``.part`` staging files (O_EXCL, 0o600, flush + fsync), then
+    published by rename — HTML first, JSON last — followed by a
+    directory fsync. The final ``results.json`` is the pair's commit
+    point: it is stamped with ``report_pair.html_sha256`` over the
+    exact HTML bytes and ``complete: true``, so a crash between the
+    renames leaves an orphan that no consumer can mistake for a
+    complete pair (see ``diffreports.load_results``). On any
+    Python-level failure the staging files and any already-published
+    sibling are unlinked. The JSON holds the public view (raw
     observations stripped unless include_evidence is set); the HTML is the
     full enriched rendering. Returns the (json_path, html_path) tuple.
     Raises ValueError if the payload fails the admission gate (not a
@@ -14827,8 +14879,15 @@ def save_report(
     # the raw observations they were computed from.
     enriched = attach_diagnostics(result)
     public = _public_view(enriched, include_evidence)
-    json_text = json.dumps(public, ensure_ascii=True, allow_nan=False, indent=2)
     html_text = render_html(enriched)
+    # The pair stamp binds the JSON to the exact HTML bytes about
+    # to be published beside it; consumers verify it before
+    # trusting the pair (diffreports.report_pair_incomplete).
+    public["report_pair"] = {
+        "html_sha256": hashlib.sha256(html_text.encode("utf-8")).hexdigest(),
+        "complete": True,
+    }
+    json_text = json.dumps(public, ensure_ascii=True, allow_nan=False, indent=2)
     # Restrictive permissions: reports may contain sensitive evidence
     # (--include-evidence). The directory and files are readable only by the
     # invoking user, regardless of the process umask.
@@ -14838,32 +14897,29 @@ def save_report(
         _allow_progress_journal=_allow_progress_journal,
     )
     json_path, html_path = target / "results.json", target / "report.html"
-    written: list[Path] = []
+    staged: list[Path] = []
+    published: list[Path] = []
     try:
-        for path, text in ((json_path, json_text), (html_path, html_text)):
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            try:
-                handle = os.fdopen(fd, "w", encoding="utf-8")
-            except BaseException:
-                os.close(fd)
-                with contextlib.suppress(OSError):
-                    os.unlink(path)
-                raise
-            try:
-                with handle:
-                    handle.write(text)
-            except BaseException:
-                # Never leave a half-written report behind: an interrupted
-                # (KeyboardInterrupt) or failed write removes the partial
-                # file, mirroring fixtures.write_fixture_file's discipline.
-                with contextlib.suppress(OSError):
-                    os.unlink(path)
-                raise
-            written.append(path)
+        for final_path, text in ((html_path, html_text), (json_path, json_text)):
+            part_path = final_path.with_name(final_path.name + ".part")
+            _write_staged(part_path, text)
+            staged.append(part_path)
+        # Publish HTML first and the stamped JSON last: the final
+        # results.json is the commit point of the pair.
+        for part_path, final_path in (
+            (staged[0], html_path),
+            (staged[1], json_path),
+        ):
+            os.replace(part_path, final_path)
+            published.append(final_path)
+        staged.clear()
+        _fsync_directory(target)
     except BaseException:
-        # The second file failed after the first was fully written: remove
-        # it too, so a failed save never leaves a half-built report pair.
-        for done in written:
+        # A failed save never leaves a half-built report pair:
+        # remove the staging files and any already-published
+        # sibling, mirroring fixtures.write_fixture_file's
+        # discipline.
+        for done in (*staged, *published):
             with contextlib.suppress(OSError):
                 os.unlink(done)
         raise

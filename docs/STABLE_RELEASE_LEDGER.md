@@ -98,7 +98,7 @@ repo). Priorities and owning packages are the audit's.
 | ORCH-03 | P2 | Transfer evaluation retains multiple loaded backends simultaneously | open | W4 | audit-executed loader trace (`load, load, load, evaluate`); no real allocation attempted |
 | ORCH-04 | P2 | Unavailable serving cells render as measured negatives (`fired=false` for capability-absent cells reads as "no fire") | **fixed-with-evidence** | W2 | audit inspection of producer + renderer; **fixed in W2 push 4**: the producer (`experiments.serving_backends_analysis`) now records `fired: None` (unobservable) for capability-absent cells — a measured no-fire keeps `fired: false` — the diff mirror (`diffreports._serving_recompute_rows`) and the cycle-67 oracle recompute the same shape, and the HTML renderer (`reporting._serving_backends_section`) prints "unobservable" for unavailable cells while measured cells keep "fired"/"no fire". Regression tests: `tests/test_w2_section_states.py` (producer shape, renderer wording for both cell classes, and a genuine capability-absent section validating both-sides through the differ on cycle-243's fake-server machinery) |
 | ORCH-D01 | P2 | Export lacks version/schema admission (`save_report` accepts `schema_version=999`) | **fixed-with-evidence** | W2 | audit inspection; classified design debt in the audit itself; the lane reproduced the acceptance of `schema_version: 999` on this baseline. **Fixed in W2 push 5 (2026-11-12)**, implementing the row in W2 as the audit plan assigns (not left as accepted debt): `save_report` now runs an admission gate before enrichment or any write — a non-dict payload, a present `schema_version` that is not the integer 1, or any top-level key outside the core set plus the registered section set is refused with `ValueError` and nothing is written. The section set is a deliberate literal in reporting (the module must stay copy-isolatable from the package, per the cycle-75 determinism gate), pinned equal to the diff registry by `tests/test_w2_projection.py` so the two cannot drift. **Amended in W2 push 6 (2026-11-12) on bug-hunt wave 10's findings F1/L1**: the refusal path itself crashed with a raw `TypeError` on non-string top-level keys, and malformed core values (hostile `search`/`held_out` shapes, a non-serializable value) crashed the projection after passing the gate. The refusal message is now total over key types, the projection's observation strips are shape-guarded, and a non-serializable payload is refused with `ValueError` before any write — adjudication: enrichment/projection totality over admitted envelopes, not gate-side duplication of the core shape contracts. Regression: `tests/test_w2_wave10.py`; the cycle-era serialization test now expects the documented `ValueError` |
-| ORCH-D02 | P2 | Report pairs lack a crash completion boundary (JSON visible before HTML exists) | design-debt-accepted-for-W4/W5 | W4/W5 | **lane: defect half NOT-REPRODUCED** — injecting a failure on the second file open removes both artifacts; the Python-exception cleanup works exactly as the audit credits it. The crash half (a half-written pair visible after a hard process kill) is not executable without killing a process mid-write and stands as design debt only |
+| ORCH-D02 | P2 | Report pairs lack a crash completion boundary (JSON visible before HTML exists) | fixed-with-evidence (W4 push 4, 2026-11-16) | W4/W5 | **closed by the D-4 pair boundary**: staged `.part` writes + fsync + rename publication (HTML first, stamped JSON last as commit point, `report_pair.html_sha256` through the ORCH-D01 admission gate); the shared loader and `pack` refuse a stamped-but-incomplete pair with `report_pair_incomplete`; legacy unstamped pairs verify as before. Acceptance: `tests/test_w4_report_pair.py` (stamp/digest, fsync count, failed-second-rename leaves no pair, tampered/missing/malformed sibling refusals, orphan shapes, seal + bundle-verify checks). The lane's defect-half note stands as history: the Python-exception cleanup always worked; the crash half is now closed by construction |
 
 ### 2.3 Semantic-key siblings of SCI-B-01 (semantic-keys lane)
 
@@ -298,6 +298,27 @@ modulo the `resumed` block. Running tallies: **31
 fixed-with-evidence, 19 open, 1 design-debt-accepted
 (ORCH-D02), 1 blocked-external (RR-05)**; §4 refreshes at
 W4 closure.
+
+A seventeenth push (W4 push 4, 2026-11-16) discharges the
+ORCH-D02 design debt with the pair boundary adjudication
+D-4 specified: `save_report` stages both report files as
+fsynced `.part` files and publishes them by rename — HTML
+first, the stamped `results.json` last as the pair's commit
+point — with the stamp (`report_pair.html_sha256` over the
+exact HTML bytes, `complete: true`) admitted through the
+ORCH-D01 gate as a core key. A hard crash mid-save now
+leaves an orphan no consumer can mistake for a complete
+pair: the shared loader (`diffreports.load_results`, hence
+`verify` and `diff-reports`) refuses a stamped pair whose
+sibling is missing or mismatched with
+`report_pair_incomplete`; `pack` refuses to seal such a
+pair and bundle verification reports it as a `report_pair`
+check. Legacy unstamped pairs verify exactly as before —
+absence is not incompleteness — pinned alongside the
+tamper, orphan, malformed-stamp and failed-rename cases in
+`tests/test_w4_report_pair.py`. Running tallies: **32
+fixed-with-evidence, 19 open, 0 design-debt-accepted,
+1 blocked-external (RR-05)**; §4 refreshes at W4 closure.
 
 ### 2.6 Independent re-verification (audit-verify lane — landed)
 

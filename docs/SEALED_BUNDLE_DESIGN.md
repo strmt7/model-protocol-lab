@@ -139,7 +139,14 @@ same single-fd discipline as `load_results`, so a FIFO cannot hang it.
 `seal_file_set`, `seal_file_hashes`, optional `seal_expected_digest`);
 replay checks keep their existing `verify_results` ids. If the seal
 layer fails, the replay is not run and its checks are recorded
-`unavailable` with detail `seal_failed`. A sealed `results.json` that the
+`unavailable` with detail `seal_failed`. Between the two layers sits
+the `report_pair` check (ORCH-D02): a sealed `results.json` carrying
+the pair stamp is verified against the sealed `report.html` (the
+manifest digest, itself verified by `seal_file_hashes` in the same
+run) — `passed`, `failed` with detail `report_pair_incomplete`, or
+`unavailable` with detail `legacy_unstamped` when the sealed report
+predates the stamp; when the seal layer fails it is recorded
+`unavailable` with detail `seal_failed`, like the replay checks. A sealed `results.json` that the
 plain `verify` path would call unreadable (duplicate fields, `NaN`,
 oversize, wrong shape) is unreadable in a bundle too — same exit class,
 same fixed vocabulary. Exit codes: 0 = seal ok and replay ok; 2 = seal or

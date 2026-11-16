@@ -27,7 +27,14 @@ def _sample_report_dir(base: Path) -> Path:
     """Sample report dir."""
     report = base / "run"
     report.mkdir()
-    (report / "results.json").write_bytes(SAMPLE.read_bytes())
+    # The committed sample pair is stamped (ORCH-D02); this helper
+    # pairs its JSON with a stand-in HTML, so it strips the stamp
+    # to keep the fixture the legacy (unstamped) pair it was
+    # written as — a stamped JSON beside a foreign HTML is an
+    # incomplete pair and pack now refuses it.
+    data = json.loads(SAMPLE.read_bytes())
+    data.pop("report_pair", None)
+    (report / "results.json").write_text(json.dumps(data), encoding="utf-8")
     (report / "report.html").write_text("<html>demo</html>", encoding="utf-8")
     return report
 
@@ -546,6 +553,7 @@ class CliGapTests(unittest.TestCase):
             report_dir.mkdir()
             data = json.loads(SAMPLE.read_text(encoding="utf-8"))
             data["selected_candidate"] = "no-such-candidate"
+            data.pop("report_pair", None)
             (report_dir / "results.json").write_text(json.dumps(data), encoding="utf-8")
             bundle = Path(tmpdir) / "out.zip"
             code, _, _ = self._run_main(["pack", str(report_dir), "--output", str(bundle)])
