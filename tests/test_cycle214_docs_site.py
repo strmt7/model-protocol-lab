@@ -104,10 +104,10 @@ class TestDocsToolchain(unittest.TestCase):
     """The docs toolchain is pinned and the wheel stays dependency-free."""
 
     def test_requirements_docs_pins_the_toolchain(self):
-        """requirements-docs.txt pins mkdocs 1.6.1 and mkdocs-material 9.8.0."""
+        """requirements-docs.txt pins mkdocs 1.6.1 and mkdocs-material 9.8.1."""
         text = (REPO_ROOT / "requirements-docs.txt").read_text(encoding="utf-8")
         self.assertIn("mkdocs==1.6.1", text)
-        self.assertIn("mkdocs-material==9.8.0", text)
+        self.assertIn("mkdocs-material==9.8.1", text)
 
     def test_wheel_runtime_dependencies_stay_zero(self):
         # The docs toolchain must never leak into the shipped package.
