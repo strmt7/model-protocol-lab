@@ -287,6 +287,19 @@ def tool_probe(params: dict[str, Any]) -> dict[str, Any]:
     fingerprint = backend.fingerprint
     protocol = sn.freeze_surface_noise_protocol(backend_fingerprint=fingerprint, fixtures=fixtures)
     cancel = threading.Event()
+    # Client cancellation (ORCH-02): when this call was dispatched
+    # through handle_request, its registered event is merged in -- a
+    # daemon watcher copies it into the sweep's own event, so the
+    # SIGALRM budget and the client share one cancellation surface.
+    client_cancel = current_call_event()
+    if client_cancel is not None and client_cancel is not cancel:
+
+        def _watch_client() -> None:
+            """Watch client."""
+            client_cancel.wait()
+            cancel.set()
+
+        threading.Thread(target=_watch_client, daemon=True).start()
 
     # The budget deadline is platform_caps.alarm_deadline -- the single
     # typed implementation doctor's render watchdog also uses.
@@ -312,7 +325,13 @@ def tool_probe(params: dict[str, Any]) -> dict[str, Any]:
         )
 
     status = report.get("status")
-    if status == "cancelled":
+    if status == "cancelled" and client_cancel is not None and client_cancel.is_set():
+        summary = (
+            "probe cancelled by client: "
+            f"{report.get('completed_variants')}/{report.get('total_variants')} "
+            "variants completed. No score rendered (fail-closed)."
+        )
+    elif status == "cancelled":
         summary = (
             f"probe cancelled after {SWEEP_TIMEOUT_SECONDS:.0f}s budget: "
             f"{report.get('completed_variants')}/{report.get('total_variants')} "
@@ -491,6 +510,56 @@ def _valid_request_id(value: Any) -> bool:
     return value is None or type(value) is str or type(value) in (int, float)
 
 
+# Client cancellation (ORCH-02): a per-request registry mapping the
+# id of each in-flight tools/call to its cancellation event. The
+# serve loop dispatches tool calls on worker threads, so a
+# ``notifications/cancelled`` frame read while a call is running can
+# set that call's event; the surface-noise tool merges the
+# registered event with its own SIGALRM budget event. At stdio EOF
+# every outstanding event is set -- a disconnected client cancels
+# its in-flight work by definition.
+_IN_FLIGHT: dict[Any, threading.Event] = {}
+_IN_FLIGHT_LOCK = threading.Lock()
+_CURRENT_CALL = threading.local()
+
+
+def current_call_event() -> threading.Event | None:
+    """Return the cancellation event of the tool call running on
+    this thread, or None outside a tools/call dispatch."""
+    return getattr(_CURRENT_CALL, "event", None)
+
+
+def _register_call(request_id: Any) -> threading.Event:
+    """Register call."""
+    event = threading.Event()
+    with _IN_FLIGHT_LOCK:
+        _IN_FLIGHT[request_id] = event
+    return event
+
+
+def _complete_call(request_id: Any, event: threading.Event) -> None:
+    """Complete call."""
+    with _IN_FLIGHT_LOCK:
+        if _IN_FLIGHT.get(request_id) is event:
+            del _IN_FLIGHT[request_id]
+
+
+def _cancel_call(request_id: Any) -> None:
+    """Cancel call."""
+    with _IN_FLIGHT_LOCK:
+        event = _IN_FLIGHT.get(request_id)
+    if event is not None:
+        event.set()
+
+
+def _cancel_all_calls() -> None:
+    """Cancel all calls."""
+    with _IN_FLIGHT_LOCK:
+        events = list(_IN_FLIGHT.values())
+    for event in events:
+        event.set()
+
+
 def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
     """Dispatch one JSON-RPC request; notifications are never executed."""
     # JSON-RPC notification discipline (oversight security S-13): a
@@ -499,7 +568,19 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
     # notification must not start an expensive probe run). An
     # explicit "id": null is a request: it dispatches normally and
     # its errors are reported like any other request's.
+    # The single exception is notifications/cancelled (ORCH-02): it
+    # executes nothing -- it only sets the registered cancellation
+    # event of the in-flight call it names, which is the MCP
+    # protocol's own cancellation contract.
     if "id" not in request:
+        if request.get("method") == "notifications/cancelled":
+            params = request.get("params")
+            if (
+                type(params) is dict
+                and "requestId" in params
+                and _valid_request_id(params["requestId"])
+            ):
+                _cancel_call(params["requestId"])
         return None
     method = request.get("method")
     request_id = request.get("id")
@@ -582,7 +663,13 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                 arguments = {}
             if type(arguments) is not dict:
                 raise MCPError(-32602, "arguments must be an object")
-            result = TOOLS[name]["handler"](arguments)
+            call_event = _register_call(request_id)
+            _CURRENT_CALL.event = call_event
+            try:
+                result = TOOLS[name]["handler"](arguments)
+            finally:
+                _CURRENT_CALL.event = None
+                _complete_call(request_id, call_event)
             return {"jsonrpc": "2.0", "id": request_id, "result": result}
         raise MCPError(-32601, f"method not found: {method}")
     except MCPError as exc:
@@ -688,6 +775,9 @@ def _reject_frame_float(text: str) -> float:
     return value
 
 
+_RESPONSE_LOCK = threading.Lock()
+
+
 def _write_response(response: dict[str, Any]) -> bool:
     """Write one response frame; False when the client has gone away.
 
@@ -696,8 +786,16 @@ def _write_response(response: dict[str, Any]) -> bool:
     session is over at that point: report False so serve() ends it
     cleanly with exit 0, and point the stdout fd at devnull so the
     interpreter's shutdown flush cannot re-raise on the dead pipe
-    (F3).
+    (F3). Writes are serialized on a module lock: tool calls run on
+    worker threads (ORCH-02), so two responses can never interleave
+    on the wire.
     """
+    with _RESPONSE_LOCK:
+        return _write_response_locked(response)
+
+
+def _write_response_locked(response: dict[str, Any]) -> bool:
+    """Write response locked."""
     try:
         sys.stdout.write(json.dumps(response, default=str) + "\n")
         sys.stdout.flush()
@@ -742,6 +840,32 @@ def serve(argv: list[str] | None = None) -> int:
     if args.self_test:
         return self_test()
     stdin = sys.stdin.buffer
+    workers: set[threading.Thread] = set()
+    # Responses are written strictly in frame order (the server's
+    # established wire contract): tool calls compute concurrently on
+    # worker threads, but each response waits for its turn, and an
+    # inline response waits for every earlier worker to flush.
+    write_cond = threading.Condition()
+    write_turn = [0]
+    next_seq = [0]
+
+    def _dispatch_call(frame: dict[str, Any], seq: int) -> None:
+        """Dispatch call."""
+        response = None
+        try:
+            response = handle_request(frame)
+        finally:
+            with write_cond:
+                while write_turn[0] != seq:
+                    write_cond.wait(timeout=5)
+                try:
+                    if response is not None:
+                        _write_response(response)
+                finally:
+                    write_turn[0] += 1
+                    write_cond.notify_all()
+                    workers.discard(threading.current_thread())
+
     while True:
         raw = stdin.readline(MAX_LINE_CHARS + 1)
         if not raw:
@@ -794,9 +918,34 @@ def serve(argv: list[str] | None = None) -> int:
             ):
                 break
             continue
+        if request.get("method") == "tools/call" and "id" in request:
+            # Tool calls run on a worker thread (ORCH-02): the read
+            # loop keeps reading, so a notifications/cancelled frame
+            # or an EOF can reach a call while it is still running.
+            seq = next_seq[0]
+            next_seq[0] += 1
+            worker = threading.Thread(target=_dispatch_call, args=(request, seq), daemon=True)
+            workers.add(worker)
+            worker.start()
+            continue
         response = handle_request(request)
-        if response is not None and not _write_response(response):
-            break
+        if response is not None:
+            with write_cond:
+                while write_turn[0] != next_seq[0]:
+                    write_cond.wait(timeout=5)
+            if not _write_response(response):
+                break
+    # EOF (or a dead client): in-flight calls first get a bounded
+    # grace to finish -- a client that half-closes after queueing
+    # its requests still expects their responses. Anything still
+    # running after the grace is abandoned work: every outstanding
+    # event is set and the workers get a bounded drain before the
+    # server exits.
+    for worker in list(workers):
+        worker.join(timeout=2)
+    _cancel_all_calls()
+    for worker in list(workers):
+        worker.join(timeout=10)
     return 0
 
 

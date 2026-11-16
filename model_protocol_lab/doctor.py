@@ -17,6 +17,7 @@ import shlex
 import struct
 from collections.abc import Callable
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 from .backends import (
@@ -784,7 +785,7 @@ def examine_dataset(path: str | Path) -> dict[str, Any]:
     }
 
 
-def template_firewall(model_path: str | Path) -> dict[str, Any]:
+def template_firewall(model_path: str | Path, *, cancel: Event | None = None) -> dict[str, Any]:
     """Static firewall scan of the checkpoint's ``chat_template``.
 
     Reads ``tokenizer_config.json``, extracts the ``chat_template`` source,
@@ -792,7 +793,13 @@ def template_firewall(model_path: str | Path) -> dict[str, Any]:
     Returns ``{"status": "allowed"|"denied"|"no_template"|"unavailable",
     "findings": [...]}`` with fixed-vocabulary findings. Never raises and
     never renders: a denied template must not reach the Jinja compiler.
+
+    ``cancel`` is the run's shared cancellation event (ORCH-02): when
+    already set, the scan performs no file reads at all and records
+    the cancelled shape.
     """
+    if cancel is not None and cancel.is_set():
+        return {"status": "unavailable", "detail": "cancelled", "findings": []}
     from .template_audit import scan_template_ast
 
     try:
@@ -834,6 +841,8 @@ def template_conformance(
     model_path: str | Path,
     formats: tuple[Format, ...],
     cases: tuple[Fixture, ...],
+    *,
+    cancel: Event | None = None,
 ) -> dict[str, Any]:
     """Diff hand-rendered hypotheses against the checkpoint's own chat template.
 
@@ -848,6 +857,13 @@ def template_conformance(
     version. Never raises: a missing template reports
     ``"no_template_declared"``; any other problem reports ``"unavailable"``
     with a fixed-vocabulary detail, so a run is never failed by this check.
+
+    ``cancel`` is the run's shared cancellation event (ORCH-02): when
+    already set, the section performs no file reads and constructs no
+    render session; when set mid-sweep, the sweep stops at the next
+    pair and the partial diffs are discarded -- the section records
+    the cancelled shape either way, never a partial sweep dressed as
+    complete.
     """
     if (
         type(formats) is not tuple
@@ -858,6 +874,8 @@ def template_conformance(
         or any(type(case) is not Fixture for case in cases)
     ):
         raise ValueError("template_conformance needs nonempty tuples of Format and Fixture")
+    if cancel is not None and cancel.is_set():
+        return {"status": "unavailable", "detail": "cancelled", "diffs": []}
     try:
         root = _directory(model_path)
         try:
@@ -918,6 +936,8 @@ def template_conformance(
         with session:
             for fmt in formats:
                 for case in cases:
+                    if cancel is not None and cancel.is_set():
+                        return {"status": "unavailable", "detail": "cancelled", "diffs": []}
                     entry: dict[str, Any] = {
                         "format": fmt.name,
                         "fixture": case.id,
@@ -958,7 +978,9 @@ class _TemplateProbeBudgetExceeded(Exception):
     """The probe's global render / wall-clock budget ran out."""
 
 
-def template_probe_section(model_path: str | Path) -> dict[str, Any]:
+def template_probe_section(
+    model_path: str | Path, *, cancel: Event | None = None
+) -> dict[str, Any]:
     """Behavioural probe of the checkpoint's chat template (cycle 182).
 
     The static firewall proves the template has no RCE primitives; it
@@ -974,6 +996,11 @@ def template_probe_section(model_path: str | Path) -> dict[str, Any]:
     extraction scope is the ``tokenizer_config.json`` string only —
     list-form templates and a separate ``chat_template.jinja`` file
     report ``no_template`` here, never a quiet pass. Never raises.
+
+    ``cancel`` is the run's shared cancellation event (ORCH-02): when
+    set, the section stops before any further load or render and
+    records detail ``"cancelled"`` with the work done so far left at
+    zero -- a cancelled probe reports no partial findings.
     """
     import hashlib
     import time
@@ -1007,6 +1034,9 @@ def template_probe_section(model_path: str | Path) -> dict[str, Any]:
         "findings": [],
         "findings_overflow": 0,
     }
+    if cancel is not None and cancel.is_set():
+        section["detail"] = "cancelled"
+        return section
     firewall = template_firewall(model_path)
     if firewall["status"] == "denied":
         section["status"] = "denied"
@@ -1079,6 +1109,10 @@ def template_probe_section(model_path: str | Path) -> dict[str, Any]:
         outcomes: list[dict[str, Any]] = []
         budget_hit = False
         for spec in tp.PAIRS:
+            if cancel is not None and cancel.is_set():
+                section["detail"] = "cancelled"
+                section["renders_used"] = renders
+                return section
             base, swapped = tp.build_pair(spec)
             try:
                 base_a = _render(base)
@@ -1105,6 +1139,10 @@ def template_probe_section(model_path: str | Path) -> dict[str, Any]:
         role_results: list[dict[str, Any]] = []
         if not budget_hit:
             for arm in tp.ROLE_ARMS:
+                if cancel is not None and cancel.is_set():
+                    section["detail"] = "cancelled"
+                    section["renders_used"] = renders
+                    return section
                 baseline, arm_conv = tp.build_role_arm(arm)
                 try:
                     base_a = _render(baseline)
@@ -1157,6 +1195,8 @@ def marker_isolation(
     model_path: str | Path,
     formats: tuple[Format, ...],
     cases: tuple[Fixture, ...],
+    *,
+    cancel: Event | None = None,
 ) -> dict[str, Any]:
     """Chat-marker isolation conformance: do hostile marker strings stay inert?
 
@@ -1176,6 +1216,10 @@ def marker_isolation(
     reports ``"no_special_ids"`` (unmeasurable, not a failure); one bad
     format/fixture/marker triple degrades to ``"unavailable"`` without
     failing the rest.
+
+    ``cancel`` is the run's shared cancellation event (ORCH-02): when
+    already set, no tokenizer is constructed and the section records
+    the cancelled shape.
     """
     from .control_tokens import (
         HOSTILE_MARKER_STRINGS,
@@ -1194,6 +1238,8 @@ def marker_isolation(
         or any(type(case) is not Fixture for case in cases)
     ):
         raise ValueError("marker_isolation needs nonempty tuples of Format and Fixture")
+    if cancel is not None and cancel.is_set():
+        return {"status": "unavailable", "detail": "cancelled", "probes": []}
     try:
         root = _directory(model_path)
         try:

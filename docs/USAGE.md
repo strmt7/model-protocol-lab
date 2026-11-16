@@ -219,7 +219,7 @@ The report pair itself is published as a unit. `results.json` and `report.html` 
 
 With `--mutate`, the bounded candidate set adds BOS and assistant-prefix variants. The prefix mutations explore the same space as assistant-prefill controls in chat APIs (HF's `add_generation_prompt` / `continue_final_message`, vLLM's guided prefill): `prefix-newline` and `prefix-trim` vary how the assistant turn is opened, `toggle-bos` and `no-bos` vary BOS placement; several families additionally yield generation-prompt variants for thinking-mode control (the empty-`<think>`-block prefill convention, and reasoning-effort branches): `kolibri/thinking-off`, `nemotron35/thinking-off`, `ling/thinking-off`, `qwen38/thinking-off` (enable_thinking=false), `nanbeige42/thinking-off`, `laguna/thinking-on` (S-2.1 thinking-enabled generation prompt), `k2horizon/effort-medium` / `k2horizon/effort-low` (reasoning_effort branches), `hy4/no-think` (reasoning_effort='no_think'), `minimax3/thinking-disabled` / `minimax3/thinking-enabled` (thinking_mode branches). Search does not modify weights. A unique candidate passing all search cases is frozen before held-out evaluation. Ties cause abstention; the held-out set is not used to break them.
 
-Ctrl+C requests cooperative cancellation after model loading. Interrupted evaluation can retain a partial report. Model loading and individual backend operations are not guaranteed to be promptly interruptible.
+Ctrl+C and SIGTERM share one cancellation lifetime for the whole `run` command. The first signal sets a cooperative cancel event: the experiment stops at the next cell boundary, every later stage — the diagnosis sections, transfer, the instrument probes — sees the same event and records its cancelled shape instead of starting work (a cancelled diagnosis section performs no tokenizer load; a cancelled transfer constructs no checkpoint backends, and its cells persist as unattempted), and the report pair is still saved in full before the command exits 130. A signal that arrives before generation starts produces a cancelled report with zero completed cells. A second signal during the drain is the hard exit: the default disposition is restored and the signal re-raised, so the process dies by the signal instead of draining. Model loading and an individual in-flight backend operation are not guaranteed to be promptly interruptible; the drain begins at the next cooperative check.
 
 ## 6. Read the outputs
 
@@ -4399,6 +4399,17 @@ no model by itself (`--backend selftest` in `probe` exercises the
 loop without a checkpoint), and caps prompts at 1 MiB and any single
 content block at 64 KiB. Run `model-protocol-lab-mcp --self-test`
 to verify it before wiring it up.
+
+Client cancellation follows the MCP contract: tool calls run on
+worker threads while the read loop keeps reading, and a
+`notifications/cancelled` frame naming an in-flight request id
+sets that call's cancellation event — the surface-noise sweep
+polls it between variants and reports the run as cancelled by
+client, with the variants completed so far counted. Responses are
+still written in frame order. Closing stdin (EOF) lets in-flight
+calls finish within a short grace period, then cancels whatever
+is still running before the server exits, so a disconnected
+client never leaves a sweep burning behind it.
 
 ## 15. Exit codes and output formats
 

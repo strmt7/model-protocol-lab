@@ -3958,6 +3958,29 @@ def _encode_probe_prompt(backend: Any, reference: Any, case: Any) -> tuple[int, 
     return encoded
 
 
+def _make_cancel_handler(cancel: Event) -> Any:
+    """Build the run command's cooperative signal handler (ORCH-02).
+
+    The first SIGINT/SIGTERM sets the shared cancel event: every
+    stage of the command drains cooperatively to a cancelled
+    verdict and a complete report. A second signal while the event
+    is already set is the operator's hard exit: the handler
+    restores the default disposition and re-raises the signal, so
+    the process dies by the signal even in the middle of the
+    drain -- the escape hatch is never trapped.
+    """
+
+    def _handler(signum: int, _frame: Any) -> None:
+        """Handle the signal."""
+        if cancel.is_set():
+            signal.signal(signum, signal.SIG_DFL)
+            signal.raise_signal(signum)
+            return
+        cancel.set()
+
+    return _handler
+
+
 def _run_batch_probe(
     backend: Any,
     formats: Any,
@@ -3966,6 +3989,7 @@ def _run_batch_probe(
     *,
     max_new_tokens: int,
     seed: int,
+    cancel: Any = None,
 ) -> None:
     """Run the batch-invariance audit; never raises.
 
@@ -3996,6 +4020,7 @@ def _run_batch_probe(
             prompts,
             max_new_tokens=max_new_tokens,
             seed=seed,
+            cancel=cancel,
         )
     except Exception:  # noqa: BLE001 -- batch-invariance must not fail the run
         result["batch_invariance"] = {
@@ -4247,6 +4272,8 @@ def main(argv: list[str] | None = None) -> int:
             output_dir = Path(args.output)
         report_saved = False
         _sink = None
+        previous_int = None
+        previous_term = None
         try:
             # own bounded local JSON reader; not huggingface_hub.datasets.
             split = load_dataset(args.dataset)  # nosec B615
@@ -4322,8 +4349,14 @@ def main(argv: list[str] | None = None) -> int:
             # the same cooperative cancellation: the experiment drains to a
             # "cancelled" verdict and a valid report instead of dying
             # mid-write and leaving a claimed output directory behind.
-            signal.signal(signal.SIGINT, lambda _signum, _frame: cancel.set())
-            signal.signal(signal.SIGTERM, lambda _signum, _frame: cancel.set())
+            # The handlers stay installed for the WHOLE command -- every
+            # optional stage and the report save included (ORCH-02) --
+            # and are restored in the finally that follows save_report;
+            # a second signal is the operator's hard exit (see
+            # _make_cancel_handler).
+            _cancel_handler = _make_cancel_handler(cancel)
+            signal.signal(signal.SIGINT, _cancel_handler)
+            signal.signal(signal.SIGTERM, _cancel_handler)
             # Test-only readiness hook (no effect unless the env var is set):
             # an orchestrating integration test cannot otherwise observe when
             # the signal handlers are installed, forcing racy timing guesses.
@@ -4346,24 +4379,20 @@ def main(argv: list[str] | None = None) -> int:
                         _rf.write("ready")
                 except OSError:
                     pass
-            try:
-                result = run_experiment(
-                    backend,
-                    formats,
-                    split,
-                    boundary=args.boundary_ids,
-                    boundary_map=boundary_map,
-                    max_new_tokens=args.max_new_tokens,
-                    seed=args.seed,
-                    cancel=cancel,
-                    eos_id=eos_id,
-                    max_total_tokens=args.max_total_tokens,
-                    on_observation=_sink.append,
-                    resume_observations=_resume_observations,
-                )
-            finally:
-                signal.signal(signal.SIGINT, previous_int)
-                signal.signal(signal.SIGTERM, previous_term)
+            result = run_experiment(
+                backend,
+                formats,
+                split,
+                boundary=args.boundary_ids,
+                boundary_map=boundary_map,
+                max_new_tokens=args.max_new_tokens,
+                seed=args.seed,
+                cancel=cancel,
+                eos_id=eos_id,
+                max_total_tokens=args.max_total_tokens,
+                on_observation=_sink.append,
+                resume_observations=_resume_observations,
+            )
             # Fixture hygiene (pure, advisory): search/held-out
             # near-duplicate overlap, so the report records whether the
             # held-out split was contaminated. Never fails the run.
@@ -4380,16 +4409,18 @@ def main(argv: list[str] | None = None) -> int:
                 if not callable(token_bytes):
                     token_bytes = None
                 result["template_conformance"] = template_conformance(
-                    args.model, formats, split.search
+                    args.model, formats, split.search, cancel=cancel
                 )
                 # Template firewall (research R3): static AST scan of the
                 # checkpoint's chat_template for RCE primitives, before any
                 # render. Fail-closed; never fails the run.
-                result["template_firewall"] = template_firewall(args.model)
+                result["template_firewall"] = template_firewall(args.model, cancel=cancel)
                 # Chat-marker isolation (research R2/R4 line): hostile marker
                 # strings injected into user text must not become real
                 # control tokens. Pure tokenizer check, never fails the run.
-                result["marker_isolation"] = marker_isolation(args.model, formats, split.search)
+                result["marker_isolation"] = marker_isolation(
+                    args.model, formats, split.search, cancel=cancel
+                )
                 if result["selected_candidate"] is not None:
                     winner = result["selected_candidate"]
                     # The stop matrix re-measures the winner under its own
@@ -4598,40 +4629,53 @@ def main(argv: list[str] | None = None) -> int:
                         _transfer_ids = [p.name for p in _transfer_paths]
                         if len(set(_transfer_ids)) != len(_transfer_ids):
                             raise ValueError("transfer checkpoint names must be unique")
-                        from .backends import LocalHFBackend
-
-                        _transfer_backends: dict[str, Any] = {}
-                        _transfer_fingerprints: dict[str, str | None] = {}
-                        for _cid, _path in zip(_transfer_ids, _transfer_paths, strict=True):
-                            try:
-                                _be = LocalHFBackend(
-                                    _path,
-                                    device=args.device,
-                                    max_context=args.max_context,
-                                )
-                                _transfer_backends[_cid] = _be
-                                _fp = getattr(_be, "fingerprint", None)
-                                _transfer_fingerprints[_cid] = _fp if type(_fp) is str else None
-                            except Exception:  # noqa: BLE001 -- per-checkpoint fail-closed
-                                _transfer_fingerprints[_cid] = None
-
-                        def _transfer_backend(ckpt_id: str) -> Any:
-                            """Return the transfer backend."""
-                            if ckpt_id not in _transfer_backends:
-                                raise RuntimeError(f"transfer checkpoint unavailable: {ckpt_id}")
-                            return _transfer_backends[ckpt_id]
-
-                        _transfer_outcomes = transfer_stage(
-                            _transfer_backend,
-                            tuple(_transfer_ids),
-                            formats,
-                            tuple(split.search),
-                            boundary=args.boundary_ids,
-                            boundary_map=boundary_map,
-                            max_new_tokens=args.max_new_tokens,
-                            seed=args.seed,
-                        )
                         _candidate_names = tuple(fmt.name for fmt in formats)
+                        _transfer_fingerprints: dict[str, str | None] = {}
+                        if cancel.is_set():
+                            # Cancelled before the stage (ORCH-02): no
+                            # transfer backend is constructed at all, and
+                            # every cell persists as unattempted (None)
+                            # in the section's normal shape.
+                            _transfer_outcomes = {
+                                cid: dict.fromkeys(_candidate_names) for cid in _transfer_ids
+                            }
+                            _transfer_fingerprints = dict.fromkeys(_transfer_ids)
+                        else:
+                            from .backends import LocalHFBackend
+
+                            _transfer_backends: dict[str, Any] = {}
+                            for _cid, _path in zip(_transfer_ids, _transfer_paths, strict=True):
+                                try:
+                                    _be = LocalHFBackend(
+                                        _path,
+                                        device=args.device,
+                                        max_context=args.max_context,
+                                    )
+                                    _transfer_backends[_cid] = _be
+                                    _fp = getattr(_be, "fingerprint", None)
+                                    _transfer_fingerprints[_cid] = _fp if type(_fp) is str else None
+                                except Exception:  # noqa: BLE001 -- per-checkpoint fail-closed
+                                    _transfer_fingerprints[_cid] = None
+
+                            def _transfer_backend(ckpt_id: str) -> Any:
+                                """Return the transfer backend."""
+                                if ckpt_id not in _transfer_backends:
+                                    raise RuntimeError(
+                                        f"transfer checkpoint unavailable: {ckpt_id}"
+                                    )
+                                return _transfer_backends[ckpt_id]
+
+                            _transfer_outcomes = transfer_stage(
+                                _transfer_backend,
+                                tuple(_transfer_ids),
+                                formats,
+                                tuple(split.search),
+                                boundary=args.boundary_ids,
+                                boundary_map=boundary_map,
+                                max_new_tokens=args.max_new_tokens,
+                                seed=args.seed,
+                                cancel=cancel,
+                            )
                         _transfer_result = transfer_portability(
                             result.get("selected_candidate"),
                             result["decision"],
@@ -4889,6 +4933,7 @@ def main(argv: list[str] | None = None) -> int:
                         tuple(split.search),
                         max_new_tokens=args.max_new_tokens,
                         seed=args.seed,
+                        cancel=cancel,
                     )
                 # Position-sensitivity experiment (research wave-3 idea 1):
                 # re-run every search candidate on synthetic multiple-choice
@@ -5692,6 +5737,10 @@ def main(argv: list[str] | None = None) -> int:
                 }
             )
         finally:
+            if previous_int is not None:
+                signal.signal(signal.SIGINT, previous_int)
+            if previous_term is not None:
+                signal.signal(signal.SIGTERM, previous_term)
             if _sink is not None:
                 _sink.close()
             if (

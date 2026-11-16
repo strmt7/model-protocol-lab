@@ -55,7 +55,12 @@ path not tested: needs live signals"). Two layers:
    process from inside ``generate()``, or raise KeyboardInterrupt):
    - A real SIGINT raised from inside ``generate()`` -> the production
      handler sets the cancel event -> decision "cancelled" -> valid
-     report saved -> exit 130. Double SIGINT -> same, no hang.
+     report saved -> exit 130. (Double SIGINT changed contract under
+     the external-audit W4 program, ORCH-02: a second signal is now
+     the operator's hard exit -- the handler restores the default
+     disposition and re-raises -- so it can no longer be exercised
+     in-process without killing the test runner. It is pinned in the
+     subprocess layer instead: ``test_double_sigint_is_a_hard_exit``.)
    - A real SIGTERM raised from inside ``generate()`` -> same graceful
      path (cycle-89 fix), exit 130.
    - KeyboardInterrupt raised from ``generate()`` propagates out of
@@ -91,11 +96,16 @@ FINDINGS
 
 DELIBERATELY NOT VERIFIED
 -------------------------
-- SIGTERM landing in the short diagnostics/save_report window after
-  ``run_experiment`` returns (handlers already restored): default
-  disposition still applies there, same as SIGINT's pre-existing
-  exposure outside the experiment window. The long phase -- the
-  experiment itself -- is covered.
+- (Resolved under the external-audit W4 program, ORCH-02:) SIGTERM
+  landing in the diagnostics/save_report window after
+  ``run_experiment`` returns. The handlers now stay installed until
+  after ``save_report`` -- one cancellation lifetime for the whole
+  command -- so a signal in that window sets the same cooperative
+  event and the run drains to its cancelled report. Verified by
+  ``tests/test_w4_cancellation.py`` (in-process dispatch pins the
+  handler still installed at save time and the diagnosis sections
+  recording their cancelled shapes; the real-signal arms pin the
+  bounded drain and the second-signal hard exit).
 - ``debug`` interactive REPL stdin behavior (out of scope; cycle-64
   read-only pins stand).
 
@@ -591,6 +601,27 @@ class RunSignalTests(unittest.TestCase):
         self.assertNotIn("Traceback", err)
         self._assert_no_partial_report(outdir)
 
+    def test_double_sigint_is_a_hard_exit(self) -> None:
+        """Test double sigint is a hard exit."""
+        # ORCH-02 (external-audit W4): the first SIGINT starts the
+        # cooperative drain; a second SIGINT restores the default
+        # disposition and re-raises, so the process dies by the
+        # signal even mid-drain -- the operator's escape hatch is
+        # never trapped.
+        outdir = self.tmp / "double-sigint-out"
+        child, marker = self._spawn_run(outdir)
+        child = self._in_generation_window(child, outdir, marker)
+        _send(child.pid, signal.SIGINT)
+        time.sleep(0.5)
+        _send(child.pid, signal.SIGINT)
+        try:
+            rc = child.wait(120)
+        except subprocess.TimeoutExpired:
+            self.fail("run did not terminate within 120s of the second SIGINT (hang)")
+        finally:
+            child.kill()
+        self.assertEqual(rc, -signal.SIGINT)
+
 
 # ---------------------------------------------------------------------------
 # Layer 2: in-process fault injection through the real cli.main machinery.
@@ -621,9 +652,6 @@ class _SignallingBackend:
         """Generate."""
         self.calls += 1
         if self.mode == "sigint-once":
-            os.kill(os.getpid(), signal.SIGINT)
-        elif self.mode == "sigint-twice":
-            os.kill(os.getpid(), signal.SIGINT)
             os.kill(os.getpid(), signal.SIGINT)
         elif self.mode == "sigterm-once":
             os.kill(os.getpid(), signal.SIGTERM)
@@ -689,12 +717,6 @@ class RunMainSignalTests(unittest.TestCase):
     def test_sigint_during_generate_yields_cancelled_report_and_130(self) -> None:
         """Test sigint during generate yields cancelled report and 130."""
         rc, outdir, _out, err = self._run_main(_backend_with("sigint-once"))
-        self.assertEqual(rc, 130)
-        self._assert_cancelled_report(outdir, err)
-
-    def test_double_sigint_during_generate_no_hang(self) -> None:
-        """Test double sigint during generate no hang."""
-        rc, outdir, _out, err = self._run_main(_backend_with("sigint-twice"))
         self.assertEqual(rc, 130)
         self._assert_cancelled_report(outdir, err)
 

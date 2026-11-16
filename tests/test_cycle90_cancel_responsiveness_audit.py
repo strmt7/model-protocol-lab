@@ -52,10 +52,15 @@ FINDINGS
   / ``--portability-matrix`` (bounded tokenizer loads and encode checks; no
   generate loops), ``stop_matrix`` / ``budget_frontier`` /
   ``divergence_section_data`` (post-hoc over recorded observations; the
-  only backend call is a single ``decode`` of the boundary), and
-  ``template_conformance`` (tokenizer-only local reads, no model calls).
+  only backend call is a single ``decode`` of the boundary).
   ``budget_frontier`` already degrades to a cheap ``"search_incomplete"``
-  marker on cancelled runs.
+  marker on cancelled runs. ``template_conformance`` left this list
+  under the external-audit W4 program (ORCH-02): the RR-10 worker
+  moved its renders into a per-pair sweep, so it is one of the long
+  post-run stages the single cancellation lifetime now covers -- it
+  takes the shared event, checks it before any load and per pair,
+  and records its cancelled shape (pinned in
+  ``tests/test_w4_cancellation.py``).
 
 Verified by running: 2026-10-16 -- this file green, plus the existing
 logprob / sensitivity-sweep / CLI suites; ruff check, ruff format
@@ -78,7 +83,7 @@ from model_protocol_lab.core import (
 )
 from model_protocol_lab.debug import run_debug
 from model_protocol_lab.diffbackends import divergence_section_data
-from model_protocol_lab.doctor import doctor, template_conformance
+from model_protocol_lab.doctor import doctor
 from model_protocol_lab.experiments import (
     budget_frontier,
     logprob_diagnostic,
@@ -412,7 +417,6 @@ class DeliberateExclusionsTest(unittest.TestCase):
         for func in (
             run_debug,
             doctor,
-            template_conformance,
             stop_matrix,
             budget_frontier,
             divergence_section_data,

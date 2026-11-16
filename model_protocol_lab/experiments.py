@@ -639,6 +639,7 @@ def transfer_stage(
     boundary_map: dict[str, tuple[int, ...]] | None = None,
     max_new_tokens: int = 64,
     seed: int = 0,
+    cancel: Event | None = None,
 ) -> dict[str, dict[str, bool | None]]:
     """Evaluate every candidate against each transfer checkpoint.
 
@@ -649,6 +650,14 @@ def transfer_stage(
     checkpoint; any backend construction or evaluation failure records
     None for that (checkpoint, candidate) cell -- fail-closed, never
     silently skipped.
+
+    ``cancel`` is the run's shared cancellation event (ORCH-02): it is
+    checked before each checkpoint's backend is constructed and before
+    each candidate's evaluation, and threaded into ``core.evaluate``.
+    Once set, every unexecuted cell records None -- the stage's
+    existing fail-closed cell value -- and no further backend is
+    constructed, so a cancelled transfer is indistinguishable in shape
+    from an incompatible-checkpoint transfer.
 
     Returns ``transfer[checkpoint_id][candidate_name]``: True when the
     candidate passed every fixture there, False when it did not, None
@@ -678,12 +687,14 @@ def transfer_stage(
     transfer: dict[str, dict[str, bool | None]] = {}
     for ckpt in checkpoint_ids:
         per_candidate: dict[str, bool | None] = {}
-        try:
-            backend = backend_factory(ckpt)
-        except Exception:  # noqa: BLE001 -- whole checkpoint degrades, not the stage
-            backend = None
+        backend = None
+        if cancel is None or not cancel.is_set():
+            try:
+                backend = backend_factory(ckpt)
+            except Exception:  # noqa: BLE001 -- whole checkpoint degrades, not the stage
+                backend = None
         for fmt in formats:
-            if backend is None:
+            if backend is None or (cancel is not None and cancel.is_set()):
                 per_candidate[fmt.name] = None
                 continue
             try:
@@ -694,6 +705,7 @@ def transfer_stage(
                     boundary=boundaries[fmt.name],
                     max_new_tokens=max_new_tokens,
                     seed=seed,
+                    cancel=cancel,
                 )
             except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
                 per_candidate[fmt.name] = None
@@ -4444,6 +4456,7 @@ def batch_stage(
     *,
     max_new_tokens: int = 64,
     seed: int = 0,
+    cancel: Event | None = None,
 ) -> dict[str, Any]:
     """Audit batch invariance: solo vs batched greedy decoding.
 
@@ -4475,6 +4488,13 @@ def batch_stage(
     of ``batch_failed``: a labelled size refusal is a different
     operator signal than a mid-run crash.
 
+    ``cancel`` is the run's shared cancellation event (ORCH-02): the
+    stage threads that one event into every ``generate`` /
+    ``generate_batch`` call -- never a private event -- and checks it
+    before each solo generation and before the batch call. Once set,
+    the stage records ``{"available": False, "detail": "cancelled"}``
+    and starts no further work.
+
     Returns the audit payload (``available`` True/False). Raises
     ``ValueError`` on a None backend, malformed prompts, or bad
     ``max_new_tokens``/``seed``.
@@ -4503,16 +4523,19 @@ def batch_stage(
     if not callable(generate_batch):
         return {"available": False, "detail": BATCH_UNSUPPORTED}
 
+    event = cancel if cancel is not None else Event()
     ordered_ids = sorted(clean_prompts)
     solo: dict[str, tuple[int, ...]] = {}
     per_prompt: dict[str, dict[str, Any]] = {}
     for pid in ordered_ids:
+        if event.is_set():
+            return {"available": False, "detail": "cancelled"}
         try:
             generation = backend.generate(
                 clean_prompts[pid],
                 max_new_tokens=max_new_tokens,
                 seed=seed,
-                cancel=Event(),
+                cancel=event,
             )
         except Exception:  # noqa: BLE001 -- one prompt degrades, not the stage
             generation = None
@@ -4534,12 +4557,14 @@ def batch_stage(
     evaluable = {pid: solo[pid] for pid in ordered_ids if pid in solo}
     n_diverged = 0
     if evaluable:
+        if event.is_set():
+            return {"available": False, "detail": "cancelled"}
         try:
             batched_raw = generate_batch(
                 tuple(clean_prompts[pid] for pid in evaluable),
                 max_new_tokens=max_new_tokens,
                 seed=seed,
-                cancel=Event(),
+                cancel=event,
             )
         except ValueError as exc:
             # The size refusal is a labelled, expected outcome, not a

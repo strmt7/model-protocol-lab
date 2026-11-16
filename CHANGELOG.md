@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (external-audit W4 push 5 — one cancellation lifetime, ORCH-02, 2026-11-16)
+
+- `run` now keeps a single cancellation lifetime from the first
+  cell to the saved report. The SIGINT/SIGTERM handlers stay
+  installed through every optional stage and the report save
+  (previously they were restored as soon as the experiment
+  returned, so Ctrl+C still paid for the full diagnosis sweep and
+  a second signal killed the process mid-report). The first
+  signal drains cooperatively — diagnosis sections record their
+  cancelled shapes without loading a tokenizer, transfer
+  constructs no backends and persists its cells as unattempted,
+  and the batch audit threads the run's own event instead of
+  minting private ones — and the command exits 130 with a
+  complete report. A second signal is the hard exit: the default
+  disposition is restored and the signal re-raised. The MCP
+  server honours `notifications/cancelled` through a per-request
+  registry (tool calls dispatch on worker threads; responses stay
+  in frame order), and stdin EOF cancels whatever is still
+  running after a short completion grace.
+
 ### Added (external-audit W4 push 4 — report-pair completion boundary, ORCH-D02, 2026-11-16)
 
 - Report pairs now publish atomically and carry a completion

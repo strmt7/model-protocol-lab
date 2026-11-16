@@ -270,6 +270,7 @@
    "test_w3_windows_workflow.py",
    "test_w4_budget_diff.py",
    "test_w4_budget_ledger.py",
+   "test_w4_cancellation.py",
    "test_w4_progress_resume.py",
    "test_w4_render_worker.py",
    "test_w4_report_pair.py",
@@ -406,6 +407,10 @@
   "test_w3_platform_caps.py": [
    "resource"
   ],
+  "test_w4_cancellation.py": [
+   "numpy",
+   "tokenizers"
+  ],
   "test_w4_progress_resume.py": [
    "numpy",
    "tokenizers"
@@ -429,9 +434,9 @@
   ]
  },
  "module_counts": {
-  "total": 270,
-  "base": 257,
+  "base": 258,
   "hf": 12,
-  "posix": 1
+  "posix": 1,
+  "total": 271
  }
 }
