@@ -85,7 +85,7 @@ repo). Priorities and owning packages are the audit's.
 | SCI-B-01 | P1 | Position `capital` key is ambiguous: Lisbon and Oslo are both European capitals; only Oslo is accepted | fixed-with-evidence | W6 (fix scheduled right after W0, alongside W2) | **execution-verified by the semantic-keys lane**: a Lisbon answer scores `exact_match = False` in the default fixture set. Repair specified (distractor Lisbon → Cairo) and applied 2026-11-11 by the semantic-key repair cycle; the pins in `tests/test_semantic_key_repairs.py` failed on the pre-fix tree and pass after it. See §2.3 |
 | SCI-B-02 | P2 | Cache profile calls prefix sharing exact duplication (distinct prompts sharing a prefix count as duplicates) | open | W6 | audit-executed against an independent oracle (the hit formula itself verified correct) |
 | SCI-B-03 | P2 | Few-shot comparisons mix fixture cohorts (order rates computed on different populations than the headline) | open | W6 | audit-executed (two-fixture stage) |
-| SCI-B-04 | P2 | Cache prefix storage is quadratic in prompt length | open | W4/W6 | audit-measured (256/512/1024 → 32,896/131,328/524,800 retained references) |
+| SCI-B-04 | P2 | Cache prefix storage is quadratic in prompt length | fixed-with-evidence | W4/W6 | Closed by W4 push 9 (storage only; the SCI-B-02 counting question stays with W6): `_prefix_counts`' dict-of-prefix-tuples is replaced by a token trie — one node per distinct prefix, O(1) tokens per node — with all four consumers re-expressed (per-prompt walk, shared-prefix count, block aggregates by depth, terminal-count duplicates incl. the proper-prefix semantics). Outputs are byte-identical: the readiness lane's golden example is pinned as a regression test and a differential battery runs against a reference copy of the old algorithm. Acceptance: `tests/test_w4_cache_trie.py` (golden, differential battery, witness node count == 200 vs 20,100 stored key tokens before); the cycle-168 partial-block mutation gate was re-anchored to the trie traversal. |
 | RTI-02 | P2 | Pack producer can emit bundles its own verifier rejects (> 1,024 entries incl. manifest; no producer-side aggregate ceilings) | open | W5 | audit-executed (1,025-entry bundle packed, then rejected) |
 | RTI-03 | P2 | Cheap invalid input causes expensive work before rejection (MCP probe constructs a backend before cap/seed validation; exec-backends loads/probes before validating settings) | **fixed-with-evidence** | W2/W4 | audit-executed with recording constructors (no real model/server) **Fixed in W2 push 1 (2026-11-11)**: MCP tool_probe validates max_new_tokens/seed before _build_backend runs; exec-backends validates stop texts, id lists, the request's scalar fields, the --results file and the cache ids before the tokenizer load, backend construction and probe — each failure keeps its established exit code |
 | RTI-04 | P2 | Serving artifact ingestion bypasses the strict bounded readers (unbounded read, permissive parse, unvalidated hash keys) | **fixed-with-evidence** | W2/W4 | audit-executed; overlaps wave-9 A8-1/A8-2 (§2.4) — one fix surface **Fixed in W2 push 1 (2026-11-11)**: load_records_artifact reads at most the sink budget plus a fixed envelope allowance, decodes UTF-8 and parses with non-finite-constant rejection under the one fixed code, and builds dedup/matching keys only from validated string fields; the exec-backends --results ingestion is bounded by the results-size budget |
@@ -387,6 +387,21 @@ checks, is now refused. Acceptance:
 fixed-with-evidence, 14 open, 0 design-debt-accepted,
 1 blocked-external (RR-05)**; §4 refreshes at W4 closure.
 
+A twenty-second push (W4 push 9, 2026-11-16) closes
+SCI-B-04 and with it the W4 package. The cache profile's
+dict-of-prefix-tuples (quadratic stored key material:
+20,100 key tokens for the 550-token witness) is replaced
+by a token trie holding one node per distinct prefix (200
+nodes for the witness), all four consumers re-expressed
+with byte-identical outputs — pinned by the readiness
+lane's golden example, a differential battery against a
+reference copy of the old algorithm, and the re-anchored
+cycle-168 mutation gate. W4's nine pushes close RR-10,
+RR-14, ORCH-02, ORCH-03, ORCH-D02, RTI-05, RTI-07, RTI-08
+and SCI-B-04. Final W4 tallies: **38 fixed-with-evidence,
+13 open, 0 design-debt-accepted, 1 blocked-external
+(RR-05)**; §4 is refreshed at this closure.
+
 ### 2.6 Independent re-verification (audit-verify lane — landed)
 
 The audit-verify lane re-executed every audit reproduction and every
@@ -460,15 +475,16 @@ anything; its only write is the verdict file the caller names.
 
 ## 4. Program state
 
-**Program state (updated at W3 closure, 2026-11-14).** W0
-(census), W1 (security), W2 (report correctness) and W3
-(portable setup) are complete; the ledger stands at 29 rows
-fixed-with-evidence, 21 open, 1 design-debt-accepted
-(ORCH-D02) and 1 blocked-external (RR-05, DeepSource quota —
-parked by owner order with a refill watch armed). The
-baseline is **not release-ready**: the remaining rows belong
-to W4–W8, RR-18's evidence completion rides W8, and the
-readiness rehearsal (W8) has not run. Next, per the plan's
-dependency order: W4 (containment, budgets, recovery), then
-W5 (distribution). No publication is authorized; W8 ends in
-a rehearsal verdict only.
+**Program state (updated at W4 closure, 2026-11-16).** W0
+(census), W1 (security), W2 (report correctness), W3
+(portable setup) and W4 (containment, budgets, recovery)
+are complete; the ledger stands at 38 rows
+fixed-with-evidence, 13 open, 0 design-debt-accepted and
+1 blocked-external (RR-05, DeepSource quota — parked by
+owner order with a refill watch armed). The baseline is
+**not release-ready**: the remaining rows belong to W5–W8,
+RR-18's evidence completion rides W8, and the readiness
+rehearsal (W8) has not run. Next, per the plan's dependency
+order: W5 (distribution), then W6 (the vLLM serving
+adapter). No publication is authorized; W8 ends in a
+rehearsal verdict only.

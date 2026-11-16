@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (external-audit W4 push 9 — cache-profile prefix trie, SCI-B-04, 2026-11-16)
+
+- **Cache-profile prefix storage is linear instead of
+  quadratic.** `_prefix_counts` materialized every prefix of
+  every prompt as a tuple dictionary key (the readiness
+  witness: 550 input tokens → 20,100 stored key tokens). A
+  token trie now holds one node per distinct prefix (200
+  nodes for the same witness), with the cacheable walk, the
+  shared-prefix count, the block aggregates and the duplicate
+  count all re-expressed over it. Every reported number is
+  unchanged — the change is storage only, pinned by a golden
+  example and a differential battery against the old
+  algorithm.
+
 ### Fixed (external-audit W4 push 8 — byte-denominated debug save cap, RTI-07, 2026-11-16)
 
 - **The debug REPL's save cap now counts bytes, and the append

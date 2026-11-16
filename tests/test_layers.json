@@ -270,6 +270,7 @@
    "test_w3_windows_workflow.py",
    "test_w4_budget_diff.py",
    "test_w4_budget_ledger.py",
+   "test_w4_cache_trie.py",
    "test_w4_cancellation.py",
    "test_w4_debug_save_cap.py",
    "test_w4_lazy_transfer.py",
@@ -437,9 +438,9 @@
   ]
  },
  "module_counts": {
-  "base": 261,
+  "base": 262,
   "hf": 12,
   "posix": 1,
-  "total": 274
+  "total": 275
  }
 }

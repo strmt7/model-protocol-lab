@@ -1239,8 +1239,8 @@ class CacheProfileMutationGateTests(unittest.TestCase):
         self._run_gate(
             "cacheprofile",
             "partial_block_counted",
-            "        if sharers >= 2 and len(prefix) % block_size == 0:",
-            "        if sharers >= 2:  # MUTANT: ignores block quantization",
+            "            if depth % block_size == 0:",
+            "            if True:  # MUTANT: ignores block quantization",
             self._partial_block_scenario,
         )
 

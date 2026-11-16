@@ -94,14 +94,67 @@ def is_evaluable_prompt(value: object) -> bool:
     return all(type(token) is int and token >= 0 for token in sequence)
 
 
-def _prefix_counts(prompts: list[tuple[int, ...]]) -> dict[tuple[int, ...], int]:
-    """Trie counts: how many prompts pass through each prefix node."""
-    counts: dict[tuple[int, ...], int] = {}
+class _TrieNode:
+    """One distinct prefix: passing-prompt count and token children."""
+
+    __slots__ = ("children", "count")
+
+    def __init__(self) -> None:
+        """Init."""
+        self.count = 0
+        self.children: dict[int, _TrieNode] = {}
+
+
+def _prefix_trie(prompts: list[tuple[int, ...]]) -> tuple[_TrieNode, int]:
+    """Build the token trie over ``prompts``; return (root, node count).
+
+    One node per distinct prefix, each storing a single token edge:
+    total storage is O(distinct prefixes). This replaces the
+    dict-of-prefix-tuples whose keys retained the sum of all prefix
+    lengths -- quadratic storage (SCI-B-04: 550 input tokens became
+    20,100 stored key tokens). A node's ``count`` is the number of
+    prompts having that prefix, exactly the pre-swap dict's value
+    for the same prefix, so every consumer's numbers are unchanged.
+    The node count excludes the root (the empty prefix, which the
+    pre-swap dict never held either).
+    """
+    root = _TrieNode()
+    node_count = 0
     for prompt in prompts:
-        for end in range(1, len(prompt) + 1):
-            prefix = prompt[:end]
-            counts[prefix] = counts.get(prefix, 0) + 1
-    return counts
+        node = root
+        for token in prompt:
+            child = node.children.get(token)
+            if child is None:
+                child = _TrieNode()
+                node.children[token] = child
+                node_count += 1
+            child.count += 1
+            node = child
+    return root, node_count
+
+
+def _trie_aggregates(root: _TrieNode, block_size: int) -> tuple[int, int, int]:
+    """(shared_prefixes, block_cacheable_blocks, distinct_block_prefixes).
+
+    One traversal carrying depth: a node at depth d is the prefix of
+    length d. Shared means count >= 2; the block aggregates take the
+    shared nodes at block-aligned depths, contributing their count
+    to ``block_cacheable_blocks`` and one each to
+    ``distinct_block_prefixes``.
+    """
+    shared_prefixes = 0
+    block_cacheable_blocks = 0
+    distinct_block_prefixes = 0
+    stack = [(child, 1) for child in root.children.values()]
+    while stack:
+        node, depth = stack.pop()
+        if node.count >= 2:
+            shared_prefixes += 1
+            if depth % block_size == 0:
+                distinct_block_prefixes += 1
+                block_cacheable_blocks += node.count
+        stack.extend((child, depth + 1) for child in node.children.values())
+    return shared_prefixes, block_cacheable_blocks, distinct_block_prefixes
 
 
 def candidate_cache_profile(
@@ -153,25 +206,30 @@ def candidate_cache_profile(
             "achievable_block_fraction": None,
             "n_duplicate_prompts": 0,
         }
-    counts = _prefix_counts(prompts)
+    root, _node_count = _prefix_trie(prompts)
     total_tokens = sum(len(prompt) for prompt in prompts)
+    # One walk per prompt down the trie: position k is cacheable iff
+    # the node at depth k+1 is shared (count >= 2), and the terminal
+    # node's count decides duplication -- a prompt that is a proper
+    # prefix of a longer one counts, exactly as the pre-swap
+    # counts[prompt] lookup did.
     cacheable_tokens = 0
+    n_duplicate_prompts = 0
     for prompt in prompts:
-        for end in range(1, len(prompt) + 1):
-            if counts[prompt[:end]] >= 2:
+        node = root
+        for token in prompt:
+            node = node.children[token]
+            if node.count >= 2:
                 cacheable_tokens += 1
-    shared_prefixes = sum(1 for sharers in counts.values() if sharers >= 2)
+        if node.count >= 2:
+            n_duplicate_prompts += 1
+    shared_prefixes, block_cacheable_blocks, distinct_block_prefixes = _trie_aggregates(
+        root, block_size
+    )
     # Exact per the module docstring: every shared prefix contributes
     # exactly one unavoidable first-occurrence miss in every order.
     achievable_tokens = cacheable_tokens - shared_prefixes
-    block_cacheable_blocks = 0
-    distinct_block_prefixes = 0
-    for prefix, sharers in counts.items():
-        if sharers >= 2 and len(prefix) % block_size == 0:
-            distinct_block_prefixes += 1
-            block_cacheable_blocks += sharers
     achievable_blocks = block_cacheable_blocks - distinct_block_prefixes
-    n_duplicate_prompts = sum(1 for prompt in prompts if counts[prompt] >= 2)
     return {
         "n": n,
         "n_evaluable": n_evaluable,
