@@ -402,6 +402,18 @@ and SCI-B-04. Final W4 tallies: **38 fixed-with-evidence,
 13 open, 0 design-debt-accepted, 1 blocked-external
 (RR-05)**; §4 is refreshed at this closure.
 
+A twenty-third push (W4 repair, 2026-11-16) fixes a
+test-design defect the GitHub legs exposed after closure:
+two real-signal cancellation arms signalled after a fixed
+8-second sleep and raced the run's completion on fast
+runners (the CI test legs failed at the W4 push 5, 6 and 8
+heads on exactly those two arms; the immediate-signal arm
+and every other test passed on every leg, and all local
+gates were green). The arms now trigger on the progress
+journal's completed-cell count — mid-run on a host of any
+speed. No product code changed and no tally moves; the
+repair is verified by the CI legs at its own head.
+
 ### 2.6 Independent re-verification (audit-verify lane — landed)
 
 The audit-verify lane re-executed every audit reproduction and every

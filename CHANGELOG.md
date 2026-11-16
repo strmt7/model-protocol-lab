@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (external-audit W4 repair — host-speed-independent signal tests, 2026-11-16)
+
+- **The real-signal cancellation tests no longer race fast
+  hosts.** Two `RealSignalCliTests` arms signalled the CLI
+  after a fixed 8-second sleep; on GitHub's runners the search
+  completes inside 8 seconds, so the decision already stood
+  and the child exited with the verdict's code instead of the
+  cancellation code — the CI test legs failed at three
+  consecutive heads while every local gate passed (this host
+  is several times slower). The arms now signal when the
+  run's progress journal shows completed cells, which is
+  mid-run on a host of any speed. The product's cancellation
+  behaviour was never at fault: the immediate-signal arm
+  passed on every leg throughout.
+
 ### Changed (external-audit W4 push 9 — cache-profile prefix trie, SCI-B-04, 2026-11-16)
 
 - **Cache-profile prefix storage is linear instead of

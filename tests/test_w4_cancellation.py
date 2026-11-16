@@ -729,13 +729,38 @@ class RealSignalCliTests(unittest.TestCase):
             time.sleep(0.02)
         return proc, output
 
+    def _await_cells(self, proc, output, minimum_records=4):
+        """Wait until the run is observably mid-search.
+
+        The progress journal gains one line per completed cell, so
+        signalling after ``minimum_records`` lines is mid-run on a
+        host of any speed. The fixed-sleep version of this trigger
+        raced the run's completion on fast CI runners: the search
+        finished inside the sleep, the decision stood, and the
+        (correct) exit code was the verdict's 2, not 130 -- the two
+        arms below failed on every GitHub leg while passing locally.
+        """
+        journal = output / "progress.jsonl"
+        deadline = time.monotonic() + 180
+        while True:
+            if journal.exists():
+                lines = journal.read_text(encoding="utf-8").count("\n")
+                if lines >= minimum_records:
+                    return
+            if proc.poll() is not None:
+                self.fail(f"run exited {proc.returncode} before signalling point")
+            if time.monotonic() > deadline:
+                proc.kill()
+                self.fail("progress journal never reached the signalling point")
+            time.sleep(0.02)
+
     def test_sigterm_mid_run_drains_to_a_cancelled_report(self):
         """Test sigterm mid run drains to a cancelled report."""
         from model_protocol_lab.diffreports import load_results
 
         with TemporaryDirectory() as tmp:
             proc, output = self._spawn(tmp, "mid")
-            time.sleep(8)
+            self._await_cells(proc, output)
             sent = time.monotonic()
             proc.send_signal(signal.SIGTERM)
             returncode = proc.wait(timeout=120)
@@ -769,7 +794,7 @@ class RealSignalCliTests(unittest.TestCase):
         """Test second sigterm is a hard exit."""
         with TemporaryDirectory() as tmp:
             proc, output = self._spawn(tmp, "twice")
-            time.sleep(8)
+            self._await_cells(proc, output)
             proc.send_signal(signal.SIGTERM)
             time.sleep(0.3)
             proc.send_signal(signal.SIGTERM)
