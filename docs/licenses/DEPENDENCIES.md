@@ -15,12 +15,12 @@ inventory stale.
 | Package | Version | License |
 | --- | --- | --- |
 | ast-serialize | 0.13.1 | MIT |
-| coverage | 7.17.0 | Apache-2.0 |
-| hypothesis | 6.170.14 | MPL-2.0 |
+| coverage | 7.17.2 | Apache-2.0 |
+| hypothesis | 6.170.15 | MPL-2.0 |
 | iniconfig | 2.3.1 | MIT |
 | librt | 0.16.0 | MIT |
 | mypy | 2.4.1 | MIT |
-| mypy-extensions | 1.1.0 | MIT (not stated in PyPI metadata; verified from the wheel's `dist-info/licenses/LICENSE` file) |
+| mypy-extensions | 1.2.0 | MIT (not stated in PyPI metadata; verified from the wheel's `dist-info/licenses/LICENSE` file) |
 | packaging | 26.3 | Apache-2.0 OR BSD-2-Clause |
 | pathspec | 1.1.1 | MPL-2.0 |
 | pluggy | 1.7.0 | MIT |

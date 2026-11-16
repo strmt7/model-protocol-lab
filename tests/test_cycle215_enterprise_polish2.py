@@ -89,7 +89,7 @@ class TestZizmorLane(unittest.TestCase):
         # Cycle 217 moved the install to the hash-pinned closure, so
         # the pin lives in tools/requirements/zizmor.txt, not in the
         # workflow text.
-        """Zizmor is pinned at 1.31.1 with the adjudicated findings floor."""
+        """Zizmor is pinned at 1.32.0 with the adjudicated findings floor."""
         self.assertIn(
             "python -m pip install --require-hashes -r tools/requirements/zizmor.txt",
             self.text,
@@ -97,7 +97,7 @@ class TestZizmorLane(unittest.TestCase):
         zizmor_txt = (REPO_ROOT / "tools" / "requirements" / "zizmor.txt").read_text(
             encoding="utf-8"
         )
-        self.assertIn("zizmor==1.31.1", zizmor_txt)
+        self.assertIn("zizmor==1.32.0", zizmor_txt)
         self.assertIn(
             "zizmor --persona pedantic --min-severity low "
             "--min-confidence low --offline .github/workflows/",
