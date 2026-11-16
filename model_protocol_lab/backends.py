@@ -1255,6 +1255,28 @@ class LocalHFBackend:
             self._model = self._tokenizer = None
             raise RuntimeError("local_backend_initialization_failed") from None
 
+    def close(self) -> None:
+        """Release the loaded model and tokenizer (idempotent).
+
+        Drops the component references so the weight memory returns
+        to the OS or device; on a CUDA device the allocator cache is
+        emptied on a best-effort basis. The backend must not be used
+        after closing -- ``_ready`` refuses a closed backend with
+        ``local_backend_not_initialized``, the same refusal an
+        unloaded one gets. Callers that hold a backend per task
+        (the transfer stage, ORCH-03) close each one as soon as its
+        work is done so at most one secondary load is ever live.
+        """
+        with self._lock:
+            self._model = None
+            self._tokenizer = None
+            torch = getattr(self, "_torch", None)
+            device = getattr(self, "_device", None)
+            if torch is not None and device is not None and device.type == "cuda":
+                # Cache release is best-effort.
+                with contextlib.suppress(Exception):
+                    torch.cuda.empty_cache()
+
     def _ready(self) -> tuple[Any, Any]:
         """Return initialized components, narrowing the None-able attributes.
 

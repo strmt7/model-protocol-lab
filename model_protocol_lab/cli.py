@@ -4630,52 +4630,49 @@ def main(argv: list[str] | None = None) -> int:
                         if len(set(_transfer_ids)) != len(_transfer_ids):
                             raise ValueError("transfer checkpoint names must be unique")
                         _candidate_names = tuple(fmt.name for fmt in formats)
-                        _transfer_fingerprints: dict[str, str | None] = {}
-                        if cancel.is_set():
-                            # Cancelled before the stage (ORCH-02): no
-                            # transfer backend is constructed at all, and
-                            # every cell persists as unattempted (None)
-                            # in the section's normal shape.
-                            _transfer_outcomes = {
-                                cid: dict.fromkeys(_candidate_names) for cid in _transfer_ids
-                            }
-                            _transfer_fingerprints = dict.fromkeys(_transfer_ids)
-                        else:
+                        _transfer_fingerprints: dict[str, str | None] = dict.fromkeys(_transfer_ids)
+                        _transfer_paths_by_id = dict(
+                            zip(_transfer_ids, _transfer_paths, strict=True)
+                        )
+
+                        def _transfer_backend(ckpt_id: str) -> Any:
+                            """Construct one transfer backend, lazily (ORCH-03).
+
+                            A checkpoint's model loads only when the
+                            transfer stage reaches it, and the stage
+                            closes it before constructing the next --
+                            at most one secondary backend is ever live.
+                            The fingerprint is recorded here, at
+                            construction; a construction failure
+                            propagates to the stage, which records the
+                            checkpoint's cells as unattempted, and the
+                            fingerprint stays None. A cancelled run
+                            never reaches this factory at all (the
+                            stage checks the event first), so nothing
+                            is constructed for it.
+                            """
                             from .backends import LocalHFBackend
 
-                            _transfer_backends: dict[str, Any] = {}
-                            for _cid, _path in zip(_transfer_ids, _transfer_paths, strict=True):
-                                try:
-                                    _be = LocalHFBackend(
-                                        _path,
-                                        device=args.device,
-                                        max_context=args.max_context,
-                                    )
-                                    _transfer_backends[_cid] = _be
-                                    _fp = getattr(_be, "fingerprint", None)
-                                    _transfer_fingerprints[_cid] = _fp if type(_fp) is str else None
-                                except Exception:  # noqa: BLE001 -- per-checkpoint fail-closed
-                                    _transfer_fingerprints[_cid] = None
-
-                            def _transfer_backend(ckpt_id: str) -> Any:
-                                """Return the transfer backend."""
-                                if ckpt_id not in _transfer_backends:
-                                    raise RuntimeError(
-                                        f"transfer checkpoint unavailable: {ckpt_id}"
-                                    )
-                                return _transfer_backends[ckpt_id]
-
-                            _transfer_outcomes = transfer_stage(
-                                _transfer_backend,
-                                tuple(_transfer_ids),
-                                formats,
-                                tuple(split.search),
-                                boundary=args.boundary_ids,
-                                boundary_map=boundary_map,
-                                max_new_tokens=args.max_new_tokens,
-                                seed=args.seed,
-                                cancel=cancel,
+                            backend = LocalHFBackend(
+                                _transfer_paths_by_id[ckpt_id],
+                                device=args.device,
+                                max_context=args.max_context,
                             )
+                            _fp = getattr(backend, "fingerprint", None)
+                            _transfer_fingerprints[ckpt_id] = _fp if type(_fp) is str else None
+                            return backend
+
+                        _transfer_outcomes = transfer_stage(
+                            _transfer_backend,
+                            tuple(_transfer_ids),
+                            formats,
+                            tuple(split.search),
+                            boundary=args.boundary_ids,
+                            boundary_map=boundary_map,
+                            max_new_tokens=args.max_new_tokens,
+                            seed=args.seed,
+                            cancel=cancel,
+                        )
                         _transfer_result = transfer_portability(
                             result.get("selected_candidate"),
                             result["decision"],

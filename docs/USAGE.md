@@ -668,6 +668,11 @@ outside the checkpoint's vocabulary -- fail-closed, never silently
 skipped). The report renders a "Cross-checkpoint transfer" section;
 the decision banner notes the verdict. Compute multiplies by
 (1 + #checkpoints); the transfer stage never fails the run.
+Transfer backends load lazily, one checkpoint at a time: a
+checkpoint's model is constructed only when the stage reaches it
+and is closed before the next one loads, so at most one secondary
+backend is ever in memory; a run cancelled before the stage
+constructs none at all.
 `diff-reports` compares the transfer experiment between runs
 (`diff_transfer`: transfer-verdict drift, per-checkpoint
 (decision, winner) drift, per-cell candidate x checkpoint verdict

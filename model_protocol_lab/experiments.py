@@ -4,6 +4,7 @@ import json
 import math
 from bisect import bisect_right
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from dataclasses import asdict
 from hashlib import sha256
 from threading import Event
@@ -649,7 +650,10 @@ def transfer_stage(
     exact. ``backend_factory(checkpoint_id)`` builds a backend per
     checkpoint; any backend construction or evaluation failure records
     None for that (checkpoint, candidate) cell -- fail-closed, never
-    silently skipped.
+    silently skipped. Construction is lazy (ORCH-03): the factory is
+    called only when the stage reaches the checkpoint, and a backend
+    that offers ``close()`` is closed before the next checkpoint is
+    constructed, so at most one secondary backend is ever live.
 
     ``cancel`` is the run's shared cancellation event (ORCH-02): it is
     checked before each checkpoint's backend is constructed and before
@@ -693,28 +697,41 @@ def transfer_stage(
                 backend = backend_factory(ckpt)
             except Exception:  # noqa: BLE001 -- whole checkpoint degrades, not the stage
                 backend = None
-        for fmt in formats:
-            if backend is None or (cancel is not None and cancel.is_set()):
-                per_candidate[fmt.name] = None
-                continue
-            try:
-                report = evaluate(
-                    backend,
-                    fmt,
-                    cases,
-                    boundary=boundaries[fmt.name],
-                    max_new_tokens=max_new_tokens,
-                    seed=seed,
-                    cancel=cancel,
-                )
-            except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
-                per_candidate[fmt.name] = None
-                continue
-            if not report.aggregate_eligible:
-                per_candidate[fmt.name] = None
-                continue
-            passed = sum(o.exact_match and o.boundary_found for o in report.observations)
-            per_candidate[fmt.name] = passed == report.planned_count
+        try:
+            for fmt in formats:
+                if backend is None or (cancel is not None and cancel.is_set()):
+                    per_candidate[fmt.name] = None
+                    continue
+                try:
+                    report = evaluate(
+                        backend,
+                        fmt,
+                        cases,
+                        boundary=boundaries[fmt.name],
+                        max_new_tokens=max_new_tokens,
+                        seed=seed,
+                        cancel=cancel,
+                    )
+                except Exception:  # noqa: BLE001 -- one cell degrades, not the stage
+                    per_candidate[fmt.name] = None
+                    continue
+                if not report.aggregate_eligible:
+                    per_candidate[fmt.name] = None
+                    continue
+                passed = sum(o.exact_match and o.boundary_found for o in report.observations)
+                per_candidate[fmt.name] = passed == report.planned_count
+        finally:
+            # ORCH-03: a checkpoint's backend is released before the
+            # next checkpoint is constructed, so at most one secondary
+            # backend is ever live. Backends without close() are left
+            # to the garbage collector; a failing close never fails
+            # the stage.
+            if backend is not None:
+                close = getattr(backend, "close", None)
+                if callable(close):
+                    # Teardown is best-effort.
+                    with suppress(Exception):
+                        close()
         transfer[ckpt] = per_candidate
     return transfer
 

@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (external-audit W4 push 6 — lazy transfer backends, ORCH-03, 2026-11-16)
+
+- **Transfer backends now load one at a time and are released.**
+  The CLI's transfer block no longer constructs every
+  `--transfer-model` backend up front into a retained dict: the
+  transfer stage's factory constructs a checkpoint's backend only
+  when the stage reaches it, records its fingerprint at
+  construction, and the stage closes the backend (the new
+  `LocalHFBackend.close()`, which drops the model/tokenizer
+  references and empties the CUDA allocator cache) before the
+  next checkpoint is constructed — at most one secondary backend
+  is ever live, a failing close never fails the stage, and a
+  cancelled run constructs none at all.
+
 ### Added (external-audit W4 push 5 — one cancellation lifetime, ORCH-02, 2026-11-16)
 
 - `run` now keeps a single cancellation lifetime from the first
