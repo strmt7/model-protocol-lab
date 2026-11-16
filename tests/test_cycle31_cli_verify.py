@@ -949,6 +949,10 @@ class TestRunValidation(unittest.TestCase):
 class _FakeBackend:
     """Stand-in for LocalHFBackend: records constructor args, no weights."""
 
+    # The Backend protocol's string fingerprint (hashed into the
+    # configuration digest by the real run flow, W4 push 3).
+    fingerprint = "cycle31-fake-backend"
+
     def __init__(self, model, device=None, max_context=None):
         self.model = model
         self.device = device
@@ -967,6 +971,20 @@ class TestRunDispatch(unittest.TestCase):
             fixture = write_fixture_file(tmp)
             outdir = Path(tmp) / "report"
             result_doc = dict(result)
+            # Complete the emulated run_experiment return contract:
+            # the budget ledger rides every return path since W4
+            # push 2, and the CLI's progress-journal footer reads it.
+            result_doc.setdefault(
+                "budget",
+                {
+                    "max_total_tokens": None,
+                    "estimated_total_tokens": None,
+                    "actual_total_tokens": 0,
+                    "cells_planned": 0,
+                    "cells_executed": 0,
+                    "estimate_includes_held_out": True,
+                },
+            )
             patches = contextlib.ExitStack()
             patches.enter_context(mock.patch.object(backends, "LocalHFBackend", _FakeBackend))
             patches.enter_context(mock.patch.object(cli, "run_experiment", return_value=result_doc))
@@ -1056,6 +1074,14 @@ class TestRunDispatch(unittest.TestCase):
                 "selected_candidate": None,
                 "search": [],
                 "held_out": {},
+                "budget": {
+                    "max_total_tokens": None,
+                    "estimated_total_tokens": None,
+                    "actual_total_tokens": 0,
+                    "cells_planned": 0,
+                    "cells_executed": 0,
+                    "estimate_includes_held_out": True,
+                },
             }
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1160,6 +1186,14 @@ class TestRunDispatch(unittest.TestCase):
                             "selected_candidate": None,
                             "search": [],
                             "held_out": {},
+                            "budget": {
+                                "max_total_tokens": None,
+                                "estimated_total_tokens": None,
+                                "actual_total_tokens": 0,
+                                "cells_planned": 0,
+                                "cells_executed": 0,
+                                "estimate_includes_held_out": True,
+                            },
                         },
                     )
                 )

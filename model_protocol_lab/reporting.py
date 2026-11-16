@@ -14595,7 +14595,12 @@ def render_html(result: dict[str, Any]) -> str:
     )
 
 
-def prepare_report_dir(directory: str | Path, *, _allow_empty_existing: bool = False) -> Path:
+def prepare_report_dir(
+    directory: str | Path,
+    *,
+    _allow_empty_existing: bool = False,
+    _allow_progress_journal: bool = False,
+) -> Path:
     """Create a fresh report directory with owner-only permissions.
 
     Creates ``directory`` (and any missing parents) with mode 0o700 so the
@@ -14603,7 +14608,11 @@ def prepare_report_dir(directory: str | Path, *, _allow_empty_existing: bool = F
     umask. Raises FileExistsError if the leaf already exists, unless
     ``_allow_empty_existing`` is set and the leaf is an empty directory
     (used by ``cli.run``, which claims the output dir before the expensive
-    experiment). A symlinked leaf always raises FileExistsError -- even with
+    experiment). With ``_allow_progress_journal`` the leaf may instead
+    hold exactly the run's own ``progress.jsonl`` journal (a regular,
+    non-symlink file written by ``cli.run`` before ``save_report`` is
+    called) — the journal is part of the report bundle, not foreign
+    content. A symlinked leaf always raises FileExistsError -- even with
     ``_allow_empty_existing`` -- so report files are never written through a
     link into an attacker-chosen directory. Symlinked path components are
     never chmodded through: the
@@ -14631,7 +14640,16 @@ def prepare_report_dir(directory: str | Path, *, _allow_empty_existing: bool = F
         # _allow_empty_existing.
         if target.is_symlink():
             raise
-        if not (_allow_empty_existing and target.is_dir() and not any(target.iterdir())):
+        if not (_allow_empty_existing and target.is_dir()):
+            raise
+        entries = list(target.iterdir())
+        if entries and not (
+            _allow_progress_journal
+            and len(entries) == 1
+            and entries[0].name == "progress.jsonl"
+            and not entries[0].is_symlink()
+            and entries[0].is_file()
+        ):
             raise
     for component in missing:
         # Never chmod through a symlink: os.chmod follows links, which would
@@ -14742,6 +14760,7 @@ _REPORT_CORE_KEYS = frozenset(
         "search",
         "held_out",
         "failure_taxonomy",
+        "resumed",
         "selection_margin",
         "token_overhead",
         "diagnostics_unavailable",
@@ -14785,6 +14804,7 @@ def save_report(
     *,
     include_evidence: bool = False,
     _allow_empty_existing: bool = False,
+    _allow_progress_journal: bool = False,
 ) -> tuple[Path, Path]:
     """Write the report as results.json + report.html into a fresh directory.
 
@@ -14812,7 +14832,11 @@ def save_report(
     # Restrictive permissions: reports may contain sensitive evidence
     # (--include-evidence). The directory and files are readable only by the
     # invoking user, regardless of the process umask.
-    target = prepare_report_dir(directory, _allow_empty_existing=_allow_empty_existing)
+    target = prepare_report_dir(
+        directory,
+        _allow_empty_existing=_allow_empty_existing,
+        _allow_progress_journal=_allow_progress_journal,
+    )
     json_path, html_path = target / "results.json", target / "report.html"
     written: list[Path] = []
     try:

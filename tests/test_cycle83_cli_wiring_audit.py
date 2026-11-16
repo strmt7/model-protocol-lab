@@ -709,6 +709,10 @@ class ExitCodeContractTests(unittest.TestCase):
 class _FakeBackend:
     """Stand-in for LocalHFBackend: records constructor args, no weights."""
 
+    # The Backend protocol's string fingerprint (hashed into the
+    # configuration digest by the real run flow, W4 push 3).
+    fingerprint = "cycle83-fake-backend"
+
     eos_token_id = None
 
     def __init__(self, model: object, device: object = None, max_context: object = None) -> None:
@@ -730,6 +734,16 @@ class RunDecisionExitCodeTests(unittest.TestCase):
                 "selected_candidate": None,
                 "search": [],
                 "held_out": None,
+                # run_experiment's return contract since W4 push 2
+                # (the CLI's progress-journal footer reads the actuals).
+                "budget": {
+                    "max_total_tokens": None,
+                    "estimated_total_tokens": None,
+                    "actual_total_tokens": 0,
+                    "cells_planned": 0,
+                    "cells_executed": 0,
+                    "estimate_includes_held_out": True,
+                },
             }
             patches = contextlib.ExitStack()
             patches.enter_context(mock.patch.object(backends, "LocalHFBackend", _FakeBackend))

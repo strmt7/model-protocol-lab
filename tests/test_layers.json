@@ -270,6 +270,7 @@
    "test_w3_windows_workflow.py",
    "test_w4_budget_diff.py",
    "test_w4_budget_ledger.py",
+   "test_w4_progress_resume.py",
    "test_w4_render_worker.py",
    "test_workflows.py"
   ],
@@ -404,6 +405,10 @@
   "test_w3_platform_caps.py": [
    "resource"
   ],
+  "test_w4_progress_resume.py": [
+   "numpy",
+   "tokenizers"
+  ],
   "test_w4_render_worker.py": [
    "resource",
    "tokenizers",
@@ -423,8 +428,8 @@
   ]
  },
  "module_counts": {
-  "total": 268,
-  "base": 255,
+  "total": 269,
+  "base": 256,
   "hf": 12,
   "posix": 1
  }

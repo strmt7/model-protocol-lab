@@ -922,9 +922,23 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
             outdir = Path(tmp) / "report"
             result_doc = _aliased_pair()
             result_doc["held_out"] = {}
+            # run_experiment's return contract since W4 push 2 (the
+            # CLI's progress-journal footer reads the actuals).
+            result_doc["budget"] = {
+                "max_total_tokens": None,
+                "estimated_total_tokens": None,
+                "actual_total_tokens": 0,
+                "cells_planned": 0,
+                "cells_executed": 0,
+                "estimate_includes_held_out": True,
+            }
 
             class _FakeHFBackend:
                 """Fake hf backend."""
+
+                # The Backend protocol's string fingerprint (hashed
+                # into the configuration digest, W4 push 3).
+                fingerprint = "cycle181-fake-backend"
 
                 def __init__(self, model, device=None, max_context=None):
                     self.model = model

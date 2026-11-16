@@ -1342,6 +1342,10 @@ class TestCliDispatch(unittest.TestCase):
         class _FakeHFBackend:
             """Fake hf backend."""
 
+            # The Backend protocol's string fingerprint (hashed
+            # into the configuration digest, W4 push 3).
+            fingerprint = "cycle183-fake-backend"
+
             def __init__(self, model: Any, device: Any = None, max_context: Any = None) -> None:
                 self.model = model
 
@@ -1399,6 +1403,16 @@ class TestCliDispatch(unittest.TestCase):
             "selected_candidate": None,
             "search": [{"format": {"name": "llama3"}}],
             "held_out": {},
+            # run_experiment's return contract since W4 push 2 (the
+            # CLI's progress-journal footer reads the actuals).
+            "budget": {
+                "max_total_tokens": None,
+                "estimated_total_tokens": None,
+                "actual_total_tokens": 0,
+                "cells_planned": 0,
+                "cells_executed": 0,
+                "estimate_includes_held_out": True,
+            },
         }
         code, captured = self._run_with_stage_recorder(result_doc, recorder)
         self.assertEqual(code, 2)  # abstention exit, by contract
@@ -1425,6 +1439,14 @@ class TestCliDispatch(unittest.TestCase):
             "selected_candidate": None,
             "search": [{"format": {"name": "llama3"}}],
             "held_out": {},
+            "budget": {
+                "max_total_tokens": None,
+                "estimated_total_tokens": None,
+                "actual_total_tokens": 0,
+                "cells_planned": 0,
+                "cells_executed": 0,
+                "estimate_includes_held_out": True,
+            },
         }
         _code, captured = self._run_with_stage_recorder(result_doc, recorder)
         self.assertEqual(calls, [])

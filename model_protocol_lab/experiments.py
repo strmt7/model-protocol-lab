@@ -3,7 +3,7 @@
 import json
 import math
 from bisect import bisect_right
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import asdict
 from hashlib import sha256
 from threading import Event
@@ -35,6 +35,7 @@ from .core import (
     Fixture,
     Format,
     Message,
+    Observation,
     Split,
     _valid_token_ids,
     evaluate,
@@ -4035,6 +4036,40 @@ def _preflight_estimate(
     return total
 
 
+def configuration_digest(
+    backend: Backend,
+    formats: tuple[Format, ...],
+    split: Split,
+    *,
+    boundary: tuple[int, ...],
+    boundary_map: dict[str, tuple[int, ...]] | None = None,
+    max_new_tokens: int = 64,
+    seed: int = 0,
+    eos_id: int | None = None,
+) -> str:
+    """The configuration identity a run's progress journal binds to.
+
+    Public wrapper over :func:`_configuration_digest` with
+    ``run_experiment``'s own defaults, so the CLI can stamp the
+    journal header before the run starts and a later ``--resume``
+    can prove it is continuing the same configuration (audit
+    adjudication D-3: digest + progress schema + package version;
+    the budget cap is deliberately NOT part of the identity — the
+    resuming invocation's cap governs, enforced by the same
+    full-run preflight bound).
+    """
+    return _configuration_digest(
+        backend,
+        formats,
+        split,
+        boundary=boundary,
+        boundary_map=boundary_map,
+        max_new_tokens=max_new_tokens,
+        seed=seed,
+        eos_id=eos_id,
+    )
+
+
 def run_experiment(
     backend: Backend,
     formats: tuple[Format, ...],
@@ -4047,6 +4082,8 @@ def run_experiment(
     cancel: Event | None = None,
     eos_id: int | None = None,
     max_total_tokens: int | None = None,
+    on_observation: Callable[[str, str, Observation], None] | None = None,
+    resume_observations: Mapping[tuple[str, str, str], Observation] | None = None,
 ) -> dict[str, Any]:
     """Run the full protocol experiment and return the result dict.
 
@@ -4073,6 +4110,16 @@ def run_experiment(
     ``None`` when no cap was set, since accounting without
     enforcement does not pay for a preflight pass — actual spend,
     planned vs executed cells).
+
+    ``on_observation`` fires as ``(stage, candidate, observation)``
+    once per freshly produced observation (the progress journal's
+    write hook). ``resume_observations`` maps ``(stage, candidate,
+    fixture)`` to observations a previous, identically configured
+    run already produced; those cells are not re-executed, and the
+    result gains a ``resumed`` block splitting reused vs generated
+    cells. Per-cell seeds are position-independent, so a resumed
+    run's result equals the uninterrupted run's apart from that
+    block.
     """
     if type(formats) is not tuple or not 1 <= len(formats) <= 24:
         raise ValueError("Supply between 1 and 24 candidates")
@@ -4088,6 +4135,26 @@ def run_experiment(
         raise ValueError("eos_id must be a nonnegative integer or None")
     if max_total_tokens is not None and (type(max_total_tokens) is not int or max_total_tokens < 1):
         raise ValueError("max_total_tokens must be a positive integer or None")
+    if on_observation is not None and not callable(on_observation):
+        raise ValueError("on_observation must be callable")
+    if resume_observations is not None:
+        if not isinstance(resume_observations, Mapping):
+            raise ValueError("resume_observations must be a mapping")
+        search_ids = {case.id for case in split.search}
+        held_out_ids = {case.id for case in split.held_out}
+        candidate_names = {fmt.name for fmt in formats}
+        for key, obs in resume_observations.items():
+            if (
+                type(key) is not tuple
+                or len(key) != 3
+                or key[0] not in ("search", "held_out")
+                or key[1] not in candidate_names
+                or type(obs) is not Observation
+                or obs.candidate != key[1]
+                or obs.fixture != key[2]
+                or key[2] not in (search_ids if key[0] == "search" else held_out_ids)
+            ):
+                raise ValueError("resume observations do not match this run's plan")
     if type(getattr(backend, "fingerprint", None)) is not str:
         # Fail fast on protocol-violating backends before any compute: a
         # non-string fingerprint would otherwise explode in json.dumps inside
@@ -4123,6 +4190,27 @@ def run_experiment(
         )
         if estimated_total_tokens > max_total_tokens:
             raise ValueError("run_budget_exceeded_preflight")
+    fresh_cells = 0
+
+    def _emit(stage: str, candidate_name: str, observation: Observation) -> None:
+        """Count and forward one freshly produced observation."""
+        nonlocal fresh_cells
+        fresh_cells += 1
+        if on_observation is not None:
+            on_observation(stage, candidate_name, observation)
+
+    def _priors_for(stage: str, candidate_name: str) -> dict[str, Observation] | None:
+        """This stage+candidate's resume priors, keyed by fixture ID."""
+        if resume_observations is None:
+            return None
+        return {
+            fixture: obs
+            for (prior_stage, prior_candidate, fixture), obs in resume_observations.items()
+            if prior_stage == stage and prior_candidate == candidate_name
+        }
+
+    _tracking = on_observation is not None or resume_observations is not None
+
     output: dict[str, Any] = {
         "schema_version": 1,
         "selection_rule": "unique_all_search_pass",
@@ -4167,11 +4255,23 @@ def run_experiment(
             "cells_executed": cells_executed,
             "estimate_includes_held_out": True,
         }
+        if resume_observations is not None:
+            # Every stored observation was either reused from the
+            # journal or freshly generated (and counted by _emit).
+            output["resumed"] = {
+                "cells_reused": cells_executed - fresh_cells,
+                "cells_generated": fresh_cells,
+            }
         return output
 
     winners = []
     for fmt in formats:
         candidate_boundary = boundaries[fmt.name]
+
+        def _search_emit(observation: Observation, _name: str = fmt.name) -> None:
+            """Forward one search observation to the journal hook."""
+            _emit("search", _name, observation)
+
         report = evaluate(
             backend,
             fmt,
@@ -4180,6 +4280,8 @@ def run_experiment(
             max_new_tokens=max_new_tokens,
             seed=seed,
             cancel=event,
+            on_observation=_search_emit if _tracking else None,
+            prior_observations=_priors_for("search", fmt.name),
         )
         summary = _summary(report)
         output["search"].append(
@@ -4197,12 +4299,26 @@ def run_experiment(
         if summary["exact_and_boundary_passes"] == report.planned_count:
             winners.append(fmt)
     decision, selected = _select_winner(winners, event.is_set())
+    if resume_observations is not None:
+        # Held-out cells exist only for the candidate the search
+        # stage actually selected; a journal naming any other
+        # candidate (or a held-out stage with no winner) cannot
+        # have come from this configuration's run.
+        held_out_priors = _priors_for("held_out", selected.name) if selected else None
+        any_held_out = any(key[0] == "held_out" for key in resume_observations)
+        if any_held_out and not held_out_priors:
+            raise ValueError("resume_stage_order_violation")
     if selected is None:
         output["decision"] = decision
         return finish()
     output["selected_candidate"] = selected.name
     selected_boundary = boundaries[selected.name]
     output["selected_boundary_token_ids"] = list(selected_boundary)
+
+    def _held_out_emit(observation: Observation) -> None:
+        """Forward one held-out observation to the journal hook."""
+        _emit("held_out", selected.name, observation)
+
     held = evaluate(
         backend,
         selected,
@@ -4211,6 +4327,8 @@ def run_experiment(
         max_new_tokens=max_new_tokens,
         seed=seed,
         cancel=event,
+        on_observation=_held_out_emit if _tracking else None,
+        prior_observations=_priors_for("held_out", selected.name),
     )
     output["held_out"] = {
         "summary": _summary(held),

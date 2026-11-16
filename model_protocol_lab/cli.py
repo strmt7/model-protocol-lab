@@ -249,6 +249,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Refuse the run before any generation if its preflight token "
         "bound exceeds this total (default: no run-level cap)",
     )
+    run.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume an interrupted run from the progress.jsonl journal in "
+        "--output instead of starting over: the journal's configuration "
+        "must match this invocation exactly, and only the missing cells "
+        "are re-executed",
+    )
     run.add_argument("--max-context", type=int, default=2048)
     run.add_argument("--seed", type=int, default=0)
     run.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
@@ -4195,7 +4203,13 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--max-drop-bytes must be between 1 and 8")
         if not 1 <= args.max_drop_tokens <= 8:
             parser.error("--max-drop-tokens must be between 1 and 8")
-        if args.output.exists():
+        if args.resume:
+            if not args.output.is_dir() or not (args.output / "progress.jsonl").is_file():
+                parser.error(
+                    "--resume needs the interrupted run's output directory, "
+                    "holding its progress.jsonl journal"
+                )
+        elif args.output.exists():
             parser.error("Output path already exists; use a fresh directory")
         # The candidate set is pure (no model involved): compute it before
         # any expensive work so a mistyped --boundary-map name fails fast
@@ -4208,23 +4222,31 @@ def main(argv: list[str] | None = None) -> int:
         # experiment run: an unwritable parent or a path through a regular
         # file fails here, cheaply, instead of discarding hours of compute
         # after the run completes. On failure before the report is saved the
-        # directory is removed again so a retry still sees a fresh path.
+        # directory is removed again so a retry still sees a fresh path —
+        # unless the run got far enough to journal completed cells, in
+        # which case the directory (and its progress.jsonl) stays for
+        # --resume. A resumed run claims nothing: the directory is the
+        # interrupted run's own.
         from .reporting import prepare_report_dir
 
-        # Remember which parents did not exist before the claim, so cleanup
-        # can remove the whole created chain (not just the leaf).
-        _pre_existing = set()
-        _probe = Path(args.output)
-        while not _probe.exists():
-            _probe = _probe.parent
-        _pre_existing.add(_probe)
-        output_dir = prepare_report_dir(args.output)
         _created_chain = []
-        _probe = output_dir
-        while _probe not in _pre_existing:
-            _created_chain.append(_probe)
-            _probe = _probe.parent
+        if not args.resume:
+            # Remember which parents did not exist before the claim, so cleanup
+            # can remove the whole created chain (not just the leaf).
+            _pre_existing = set()
+            _probe = Path(args.output)
+            while not _probe.exists():
+                _probe = _probe.parent
+            _pre_existing.add(_probe)
+            output_dir = prepare_report_dir(args.output)
+            _probe = output_dir
+            while _probe not in _pre_existing:
+                _created_chain.append(_probe)
+                _probe = _probe.parent
+        else:
+            output_dir = Path(args.output)
         report_saved = False
+        _sink = None
         try:
             # own bounded local JSON reader; not huggingface_hub.datasets.
             split = load_dataset(args.dataset)  # nosec B615
@@ -4241,6 +4263,58 @@ def main(argv: list[str] | None = None) -> int:
 
             backend = LocalHFBackend(args.model, device=args.device, max_context=args.max_context)
             eos_id = _backend_eos_id(backend)
+            # Progress journal (W4-3, RR-14b): every run journals each
+            # completed cell to progress.jsonl in its output directory,
+            # so an interrupted run (host replacement, kill -9, OOM)
+            # can be continued with --resume instead of restarted. A
+            # resumed run's journal is verified against THIS
+            # invocation's configuration before any generation: the
+            # identity is the configuration digest + progress schema
+            # + package version (adjudication D-3; the budget cap is
+            # not part of it — this invocation's cap governs).
+            import importlib.metadata
+
+            from .experiments import configuration_digest
+            from .runprogress import PROGRESS_SCHEMA, ProgressSink, load_progress
+
+            _digest = configuration_digest(
+                backend,
+                formats,
+                split,
+                boundary=args.boundary_ids,
+                boundary_map=boundary_map,
+                max_new_tokens=args.max_new_tokens,
+                seed=args.seed,
+                eos_id=eos_id,
+            )
+            try:
+                _package_version = importlib.metadata.version("model-protocol-lab")
+            except importlib.metadata.PackageNotFoundError:
+                _package_version = "unavailable"
+            _progress_path = output_dir / "progress.jsonl"
+            _resume_observations = None
+            if args.resume:
+                if (output_dir / "results.json").exists():
+                    raise ValueError("resume_already_complete")
+                _loaded = load_progress(
+                    _progress_path,
+                    expected_digest=_digest,
+                    expected_package_version=_package_version,
+                    formats=formats,
+                    split=split,
+                )
+                _sink = ProgressSink.resume(_progress_path, _loaded)
+                _resume_observations = _loaded.observations
+            else:
+                _sink = ProgressSink.create(
+                    _progress_path,
+                    header={
+                        "schema": PROGRESS_SCHEMA,
+                        "package_version": _package_version,
+                        "configuration_digest": _digest,
+                        "max_total_tokens": args.max_total_tokens,
+                    },
+                )
             cancel = Event()
             previous_int = signal.getsignal(signal.SIGINT)
             previous_term = signal.getsignal(signal.SIGTERM)
@@ -4284,6 +4358,8 @@ def main(argv: list[str] | None = None) -> int:
                     cancel=cancel,
                     eos_id=eos_id,
                     max_total_tokens=args.max_total_tokens,
+                    on_observation=_sink.append,
+                    resume_observations=_resume_observations,
                 )
             finally:
                 signal.signal(signal.SIGINT, previous_int)
@@ -5606,13 +5682,28 @@ def main(argv: list[str] | None = None) -> int:
                 args.output,
                 include_evidence=args.include_evidence,
                 _allow_empty_existing=True,  # pre-claimed above
+                _allow_progress_journal=True,  # the run's own journal is bundle content
             )
             report_saved = True
+            _sink.finalize(
+                {
+                    "decision": result["decision"],
+                    "actual_total_tokens": result["budget"]["actual_total_tokens"],
+                }
+            )
         finally:
-            if not report_saved:
-                # The run produced no report: release the claimed directory
-                # (and any partial files / newly-created parents) so a retry
-                # does not trip the freshness check.
+            if _sink is not None:
+                _sink.close()
+            if (
+                not report_saved
+                and not args.resume
+                and not (_sink is not None and _sink.records_written > 0)
+            ):
+                # The run produced no report and journaled no completed
+                # cells: release the claimed directory (and any partial
+                # files / newly-created parents) so a retry does not trip
+                # the freshness check. A directory holding journaled
+                # cells stays — it is the --resume target.
                 for _component in _created_chain:
                     with contextlib.suppress(OSError):
                         if _component.is_dir():

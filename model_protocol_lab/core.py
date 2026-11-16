@@ -5,7 +5,7 @@ from __future__ import annotations
 import difflib
 import time
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from threading import Event
@@ -765,6 +765,8 @@ def evaluate(
     max_new_tokens: int = 64,
     seed: int = 0,
     cancel: Event | None = None,
+    on_observation: Callable[[Observation], None] | None = None,
+    prior_observations: Mapping[str, Observation] | None = None,
 ) -> EvaluationReport:
     """Measure a frozen candidate, retaining incomplete-run evidence.
 
@@ -773,6 +775,15 @@ def evaluate(
     No backend exception text is exported. Total compute accounting, confidence,
     provenance and candidate selection remain separate unimplemented features.
     Boundary IDs must be verified in context; suffix tokens remain in evidence.
+
+    ``on_observation`` fires once per freshly produced observation, in
+    production order (the resume journal's write hook); it never fires
+    for reused observations. ``prior_observations`` maps fixture IDs to
+    observations a previous, identically configured run already
+    produced: those cells are not re-executed, and a non-completed
+    prior ends the evaluation with that prior's status, exactly as
+    the original run ended there — a resumed evaluation therefore
+    reproduces the uninterrupted report.
     """
     if type(candidate) is not Format:
         raise ValueError("candidate must be a Format")
@@ -790,6 +801,10 @@ def evaluate(
         raise ValueError("seed must be an unsigned 64-bit integer")
     if cancel is not None and not isinstance(cancel, Event):
         raise ValueError("cancel must be a threading.Event")
+    if on_observation is not None and not callable(on_observation):
+        raise ValueError("on_observation must be callable")
+    if prior_observations is not None and not isinstance(prior_observations, Mapping):
+        raise ValueError("prior_observations must be a mapping of fixture ID to Observation")
     event = cancel if cancel is not None else Event()
     records: list[Observation] = []
 
@@ -812,22 +827,23 @@ def evaluate(
         # All per-attempt state is passed explicitly: these helpers are defined
         # once outside the loop so they can never capture a stale loop variable.
         """Record."""
-        records.append(
-            Observation(
-                candidate=candidate.name,
-                fixture=case.id,
-                input_ids=input_ids,
-                output_ids=output_ids,
-                answer=answer,
-                exact_match=status == "completed" and answer == case.expected,
-                boundary_found=cut is not None,
-                boundary_text_match=boundary_text_match,
-                raw_reason=raw_reason,
-                error=error,
-                status=status,
-                input_text=input_text,
-            )
+        observation = Observation(
+            candidate=candidate.name,
+            fixture=case.id,
+            input_ids=input_ids,
+            output_ids=output_ids,
+            answer=answer,
+            exact_match=status == "completed" and answer == case.expected,
+            boundary_found=cut is not None,
+            boundary_text_match=boundary_text_match,
+            raw_reason=raw_reason,
+            error=error,
+            status=status,
+            input_text=input_text,
         )
+        records.append(observation)
+        if on_observation is not None:
+            on_observation(observation)
 
     def terminate(
         status: RunStatus,
@@ -859,6 +875,19 @@ def evaluate(
         return terminate(status, case, (), (), "", None, None, error)
 
     for case in cases:
+        if prior_observations is not None:
+            prior = prior_observations.get(case.id)
+            if prior is not None:
+                if (
+                    type(prior) is not Observation
+                    or prior.candidate != candidate.name
+                    or prior.fixture != case.id
+                ):
+                    raise ValueError("prior observation does not match this evaluation")
+                records.append(prior)
+                if prior.status != "completed":
+                    return report(prior.status)
+                continue
         if event.is_set():
             return report("cancelled")
         input_ids: tuple[int, ...] = ()

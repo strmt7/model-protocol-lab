@@ -6,6 +6,35 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (external-audit W4 push 3 — durable run progress + resume, RR-14, 2026-11-15)
+
+- `run` now journals its progress and can resume an interrupted
+  run. Every run writes `progress.jsonl` into its output
+  directory — a header binding the configuration digest, journal
+  schema and package version, one hash-chained line per completed
+  search/held-out cell (flushed and fsynced per cell), and a
+  completion footer written once the report pair is saved. If
+  the process dies mid-run (host reboot, `kill -9`, OOM), the
+  same command with `--resume` verifies the journal against the
+  resuming invocation's configuration before any generation and
+  re-executes only the missing cells; per-cell seeds are
+  position-independent, so the resumed report equals the
+  uninterrupted control's except for a `resumed` block counting
+  reused vs generated cells. The budget cap is not part of the
+  resume identity (adjudication D-3): the resuming invocation's
+  cap governs through the same full-run preflight bound.
+  Refusals are fixed codes — `resume_configuration_mismatch`,
+  `resume_progress_corrupt`, `resume_stage_order_violation`,
+  `resume_already_complete` — and a torn final journal line
+  (the kill landed mid-write) drops and re-executes exactly one
+  cell. `save_report`'s fresh-directory discipline gained a
+  narrow opt-in: a claimed directory may hold the run's own
+  journal when the pair is written. RR-14 is closed
+  fixed-with-evidence (budget half in W4 push 2, resume half
+  here), proven by a subprocess kill -9 acceptance whose resumed
+  report byte-matches the uninterrupted control modulo the
+  `resumed` block.
+
 ### Added (external-audit W4 push 2 — run budget ledger, RR-14 budget half, 2026-11-15)
 
 - `run` gained a run-level token budget. `--max-total-tokens N`

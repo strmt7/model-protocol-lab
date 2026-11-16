@@ -67,7 +67,7 @@ repo). Priorities and owning packages are the audit's.
 | RR-11 | P2 | Release smoke can import the checkout instead of the installed wheel | open | W5 | audit inspection + isolated re-run |
 | RR-12 | P2 | Sdist-shipped tests lack their dependencies; the sdist test scope is not self-contained | open | W5 | audit inspection of `MANIFEST.in` and test imports |
 | RR-13 | P2 | No real positive-path evidence: 7 rows / 324 generations, every decision `no_candidate`, held-out confirmation never entered | open | W6 | standing record (`docs/REAL_CHECKPOINT_VALIDATION.md`); the negative rows are evidence, not defects to weaken |
-| RR-14 | P2 | Run-level budget/recovery incomplete (per-stage caps only; no durable partial-run resume) | open | W4 | audit inspection; consistent with the R2 remainder history. **W4 push 2 (2026-11-15)**: the budget half landed — `run_experiment` gained the run-level ledger (`budget` block on every return path: cap, preflight estimate, actuals, planned vs executed cells) and the optional `--max-total-tokens` cap enforced at one preflight refusal point (D-2: preflight-only, no wall-clock), with the `diff-reports` budget mirror validating each side by recomputation from its stored observations. The row stays **open**: durable partial-run resume (progress journal + `--resume`, D-3 identity) is W4 push 3 |
+| RR-14 | P2 | Run-level budget/recovery incomplete (per-stage caps only; no durable partial-run resume) | fixed-with-evidence | W4 | audit inspection; consistent with the R2 remainder history. **W4 push 2 (2026-11-15)**: the budget half landed — `run_experiment` gained the run-level ledger (`budget` block on every return path: cap, preflight estimate, actuals, planned vs executed cells) and the optional `--max-total-tokens` cap enforced at one preflight refusal point (D-2: preflight-only, no wall-clock), with the `diff-reports` budget mirror validating each side by recomputation from its stored observations. **W4 push 3 (2026-11-15)**: the resume half landed and the row closes — every run journals completed cells to `progress.jsonl` (hash-chained, fsync per cell, identity = configuration digest + journal schema + package version per D-3, cap excluded), and `run --resume` verifies the journal before any generation and re-executes only the missing cells, refusing by fixed code (`resume_configuration_mismatch` / `resume_progress_corrupt` / `resume_stage_order_violation` / `resume_already_complete`); a torn final line re-executes exactly one cell. Acceptance: subprocess kill -9 mid-run, resume completes, and the resumed `results.json` equals the uninterrupted control's except the `resumed` accounting block |
 | RR-15 | P2 | Duplicated contracts/gates; the cycle-124 mutation gate counts any non-zero child exit (incl. collection failure) as a kill | open | W7 | audit-executed; **lane-confirmed deterministically** (shadow child exit 2, zero semantic tests executed, gate returns OK in ~0.5 s). New datum from the lane: the gate's *unmutated control* passed only 2 of 3 runs on the verification copy (tree byte-identical after every run, no cause asserted) — the baseline itself is not deterministic there; W7 owns both |
 | RR-16 | P2 | Docs/generated metadata drift: `site/` (101 files) and `model_protocol_lab.egg-info/` tracked (107 generated files total, lane-confirmed exact); egg-info says 0.1.0 vs package 0.2.0; living SECURITY.md claims contradicted by the serving implementation (its "no HTTP clients anywhere" claim vs `servingbackends.py`'s `urllib.request`); USAGE §6 table stale in three places (R4 adjudication record) | open | W7 | audit census + tree counts in §1; lane census |
 | RR-17 | P2 | Scanner-exclusion policy not mechanically enforced | open | W1/W7 | audit lexical census (706 marker *lines*); **lane occurrence census**: 1,050 marker occurrences total, **310 in package source** (noqa 231, nosec 74, `type: ignore` 5), and **`skipcq` occurrences are 0 everywhere** — the cycle-225 withdrawal is complete on this head. Same conclusion, sharper arithmetic; the residual surface is noqa/nosec/type-ignore only. **W1 wave 1 (2026-11-11)**: the mechanical inventory is now a durable artifact (occurrence census over every `.py` in the package/tests/examples/tools/fuzz trees; repo total 1,089 = noqa 656, nosec 80, `type: ignore` 335, `pragma: no cover` 18, skipcq 0; package 314 = noqa 231, nosec 74, `type: ignore` 5, pragma 4 — method and per-file rows in the W1 work area, `marker_inventory.csv`). One bounded class removed by genuine typing fixes: **all 5 package `type: ignore` markers** (deliforge.py ×2 [arg-type], experiments.py [index], mcp_server.py [attr-defined] + [arg-type]). Regression-first: stripping the markers alone produced exactly 5 mypy errors with the same codes; the fixes (a `TypeGuard` on deliforge's `_valid_ids` + `Iterable` narrowing at its fail-closed boundary, walrus narrowing in the experiments selection comprehension, and `_build_backend` declaring its real `Backend` return type) leave `mypy` and `mypy --strict` clean with the markers gone, and a 1,176-combination differential run shows zero behaviour change in the restructured deliforge validator. The row stays **open**: the remaining classes (package noqa 231 — BLE001 ×223 deliberate fail-closed sites, nosec 74, tests-tree markers) are future waves, and mechanical enforcement (a census gate) is W7 scope |
@@ -279,6 +279,25 @@ RR-14 itself stays **open**: durable partial-run resume
 tallies unchanged: **30 fixed-with-evidence, 20 open,
 1 design-debt-accepted (ORCH-D02), 1 blocked-external
 (RR-05)**; §4 refreshes at W4 closure.
+
+A sixteenth push (W4 push 3, 2026-11-15) lands RR-14's
+resume half and closes the row: `run` journals every
+completed cell to `progress.jsonl` in its output directory
+(hash-chained lines, flush + fsync per cell, a completion
+footer after the report pair is saved), and `--resume`
+verifies the journal against the resuming invocation's
+configuration — digest, journal schema and package version
+per adjudication D-3, with the resuming cap governing via
+the same preflight bound — before re-executing only the
+missing cells. The verification battery refuses tampered,
+reordered and configuration-foreign journals by fixed
+code, drops a torn final line as exactly one re-executed
+cell, and the subprocess kill -9 acceptance shows the
+resumed report equal to the uninterrupted control's
+modulo the `resumed` block. Running tallies: **31
+fixed-with-evidence, 19 open, 1 design-debt-accepted
+(ORCH-D02), 1 blocked-external (RR-05)**; §4 refreshes at
+W4 closure.
 
 ### 2.6 Independent re-verification (audit-verify lane — landed)
 

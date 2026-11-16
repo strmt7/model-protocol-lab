@@ -807,6 +807,16 @@ class TokenCliTests(unittest.TestCase):
                 "selected_candidate": None,
                 "search": [],
                 "held_out": {},
+                # run_experiment's return contract since W4 push 2
+                # (the CLI's progress-journal footer reads the actuals).
+                "budget": {
+                    "max_total_tokens": None,
+                    "estimated_total_tokens": None,
+                    "actual_total_tokens": 0,
+                    "cells_planned": 0,
+                    "cells_executed": 0,
+                    "estimate_includes_held_out": True,
+                },
             }
             sentinel = _Sentinel()
             with contextlib.ExitStack() as stack:

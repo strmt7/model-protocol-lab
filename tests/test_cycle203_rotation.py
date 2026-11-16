@@ -1637,6 +1637,10 @@ class _DispatchFakeHFBackend:
     cycle-179 harness pattern): no weights, no generations.
     """
 
+    # The Backend protocol's string fingerprint (hashed into the
+    # configuration digest by the real run flow, W4 push 3).
+    fingerprint = "cycle203-dispatch-fake"
+
     def __init__(self, model, device=None, max_context=None, dtype=None):
         self.model = model
         self.device = device
@@ -1678,6 +1682,16 @@ class TestMainDispatchGap(unittest.TestCase):
             "selected_candidate": None,
             "search": [],
             "held_out": {},
+            # run_experiment's return contract since W4 push 2 (the
+            # CLI's progress-journal footer reads the actuals).
+            "budget": {
+                "max_total_tokens": None,
+                "estimated_total_tokens": None,
+                "actual_total_tokens": 0,
+                "cells_planned": 0,
+                "cells_executed": 0,
+                "estimate_includes_held_out": True,
+            },
         }
         sentinel = {"available": True, "detail": ""}
         with tempfile.TemporaryDirectory() as tmp:

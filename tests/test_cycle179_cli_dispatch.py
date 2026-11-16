@@ -502,6 +502,11 @@ class TestHelperDispatch(unittest.TestCase):
 class _FakeHFBackend:
     """Stand-in for LocalHFBackend in the run flow: no weights."""
 
+    # The Backend protocol requires a string fingerprint (the real
+    # run flow hashes it into the configuration digest — including
+    # the CLI's progress-journal header since W4 push 3).
+    fingerprint = "cycle179-fake-backend"
+
     def __init__(self, model, device=None, max_context=None, dtype=None):
         """Init  ."""
         self.model = model
@@ -568,6 +573,17 @@ class TestInlineDispatch(unittest.TestCase):
                 "selected_candidate": None,
                 "search": [],
                 "held_out": {},
+                # run_experiment's current return contract (the budget
+                # ledger rides every return path since W4 push 2; the
+                # CLI's progress-journal footer reads the actuals).
+                "budget": {
+                    "max_total_tokens": None,
+                    "estimated_total_tokens": None,
+                    "actual_total_tokens": 0,
+                    "cells_planned": 0,
+                    "cells_executed": 0,
+                    "estimate_includes_held_out": True,
+                },
             }
             sentinel = _Sentinel()
             with contextlib.ExitStack() as stack:

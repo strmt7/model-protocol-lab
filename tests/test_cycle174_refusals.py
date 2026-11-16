@@ -984,6 +984,10 @@ class TestReportingSectionHostile(unittest.TestCase):
 class _DispatchFakeBackend:
     """Dispatch fake backend."""
 
+    # The Backend protocol's string fingerprint (hashed into the
+    # configuration digest by the real run flow, W4 push 3).
+    fingerprint = "cycle174-dispatch-fake"
+
     def __init__(self, model: Any, device: Any = None, max_context: Any = None):
         self.model = model
         self.device = device
@@ -1002,6 +1006,16 @@ class TestCliDispatchEndToEnd(unittest.TestCase):
             "selected_candidate": None,
             "search": [_entry("chatml", [_obs("f1", "I'm sorry, I cannot help.")])],
             "held_out": {},
+            # run_experiment's return contract since W4 push 2 (the
+            # CLI's progress-journal footer reads the actuals).
+            "budget": {
+                "max_total_tokens": None,
+                "estimated_total_tokens": None,
+                "actual_total_tokens": 0,
+                "cells_planned": 0,
+                "cells_executed": 0,
+                "estimate_includes_held_out": True,
+            },
         }
         with tempfile.TemporaryDirectory() as tmp:
             fixture_path = Path(tmp) / "fixture.json"
