@@ -443,7 +443,11 @@ class BaseExceptionBoundaryTests(unittest.TestCase):
 
 
 class TranscriptCounterTests(unittest.TestCase):
-    """The debug REPL transcript counter must match the true char count."""
+    """The debug REPL transcript counter must match the true byte count.
+
+    The counter is denominated in UTF-8 bytes since W4 (RTI-07): the
+    save cap it feeds is a byte cap on the file actually written.
+    """
 
     def test_counter_invariant(self):
         """Test counter invariant."""
@@ -453,8 +457,11 @@ class TranscriptCounterTests(unittest.TestCase):
         repl.stdout = io.StringIO()
         for i in range(50):
             repl.onecmd(f"# comment {i}")
-        self.assertEqual(repl._transcript_chars, sum(len(c) for c in repl._transcript))
-        self.assertLessEqual(repl._transcript_chars, _MAX_SAVE_BYTES + 10_000)
+        self.assertEqual(
+            repl._transcript_bytes,
+            sum(len(c.encode("utf-8")) for c in repl._transcript),
+        )
+        self.assertLessEqual(repl._transcript_bytes, _MAX_SAVE_BYTES + 10_000)
 
     def test_counter_survives_truncation(self):
         """Test counter survives truncation."""
@@ -464,9 +471,12 @@ class TranscriptCounterTests(unittest.TestCase):
         repl.stdout = io.StringIO()
         # Force the truncation path directly.
         repl._transcript = ["x" * 1_000_000 for _ in range(6)]
-        repl._transcript_chars = sum(len(c) for c in repl._transcript)
+        repl._transcript_bytes = sum(len(c.encode("utf-8")) for c in repl._transcript)
         repl.onecmd("# trigger accounting")
-        self.assertEqual(repl._transcript_chars, sum(len(c) for c in repl._transcript))
+        self.assertEqual(
+            repl._transcript_bytes,
+            sum(len(c.encode("utf-8")) for c in repl._transcript),
+        )
         self.assertTrue(repl._transcript_truncated)
 
 

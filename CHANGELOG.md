@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (external-audit W4 push 8 — byte-denominated debug save cap, RTI-07, 2026-11-16)
+
+- **The debug REPL's save cap now counts bytes, and the append
+  total is checked.** `.save` previously checked the existing
+  file's size and the transcript's *character* length against
+  the 5MB cap separately, so the file actually written could
+  exceed it (the audit observed 5,000,764 bytes) and a
+  multi-byte transcript could exceed it alone. The transcript's
+  running accounting and truncation budget are now denominated
+  in UTF-8 bytes, and `.save` refuses when the existing bytes
+  plus the transcript's encoded bytes would exceed the cap.
+
 ### Fixed (external-audit W4 push 7 — serving teardown + transport classification, RTI-05/RTI-08, 2026-11-16)
 
 - **Aborted cache sequences now run their end teardown.** The

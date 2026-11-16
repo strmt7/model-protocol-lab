@@ -271,6 +271,7 @@
    "test_w4_budget_diff.py",
    "test_w4_budget_ledger.py",
    "test_w4_cancellation.py",
+   "test_w4_debug_save_cap.py",
    "test_w4_lazy_transfer.py",
    "test_w4_progress_resume.py",
    "test_w4_render_worker.py",
@@ -436,9 +437,9 @@
   ]
  },
  "module_counts": {
-  "base": 260,
+  "base": 261,
   "hf": 12,
   "posix": 1,
-  "total": 273
+  "total": 274
  }
 }

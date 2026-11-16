@@ -204,9 +204,11 @@ class DebugShell(cmd.Cmd):
         self._buffered: tuple[Message, ...] | None = None
         self._transcript: list[str] = []
         self._transcript_truncated = False
-        # Running char count: re-summing the transcript on every command is
-        # O(commands x transcript); the counter keeps .read scripts cheap.
-        self._transcript_chars = 0
+        # Running UTF-8 byte count: re-summing the transcript on every
+        # command is O(commands x transcript); the counter keeps .read
+        # scripts cheap. Bytes, not characters -- the save cap is
+        # denominated in the bytes actually written (RTI-07).
+        self._transcript_bytes = 0
         self._read_depth = 0
         # Script mode (set by run_script): command failures are also
         # written to stderr and counted, so a scripted run's exit code
@@ -301,26 +303,33 @@ class DebugShell(cmd.Cmd):
         text = buffer.getvalue()
         echo_chunk = f"{echo_prompt}{line}\n"
         self._transcript.append(echo_chunk)
-        self._transcript_chars += len(echo_chunk)
+        self._transcript_bytes += len(echo_chunk.encode("utf-8"))
         if text:
             self._transcript.append(text)
-            self._transcript_chars += len(text)
+            self._transcript_bytes += len(text.encode("utf-8"))
         # Bound transcript memory: keep the most recent output; .save notes
         # the truncation so a saved transcript never silently loses its head.
-        if self._transcript_chars > _MAX_SAVE_BYTES:
+        if self._transcript_bytes > _MAX_SAVE_BYTES:
             marker = "[... transcript truncated ...]\n"
             kept: list[str] = []
             # Budget the marker itself so the truncated transcript still
-            # fits under _MAX_SAVE_BYTES and .save stays usable.
-            remaining = _MAX_SAVE_BYTES - len(marker)
+            # fits under _MAX_SAVE_BYTES and .save stays usable. All
+            # accounting is in UTF-8 bytes (RTI-07); a chunk straddling
+            # the budget keeps its trailing bytes, with a split
+            # multi-byte character at the cut dropped by the decoder.
+            remaining = _MAX_SAVE_BYTES - len(marker.encode("utf-8"))
             for chunk in reversed(self._transcript):
                 if remaining <= 0:
                     break
-                kept.append(chunk[-remaining:] if len(chunk) > remaining else chunk)
-                remaining -= len(kept[-1])
+                encoded = chunk.encode("utf-8")
+                if len(encoded) > remaining:
+                    chunk = encoded[-remaining:].decode("utf-8", errors="ignore")
+                    encoded = chunk.encode("utf-8")
+                kept.append(chunk)
+                remaining -= len(encoded)
             kept.reverse()
             self._transcript = [marker, *kept]
-            self._transcript_chars = sum(len(chunk) for chunk in self._transcript)
+            self._transcript_bytes = sum(len(chunk.encode("utf-8")) for chunk in self._transcript)
             self._transcript_truncated = True
         self.stdout.write(text)
         return stop
@@ -723,10 +732,13 @@ class DebugShell(cmd.Cmd):
 
         Append the session transcript (command echoes plus their output) to
         a file. The parent directory must exist; an existing file must be a
-        regular file and stay under 5MB. The path is used as given --
-        absolute and parent-relative paths are intentional (the operator's
-        own REPL command, e.g. saving under /tmp); a shared --script file
-        can therefore direct output anywhere the operator could write.
+        regular file. The cap is denominated in bytes (RTI-07): the final
+        file -- existing bytes plus the transcript's UTF-8 bytes -- must
+        stay under 5MB, and each component is checked in bytes too. The
+        path is used as given -- absolute and parent-relative paths are
+        intentional (the operator's own REPL command, e.g. saving under
+        /tmp); a shared --script file can therefore direct output anywhere
+        the operator could write.
         """
         target = arg.strip()
         if not target:
@@ -736,14 +748,19 @@ class DebugShell(cmd.Cmd):
         path = Path(target).expanduser()
         if not path.parent.is_dir():
             raise ValueError(f"not a directory: {path.parent}")
+        existing_bytes = 0
         if path.exists():
             if not path.is_file():
                 raise ValueError(f"not a regular file: {path}")
-            if path.stat().st_size > _MAX_SAVE_BYTES:
+            existing_bytes = path.stat().st_size
+            if existing_bytes > _MAX_SAVE_BYTES:
                 raise ValueError(f"refusing to append to a file over 5MB: {path}")
         text = "".join(self._transcript)
-        if len(text) > _MAX_SAVE_BYTES:
+        text_bytes = len(text.encode("utf-8"))
+        if text_bytes > _MAX_SAVE_BYTES:
             raise ValueError("transcript too large to save (over 5MB)")
+        if existing_bytes + text_bytes > _MAX_SAVE_BYTES:
+            raise ValueError(f"refusing to append: the saved file would exceed 5MB: {path}")
         with open(path, "a", encoding="utf-8") as handle:
             handle.write(text)
         print(f"saved {len(text)} chars of transcript to {_sanitize_display(str(path))}")
