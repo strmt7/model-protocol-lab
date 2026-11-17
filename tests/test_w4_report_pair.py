@@ -388,8 +388,18 @@ class PairCoverageTests(unittest.TestCase):
 
     def test_fsync_directory_non_posix_noop(self):
         """Test fsync directory non posix noop."""
-        with TemporaryDirectory() as tmp, mock.patch.object(os, "name", "nt"):
-            self.assertIsNone(reporting._fsync_directory(Path(tmp)))
+        # The Path is built BEFORE os.name is patched: on
+        # Python 3.11 pathlib dispatches Path() on os.name, so
+        # constructing it under the "nt" patch tries to build a
+        # WindowsPath on a POSIX host and raises
+        # NotImplementedError (the GitHub 3.11 leg's error).
+        # _fsync_directory reads os.name itself and returns
+        # before touching the path on non-POSIX, so the patch
+        # region only needs the call.
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp)
+            with mock.patch.object(os, "name", "nt"):
+                self.assertIsNone(reporting._fsync_directory(path))
 
     def test_verify_bundle_seal_failed_records_pair_unavailable(self):
         """Test verify bundle seal failed records pair unavailable."""

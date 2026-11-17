@@ -414,6 +414,26 @@ journal's completed-cell count — mid-run on a host of any
 speed. No product code changed and no tally moves; the
 repair is verified by the CI legs at its own head.
 
+A twenty-fourth push (W4 repair, 2026-11-16) fixes a
+second test-design defect the same legs exposed:
+`test_fsync_directory_non_posix_noop` (push 4) constructed
+`Path(tmp)` while `os.name` was patched to `"nt"`; on
+Python 3.11 pathlib dispatches `Path()` on `os.name`, so
+construction raised `NotImplementedError` (a `WindowsPath`
+cannot instantiate on POSIX), while 3.12+ never consults
+the patched string and every local gate passed. The error
+is present in the push 5 head's 3.11 job log and is the
+only failure on the twenty-third head's 3.11 leg (its
+3.12/3.13 legs are fully green, the repaired signal arms
+passing on all three); it stayed masked because push 4's
+own CI run was superseded before completing and the 3.11
+legs afterwards failed louder on the signal arms. The test
+now builds the path before patching; `_fsync_directory`
+reads `os.name` itself and returns before touching the
+path on non-POSIX, so the exercised behaviour is
+unchanged. No product code changed and no tally moves;
+the repair is verified by the CI legs at its own head.
+
 ### 2.6 Independent re-verification (audit-verify lane — landed)
 
 The audit-verify lane re-executed every audit reproduction and every

@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (external-audit W4 repair — Python 3.11 pathlib dispatch in a report-pair test, 2026-11-16)
+
+- **A report-pair coverage test no longer builds its path
+  under a patched `os.name`.** The test patched `os.name` to
+  `"nt"` and constructed `Path(tmp)` inside the patch; on
+  Python 3.11 pathlib dispatches `Path()` on `os.name`, so
+  construction tried to instantiate `WindowsPath` on a POSIX
+  host and raised `NotImplementedError`. On 3.12+ the
+  dispatch does not consult the patched string, so every
+  local gate and the 3.12/3.13 CI legs passed while the 3.11
+  leg errored — present since the report-pair push, whose
+  own CI run was superseded before completing, and masked
+  afterwards by the louder signal-test failures on the same
+  leg. The path is now built before the patch; the function
+  under test reads `os.name` itself and returns before
+  touching the path on non-POSIX, so the exercised behaviour
+  is unchanged. No product code changed.
+
 ### Fixed (external-audit W4 repair — host-speed-independent signal tests, 2026-11-16)
 
 - **The real-signal cancellation tests no longer race fast
