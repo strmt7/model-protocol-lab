@@ -36,6 +36,19 @@ Usage:
         --build-record build-record.json \
         --smoke-result smoke-result.json --scope-result scope-result.json
     python tools/artifact_manifest.py verify --dist dist [--source .]
+    python tools/artifact_manifest.py rebuild-check --dist dist \
+        --epoch <SOURCE_DATE_EPOCH>
+
+``rebuild-check`` is the from-sdist rebuild under the declared
+conditions (W5-6): the sdist is extracted with tarfile's ``data``
+filter, the extracted tree's mtimes are normalized to the epoch,
+and the wheel is rebuilt with ``SOURCE_DATE_EPOCH`` set. Under
+those conditions the rebuilt wheel must be byte-identical to the
+manifest's wheel. If the file hash differs but every member's
+content digest matches the manifest, the delta is metadata-only
+(zip entry timestamps) and the check says so, naming the members
+whose timestamps differ — the distinction is checkable from the
+manifest's per-member digests instead of being arguable.
 """
 
 from __future__ import annotations
@@ -47,8 +60,10 @@ import importlib.util
 import json
 import os
 import re
+import subprocess
 import sys
 import tarfile
+import tempfile
 import tomllib
 import urllib.request
 import zipfile
@@ -722,6 +737,114 @@ def verify_manifest(
     return claims
 
 
+def _build_wheel(package_dir: Path, out_dir: Path, epoch: int) -> Path:
+    """Build the wheel from an extracted sdist tree (the pinned invocation)."""
+    env = dict(os.environ)
+    env["SOURCE_DATE_EPOCH"] = str(epoch)
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "build",
+            "--no-isolation",
+            "--wheel",
+            "--outdir",
+            str(out_dir),
+            str(package_dir),
+        ],
+        check=True,
+        env=env,
+        capture_output=True,
+    )
+    wheels = sorted(out_dir.glob("*.whl"))
+    if len(wheels) != 1:
+        raise ManifestFailure(f"from-sdist rebuild produced {len(wheels)} wheels")
+    return wheels[0]
+
+
+def _zip_timestamps(path: Path) -> dict[str, tuple[int, ...]]:
+    """Zip entry timestamps per member of a wheel."""
+    with zipfile.ZipFile(path) as archive:
+        return {info.filename: info.date_time for info in archive.infolist()}
+
+
+def rebuild_check(
+    *,
+    dist: Path,
+    manifest_path: Path,
+    epoch: int,
+    work: Path | None = None,
+    builder: Callable[[Path, Path, int], Path] = _build_wheel,
+) -> list[str]:
+    """Rebuild the wheel from the sdist under the declared conditions.
+
+    Returns the report lines on byte-identity; raises ManifestFailure
+    naming the differing members on a content mismatch, or carrying
+    the metadata-only explanation when only archive metadata differs.
+    """
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ManifestFailure(f"manifest is unreadable: {error}") from error
+    entries = {entry.get("name"): entry for entry in data.get("artifacts") or []}
+    wheels = sorted(dist.glob("*.whl"))
+    sdists = sorted(dist.glob("*.tar.gz"))
+    if len(wheels) != 1 or len(sdists) != 1:
+        raise ManifestFailure(f"dist must hold exactly one wheel and one sdist: {dist}")
+    wheel, sdist = wheels[0], sdists[0]
+    for artifact in (wheel, sdist):
+        entry = entries.get(artifact.name)
+        if entry is None or entry.get("sha256") != _sha256_file(artifact):
+            raise ManifestFailure(
+                f"{artifact.name} does not match the manifest; refusing to rebuild"
+            )
+    if work is None:
+        work = Path(tempfile.mkdtemp(prefix="mpl_rebuild_check_"))
+    extract = work / "extract"
+    extract.mkdir(parents=True, exist_ok=True)
+    try:
+        with tarfile.open(sdist, "r:gz") as archive:
+            archive.extractall(extract, filter="data")
+    except (tarfile.TarError, OSError) as error:
+        raise ManifestFailure(f"sdist extraction refused (data filter): {error}") from error
+    roots = sorted(p for p in extract.iterdir() if p.is_dir())
+    if len(roots) != 1:
+        raise ManifestFailure("sdist does not hold exactly one top-level directory")
+    package_dir = roots[0]
+    for root, dirs, files in os.walk(package_dir):
+        for name in dirs + files:
+            os.utime(Path(root) / name, (epoch, epoch))
+    os.utime(package_dir, (epoch, epoch))
+    out_dir = work / "out"
+    out_dir.mkdir(exist_ok=True)
+    rebuilt = builder(package_dir, out_dir, epoch)
+    expected_members = entries[wheel.name].get("members") or {}
+    rebuilt_members = _member_digests(rebuilt)
+    differing = sorted(
+        name
+        for name in set(expected_members) | set(rebuilt_members)
+        if expected_members.get(name) != rebuilt_members.get(name)
+    )
+    if differing:
+        raise ManifestFailure(f"from-sdist rebuild content mismatch: {', '.join(differing)}")
+    if _sha256_file(rebuilt) == entries[wheel.name].get("sha256"):
+        return [
+            "from-sdist rebuild: byte-identical to the manifest wheel "
+            "under the declared conditions (tarfile data-filter extraction, "
+            "mtimes normalized to SOURCE_DATE_EPOCH, epoch-stamped build)"
+        ]
+    reference_times = _zip_timestamps(wheel)
+    rebuilt_times = _zip_timestamps(rebuilt)
+    restamped = sorted(
+        name for name in reference_times if reference_times.get(name) != rebuilt_times.get(name)
+    )
+    raise ManifestFailure(
+        "from-sdist rebuild is not byte-identical, but every member's content "
+        "digest matches the manifest: the delta is metadata-only (zip entry "
+        f"timestamps differ on {len(restamped)} member(s): {', '.join(restamped)})"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """Return the main."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -738,6 +861,14 @@ def main(argv: list[str] | None = None) -> int:
     verify.add_argument("--dist", type=Path, required=True)
     verify.add_argument("--manifest", type=Path, default=None)
     verify.add_argument("--source", type=Path, default=None)
+    rebuild = sub.add_parser(
+        "rebuild-check", help="rebuild the wheel from the sdist under the declared conditions"
+    )
+    rebuild.add_argument("--dist", type=Path, required=True)
+    rebuild.add_argument("--manifest", type=Path, default=None)
+    rebuild.add_argument(
+        "--epoch", type=int, required=True, help="SOURCE_DATE_EPOCH of the release"
+    )
     args = parser.parse_args(argv)
     if args.command == "emit":
         try:
@@ -758,6 +889,20 @@ def main(argv: list[str] | None = None) -> int:
         sbom_path = args.dist / _SBOM_NAME
         print(f"{_sha256_file(sbom_path)}  {sbom_path}")
         print("artifact manifest: emitted")
+        return 0
+    if args.command == "rebuild-check":
+        try:
+            lines = rebuild_check(
+                dist=args.dist,
+                manifest_path=args.manifest or (args.dist / "artifact-manifest.json"),
+                epoch=args.epoch,
+            )
+        except ManifestFailure as error:
+            print(f"rebuild check FAILED: {error}", file=sys.stderr)
+            return 2
+        for line in lines:
+            print(f"  {line}")
+        print("rebuild check: OK")
         return 0
     manifest_path = args.manifest or (args.dist / "artifact-manifest.json")
     claims = verify_manifest(dist=args.dist, manifest_path=manifest_path, source=args.source)

@@ -282,6 +282,7 @@
       "test_w5_artifact_smoke.py",
       "test_w5_census_gate.py",
       "test_w5_pack_limits.py",
+      "test_w5_rebuild_check.py",
       "test_w5_sdist_scope.py",
       "test_workflows.py"
     ],
@@ -443,9 +444,9 @@
     ]
   },
   "module_counts": {
-    "base": 267,
+    "base": 268,
     "hf": 12,
     "posix": 1,
-    "total": 280
+    "total": 281
   }
 }

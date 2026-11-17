@@ -17,8 +17,8 @@ degrade there (checkpoint-template rendering does not: since
 W4/RR-10 it runs in an owned worker process whose deadline the
 parent enforces on every platform).
 
-- `python -m pytest -q -p no:cacheprovider` — **10202 tests collected**
-  (measured 2026-11-17, W5 push 3). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **10208 tests collected**
+  (measured 2026-11-17, W5 push 6). Subtests numbered in the 73k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -625,7 +625,7 @@ parent enforces on every platform).
   cross-pin test guards the §6/§15 split.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (362 files in that CI scope; the repo-root scope counts more.
+  (363 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (78 source files).
@@ -846,6 +846,15 @@ reproducible from the repository root in a fresh virtual environment.
   the primary source does not state unambiguously is `NOASSERTION`
   in the SBOM and named in the manifest. `verify` re-checks every
   claim from the artifacts alone and names the failing one.
+- `python tools/artifact_manifest.py rebuild-check --dist dist --epoch <SOURCE_DATE_EPOCH>` — the
+  from-sdist rebuild, run in the release workflow: the sdist is
+  extracted with tarfile's `data` filter, the extracted tree's
+  mtimes are normalized to the epoch, and the wheel is rebuilt with
+  the epoch set; the result must be byte-identical to the manifest's
+  wheel. A delta confined to zip entry timestamps is reported as
+  metadata-only from the manifest's per-member digests, naming the
+  restamped members, and a content difference names the differing
+  members — the naive-rebuild mismatch is explained, not opaque.
 - CLI smoke: `catalog`, `inspect examples/fixtures.json`, and `doctor` against
   synthetic and real (locally generated) checkpoint directories.
 - HTML report validated programmatically: required structure, zero external
