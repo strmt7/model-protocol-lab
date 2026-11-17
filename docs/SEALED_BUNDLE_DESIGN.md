@@ -108,6 +108,17 @@ types throughout (`type(x) is int` / `is str`; booleans are not ints):
 | Total uncompressed size | 256 MiB | Central directory running total |
 | Sealed `results.json` | 32 MiB (`MAX_RESULTS_BYTES`) | Shared bounded JSON reader |
 
+The producer enforces the same ceilings before building anything
+(RTI-02): `pack_bundle` refuses a file set whose count plus the
+manifest exceeds the entry ceiling (`bundle_too_many_entries` — the
+verifier's own code), whose summed uncompressed bytes, manifest
+included, exceed the total ceiling (`pack_total_too_large`), or
+whose stored archive size — computed exactly for the STORED layout
+the writer emits — exceeds the outer-size ceiling
+(`pack_zip_too_large`). A bundle the verifier would refuse on size
+grounds is therefore not producible; the per-entry ceiling is
+already enforced at collection time (`pack_entry_too_large`).
+
 The container is strict: the first local header is at offset 0 (no
 prepended data), the file ends exactly at the end of the EOCD record (no
 trailing data), the EOCD disk fields are zero, and ZIP64 sentinel

@@ -242,6 +242,34 @@ def build_bundle_bytes(manifest_data: bytes, files: list[tuple[str, bytes]]) -> 
     return buffer.getvalue()
 
 
+def _zip_name_size(name: str) -> int:
+    """Bytes a member name occupies in a local/central header:
+    zipfile stores ASCII names as-is and UTF-8-encodes any name
+    with a non-ASCII character (the UTF-8 flag), one header copy
+    in each of the local and central records.
+    """
+    if name.isascii():
+        return len(name)
+    return len(name.encode("utf-8"))
+
+
+def _stored_bundle_size(manifest_data: bytes, files: list[tuple[str, bytes]]) -> int:
+    """Exact size of the archive ``build_bundle_bytes`` emits for
+    these inputs — STORED entries with normalised ZipInfos (no extra
+    fields), one central-directory record per entry, and the digest
+    comment on the EOCD. Computed arithmetically so the producer can
+    enforce the archive-size ceiling before building anything; the
+    equality with ``len(build_bundle_bytes(...))`` is pinned by
+    tests/test_w5_pack_limits.py across entry shapes.
+    """
+    total = 22 + len(_COMMENT_PREFIX) + 64  # EOCD record + comment
+    for name, data in [(MANIFEST_NAME, manifest_data), *files]:
+        name_size = _zip_name_size(name)
+        total += 30 + name_size + len(data)  # local header + payload
+        total += 46 + name_size  # central-directory record
+    return total
+
+
 def _read_regular_file(path: Path, *, too_large_code: str, cap: int) -> bytes:
     """Open ``path`` once (O_NOFOLLOW/O_NONBLOCK), require a regular
     file, and return its bytes — at most ``cap`` of them. Mirrors the
@@ -340,6 +368,13 @@ def pack_bundle(report_dir: Path, includes: list[Path]) -> tuple[bytes, dict[str
     directory contents): returns ``(bundle_bytes, manifest, digest)``.
     """
     entries, results_data = collect_pack_files(report_dir, includes)
+    if len(entries) + 1 > MAX_BUNDLE_ENTRIES:
+        # RTI-02: the manifest is an archive entry too — before this
+        # check the producer happily emitted 1,025-entry bundles its
+        # own verifier then refused. The verifier counts entries from
+        # the EOCD and raises this same code; the producer counts its
+        # files plus the one manifest it is about to add.
+        raise ValueError("bundle_too_many_entries")
     # ORCH-D02: never seal a stamped pair whose HTML sibling is
     # missing or mismatched — the bundle would certify an
     # incomplete report. Legacy pairs (no stamp) seal as before.
@@ -365,6 +400,18 @@ def pack_bundle(report_dir: Path, includes: list[Path]) -> tuple[bytes, dict[str
     }
     manifest = build_manifest(files, context)
     data = manifest_bytes(manifest)
+    # RTI-02, the aggregate ceilings: the verifier caps the summed
+    # uncompressed sizes (manifest included) and the archive size, so
+    # the producer refuses the same shapes before building them. With
+    # the shipped constants the archive ceiling is implied by the two
+    # checks above it (STORED overhead is ~76 bytes per entry), but it
+    # is enforced on its own arithmetic so a future constant change
+    # cannot reopen the gap silently.
+    total_size = len(data) + sum(len(content) for _name, content in entries)
+    if total_size > MAX_BUNDLE_TOTAL_BYTES:
+        raise ValueError("pack_total_too_large")
+    if _stored_bundle_size(data, entries) > MAX_BUNDLE_ZIP_BYTES:
+        raise ValueError("pack_zip_too_large")
     return build_bundle_bytes(data, entries), manifest, bundle_digest(data)
 
 
