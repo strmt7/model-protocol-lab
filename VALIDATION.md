@@ -17,8 +17,8 @@ degrade there (checkpoint-template rendering does not: since
 W4/RR-10 it runs in an owned worker process whose deadline the
 parent enforces on every platform).
 
-- `python -m pytest -q -p no:cacheprovider` — **10144 tests collected**
-  (measured 2026-11-17, W5 push 2). Subtests numbered in the 72k+
+- `python -m pytest -q -p no:cacheprovider` — **10158 tests collected**
+  (measured 2026-11-17, W5 push 3). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -625,7 +625,7 @@ parent enforces on every platform).
   cross-pin test guards the §6/§15 split.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (359 files in that CI scope; the repo-root scope counts more.
+  (360 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (78 source files).
@@ -815,6 +815,13 @@ reproducible from the repository root in a fresh virtual environment.
   with flaky tests.
 - `python -m build` + `twine check` — sdist and wheel build; metadata valid
   (`License-Expression: MIT`, `License-File: LICENSE`).
+- `python tools/sdist_scope.py --sdist dist/*.tar.gz` — the sdist's
+  shipped test suite runs in its declared scope: the modules that
+  audit the checkout itself are named with reasons in
+  `tests/CHECKOUT_ONLY` (shipped in the tarball), and the runner
+  executes the remaining base + posix layers from the sdist alone
+  (RR-12). The tarball's suite is therefore not self-contained by
+  accident but by declaration, and the declaration is executed.
 - CLI smoke: `catalog`, `inspect examples/fixtures.json`, and `doctor` against
   synthetic and real (locally generated) checkpoint directories.
 - HTML report validated programmatically: required structure, zero external

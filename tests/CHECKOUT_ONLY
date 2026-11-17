@@ -1,0 +1,87 @@
+# CHECKOUT_ONLY — the shipped test suite's declared sdist scope.
+#
+# The sdist ships the full test suite, but the modules listed here
+# audit the checkout itself: they import the checkout's tools/
+# package, read docs/, examples/, .github/ or root files the sdist
+# deliberately does not carry, or assume the development (editable)
+# install's layout. In an sdist-only extraction they error at
+# collection or fail at run time — measured, not guessed: the list
+# is derived by executing the suite from an sdist extraction in the
+# project's own test environment (see tools/sdist_scope.py, RR-12).
+#
+# Format: one module per line, "module | reason". The runner
+# (tools/sdist_scope.py) verifies that the remaining declared scope
+# — the base + posix test layers from tests/test_layers.json —
+# collects with zero errors and runs green from the sdist alone.
+# A module that gains a checkout dependency without joining this
+# list fails that runner; a module listed here that no longer needs
+# checkout content fails the manifest's honesty pins
+# (tests/test_w5_sdist_scope.py). The hf layer is a separate
+# environment scope ([hf] extra) declared in tests/test_layers.json;
+# a module that is both heavy and checkout-bound appears in both
+# declarations, so this list stays the complete census.
+test_ci_portability_guard.py | spawns collection subprocesses that import tests._collect_cache through the development install's path entry, which an installed-package environment does not provide
+test_cycle1.py | loads examples/fixtures.json as its dataset; examples/ is not shipped in the sdist
+test_cycle153_batchinv.py | reads examples/sample-report/results.json and examples/make_sample_report.py; examples/ is not shipped in the sdist
+test_cycle154_position.py | reads examples/sample-report/results.json and examples/make_sample_report.py; examples/ is not shipped in the sdist
+test_cycle155_stopcause.py | reads examples/sample-report/results.json and examples/make_sample_report.py; examples/ is not shipped in the sdist
+test_cycle156_wscanonical.py | reads examples/sample-report/report.html and examples/make_sample_report.py; examples/ is not shipped in the sdist
+test_cycle157_structured.py | executes examples/make_sample_report.py; examples/ is not shipped in the sdist
+test_cycle161_agent_context.py | imports tools.agent_context at module level; tools/ is not shipped in the sdist
+test_cycle161_cocoindex_agent_search.py | imports tools.cocoindex_agent_search at module level; tools/ is not shipped in the sdist
+test_cycle161_crawl4ai_tool.py | imports tools.crawl4ai_tool and tools.crawl4ai_research at module level; tools/ is not shipped in the sdist
+test_cycle171_pack.py | reads examples/sample-report/results.json as its canonical report fixture; examples/ is not shipped in the sdist
+test_cycle171_pack_gaps.py | reads examples/sample-report/results.json as its canonical report fixture; examples/ is not shipped in the sdist
+test_cycle174_refusals.py | reads examples/sample-report/results.json; examples/ is not shipped in the sdist
+test_cycle175_wave7_fixes.py | reads examples/sample-report/results.json; examples/ is not shipped in the sdist
+test_cycle178_docs_currency.py | reads docs/USAGE.md at import time; docs/ is not shipped in the sdist
+test_cycle196_oversight_fixes.py | builds its report directories from examples/sample-report; examples/ is not shipped in the sdist
+test_cycle2.py | loads examples/fixtures.json as its dataset; examples/ is not shipped in the sdist
+test_cycle201_readiness.py | imports tools.release_build at module level; tools/ is not shipped in the sdist
+test_cycle202_wave9_fixes.py | imports tools.release_build at class level; tools/ is not shipped in the sdist
+test_cycle206_depth.py | reads examples/sample-report/results.json; examples/ is not shipped in the sdist
+test_cycle208_release_readiness2.py | reads .github/workflows/release.yml at import time; .github/ is not shipped in the sdist
+test_cycle210_enterprise_hardening.py | reads .github/workflows/ci.yml and the other workflow files; .github/ is not shipped in the sdist
+test_cycle214_docs_site.py | reads mkdocs.yml and docs/index.md; neither is shipped in the sdist
+test_cycle215_enterprise_polish2.py | reads docs/explanation/adr-index.md and .github/workflows/zizmor.yml; neither is shipped in the sdist
+test_cycle217_deepsource_inventory.py | imports tools.deepsource_inventory at module level; tools/ is not shipped in the sdist
+test_cycle217_findings_guard.py | imports tools.findings_guard at module level; tools/ is not shipped in the sdist
+test_cycle217_workflow_pinning.py | reads tools/requirements locks and .github/workflows files; neither is shipped in the sdist
+test_cycle221_recordnotation.py | loads examples/fixtures.json as its dataset; examples/ is not shipped in the sdist
+test_cycle224_confusableskeleton.py | reads docs/CONFUSABLESKELETON_DESIGN.md; docs/ is not shipped in the sdist
+test_cycle226_json_discipline.py | imports tools.agent_context at module level; tools/ is not shipped in the sdist
+test_cycle226_operability.py | loads examples/ fixtures and reads pylock.toml; neither is shipped in the sdist
+test_cycle227_findings.py | builds its report directories from examples/sample-report; examples/ is not shipped in the sdist
+test_cycle228_release_tooling.py | imports tools.release_build at module level; tools/ is not shipped in the sdist
+test_cycle228_tooling_locks.py | imports tools.crawl4ai_tool at module level; tools/ is not shipped in the sdist
+test_cycle231_compatibilityform.py | reads docs/COMPATIBILITYFORM_DESIGN.md; docs/ is not shipped in the sdist
+test_cycle233_enumerationconvention.py | reads docs/ENUMERATION_DESIGN.md; docs/ is not shipped in the sdist
+test_cycle241_fixwaves.py | reads examples/sample-report/results.json; examples/ is not shipped in the sdist
+test_cycle244_fixwave8.py | reads examples/sample-report/results.json as its canonical report fixture; examples/ is not shipped in the sdist
+test_cycle24_leak_sweep.py | reads examples/sample-report/results.json and examples/fixtures.json; examples/ is not shipped in the sdist
+test_cycle3.py | loads examples/fixtures.json as its dataset; examples/ is not shipped in the sdist
+test_cycle4.py | imports tests._collect_cache in a spawned interpreter that resolves it through the development install's path entry
+test_cycle41_api_surface_verify.py | verifies surfaces against examples/fixtures.json and the examples/ datasets; examples/ is not shipped in the sdist
+test_cycle43_leak_sweep.py | reads examples/sample-report/results.json; examples/ is not shipped in the sdist
+test_cycle44_validation_audit.py | reads docs/USAGE.md and .github/workflows/ci.yml; neither is shipped in the sdist
+test_cycle46_docs_accuracy_audit.py | executes the command examples documented in docs/USAGE.md; docs/ is not shipped in the sdist
+test_cycle47_sample_report_audit.py | executes examples/make_sample_report.py; examples/ is not shipped in the sdist
+test_cycle48_evidence_leak_sweep3.py | reads examples/sample-report/results.json; examples/ is not shipped in the sdist
+test_cycle58_html_escaping_audit.py | executes examples/make_sample_report.py; examples/ is not shipped in the sdist
+test_cycle5_report.py | reads examples/sample-report/report.html and examples/make_sample_report.py; examples/ is not shipped in the sdist
+test_cycle64_cli_surface_audit.py | runs the CLI surfaces against examples/ fixtures and docs/USAGE.md; neither is shipped in the sdist
+test_cycle7_divergence.py | executes examples/make_sample_report.py; examples/ is not shipped in the sdist
+test_cycle83_cli_wiring_audit.py | loads examples/fixtures.json and examples/fixtures.csv; examples/ is not shipped in the sdist
+test_cycle84_release_readiness.py | reads CITATION.cff; it is not shipped in the sdist
+test_cycle85_readme_quickstart_audit.py | audits test-module imports against the development install's distribution metadata, which an sdist-only environment does not reproduce
+test_cycle87_docs_coherence_audit.py | reads examples/ authoring files and VALIDATION.md; neither is shipped in the sdist
+test_cycle99_plan_currency.py | reads DEVELOPMENT_PLAN.md; it is not shipped in the sdist
+test_e2e.py | loads examples/fixtures.json as its dataset; examples/ is not shipped in the sdist
+test_hardening.py | runs the CLI against examples/fixtures.json; examples/ is not shipped in the sdist
+test_release_policy.py | imports tools.release_policy at module level; tools/ is not shipped in the sdist
+test_sample_report.py | reads examples/sample-report and examples/make_sample_report.py; examples/ is not shipped in the sdist
+test_w3_test_layers.py | reads tools/layer_paths.py and spawns layer-audit subprocesses that import the tests package's helpers through the checkout layout
+test_w3_windows_workflow.py | reads .github/workflows/windows.yml; .github/ is not shipped in the sdist
+test_w5_artifact_smoke.py | imports tools.artifact_smoke at module level; tools/ is not shipped in the sdist
+test_w5_pack_limits.py | reads examples/sample-report/results.json as its canonical report fixture; examples/ is not shipped in the sdist
+test_w5_sdist_scope.py | imports tools.sdist_scope, the runner it pins; tools/ is not shipped in the sdist

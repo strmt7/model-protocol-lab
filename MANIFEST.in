@@ -1,9 +1,12 @@
 # The sdist carries the documents a recipient needs to evaluate the
 # release without the repository: the changelog (what shipped, per
 # cycle) and the contributor/community documents. docs/ and examples/
-# stay out deliberately — the sdist already ships the full test suite
-# via setuptools defaults, and the documentation set is large and
-# versioned with the repository, not the artifact.
+# stay out deliberately, and the documentation set is large and
+# versioned with the repository, not the artifact. The test suite
+# ships via setuptools defaults, but it is NOT self-contained: the
+# modules that audit the checkout itself are declared, with reasons,
+# in tests/CHECKOUT_ONLY, and tools/sdist_scope.py verifies the
+# remaining declared scope from the sdist alone (RR-12).
 include CHANGELOG.md
 include CONTRIBUTING.md
 include CODE_OF_CONDUCT.md
@@ -11,3 +14,8 @@ include CODE_OF_CONDUCT.md
 # UnicodeData.txt (15.0.0) and fails closed without it (cycle 234), so
 # the data file ships with the test suite it serves.
 include tests/data/UnicodeData.txt
+# The suite's own scope contracts ship with it: the layer manifest
+# the suite is selected by, and the checkout-only manifest that
+# declares which shipped modules need the checkout (RR-12).
+include tests/test_layers.json
+include tests/CHECKOUT_ONLY
