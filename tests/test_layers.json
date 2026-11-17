@@ -278,6 +278,7 @@
    "test_w4_render_worker.py",
    "test_w4_report_pair.py",
    "test_w4_serving_teardown.py",
+   "test_w5_artifact_smoke.py",
    "test_workflows.py"
   ],
   "hf": [
@@ -438,9 +439,9 @@
   ]
  },
  "module_counts": {
-  "base": 262,
+  "base": 263,
   "hf": 12,
   "posix": 1,
-  "total": 275
+  "total": 276
  }
 }

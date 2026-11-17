@@ -42,11 +42,17 @@ class ReleaseWorkflowTests(unittest.TestCase):
         """Test build job smoke tests installed wheel."""
         # M1: the build job installs the wheel into a fresh venv and
         # runs the zero-dependency commands plus the MCP self-test.
-        self.assertIn("python -m venv", WORKFLOW)
-        self.assertIn("dist/*.whl", WORKFLOW)
-        self.assertIn("model-protocol-lab catalog", WORKFLOW)
-        self.assertIn("model-protocol-lab inspect", WORKFLOW)
-        self.assertIn("model-protocol-lab-mcp --self-test", WORKFLOW)
+        # W5 (RR-11): the inline commands moved into
+        # tools/artifact_smoke.py, which creates the venv itself,
+        # scrubs every subprocess environment, and asserts import
+        # origin + version before trusting output — the workflow
+        # pin now names the tool invocation, and the behavioural
+        # contract (catalog / inspect / MCP self-test against the
+        # installed wheel) is pinned by tests/test_w5_artifact_smoke.py
+        # against the tool itself, sabotage arms included.
+        self.assertIn("python tools/artifact_smoke.py", WORKFLOW)
+        self.assertIn("--wheel dist/*.whl", WORKFLOW)
+        self.assertIn("--source-tree .", WORKFLOW)
 
     def test_epoch_derived_from_tagged_commit(self) -> None:
         """Test epoch derived from tagged commit."""

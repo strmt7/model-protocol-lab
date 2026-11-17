@@ -79,15 +79,17 @@ jobs:
         # against it, plus the shipped MCP server's self-test —
         # so a packaging regression that only appears after
         # installation fails here, not at a customer's install.
-        # The fixture file is an input, not part of the artifact:
-        # examples/ is not in the sdist, and inspect only reads
-        # the file it is given.
-        run: |
-          python -m venv /tmp/mpl-release-smoke
-          /tmp/mpl-release-smoke/bin/pip install --quiet dist/*.whl
-          /tmp/mpl-release-smoke/bin/model-protocol-lab catalog
-          /tmp/mpl-release-smoke/bin/model-protocol-lab inspect examples/fixtures.json
-          /tmp/mpl-release-smoke/bin/model-protocol-lab-mcp --self-test
+        # W5 (RR-11): that smoke ran the venv's console scripts
+        # from this checkout, and the readiness lane proved by
+        # sabotage that it could not tell the artifact from the
+        # tree — with nothing installed and the checkout on
+        # PYTHONPATH, every command still exited 0. The smoke is
+        # now tools/artifact_smoke.py: it creates its own venv,
+        # scrubs the environment of every subprocess, runs from
+        # an empty external directory, and asserts the imported
+        # package resolves under that venv's site-packages at
+        # the wheel's own version before any output is trusted.
+        run: python tools/artifact_smoke.py --wheel dist/*.whl --source-tree .
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist
