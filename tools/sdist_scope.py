@@ -46,6 +46,7 @@ Usage: python tools/sdist_scope.py --sdist dist/<sdist file> \
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -321,6 +322,13 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="scratch directory (default: a fresh temporary directory)",
     )
+    parser.add_argument(
+        "--result-json",
+        type=Path,
+        default=None,
+        help="on success, write a JSON result bound to the sdist's "
+        "SHA-256 (consumed by tools/artifact_manifest.py)",
+    )
     args = parser.parse_args(argv)
     work = args.work
     if work is None:
@@ -333,6 +341,21 @@ def main(argv: list[str] | None = None) -> int:
     for line in report:
         print(f"  {line}")
     print("sdist scope: OK")
+    if args.result_json is not None:
+        sdist = args.sdist.resolve()
+        digest = hashlib.sha256()
+        with sdist.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        result = {
+            "tool": "sdist_scope",
+            "artifact": {"name": sdist.name, "sha256": digest.hexdigest()},
+            "report": report,
+            "result": "passed",
+        }
+        args.result_json.write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
     return 0
 
 

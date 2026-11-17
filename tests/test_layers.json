@@ -278,6 +278,7 @@
       "test_w4_render_worker.py",
       "test_w4_report_pair.py",
       "test_w4_serving_teardown.py",
+      "test_w5_artifact_manifest.py",
       "test_w5_artifact_smoke.py",
       "test_w5_census_gate.py",
       "test_w5_pack_limits.py",
@@ -442,9 +443,9 @@
     ]
   },
   "module_counts": {
-    "base": 266,
+    "base": 267,
     "hf": 12,
     "posix": 1,
-    "total": 279
+    "total": 280
   }
 }

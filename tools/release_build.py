@@ -70,6 +70,7 @@ import gzip
 import hashlib
 import importlib.util
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -322,6 +323,14 @@ def main(argv: list[str] | None = None) -> int:
         "version, so a mistagged release cannot publish artifacts "
         "whose internal version disagrees with the tag name)",
     )
+    parser.add_argument(
+        "--build-record",
+        type=Path,
+        default=None,
+        help="Write a JSON record of both build invocations' artifact "
+        "hashes and the reproducibility verdict (consumed by "
+        "tools/artifact_manifest.py)",
+    )
     args = parser.parse_args(argv)
     if not 0 <= args.epoch <= 253402300799:
         # os.utime raises a raw OverflowError for absurd epochs; the
@@ -360,6 +369,26 @@ def main(argv: list[str] | None = None) -> int:
         if _sha256(wheel_a) != _sha256(wheel_b):
             _report_mismatch("wheel", wheel_a, wheel_b)
             ok = False
+        if args.build_record is not None:
+            record = {
+                "tool": "release_build",
+                "version": _package_version(source),
+                "epoch": args.epoch,
+                "sdist": {
+                    "name": sdist_a.name,
+                    "sha256_run1": _sha256(sdist_a),
+                    "sha256_run2": _sha256(sdist_b),
+                },
+                "wheel": {
+                    "name": wheel_a.name,
+                    "sha256_run1": _sha256(wheel_a),
+                    "sha256_run2": _sha256(wheel_b),
+                },
+                "verdict": "identical" if ok else "mismatch",
+            }
+            args.build_record.write_text(
+                json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
         if not ok:
             return 1
         archive_findings = census.check_wheel(wheel_a, source) + census.check_sdist(sdist_a, source)

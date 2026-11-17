@@ -70,7 +70,8 @@ jobs:
           # version under the tag's name).
           python tools/release_build.py --source . --output dist \
             --epoch "$SOURCE_DATE_EPOCH" \
-            --expect-version "${GITHUB_REF_NAME#v}"
+            --expect-version "${GITHUB_REF_NAME#v}" \
+            --build-record build-record.json
           python -m twine check dist/*
       - name: Install the wheel and smoke-test the published artifact
         # Cycle 208 (M1): the pipeline used to publish artifacts it
@@ -89,14 +90,30 @@ jobs:
         # an empty external directory, and asserts the imported
         # package resolves under that venv's site-packages at
         # the wheel's own version before any output is trusted.
-        run: python tools/artifact_smoke.py --wheel dist/*.whl --source-tree .
+        run: python tools/artifact_smoke.py --wheel dist/*.whl --source-tree . --result-json smoke-result.json
       # RR-12: the sdist ships the test suite minus a declared
       # checkout-only scope (tests/CHECKOUT_ONLY). The runner
       # executes the declared scope from the sdist alone — a module
       # that gains a checkout dependency without joining the
       # manifest fails here, at release time at the latest.
       - name: Verify the sdist test scope
-        run: python tools/sdist_scope.py --sdist dist/*.tar.gz --source-tree .
+        run: python tools/sdist_scope.py --sdist dist/*.tar.gz --source-tree . --result-json scope-result.json
+      # W5-5 (RR-11 receipt): bind the readiness evidence to the
+      # artifacts' hashes. The manifest records the double-build
+      # record, the census result and the smoke/scope results (each
+      # bound to the artifact hash it ran against) and references
+      # the CycloneDX SBOM by digest; both files land in dist/ so
+      # the publish job's attestation (subject-path dist/*) and the
+      # GitHub release attachments cover them with the artifacts.
+      - name: Emit the artifact manifest and SBOM
+        env:
+          SOURCE_DATE_EPOCH: ${{ env.SOURCE_DATE_EPOCH }}
+        run: |
+          python tools/artifact_manifest.py emit --dist dist --source . \
+            --commit "$GITHUB_SHA" --epoch "$SOURCE_DATE_EPOCH" \
+            --build-record build-record.json \
+            --smoke-result smoke-result.json \
+            --scope-result scope-result.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist
@@ -149,5 +166,10 @@ jobs:
               --notes "Artifacts built reproducibly from this tag
               (tools/release_build.py) and published to PyPI with PEP 740
               attestations. Verify provenance with:
-              gh attestation verify <artifact> --repo strmt7/model-protocol-lab"
+              gh attestation verify <artifact> --repo strmt7/model-protocol-lab
+              The release also carries artifact-manifest.json and
+              sbom.cdx.json: recompute each artifact's SHA-256, compare
+              it with the manifest, then run
+              python tools/artifact_manifest.py verify --dist <dir> --source <tag checkout>
+              to re-check every claim the manifest makes."
           fi

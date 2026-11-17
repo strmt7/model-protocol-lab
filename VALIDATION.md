@@ -17,7 +17,7 @@ degrade there (checkpoint-template rendering does not: since
 W4/RR-10 it runs in an owned worker process whose deadline the
 parent enforces on every platform).
 
-- `python -m pytest -q -p no:cacheprovider` — **10185 tests collected**
+- `python -m pytest -q -p no:cacheprovider` — **10202 tests collected**
   (measured 2026-11-17, W5 push 3). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
@@ -625,7 +625,7 @@ parent enforces on every platform).
   cross-pin test guards the §6/§15 split.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (361 files in that CI scope; the repo-root scope counts more.
+  (362 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (78 source files).
@@ -834,6 +834,18 @@ reproducible from the repository root in a fresh virtual environment.
   tools, 29 catalog families, 65 report sections (57 dispatched + 8
   undispatched-with-reasons; the W0 audit's "62" was the count at
   that head).
+- `python tools/artifact_manifest.py verify --dist dist --source .` — the
+  release readiness receipt: the build job emits `dist/artifact-manifest.json`
+  and `dist/sbom.cdx.json` (attested with the artifacts), binding the
+  double-build record, the census result and the origin-smoke and
+  sdist-scope results — each bound to the artifact hash it ran
+  against — to the artifacts' SHA-256 digests, with per-member
+  digests for both archives. The SBOM's license inventory is
+  enumerated from PyPI JSON at generation time (dev closure exactly
+  `pylock.toml`; hf closure walked from `requires_dist`); a license
+  the primary source does not state unambiguously is `NOASSERTION`
+  in the SBOM and named in the manifest. `verify` re-checks every
+  claim from the artifacts alone and names the failing one.
 - CLI smoke: `catalog`, `inspect examples/fixtures.json`, and `doctor` against
   synthetic and real (locally generated) checkpoint directories.
 - HTML report validated programmatically: required structure, zero external
