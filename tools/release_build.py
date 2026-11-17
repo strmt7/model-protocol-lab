@@ -27,6 +27,13 @@ build user's name). The procedure here removes both leaks:
    changed the resulting wheel hash before modes were canonicalized.
 5. Repeat from a second copy; compare hashes. On a mismatch, name the
    members that differ instead of rebuilding until it happens to match.
+6. Census gate (tools/artifact_census.py, W5-4): the built wheel and
+   sdist must carry exactly the declared members — package code +
+   py.typed + dist-info in the wheel; package files, test modules,
+   the named root/egg-info/test files in the sdist — and the source
+   tree must carry no stray file in the package tree. A census
+   finding fails the build before anything is copied to the output
+   directory.
 
 Builds run with ``--no-isolation``: the PEP 517 backend is the
 setuptools version pinned exactly in pyproject.toml's
@@ -45,11 +52,15 @@ The epoch for a real release is the tagged commit's timestamp
 (`SOURCE_DATE_EPOCH` convention); any fixed value demonstrates the
 reproducibility property.
 
-Two refusals guard the build before anything is produced: a source
+Three refusals guard the build before anything is produced: a source
 tree containing symlinks is rejected by name (links are never
-dereferenced into artifacts), and `--expect-version X` fails unless
+dereferenced into artifacts), `--expect-version X` fails unless
 the tree's package version is exactly X — the release workflow passes
-the tag's version, binding the tag to the artifacts it publishes.
+the tag's version, binding the tag to the artifacts it publishes —
+and the artifact census (tools/artifact_census.py) rejects a source
+tree carrying a stray file in the package tree. After the double
+build, the same census checks the built wheel and sdist before
+their hashes are published to the output directory.
 """
 
 from __future__ import annotations
@@ -57,6 +68,7 @@ from __future__ import annotations
 import argparse
 import gzip
 import hashlib
+import importlib.util
 import io
 import os
 import shutil
@@ -67,6 +79,7 @@ import tempfile
 import tomllib
 import zipfile
 from pathlib import Path
+from types import ModuleType
 
 _EXCLUDED_NAMES = {
     ".git",
@@ -124,6 +137,23 @@ def _package_version(source: Path) -> str:
     if type(version) is not str or not version:
         raise SystemExit("release build failed: pyproject.toml has no project.version")
     return version
+
+
+def _load_census() -> ModuleType:
+    """Load tools/artifact_census.py regardless of invocation mode.
+
+    release_build.py runs both as a script (``python
+    tools/release_build.py``, where sys.path[0] is tools/) and as
+    ``tools.release_build`` (tests), so a plain sibling import works
+    in neither mode reliably; a file-location load works in both.
+    """
+    path = Path(__file__).with_name("artifact_census.py")
+    spec = importlib.util.spec_from_file_location("artifact_census", path)
+    if spec is None or spec.loader is None:
+        raise SystemExit("release build failed: cannot load tools/artifact_census.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _first(paths: object, label: str) -> Path:
@@ -312,6 +342,12 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 2
+    census = _load_census()
+    source_findings = census.check_source_tree(source)
+    if source_findings:
+        for finding in source_findings:
+            print(f"release build refused: {finding}", file=sys.stderr)
+        return 2
     results: list[tuple[Path, Path]] = []
     with tempfile.TemporaryDirectory(prefix="mpl_release_") as tmp:
         for run in (1, 2):
@@ -325,6 +361,11 @@ def main(argv: list[str] | None = None) -> int:
             _report_mismatch("wheel", wheel_a, wheel_b)
             ok = False
         if not ok:
+            return 1
+        archive_findings = census.check_wheel(wheel_a, source) + census.check_sdist(sdist_a, source)
+        if archive_findings:
+            for finding in archive_findings:
+                print(f"release build refused: {finding}", file=sys.stderr)
             return 1
         output = args.output
         output.mkdir(parents=True, exist_ok=True)

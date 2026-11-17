@@ -83,5 +83,6 @@ test_sample_report.py | reads examples/sample-report and examples/make_sample_re
 test_w3_test_layers.py | reads tools/layer_paths.py and spawns layer-audit subprocesses that import the tests package's helpers through the checkout layout
 test_w3_windows_workflow.py | reads .github/workflows/windows.yml; .github/ is not shipped in the sdist
 test_w5_artifact_smoke.py | imports tools.artifact_smoke at module level; tools/ is not shipped in the sdist
+test_w5_census_gate.py | imports tools.artifact_census and tools.release_build at module level; tools/ is not shipped in the sdist
 test_w5_pack_limits.py | reads examples/sample-report/results.json as its canonical report fixture; examples/ is not shipped in the sdist
 test_w5_sdist_scope.py | imports tools.sdist_scope, the runner it pins; tools/ is not shipped in the sdist

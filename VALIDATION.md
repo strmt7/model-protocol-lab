@@ -17,7 +17,7 @@ degrade there (checkpoint-template rendering does not: since
 W4/RR-10 it runs in an owned worker process whose deadline the
 parent enforces on every platform).
 
-- `python -m pytest -q -p no:cacheprovider` — **10158 tests collected**
+- `python -m pytest -q -p no:cacheprovider` — **10185 tests collected**
   (measured 2026-11-17, W5 push 3). Subtests numbered in the 72k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
@@ -625,7 +625,7 @@ parent enforces on every platform).
   cross-pin test guards the §6/§15 split.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (360 files in that CI scope; the repo-root scope counts more.
+  (361 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (78 source files).
@@ -822,6 +822,18 @@ reproducible from the repository root in a fresh virtual environment.
   executes the remaining base + posix layers from the sdist alone
   (RR-12). The tarball's suite is therefore not self-contained by
   accident but by declaration, and the declaration is executed.
+- `python tools/artifact_census.py --source . --wheel dist/*.whl --sdist dist/*.tar.gz` — the archive-member census is a build-time gate,
+  enforced by `tools/release_build.py` on every build: the wheel
+  carries exactly the package `.py` files + `py.typed` + the six
+  dist-info files; the sdist carries exactly the package files, the
+  `test_*.py` modules, the three named non-code test files, the six
+  regenerated egg-info files, and the nine named root files. A stray
+  file in the package tree, or any unexpected archive member, fails
+  the build with the member named. The surface census is pinned from
+  the source registries by the same gate: 12 CLI commands, 4 MCP
+  tools, 29 catalog families, 65 report sections (57 dispatched + 8
+  undispatched-with-reasons; the W0 audit's "62" was the count at
+  that head).
 - CLI smoke: `catalog`, `inspect examples/fixtures.json`, and `doctor` against
   synthetic and real (locally generated) checkpoint directories.
 - HTML report validated programmatically: required structure, zero external
