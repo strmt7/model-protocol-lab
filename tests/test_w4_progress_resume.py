@@ -818,6 +818,16 @@ class JournalRefusalTests(unittest.TestCase):
         payload = _obs_payload(status="bogus")
         self._refuses(_journal_bytes([("search", "cand-A", payload)]))
 
+    def test_record_status_list_refused(self):
+        """Test record status list refused (BH12-1: unhashable status)."""
+        payload = _obs_payload(status=["completed"])
+        self._refuses(_journal_bytes([("search", "cand-A", payload)]))
+
+    def test_record_status_dict_refused(self):
+        """Test record status dict refused (BH12-1: unhashable status)."""
+        payload = _obs_payload(status={"value": "completed"})
+        self._refuses(_journal_bytes([("search", "cand-A", payload)]))
+
     def test_torn_middle_line_refused(self):
         """Test torn middle line refused."""
         with TemporaryDirectory() as tmp:

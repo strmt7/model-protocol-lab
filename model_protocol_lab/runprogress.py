@@ -39,9 +39,9 @@ import json
 import os
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from .core import Format, Observation, Split
+from .core import Format, Observation, RunStatus, Split
 
 PROGRESS_SCHEMA = "mpl-progress-1"
 PROGRESS_FILENAME = "progress.jsonl"
@@ -197,6 +197,7 @@ def _reconstruct_observation(payload: Any) -> Observation:
         )
         or not (payload["raw_reason"] is None or type(payload["raw_reason"]) is str)
         or not (payload["error"] is None or type(payload["error"]) is str)
+        or type(payload["status"]) is not str
         or payload["status"] not in _STATUSES
         or type(payload["input_text"]) is not str
     ):
@@ -212,7 +213,10 @@ def _reconstruct_observation(payload: Any) -> Observation:
         boundary_text_match=payload["boundary_text_match"],
         raw_reason=payload["raw_reason"],
         error=payload["error"],
-        status=payload["status"],
+        # The guard chain above has verified the status is a str
+        # in _STATUSES; the cast records that validation for the
+        # type checker.
+        status=cast(RunStatus, payload["status"]),
         input_text=payload["input_text"],
     )
 

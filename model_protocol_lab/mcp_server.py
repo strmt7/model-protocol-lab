@@ -50,6 +50,7 @@ import math
 import os
 import sys
 import threading
+import time
 from typing import Any, Literal, NoReturn, cast
 
 from model_protocol_lab import __version__, datasets, platform_caps
@@ -517,8 +518,12 @@ def _valid_request_id(value: Any) -> bool:
 # set that call's event; the surface-noise tool merges the
 # registered event with its own SIGALRM budget event. At stdio EOF
 # every outstanding event is set -- a disconnected client cancels
-# its in-flight work by definition.
-_IN_FLIGHT: dict[Any, threading.Event] = {}
+# its in-flight work by definition. A client must not reuse an id
+# while its call is in flight; if one does, both dispatches are
+# tracked under that id (BH12-4) and a cancellation naming the id
+# sets every event registered under it -- the client cancelled
+# that id, and both calls claim to be it.
+_IN_FLIGHT: dict[Any, set[threading.Event]] = {}
 _IN_FLIGHT_LOCK = threading.Lock()
 _CURRENT_CALL = threading.local()
 
@@ -533,29 +538,32 @@ def _register_call(request_id: Any) -> threading.Event:
     """Register call."""
     event = threading.Event()
     with _IN_FLIGHT_LOCK:
-        _IN_FLIGHT[request_id] = event
+        _IN_FLIGHT.setdefault(request_id, set()).add(event)
     return event
 
 
 def _complete_call(request_id: Any, event: threading.Event) -> None:
     """Complete call."""
     with _IN_FLIGHT_LOCK:
-        if _IN_FLIGHT.get(request_id) is event:
-            del _IN_FLIGHT[request_id]
+        events = _IN_FLIGHT.get(request_id)
+        if events is not None:
+            events.discard(event)
+            if not events:
+                del _IN_FLIGHT[request_id]
 
 
 def _cancel_call(request_id: Any) -> None:
     """Cancel call."""
     with _IN_FLIGHT_LOCK:
-        event = _IN_FLIGHT.get(request_id)
-    if event is not None:
+        events = list(_IN_FLIGHT.get(request_id, ()))
+    for event in events:
         event.set()
 
 
 def _cancel_all_calls() -> None:
     """Cancel all calls."""
     with _IN_FLIGHT_LOCK:
-        events = list(_IN_FLIGHT.values())
+        events = [event for group in _IN_FLIGHT.values() for event in group]
     for event in events:
         event.set()
 
@@ -812,6 +820,14 @@ def _write_response_locked(response: dict[str, Any]) -> bool:
     return True
 
 
+#: Bounds for the stdio-EOF shutdown (ORCH-02): in-flight calls
+#: share ONE grace window to finish, then every outstanding event
+#: is set and the workers share ONE drain window before the
+#: server exits (BH12-3).
+_EOF_GRACE_SECONDS = 2.0
+_EOF_DRAIN_SECONDS = 10.0
+
+
 def serve(argv: list[str] | None = None) -> int:
     """Serve newline-delimited JSON-RPC on stdio until EOF, or self-test.
 
@@ -940,12 +956,16 @@ def serve(argv: list[str] | None = None) -> int:
     # its requests still expects their responses. Anything still
     # running after the grace is abandoned work: every outstanding
     # event is set and the workers get a bounded drain before the
-    # server exits.
+    # server exits. Both bounds are single shared deadlines across
+    # all workers (BH12-3), never per-worker timeouts, so shutdown
+    # latency does not grow with the number of in-flight calls.
+    grace_deadline = time.monotonic() + _EOF_GRACE_SECONDS
     for worker in list(workers):
-        worker.join(timeout=2)
+        worker.join(timeout=max(0.0, grace_deadline - time.monotonic()))
     _cancel_all_calls()
+    drain_deadline = time.monotonic() + _EOF_DRAIN_SECONDS
     for worker in list(workers):
-        worker.join(timeout=10)
+        worker.join(timeout=max(0.0, drain_deadline - time.monotonic()))
     return 0
 
 

@@ -50,6 +50,7 @@ in this cycle: the request/record schema already carries its fields
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import http.client
 import json
@@ -1824,12 +1825,22 @@ def run_cache_sequence(
         # a raised arm, cancellation, or a failing on_record
         # persistence callback -- so an aborted sequence never
         # leaves the probed slot holding cached prompt state and
-        # never skips the end identity recheck. Both teardown calls
-        # are total (they report failure as False, never raise on a
-        # transport fault), so the aborting exception, when there is
-        # one, still propagates unchanged after teardown.
-        backend.erase_slot()
-        if not backend.verify_identity():
+        # never skips the end identity recheck. The shipped
+        # backend's teardown calls are total (they report failure
+        # as False, never raise on a transport fault), but the
+        # sequence does not rely on that (BH12-5): each step is
+        # guarded independently -- a raising erase is suppressed
+        # (its False return is likewise ignored by design) and a
+        # raising identity re-read is recorded as an identity
+        # change -- so the recheck always runs and the aborting
+        # exception, when there is one, still propagates unchanged
+        # after teardown.
+        with contextlib.suppress(Exception):
+            backend.erase_slot()
+        identity_kept = False
+        with contextlib.suppress(Exception):
+            identity_kept = backend.verify_identity()
+        if not identity_kept:
             identity_changed = True
     detail = ""
     if identity_changed:

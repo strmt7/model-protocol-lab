@@ -4412,8 +4412,10 @@ sets that call's cancellation event — the surface-noise sweep
 polls it between variants and reports the run as cancelled by
 client, with the variants completed so far counted. Responses are
 still written in frame order. Closing stdin (EOF) lets in-flight
-calls finish within a short grace period, then cancels whatever
-is still running before the server exits, so a disconnected
+calls finish within one shared 2-second grace period — the same
+window for every in-flight call, not 2 seconds per call — then
+cancels whatever is still running and gives it one shared
+10-second drain before the server exits, so a disconnected
 client never leaves a sweep burning behind it.
 
 ## 15. Exit codes and output formats

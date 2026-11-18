@@ -524,6 +524,20 @@ class McpCancelTests(unittest.TestCase):
         self.assertFalse(worker.is_alive())
         self.assertEqual(record, {"saw_event": True, "was_set": True})
 
+    def test_duplicate_in_flight_id_cancels_both_calls(self):
+        """Test duplicate in-flight id cancels both calls (BH12-4)."""
+        first = mcp_server._register_call("dup-1")
+        second = mcp_server._register_call("dup-1")
+        try:
+            self.assertIsNot(first, second)
+            mcp_server._cancel_call("dup-1")
+            self.assertTrue(first.is_set())
+            self.assertTrue(second.is_set())
+        finally:
+            mcp_server._complete_call("dup-1", first)
+            mcp_server._complete_call("dup-1", second)
+        self.assertEqual(mcp_server._IN_FLIGHT, {})
+
     def test_notification_for_unknown_id_is_a_noop(self):
         """Test notification for unknown id is a noop."""
         reply = mcp_server.handle_request(
@@ -546,6 +560,74 @@ class McpCancelTests(unittest.TestCase):
             }
         )
         self.assertEqual(reply["error"]["code"], -32601)
+
+    def test_eof_grace_is_one_shared_window(self):
+        """Test eof grace is one shared window (BH12-3).
+
+        Three staggered calls ignore their cancellation events.
+        The documented contract is ONE bounded grace for all
+        in-flight calls, then cancel-all: the last call's event
+        must be set at the grace bound (~2s), not after a
+        per-worker sequence of grace joins (~4s), and the drain
+        that follows is likewise one shared window (serve returns
+        at ~12s, not ~14s).
+        """
+        sleeps = {"w1": 1.9, "w2": 3.8, "w3": 20.0}
+        events = {}
+        marks = {}
+
+        def handler(arguments):
+            """Handler."""
+            name = arguments["name"]
+            events[name] = mcp_server.current_call_event()
+            time.sleep(sleeps[name])
+            return {"ok": name}
+
+        lines = "".join(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": f"g{i}",
+                    "method": "tools/call",
+                    "params": {
+                        "name": "probe_surface_noise_stability",
+                        "arguments": {"name": name},
+                    },
+                }
+            )
+            + "\n"
+            for i, name in enumerate(("w1", "w2", "w3"), start=1)
+        )
+        fake_stdin = mock.Mock()
+        fake_stdin.buffer = io.BytesIO(lines.encode("utf-8"))
+        fake_stdout = mock.Mock()
+        fake_stdout.buffer = io.BytesIO()
+        t0 = time.monotonic()
+
+        def watch():
+            """Watch."""
+            while time.monotonic() - t0 < 15:
+                for name, event in list(events.items()):
+                    if event is not None and event.is_set() and name not in marks:
+                        marks[name] = time.monotonic() - t0
+                time.sleep(0.02)
+
+        watcher = threading.Thread(target=watch, daemon=True)
+        with (
+            mock.patch.dict(
+                mcp_server.TOOLS["probe_surface_noise_stability"],
+                {"handler": handler},
+            ),
+            mock.patch.object(sys, "stdin", fake_stdin),
+            mock.patch.object(sys, "stdout", fake_stdout),
+        ):
+            watcher.start()
+            code = mcp_server.serve([])
+            elapsed = time.monotonic() - t0
+        self.assertEqual(code, 0)
+        self.assertIn("w3", marks)
+        self.assertLess(marks["w3"], 3.0)
+        self.assertLess(elapsed, 13.0)
 
     def test_eof_sets_outstanding_events(self):
         """Test eof sets outstanding events."""

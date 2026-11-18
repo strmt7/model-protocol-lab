@@ -54,22 +54,30 @@ def _identity():
 class FakeCacheBackend:
     """Duck-typed cache-sequence backend counting its teardown."""
 
-    def __init__(self, *, fail_on_mode=None):
+    def __init__(
+        self, *, fail_on_mode=None, teardown_erase_raises=False, teardown_verify_raises=False
+    ):
         """Init."""
         self.identity = _identity()
         self.erase_calls = 0
         self.verify_calls = 0
         self.identity_ok = True
         self._fail_on_mode = fail_on_mode
+        self._teardown_erase_raises = teardown_erase_raises
+        self._teardown_verify_raises = teardown_verify_raises
 
     def verify_identity(self):
         """Verify identity."""
         self.verify_calls += 1
+        if self.verify_calls == 2 and self._teardown_verify_raises:
+            raise RuntimeError("teardown verify boom")
         return self.identity_ok
 
     def erase_slot(self):
         """Erase slot."""
         self.erase_calls += 1
+        if self.erase_calls == 2 and self._teardown_erase_raises:
+            raise RuntimeError("teardown erase boom")
         return True
 
     def execute(self, request, *, cancel=None):
@@ -164,6 +172,31 @@ class CacheSequenceTeardownTests(unittest.TestCase):
             return original_execute(request, cancel=cancel)
 
         backend.execute = execute_then_drift
+        sequence = _run_sequence(backend)
+        self.assertEqual(sequence["detail"], "stack_identity_changed_during_run")
+        self.assertEqual(backend.erase_calls, 2)
+        self.assertEqual(backend.verify_calls, 2)
+
+    def test_raising_teardown_erase_does_not_mask_arm_error(self):
+        """Test raising teardown erase does not mask arm error (BH12-5)."""
+        backend = FakeCacheBackend(fail_on_mode="shared_prefix", teardown_erase_raises=True)
+        with self.assertRaises(RuntimeError) as caught:
+            _run_sequence(backend)
+        self.assertEqual(str(caught.exception), "arm boom")
+        self.assertEqual(backend.erase_calls, 2)
+        self.assertEqual(backend.verify_calls, 2)
+
+    def test_raising_teardown_erase_on_clean_run_returns_sequence(self):
+        """Test raising teardown erase on clean run returns sequence (BH12-5)."""
+        backend = FakeCacheBackend(teardown_erase_raises=True)
+        sequence = _run_sequence(backend)
+        self.assertTrue(sequence["available"])
+        self.assertEqual(backend.erase_calls, 2)
+        self.assertEqual(backend.verify_calls, 2)
+
+    def test_raising_teardown_verify_reports_identity_changed(self):
+        """Test raising teardown verify reports identity changed (BH12-5)."""
+        backend = FakeCacheBackend(teardown_verify_raises=True)
         sequence = _run_sequence(backend)
         self.assertEqual(sequence["detail"], "stack_identity_changed_during_run")
         self.assertEqual(backend.erase_calls, 2)

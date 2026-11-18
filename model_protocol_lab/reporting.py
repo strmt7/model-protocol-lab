@@ -14595,6 +14595,20 @@ def render_html(result: dict[str, Any]) -> str:
     )
 
 
+#: Names a ``--resume`` claim may find in the report leaf beside
+#: the run's ``progress.jsonl`` journal (BH12-2): the journal itself
+#: plus the staging/orphan files a hard crash inside
+#: ``save_report``'s publication window can leave behind (the
+#: ``.part`` files, and the published ``report.html`` whose
+#: ``results.json`` commit point never landed). ``results.json``
+#: is deliberately absent: its presence means a completed pair,
+#: which the resume path refuses before saving
+#: (``resume_already_complete``).
+_JOURNAL_CLAIM_NAMES = frozenset(
+    {"progress.jsonl", "report.html", "report.html.part", "results.json.part"}
+)
+
+
 def prepare_report_dir(
     directory: str | Path,
     *,
@@ -14609,10 +14623,19 @@ def prepare_report_dir(
     ``_allow_empty_existing`` is set and the leaf is an empty directory
     (used by ``cli.run``, which claims the output dir before the expensive
     experiment). With ``_allow_progress_journal`` the leaf may instead
-    hold exactly the run's own ``progress.jsonl`` journal (a regular,
+    hold the run's own ``progress.jsonl`` journal (a regular,
     non-symlink file written by ``cli.run`` before ``save_report`` is
     called) — the journal is part of the report bundle, not foreign
-    content. A symlinked leaf always raises FileExistsError -- even with
+    content. The journal may be accompanied by the run's own
+    crash-window leftovers (``_JOURNAL_CLAIM_NAMES``: the ``.part``
+    staging files and an orphan ``report.html`` from a save that a
+    hard crash interrupted before its ``results.json`` commit
+    point); those are admitted and removed, so a ``--resume``
+    re-save stages onto a clean leaf instead of refusing the
+    directory its own previous save left behind (BH12-2). Anything
+    else beside the journal — a foreign name, a ``results.json``,
+    a non-regular or symlinked entry — still refuses.
+    A symlinked leaf always raises FileExistsError -- even with
     ``_allow_empty_existing`` -- so report files are never written through a
     link into an attacker-chosen directory. Symlinked path components are
     never chmodded through: the
@@ -14643,14 +14666,21 @@ def prepare_report_dir(
         if not (_allow_empty_existing and target.is_dir()):
             raise
         entries = list(target.iterdir())
+        names = {entry.name for entry in entries}
         if entries and not (
             _allow_progress_journal
-            and len(entries) == 1
-            and entries[0].name == "progress.jsonl"
-            and not entries[0].is_symlink()
-            and entries[0].is_file()
+            and "progress.jsonl" in names
+            and names <= _JOURNAL_CLAIM_NAMES
+            and all(not entry.is_symlink() and entry.is_file() for entry in entries)
         ):
             raise
+        # Admitted crash-window leftovers (BH12-2) are the run's own
+        # unpublished staging: remove them so the save that follows
+        # stages onto a clean leaf (the .part files are O_EXCL and
+        # would otherwise refuse it). The journal stays.
+        for entry in entries:
+            if entry.name != "progress.jsonl":
+                entry.unlink()
     for component in missing:
         # Never chmod through a symlink: os.chmod follows links, which would
         # change permissions on a directory outside the requested tree (and

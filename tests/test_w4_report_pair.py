@@ -166,6 +166,97 @@ class SavePairTests(unittest.TestCase):
             self.assertEqual(names, [])
 
 
+class CrashLeftoverResumeTests(unittest.TestCase):
+    """BH12-2: a crash inside save_report's publication window
+    leaves .part staging files or an orphan report.html beside the
+    progress journal. The --resume re-save (same flags the CLI
+    uses) must recover the directory -- the leftovers are the
+    run's own unpublished staging -- while anything else beside
+    the journal still refuses fail-closed."""
+
+    def _claimed_dir(self, tmp, leftovers=(), journal=True):
+        """Claimed dir."""
+        target = Path(tmp) / "report"
+        target.mkdir()
+        if journal:
+            (target / "progress.jsonl").write_text("{}\n", encoding="utf-8")
+        for name in leftovers:
+            (target / name).write_text("x", encoding="utf-8")
+        return target
+
+    def _resume_save(self, target):
+        """Resume save."""
+        return reporting.save_report(
+            _result(),
+            target,
+            _allow_empty_existing=True,
+            _allow_progress_journal=True,
+        )
+
+    def _assert_valid_pair(self, target):
+        """Assert valid pair."""
+        data = json.loads((target / "results.json").read_text(encoding="utf-8"))
+        stamp = data["report_pair"]
+        self.assertTrue(stamp["complete"])
+        self.assertEqual(
+            stamp["html_sha256"],
+            hashlib.sha256((target / "report.html").read_bytes()).hexdigest(),
+        )
+        names = sorted(p.name for p in target.iterdir())
+        self.assertEqual(names, ["progress.jsonl", "report.html", "results.json"])
+
+    def test_resume_save_with_journal_only(self):
+        """Test resume save with journal only (control)."""
+        with TemporaryDirectory() as tmp:
+            target = self._claimed_dir(tmp)
+            self._resume_save(target)
+            self._assert_valid_pair(target)
+
+    def test_resume_save_recovers_from_part_leftovers(self):
+        """Test resume save recovers from part leftovers (BH12-2)."""
+        for leftover in ("results.json.part", "report.html.part"):
+            with self.subTest(leftover=leftover), TemporaryDirectory() as tmp:
+                target = self._claimed_dir(tmp, (leftover,))
+                self._resume_save(target)
+                self._assert_valid_pair(target)
+
+    def test_resume_save_recovers_from_orphan_html(self):
+        """Test resume save recovers from orphan html (BH12-2)."""
+        with TemporaryDirectory() as tmp:
+            target = self._claimed_dir(tmp, ("report.html",))
+            self._resume_save(target)
+            self._assert_valid_pair(target)
+
+    def test_resume_save_still_refuses_foreign_file(self):
+        """Test resume save still refuses foreign file."""
+        with TemporaryDirectory() as tmp:
+            target = self._claimed_dir(tmp, ("notes.txt",))
+            with self.assertRaises(FileExistsError):
+                self._resume_save(target)
+
+    def test_resume_save_still_refuses_completed_pair(self):
+        """Test resume save still refuses completed pair."""
+        with TemporaryDirectory() as tmp:
+            target = self._claimed_dir(tmp, ("report.html", "results.json"))
+            with self.assertRaises(FileExistsError):
+                self._resume_save(target)
+
+    def test_resume_save_still_refuses_leftovers_without_journal(self):
+        """Test resume save still refuses leftovers without journal."""
+        with TemporaryDirectory() as tmp:
+            target = self._claimed_dir(tmp, ("report.html.part",), journal=False)
+            with self.assertRaises(FileExistsError):
+                self._resume_save(target)
+
+    def test_resume_save_still_refuses_symlink_leftover(self):
+        """Test resume save still refuses symlink leftover."""
+        with TemporaryDirectory() as tmp:
+            target = self._claimed_dir(tmp)
+            os.symlink(Path(tmp) / "elsewhere", target / "report.html.part")
+            with self.assertRaises(FileExistsError):
+                self._resume_save(target)
+
+
 class LoadPairTests(unittest.TestCase):
     """Test load pair."""
 
