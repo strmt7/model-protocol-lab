@@ -70,6 +70,7 @@ import zipfile
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
+from typing import BinaryIO
 
 _SCHEMA = "artifact-manifest-1"
 _SBOM_NAME = "sbom.cdx.json"
@@ -152,6 +153,16 @@ _PACK_CEILINGS = (
     "MAX_BUNDLE_TOTAL_BYTES",
 )
 
+# Archive-reader ceilings for _member_digests, mirroring pack.py's
+# RTI-02 producer ceilings (pinned equal by test): a member's
+# uncompressed size, the member count, and the aggregate uncompressed
+# size. A downloaded archive is hostile input to verify; reads are
+# streamed under these ceilings and refuse by name over them instead
+# of materialising members unboundedly in memory.
+_MAX_MEMBER_BYTES = 64 * 1024 * 1024  # pack.MAX_BUNDLE_FILE_BYTES
+_MAX_MEMBERS = 1024  # pack.MAX_BUNDLE_ENTRIES
+_MAX_TOTAL_MEMBER_BYTES = 256 * 1024 * 1024  # pack.MAX_BUNDLE_TOTAL_BYTES
+
 
 class ManifestFailure(Exception):
     """A manifest input or claim does not hold; the message names it."""
@@ -171,20 +182,75 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _digest_stream(stream: BinaryIO, name: str) -> tuple[str, int]:
+    """SHA-256 of one member, streamed in chunks under the member ceiling."""
+    digest = hashlib.sha256()
+    size = 0
+    while True:
+        chunk = stream.read(1024 * 1024)
+        if not chunk:
+            break
+        size += len(chunk)
+        if size > _MAX_MEMBER_BYTES:
+            raise ManifestFailure(
+                f"archive member exceeds the {_MAX_MEMBER_BYTES}-byte member ceiling: {name}"
+            )
+        digest.update(chunk)
+    return digest.hexdigest(), size
+
+
 def _member_digests(path: Path) -> dict[str, str]:
-    """Per-member content digests of a wheel (zip) or sdist (tar.gz)."""
+    """Per-member content digests of a wheel (zip) or sdist (tar.gz).
+
+    Reads are ceiling-bound (see _MAX_MEMBER_BYTES and siblings):
+    a member over the member ceiling, more members than the count
+    ceiling, or an aggregate over the total ceiling refuses by name
+    instead of reading unbounded content into memory.
+    """
     members: dict[str, str] = {}
+    total = 0
+
+    def add(name: str, digest: str, size: int) -> None:
+        """Add."""
+        nonlocal total
+        members[name] = digest
+        total += size
+        if total > _MAX_TOTAL_MEMBER_BYTES:
+            raise ManifestFailure(
+                f"archive members exceed the {_MAX_TOTAL_MEMBER_BYTES}-byte "
+                f"aggregate ceiling: {path.name}"
+            )
+
     if path.name.endswith(".whl"):
         with zipfile.ZipFile(path) as archive:
-            for info in archive.infolist():
-                members[info.filename] = _sha256_bytes(archive.read(info.filename))
+            infos = archive.infolist()
+            if len(infos) > _MAX_MEMBERS:
+                raise ManifestFailure(
+                    f"{path.name}: {len(infos)} members exceeds the ceiling of {_MAX_MEMBERS}"
+                )
+            for info in infos:
+                if info.is_dir():
+                    add(info.filename, _sha256_bytes(b""), 0)
+                    continue
+                with archive.open(info) as stream:
+                    digest, size = _digest_stream(stream, info.filename)
+                add(info.filename, digest, size)
     else:
         with tarfile.open(path, "r:gz") as archive:
-            for member in archive.getmembers():
-                if member.isfile():
-                    extracted = archive.extractfile(member)
-                    if extracted is not None:
-                        members[member.name] = _sha256_bytes(extracted.read())
+            infos = archive.getmembers()
+            if len(infos) > _MAX_MEMBERS:
+                raise ManifestFailure(
+                    f"{path.name}: {len(infos)} members exceeds the ceiling of {_MAX_MEMBERS}"
+                )
+            for member in infos:
+                if not member.isfile():
+                    continue
+                extracted = archive.extractfile(member)
+                if extracted is None:
+                    continue
+                with extracted:
+                    digest, size = _digest_stream(extracted, member.name)
+                add(member.name, digest, size)
     return members
 
 
@@ -205,7 +271,11 @@ def _wheel_identity(wheel: Path) -> tuple[str, str]:
     with zipfile.ZipFile(wheel) as archive:
         for name in archive.namelist():
             if name.endswith(".dist-info/METADATA"):
-                fields = _metadata_fields(archive.read(name).decode("utf-8"))
+                try:
+                    text = archive.read(name).decode("utf-8")
+                except UnicodeDecodeError as error:
+                    raise ManifestFailure(f"wheel METADATA is not valid UTF-8: {name}") from error
+                fields = _metadata_fields(text)
                 return fields.get("Name", ""), fields.get("Version", "")
     raise ManifestFailure(f"wheel carries no dist-info METADATA: {wheel.name}")
 
@@ -221,7 +291,13 @@ def _sdist_identity(sdist: Path) -> tuple[str, str]:
             ):
                 extracted = archive.extractfile(member)
                 if extracted is not None:
-                    fields = _metadata_fields(extracted.read().decode("utf-8"))
+                    try:
+                        text = extracted.read().decode("utf-8")
+                    except UnicodeDecodeError as error:
+                        raise ManifestFailure(
+                            f"sdist PKG-INFO is not valid UTF-8: {member.name}"
+                        ) from error
+                    fields = _metadata_fields(text)
                     return fields.get("Name", ""), fields.get("Version", "")
     raise ManifestFailure(f"sdist carries no top-level PKG-INFO: {sdist.name}")
 
@@ -303,30 +379,74 @@ def _pack_ceilings(source: Path) -> dict[str, int]:
 
 
 def _is_spdx_expression(text: str) -> bool:
-    """True when text parses as an SPDX expression over known identifiers."""
-    parts = re.findall(r"\(|\)|[^\s()]+", text)
-    if not parts:
+    """True when text parses as an SPDX expression over known identifiers.
+
+    The grammar, parsed by recursive descent: an expression is one
+    or more terms joined by ``AND``/``OR``; a term is a known
+    license id (optionally ``+``-suffixed), a term followed by
+    ``WITH <exception id>``, or a parenthesised expression.
+    Operators cannot dangle, double, or stand alone — a token
+    sequence that merely alternates plausible tokens is not an
+    expression. Parenthesis nesting is depth-capped so hostile
+    metadata fails the parse (and falls through the license cascade
+    to NOASSERTION) instead of exhausting the call stack.
+    """
+    tokens = re.findall(r"\(|\)|[^\s()]+", text)
+    if not tokens:
         return False
-    previous: str | None = None
-    for part in parts:
-        if part in ("AND", "OR", "(", ")"):
-            previous = part
-            continue
-        if part == "WITH":
-            if previous is None or previous not in _SPDX_IDS:
+    pos = 0
+    depth = 0
+
+    def peek() -> str | None:
+        """Peek."""
+        return tokens[pos] if pos < len(tokens) else None
+
+    def parse_term() -> bool:
+        """Parse term."""
+        nonlocal pos, depth
+        current = peek()
+        if current == "(":
+            depth += 1
+            if depth > 64:
                 return False
-            previous = "WITH"
-            continue
-        if previous == "WITH":
-            if not re.fullmatch(r"[A-Za-z0-9.-]+", part):
+            pos += 1
+            if not parse_expression():
                 return False
-            previous = part
-            continue
-        base = part.rstrip("+")
+            if peek() != ")":
+                return False
+            pos += 1
+            depth -= 1
+            return True
+        if current is None or current in ("AND", "OR", "WITH", ")"):
+            return False
+        base = current[:-1] if current.endswith("+") else current
         if base not in _SPDX_IDS:
             return False
-        previous = base
-    return True
+        pos += 1
+        if peek() == "WITH":
+            pos += 1
+            exception = peek()
+            if (
+                exception is None
+                or exception in ("AND", "OR", "WITH", "(", ")")
+                or not re.fullmatch(r"[A-Za-z0-9.-]+", exception)
+            ):
+                return False
+            pos += 1
+        return True
+
+    def parse_expression() -> bool:
+        """Parse expression."""
+        nonlocal pos
+        if not parse_term():
+            return False
+        while peek() in ("AND", "OR"):
+            pos += 1
+            if not parse_term():
+                return False
+        return True
+
+    return parse_expression() and pos == len(tokens)
 
 
 def _resolve_license(info: dict) -> tuple[str | None, str]:
@@ -538,8 +658,10 @@ def emit_manifest(
         )
     try:
         record = json.loads(build_record_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ManifestFailure(f"build record is unreadable: {error}") from error
+    if not isinstance(record, dict):
+        raise ManifestFailure("build record is not a JSON object")
     if record.get("verdict") != "identical":
         raise ManifestFailure(
             "build record does not record the reproducibility verdict 'identical'"
@@ -641,6 +763,16 @@ def emit_manifest(
     return manifest_path
 
 
+def _as_object(value: object) -> dict:
+    """The value as a JSON object, or an empty object if it is not one.
+
+    Manifest and SBOM blocks are hostile-shaped input to verify: a
+    block of the wrong type is not an exception, it is a failed
+    claim, so every block is coerced through here before use.
+    """
+    return value if isinstance(value, dict) else {}
+
+
 def verify_manifest(
     *,
     dist: Path,
@@ -656,16 +788,33 @@ def verify_manifest(
 
     try:
         data = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         return [("manifest-readable", False, str(error))]
+    if not isinstance(data, dict):
+        return [
+            (
+                "manifest-readable",
+                False,
+                f"manifest is a {type(data).__name__}, not a JSON object",
+            )
+        ]
     claim("manifest-readable", True)
     claim("schema", data.get("schema") == _SCHEMA, str(data.get("schema")))
-    package = data.get("package") or {}
-    artifacts = {entry.get("name"): entry for entry in data.get("artifacts") or []}
+    package = _as_object(data.get("package"))
+    raw_artifacts = data.get("artifacts")
+    artifacts: dict[str, dict] = {}
+    entries_malformed = not isinstance(raw_artifacts, list)
+    if isinstance(raw_artifacts, list):
+        for entry in raw_artifacts:
+            if not isinstance(entry, dict) or not isinstance(entry.get("name"), str):
+                entries_malformed = True
+                continue
+            artifacts[entry["name"]] = entry
     wheels = sorted(dist.glob("*.whl"))
     sdists = sorted(dist.glob("*.tar.gz"))
     present = (
-        len(wheels) == 1
+        not entries_malformed
+        and len(wheels) == 1
         and len(sdists) == 1
         and set(artifacts)
         == {
@@ -684,11 +833,16 @@ def verify_manifest(
             _sha256_file(dist / name) == entry.get("sha256") for name, entry in artifacts.items()
         )
         claim("artifact-hashes", hashes_ok)
-        members_ok = all(
-            _member_digests(dist / name) == entry.get("members")
-            for name, entry in artifacts.items()
-        )
-        claim("artifact-members", members_ok)
+        members_detail = ""
+        try:
+            members_ok = all(
+                _member_digests(dist / name) == entry.get("members")
+                for name, entry in artifacts.items()
+            )
+        except ManifestFailure as error:
+            members_ok = False
+            members_detail = str(error)
+        claim("artifact-members", members_ok, members_detail)
         try:
             _wn, wheel_version = _wheel_identity(wheel)
             _sn, sdist_version = _sdist_identity(sdist)
@@ -699,40 +853,54 @@ def verify_manifest(
             )
         except ManifestFailure as error:
             claim("package-version", False, str(error))
-        verification = data.get("verification") or {}
+        # The embedded verification results are re-validated, not
+        # merely hash-bound: tool, pass status, artifact name and
+        # hash must all hold, exactly as _read_result enforces at
+        # emit — a manifest carrying a failed or foreign result
+        # under a verified receipt fails this claim.
+        verification = _as_object(data.get("verification"))
         bindings_ok = True
-        for block, artifact in (("origin_smoke", wheel), ("sdist_scope", sdist)):
-            bound = (verification.get(block) or {}).get("artifact") or {}
-            if bound.get("sha256") != artifacts[artifact.name].get("sha256"):
+        for block, tool, artifact in (
+            ("origin_smoke", "artifact_smoke", wheel),
+            ("sdist_scope", "sdist_scope", sdist),
+        ):
+            block_data = _as_object(verification.get(block))
+            bound = _as_object(block_data.get("artifact"))
+            if (
+                block_data.get("tool") != tool
+                or block_data.get("result") != "passed"
+                or bound.get("name") != artifact.name
+                or bound.get("sha256") != artifacts[artifact.name].get("sha256")
+            ):
                 bindings_ok = False
         claim("verification-bindings", bindings_ok)
-        reproducibility = data.get("reproducibility") or {}
+        reproducibility = _as_object(data.get("reproducibility"))
         claim(
             "reproducibility-binding",
             reproducibility.get("verdict") == "identical"
             and reproducibility.get("wheel_sha256") == artifacts[wheel.name].get("sha256")
             and reproducibility.get("sdist_sha256") == artifacts[sdist.name].get("sha256"),
         )
-    sbom_block = data.get("sbom") or {}
+    sbom_block = _as_object(data.get("sbom"))
     sbom_path = dist / str(sbom_block.get("file", _SBOM_NAME))
     if sbom_path.is_file():
         claim("sbom-digest", _sha256_file(sbom_path) == sbom_block.get("sha256"))
         try:
             sbom = json.loads(sbom_path.read_text(encoding="utf-8"))
-            root = (sbom.get("metadata") or {}).get("component") or {}
+            root = _as_object(_as_object(_as_object(sbom).get("metadata")).get("component"))
             claim(
                 "sbom-package",
                 root.get("name") == package.get("name")
                 and root.get("version") == package.get("version"),
             )
-        except json.JSONDecodeError as error:
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
             claim("sbom-package", False, str(error))
     else:
         claim("sbom-digest", False, f"missing {sbom_path.name}")
     if source is not None:
         claim(
             "source-tree",
-            (data.get("source") or {}).get("tree_digest") == _tree_digest(source),
+            _as_object(data.get("source")).get("tree_digest") == _tree_digest(source),
         )
     return claims
 
@@ -784,9 +952,16 @@ def rebuild_check(
     """
     try:
         data = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ManifestFailure(f"manifest is unreadable: {error}") from error
-    entries = {entry.get("name"): entry for entry in data.get("artifacts") or []}
+    if not isinstance(data, dict):
+        raise ManifestFailure("manifest is not a JSON object")
+    entries: dict[str, dict] = {}
+    raw_entries = data.get("artifacts")
+    if isinstance(raw_entries, list):
+        for entry in raw_entries:
+            if isinstance(entry, dict) and isinstance(entry.get("name"), str):
+                entries[entry["name"]] = entry
     wheels = sorted(dist.glob("*.whl"))
     sdists = sorted(dist.glob("*.tar.gz"))
     if len(wheels) != 1 or len(sdists) != 1:
@@ -818,7 +993,8 @@ def rebuild_check(
     out_dir = work / "out"
     out_dir.mkdir(exist_ok=True)
     rebuilt = builder(package_dir, out_dir, epoch)
-    expected_members = entries[wheel.name].get("members") or {}
+    raw_members = entries[wheel.name].get("members")
+    expected_members = raw_members if isinstance(raw_members, dict) else {}
     rebuilt_members = _member_digests(rebuilt)
     differing = sorted(
         name

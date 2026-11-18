@@ -30,6 +30,7 @@ runs this census on every build before publishing its output.
 from __future__ import annotations
 
 import io
+import os
 import shutil
 import tarfile
 import tempfile
@@ -37,6 +38,7 @@ import unittest
 import warnings
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 from model_protocol_lab import catalog as catalog_module
 from model_protocol_lab import cli as cli_module
@@ -209,6 +211,48 @@ class TestSourceTreeCensus(unittest.TestCase):
         (cache / "a.cpython-312.pyc").write_bytes(b"\x00")
         self.assertEqual(artifact_census.check_source_tree(self.source), [])
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "platform has no FIFOs")
+    def test_fifo_named_py_refused(self) -> None:
+        """BH13-3: a FIFO named *.py is not a module; it is refused by name.
+
+        Before the fix the census judged package entries by name only,
+        admitted the FIFO as a module, and the release build died
+        inside shutil.copytree with a raw traceback instead of its
+        named refusal.
+        """
+        os.mkfifo(self.source / "model_protocol_lab" / "stuck.py")
+        findings = artifact_census.check_source_tree(self.source)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("model_protocol_lab/stuck.py", findings[0])
+        self.assertIn("fifo", findings[0])
+
+    def test_symlink_module_refused(self) -> None:
+        """BH13-3 sweep: a symlinked *.py is refused by name, not shipped."""
+        link = self.source / "model_protocol_lab" / "link.py"
+        try:
+            link.symlink_to("a.py")
+        except (OSError, NotImplementedError) as error:
+            self.skipTest(f"symlinks unavailable: {error}")
+        findings = artifact_census.check_source_tree(self.source)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("model_protocol_lab/link.py", findings[0])
+        self.assertIn("symlink", findings[0])
+
+    def test_symlinked_directory_refused(self) -> None:
+        """BH13-3 sweep: a symlinked directory in the package is named."""
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        (outside / "x.py").write_text("# x\n", encoding="utf-8")
+        link = self.source / "model_protocol_lab" / "subpkg"
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except (OSError, NotImplementedError) as error:
+            self.skipTest(f"symlinks unavailable: {error}")
+        findings = artifact_census.check_source_tree(self.source)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("model_protocol_lab/subpkg", findings[0])
+        self.assertIn("symlink", findings[0])
+
     def test_excluded_names_match_release_build(self) -> None:
         """Test excluded names match release build."""
         self.assertEqual(artifact_census._EXCLUDED_NAMES, release_build._EXCLUDED_NAMES)
@@ -288,6 +332,20 @@ class TestWheelCensus(unittest.TestCase):
         findings = artifact_census.check_wheel(self.wheel, self.source)
         self.assertEqual(len(findings), 1)
         self.assertIn("model_protocol_lab/a.py", findings[0])
+
+    def test_undeclared_package_module_named(self) -> None:
+        """BH13-1: a package-shaped member outside the source set is unexpected.
+
+        The wheel census is a set check, not a shape check: a module
+        the source tree does not carry is refused by name, exactly as
+        the sdist census refuses the identical injection.
+        """
+        members = _wheel_members(self.source, extra=("model_protocol_lab/zz_injected.py",))
+        _write_wheel(self.wheel, members)
+        findings = artifact_census.check_wheel(self.wheel, self.source)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("wheel:unexpected", findings[0])
+        self.assertIn("model_protocol_lab/zz_injected.py", findings[0])
 
 
 class TestSdistCensus(unittest.TestCase):
@@ -384,6 +442,91 @@ class TestSdistCensus(unittest.TestCase):
         self.assertIn("model_protocol_lab.egg-info/requires.txt", findings[0])
 
 
+def _write_sdist_with_specials(
+    path: Path, members: list[str], specials: list[tarfile.TarInfo]
+) -> None:
+    """Write a synthetic sdist: regular members plus typed TarInfo members."""
+    with tarfile.open(path, "w:gz") as archive:
+        for member in members:
+            data = f"content of {member}\n".encode()
+            info = tarfile.TarInfo(member)
+            info.size = len(data)
+            info.mtime = 1700000000
+            archive.addfile(info, io.BytesIO(data))
+        for info in specials:
+            info.mtime = 1700000000
+            archive.addfile(info)
+
+
+def _typed_member(name: str, type_: bytes, target: str = "") -> tarfile.TarInfo:
+    """A non-regular tar member (link or FIFO) for census attacks."""
+    info = tarfile.TarInfo(name)
+    info.type = type_
+    info.linkname = target
+    return info
+
+
+class TestSdistNonRegularMembers(unittest.TestCase):
+    """BH13-2: non-regular sdist members are named findings, never invisible.
+
+    Before the fix, check_sdist enumerated only regular files, so a
+    symlink, hardlink or FIFO member was neither counted nor named —
+    and a relative symlink could materialise through data-filter
+    extraction into an undeclared module downstream.
+    """
+
+    def setUp(self) -> None:
+        """Set up."""
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmpdir.name)
+        self.source = _fake_source(self.tmp / "src")
+        self.sdist = self.tmp / "model_protocol_lab-0.2.0.tar.gz"
+        self.top = f"model_protocol_lab-{_VERSION}"
+
+    def tearDown(self) -> None:
+        """Tear down."""
+        self._tmpdir.cleanup()
+
+    def test_extra_symlink_named_with_target(self) -> None:
+        """Test extra symlink named with target."""
+        link = _typed_member(f"{self.top}/evil_link", tarfile.SYMTYPE, "/etc/passwd")
+        _write_sdist_with_specials(self.sdist, _sdist_members(self.source), [link])
+        findings = artifact_census.check_sdist(self.sdist, self.source)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("evil_link", findings[0])
+        self.assertIn("symlink", findings[0])
+        self.assertIn("/etc/passwd", findings[0])
+
+    def test_symlink_replacing_module_named(self) -> None:
+        """Test symlink replacing module named."""
+        victim = f"{self.top}/model_protocol_lab/a.py"
+        members = _sdist_members(self.source, drop=(victim,))
+        link = _typed_member(victim, tarfile.SYMTYPE, "/etc/passwd")
+        _write_sdist_with_specials(self.sdist, members, [link])
+        findings = artifact_census.check_sdist(self.sdist, self.source)
+        named = [f for f in findings if "model_protocol_lab/a.py" in f and "symlink" in f]
+        self.assertEqual(len(named), 1, findings)
+
+    def test_extra_hardlink_named_with_target(self) -> None:
+        """Test extra hardlink named with target."""
+        link = _typed_member(f"{self.top}/hard_link", tarfile.LNKTYPE, "model_protocol_lab/a.py")
+        _write_sdist_with_specials(self.sdist, _sdist_members(self.source), [link])
+        findings = artifact_census.check_sdist(self.sdist, self.source)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("hard_link", findings[0])
+        self.assertIn("hardlink", findings[0])
+        self.assertIn("model_protocol_lab/a.py", findings[0])
+
+    def test_extra_fifo_named(self) -> None:
+        """Test extra fifo named."""
+        fifo = _typed_member(f"{self.top}/fifo_member", tarfile.FIFOTYPE)
+        _write_sdist_with_specials(self.sdist, _sdist_members(self.source), [fifo])
+        findings = artifact_census.check_sdist(self.sdist, self.source)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("fifo_member", findings[0])
+        self.assertIn("fifo", findings[0])
+
+
 class TestReleaseBuildWiring(unittest.TestCase):
     """Test release build wiring."""
 
@@ -422,6 +565,78 @@ class TestReleaseBuildWiring(unittest.TestCase):
             self.assertEqual(list(out.glob("*")), [])
         finally:
             tmpdir.cleanup()
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "platform has no FIFOs")
+    def test_fifo_in_package_tree_refuses_build_by_name(self) -> None:
+        """BH13-3: a FIFO in the package tree is a named refusal, exit 2.
+
+        Before the fix the census admitted the FIFO as a module and
+        the build died inside shutil.copytree with a raw traceback.
+        """
+        tmpdir = tempfile.TemporaryDirectory()
+        tmp = Path(tmpdir.name)
+        try:
+            source = tmp / "src"
+            source.mkdir()
+            repo = Path(__file__).resolve().parent.parent
+            shutil.copytree(repo / "model_protocol_lab", source / "model_protocol_lab")
+            shutil.copyfile(repo / "pyproject.toml", source / "pyproject.toml")
+            os.mkfifo(source / "model_protocol_lab" / "stuck.py")
+            out = tmp / "out"
+            import contextlib
+            import io as _io
+
+            stderr = _io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                code = release_build.main(
+                    [
+                        "--source",
+                        str(source),
+                        "--output",
+                        str(out),
+                        "--epoch",
+                        "1700000000",
+                        "--expect-version",
+                        "0.2.0",
+                    ]
+                )
+            self.assertEqual(code, 2)
+            self.assertIn("release build refused", stderr.getvalue())
+            self.assertIn("model_protocol_lab/stuck.py", stderr.getvalue())
+            self.assertNotIn("Traceback", stderr.getvalue())
+            self.assertEqual(list(out.glob("*")), [])
+        finally:
+            tmpdir.cleanup()
+
+
+class TestReleaseBuildMemberDigests(unittest.TestCase):
+    """BH13-6 twin: release_build's _member_digests is ceiling-bound too.
+
+    The mismatch-diagnosis reader gets the same RTI-02 discipline as
+    artifact_manifest's: an oversized member aborts with a named
+    refusal instead of an unbounded read.
+    """
+
+    def test_member_ceiling_names_the_member(self) -> None:
+        """Test member ceiling names the member."""
+        with tempfile.TemporaryDirectory() as tmp:
+            wheel = Path(tmp) / "x.whl"
+            with zipfile.ZipFile(wheel, "w", zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("model_protocol_lab/big.py", b"\0" * 4096)
+            with (
+                mock.patch.object(release_build, "_MAX_MEMBER_BYTES", 1024),
+                self.assertRaises(SystemExit) as caught,
+            ):
+                release_build._member_digests(wheel)
+        self.assertIn("model_protocol_lab/big.py", str(caught.exception))
+
+    def test_genuine_members_digest_unchanged(self) -> None:
+        """Test genuine members digest unchanged."""
+        with tempfile.TemporaryDirectory() as tmp:
+            wheel = Path(tmp) / "x.whl"
+            _write_wheel(wheel, _wheel_members(Path(tmp)))
+            digests = release_build._member_digests(wheel)
+        self.assertEqual(set(digests), set(_wheel_members(Path(tmp))))
 
 
 class TestSurfaceCensus(unittest.TestCase):

@@ -81,6 +81,7 @@ import tomllib
 import zipfile
 from pathlib import Path
 from types import ModuleType
+from typing import BinaryIO
 
 _EXCLUDED_NAMES = {
     ".git",
@@ -232,20 +233,80 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+# Archive-reader ceilings for _member_digests, mirroring pack.py's
+# RTI-02 producer ceilings (and artifact_manifest's twin constants):
+# a member's uncompressed size, the member count, and the aggregate
+# uncompressed size. Reads stream under them and refuse by name over
+# them instead of materialising members unboundedly in memory.
+_MAX_MEMBER_BYTES = 64 * 1024 * 1024
+_MAX_MEMBERS = 1024
+_MAX_TOTAL_MEMBER_BYTES = 256 * 1024 * 1024
+
+
+def _digest_stream(stream: BinaryIO, name: str) -> tuple[str, int]:
+    """SHA-256 of one member, streamed in chunks under the member ceiling."""
+    digest = hashlib.sha256()
+    size = 0
+    while True:
+        chunk = stream.read(1024 * 1024)
+        if not chunk:
+            break
+        size += len(chunk)
+        if size > _MAX_MEMBER_BYTES:
+            raise SystemExit(
+                f"release build failed: archive member exceeds the "
+                f"{_MAX_MEMBER_BYTES}-byte member ceiling: {name}"
+            )
+        digest.update(chunk)
+    return digest.hexdigest(), size
+
+
 def _member_digests(path: Path) -> dict[str, str]:
     """Per-member content digests, for naming what differs on a mismatch."""
     members: dict[str, str] = {}
+    total = 0
+
+    def add(name: str, digest: str, size: int) -> None:
+        """Add."""
+        nonlocal total
+        members[name] = digest
+        total += size
+        if total > _MAX_TOTAL_MEMBER_BYTES:
+            raise SystemExit(
+                f"release build failed: archive members exceed the "
+                f"{_MAX_TOTAL_MEMBER_BYTES}-byte aggregate ceiling: {path.name}"
+            )
+
     if path.suffix == ".whl" or path.name.endswith(".whl"):
         with zipfile.ZipFile(path) as archive:
-            for info in archive.infolist():
-                members[info.filename] = hashlib.sha256(archive.read(info.filename)).hexdigest()
+            infos = archive.infolist()
+            if len(infos) > _MAX_MEMBERS:
+                raise SystemExit(
+                    f"release build failed: {path.name}: {len(infos)} members "
+                    f"exceeds the ceiling of {_MAX_MEMBERS}"
+                )
+            for info in infos:
+                if info.is_dir():
+                    add(info.filename, hashlib.sha256(b"").hexdigest(), 0)
+                    continue
+                with archive.open(info) as stream:
+                    digest, size = _digest_stream(stream, info.filename)
+                add(info.filename, digest, size)
     else:
         with tarfile.open(path, "r:gz") as archive:
-            for member in archive.getmembers():
+            infos = archive.getmembers()
+            if len(infos) > _MAX_MEMBERS:
+                raise SystemExit(
+                    f"release build failed: {path.name}: {len(infos)} members "
+                    f"exceeds the ceiling of {_MAX_MEMBERS}"
+                )
+            for member in infos:
                 if member.isfile():
                     extracted = archive.extractfile(member)
                     if extracted is not None:
-                        members[member.name] = hashlib.sha256(extracted.read()).hexdigest()
+                        with extracted:
+                            digest, size = _digest_stream(extracted, member.name)
+                        add(member.name, digest, size)
     return members
 
 

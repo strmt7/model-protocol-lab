@@ -49,6 +49,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tarfile
@@ -119,7 +120,7 @@ def parse_checkout_only(text: str) -> list[tuple[str, str]]:
         reason = reason.strip()
         if not sep or not reason:
             raise ScopeFailure(f"CHECKOUT_ONLY line {lineno} carries no reason: {raw!r}")
-        if not module.endswith(".py") or "/" in module:
+        if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*\.py", module):
             raise ScopeFailure(f"CHECKOUT_ONLY line {lineno} is not a test module: {raw!r}")
         if module in seen:
             raise ScopeFailure(f"CHECKOUT_ONLY lists {module} twice")
@@ -136,15 +137,30 @@ def layer_scope(layers_text: str) -> tuple[list[str], list[str]]:
     In scope for the sdist contract = base + posix layers (the dev
     suite). The hf layer needs the [hf] extra's environment and is
     excluded by layer, never by CHECKOUT_ONLY.
+
+    The shape is validated, not merely navigated: each layer must
+    be a list of module-name strings. A layer given as an object or
+    a string would otherwise be silently reinterpreted (keys, or
+    single characters) into a garbage module selection.
     """
     try:
         data = json.loads(layers_text)
-        layers = data["layers"]
-        in_scope = sorted(layers["base"]) + sorted(layers["posix"])
-        hf = sorted(layers["hf"])
-    except (ValueError, KeyError, TypeError) as error:
+    except ValueError as error:
         raise ScopeFailure(f"test_layers.json is malformed: {error}") from error
-    return in_scope, hf
+    if not isinstance(data, dict) or not isinstance(data.get("layers"), dict):
+        raise ScopeFailure("test_layers.json is malformed: no 'layers' object")
+    layers = data["layers"]
+
+    def modules(name: str) -> list[str]:
+        """Modules."""
+        value = layers.get(name)
+        if not isinstance(value, list) or not all(isinstance(m, str) for m in value):
+            raise ScopeFailure(
+                f"test_layers.json is malformed: layer {name!r} is not a list of module names"
+            )
+        return sorted(value)
+
+    return modules("base") + modules("posix"), modules("hf")
 
 
 def _run(
@@ -189,8 +205,15 @@ def run_scope(sdist: Path, source_tree: Path, work: Path, phase: str) -> list[st
     tmp = work / "tmp"
     tmp.mkdir(exist_ok=True)
     env = _clean_env(tmp)
-    with tarfile.open(sdist, "r:gz") as archive:
-        archive.extractall(work / "sdist", filter="data")
+    try:
+        with tarfile.open(sdist, "r:gz") as archive:
+            archive.extractall(work / "sdist", filter="data")
+    except (tarfile.TarError, OSError, EOFError) as error:
+        # The data filter fails closed on traversal members, escaping
+        # links and non-gzip input; the refusal is a ScopeFailure with
+        # a named message (as in artifact_manifest.rebuild_check),
+        # never a raw tarfile traceback out of the CLI.
+        raise ScopeFailure(f"sdist extraction refused (data filter): {error}") from error
     candidates = [path for path in (work / "sdist").iterdir() if path.is_dir()]
     if len(candidates) != 1:
         raise ScopeFailure(f"sdist extracted to an unexpected layout: {candidates}")

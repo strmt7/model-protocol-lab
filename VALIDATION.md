@@ -17,7 +17,7 @@ degrade there (checkpoint-template rendering does not: since
 W4/RR-10 it runs in an owned worker process whose deadline the
 parent enforces on every platform).
 
-- `python -m pytest -q -p no:cacheprovider` — **10222 tests collected**
+- `python -m pytest -q -p no:cacheprovider` — **10262 tests collected**
   (measured 2026-11-18, wave-12 repair push). Subtests numbered in the 73k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
@@ -829,7 +829,10 @@ reproducible from the repository root in a fresh virtual environment.
   `test_*.py` modules, the three named non-code test files, the six
   regenerated egg-info files, and the nine named root files. A stray
   file in the package tree, or any unexpected archive member, fails
-  the build with the member named. The surface census is pinned from
+  the build with the member named; entries and members are judged
+  by type as well as name, so a symlink, hardlink, FIFO or device —
+  in the package tree or in either archive — is named and refused
+  rather than invisible. The surface census is pinned from
   the source registries by the same gate: 12 CLI commands, 4 MCP
   tools, 29 catalog families, 65 report sections (57 dispatched + 8
   undispatched-with-reasons; the W0 audit's "62" was the count at

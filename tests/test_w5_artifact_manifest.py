@@ -32,6 +32,7 @@ import unittest
 import zipfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
@@ -575,6 +576,239 @@ def _closure(component: dict) -> str:
         if prop["name"] == "mpl:closure":
             return str(prop["value"])
     return ""
+
+
+class VerifyTotalityTests(_Fixture):
+    """BH13-4: malformed manifests fail named claims, never tracebacks.
+
+    The verifier's user story is checking a downloaded release's
+    receipt, so type-confused JSON is the expected hostile case:
+    every malformed shape must surface as a failed named claim.
+    """
+
+    def test_non_object_manifest_fails_readable_claim(self) -> None:
+        """Test non object manifest fails readable claim."""
+        path = self.dist / "artifact-manifest.json"
+        path.write_text(json.dumps(["not", "an", "object"]), encoding="utf-8")
+        claims = self.verify()
+        self.assertEqual(self.failed_claims(claims), ["manifest-readable"])
+
+    def test_string_artifact_entries_fail_present_claim(self) -> None:
+        """Test string artifact entries fail present claim."""
+        path = self.emit()
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["artifacts"] = ["wheel-name", "sdist-name"]
+        path.write_text(json.dumps(data), encoding="utf-8")
+        self.assertIn("artifacts-present", self.failed_claims(self.verify()))
+
+    def test_int_artifact_name_fails_present_claim(self) -> None:
+        """Test int artifact name fails present claim."""
+        path = self.emit()
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["artifacts"][0]["name"] = 7
+        path.write_text(json.dumps(data), encoding="utf-8")
+        self.assertIn("artifacts-present", self.failed_claims(self.verify()))
+
+    def test_string_package_fails_version_claims(self) -> None:
+        """Test string package fails version claims."""
+        path = self.emit()
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["package"] = "model-protocol-lab"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        failed = self.failed_claims(self.verify())
+        self.assertIn("package-version", failed)
+        self.assertIn("sbom-package", failed)
+
+    def test_non_utf8_wheel_metadata_fails_version_claim(self) -> None:
+        """Test non utf8 wheel metadata fails version claim."""
+        self.emit()
+        with zipfile.ZipFile(self.wheel, "w") as archive:
+            for member in _wheel_members():
+                payload: bytes | str = (
+                    b"\xff\xfe not utf-8"
+                    if member.endswith("/METADATA")
+                    else f"content of {member}\n"
+                )
+                archive.writestr(member, payload)
+        self.assertIn("package-version", self.failed_claims(self.verify()))
+
+
+class VerificationBindingTests(_Fixture):
+    """BH13-5: verify re-validates the embedded results it displays.
+
+    Emit enforces each embedded result's tool, pass status, artifact
+    name and hash; verify must enforce the same, so a manifest cannot
+    carry a failed (or foreign) verification record under a
+    fully-verified receipt.
+    """
+
+    def test_embedded_failed_result_fails_bindings(self) -> None:
+        """Test embedded failed result fails bindings."""
+        path = self.emit()
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["verification"]["origin_smoke"]["result"] = "failed"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        self.assertIn("verification-bindings", self.failed_claims(self.verify()))
+
+    def test_embedded_foreign_tool_fails_bindings(self) -> None:
+        """Test embedded foreign tool fails bindings."""
+        path = self.emit()
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["verification"]["sdist_scope"]["tool"] = "something_else"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        self.assertIn("verification-bindings", self.failed_claims(self.verify()))
+
+    def test_embedded_wrong_artifact_name_fails_bindings(self) -> None:
+        """Test embedded wrong artifact name fails bindings."""
+        path = self.emit()
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["verification"]["origin_smoke"]["artifact"]["name"] = "other.whl"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        self.assertIn("verification-bindings", self.failed_claims(self.verify()))
+
+
+class MemberCeilingTests(unittest.TestCase):
+    """BH13-6: _member_digests reads are ceiling-bound, refusing by name.
+
+    A crafted archive member must not amplify into unbounded memory:
+    the reader streams under ceilings mirroring pack.py's RTI-02
+    producer ceilings and refuses by name over a ceiling.
+    """
+
+    def test_member_ceiling_names_the_member(self) -> None:
+        """Test member ceiling names the member."""
+        with TemporaryDirectory() as tmp:
+            wheel = Path(tmp) / "x.whl"
+            with zipfile.ZipFile(wheel, "w", zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("model_protocol_lab/big.py", b"\0" * 4096)
+            with (
+                mock.patch.object(manifest, "_MAX_MEMBER_BYTES", 1024),
+                self.assertRaises(manifest.ManifestFailure) as caught,
+            ):
+                manifest._member_digests(wheel)
+        self.assertIn("model_protocol_lab/big.py", str(caught.exception))
+
+    def test_aggregate_ceiling_names_the_archive(self) -> None:
+        """Test aggregate ceiling names the archive."""
+        with TemporaryDirectory() as tmp:
+            wheel = Path(tmp) / "x.whl"
+            with zipfile.ZipFile(wheel, "w") as archive:
+                archive.writestr("model_protocol_lab/a.py", b"a" * 800)
+                archive.writestr("model_protocol_lab/b.py", b"b" * 800)
+            with (
+                mock.patch.object(manifest, "_MAX_MEMBER_BYTES", 4096),
+                mock.patch.object(manifest, "_MAX_TOTAL_MEMBER_BYTES", 1024),
+                self.assertRaises(manifest.ManifestFailure) as caught,
+            ):
+                manifest._member_digests(wheel)
+        self.assertIn("x.whl", str(caught.exception))
+
+    def test_count_ceiling_names_the_archive(self) -> None:
+        """Test count ceiling names the archive."""
+        with TemporaryDirectory() as tmp:
+            wheel = Path(tmp) / "x.whl"
+            with zipfile.ZipFile(wheel, "w") as archive:
+                for index in range(5):
+                    archive.writestr(f"model_protocol_lab/m{index}.py", b"x")
+            with (
+                mock.patch.object(manifest, "_MAX_MEMBERS", 3),
+                self.assertRaises(manifest.ManifestFailure) as caught,
+            ):
+                manifest._member_digests(wheel)
+        self.assertIn("x.whl", str(caught.exception))
+
+    def test_sdist_member_ceiling_names_the_member(self) -> None:
+        """Test sdist member ceiling names the member."""
+        with TemporaryDirectory() as tmp:
+            sdist = Path(tmp) / "x.tar.gz"
+            data = b"\0" * 4096
+            with tarfile.open(sdist, "w:gz") as archive:
+                info = tarfile.TarInfo("model_protocol_lab-0.2.0/model_protocol_lab/big.py")
+                info.size = len(data)
+                archive.addfile(info, io.BytesIO(data))
+            with (
+                mock.patch.object(manifest, "_MAX_MEMBER_BYTES", 1024),
+                self.assertRaises(manifest.ManifestFailure) as caught,
+            ):
+                manifest._member_digests(sdist)
+        self.assertIn("model_protocol_lab/big.py", str(caught.exception))
+
+
+class CeilingParityTests(_Fixture):
+    """BH13-6: the manifest reader's ceilings equal pack.py's RTI-02 values."""
+
+    def test_ceilings_match_pack(self) -> None:
+        """Test ceilings match pack."""
+        ceilings = manifest._pack_ceilings(self.source)
+        self.assertEqual(manifest._MAX_MEMBER_BYTES, ceilings["MAX_BUNDLE_FILE_BYTES"])
+        self.assertEqual(manifest._MAX_TOTAL_MEMBER_BYTES, ceilings["MAX_BUNDLE_TOTAL_BYTES"])
+        self.assertEqual(manifest._MAX_MEMBERS, ceilings["MAX_BUNDLE_ENTRIES"])
+
+    def test_verify_fails_members_claim_over_ceiling(self) -> None:
+        """Test verify fails members claim over ceiling."""
+        self.emit()
+        with mock.patch.object(manifest, "_MAX_MEMBER_BYTES", 8):
+            failed = self.failed_claims(self.verify())
+        self.assertIn("artifact-members", failed)
+
+
+class SpdxExpressionTests(unittest.TestCase):
+    """BH13-7: the SPDX validator implements the expression grammar.
+
+    Dangling, doubled or bare operators are not expressions; a
+    malformed license_expression falls through the cascade to
+    classifiers / NOASSERTION instead of landing in the SBOM as an
+    invalid license id.
+    """
+
+    def test_valid_expressions(self) -> None:
+        """Test valid expressions."""
+        for text in (
+            "MIT",
+            "MIT+",
+            "MIT OR Apache-2.0",
+            "Apache-2.0 AND MIT",
+            "(MIT OR Apache-2.0) AND BSD-3-Clause",
+            "BSD-3-Clause AND 0BSD AND MIT",
+            "Apache-2.0 WITH LLVM-exception",
+            "GPL-2.0-only WITH Classpath-exception-2.0",
+        ):
+            self.assertTrue(manifest._is_spdx_expression(text), text)
+
+    def test_invalid_expressions(self) -> None:
+        """Test invalid expressions."""
+        for text in (
+            "",
+            "OR",
+            "AND",
+            "WITH MIT",
+            "MIT OR",
+            "OR MIT",
+            "MIT AND",
+            "MIT AND AND MIT",
+            "MIT OR OR MIT",
+            "MIT WITH",
+            "MIT WITH AND",
+            "MIT OR (Apache-2.0",
+            "MIT)",
+            "()",
+            "FooBar",
+        ):
+            self.assertFalse(manifest._is_spdx_expression(text), text)
+
+    def test_bare_operator_resolves_unresolved(self) -> None:
+        """Test bare operator resolves unresolved."""
+        info = {"license_expression": "OR", "license": None, "classifiers": []}
+        self.assertEqual(manifest._resolve_license(info), (None, "unresolved"))
+
+    def test_bare_operator_falls_through_to_classifier(self) -> None:
+        """Test bare operator falls through to classifier."""
+        info = {
+            "license_expression": "OR",
+            "license": None,
+            "classifiers": ["License :: OSI Approved :: MIT License"],
+        }
+        self.assertEqual(manifest._resolve_license(info), ("MIT", "pypi:classifier"))
 
 
 class WorkflowTests(unittest.TestCase):

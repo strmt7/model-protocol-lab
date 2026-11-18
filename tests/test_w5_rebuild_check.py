@@ -166,6 +166,18 @@ class RebuildCheckTests(unittest.TestCase):
             self._check(self._copy_builder(self.wheel))
         self.assertIn("does not match the manifest", str(caught.exception))
 
+    def test_non_object_manifest_refused(self) -> None:
+        """BH13-4: a non-object manifest is a ManifestFailure, not a traceback."""
+        self.manifest_path.write_text(json.dumps(["x"]), encoding="utf-8")
+        with self.assertRaises(manifest.ManifestFailure):
+            self._check(self._copy_builder(self.wheel))
+
+    def test_string_artifact_entries_refused(self) -> None:
+        """BH13-4: type-confused artifact entries refuse by name."""
+        self.manifest_path.write_text(json.dumps({"artifacts": ["x"]}), encoding="utf-8")
+        with self.assertRaises(manifest.ManifestFailure):
+            self._check(self._copy_builder(self.wheel))
+
     def test_traversal_member_fails_closed(self) -> None:
         """Test traversal member fails closed."""
         _write_sdist(self.sdist, {"../evil.txt": "x\n"})

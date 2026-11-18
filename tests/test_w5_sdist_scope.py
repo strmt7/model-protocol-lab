@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import ast
 import io
+import json
 import sys
 import tarfile
 import unittest
@@ -168,6 +169,49 @@ class ParserTests(unittest.TestCase):
         with self.assertRaises(scope.ScopeFailure):
             scope.layer_scope("{not json")
 
+    def test_backslash_module_rejected(self) -> None:
+        """BH13-9: a backslash path is not a module name."""
+        with self.assertRaises(scope.ScopeFailure):
+            scope.parse_checkout_only("..\\test_a.py | windows path, not a module\n")
+
+    def test_space_module_rejected(self) -> None:
+        """BH13-9: a space-containing name is not a module name."""
+        with self.assertRaises(scope.ScopeFailure):
+            scope.parse_checkout_only("test a.py | not a module name\n")
+
+    def test_layer_scope_rejects_dict_layer(self) -> None:
+        """BH13-9: a layer given as an object is malformed, not a key list."""
+        text = json.dumps({"layers": {"base": {"test_a.py": 1}, "posix": [], "hf": []}})
+        with self.assertRaises(scope.ScopeFailure):
+            scope.layer_scope(text)
+
+    def test_layer_scope_rejects_string_layer(self) -> None:
+        """BH13-9: a layer given as a string is not a list of modules."""
+        text = json.dumps({"layers": {"base": "test_a.py", "posix": [], "hf": []}})
+        with self.assertRaises(scope.ScopeFailure):
+            scope.layer_scope(text)
+
+    def test_layer_scope_rejects_int_elements(self) -> None:
+        """BH13-9: layer elements must be module-name strings."""
+        text = json.dumps({"layers": {"base": [1, 2], "posix": [], "hf": []}})
+        with self.assertRaises(scope.ScopeFailure):
+            scope.layer_scope(text)
+
+    def test_layer_scope_accepts_genuine_shape(self) -> None:
+        """Test layer scope accepts genuine shape."""
+        text = json.dumps(
+            {
+                "layers": {
+                    "base": ["test_b.py", "test_a.py"],
+                    "posix": ["test_c.py"],
+                    "hf": ["test_h.py"],
+                }
+            }
+        )
+        in_scope, hf = scope.layer_scope(text)
+        self.assertEqual(in_scope, ["test_a.py", "test_b.py", "test_c.py"])
+        self.assertEqual(hf, ["test_h.py"])
+
 
 class RunnerGateTests(unittest.TestCase):
     """The runner refuses artifacts that do not carry the contract."""
@@ -198,6 +242,56 @@ class RunnerGateTests(unittest.TestCase):
             with self.assertRaises(scope.ScopeFailure) as caught:
                 scope.run_scope(fake, REPO_ROOT, Path(tmp) / "work", "collect")
         self.assertIn("CHECKOUT_ONLY", str(caught.exception))
+
+    def test_traversal_sdist_is_a_scope_failure(self) -> None:
+        """BH13-8: a traversal member fails as ScopeFailure, not a traceback.
+
+        The data filter refuses the member; run_scope wraps tarfile's
+        refusal the way artifact_manifest.rebuild_check does, so the
+        CLI reports a named failure instead of a raw traceback.
+        """
+        import tempfile
+
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+            info = tarfile.TarInfo("../evil.py")
+            payload = b"# evil\n"
+            info.size = len(payload)
+            archive.addfile(info, io.BytesIO(payload))
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "fake.tar.gz"
+            fake.write_bytes(buffer.getvalue())
+            with self.assertRaises(scope.ScopeFailure) as caught:
+                scope.run_scope(fake, REPO_ROOT, Path(tmp) / "work", "collect")
+        self.assertIn("extraction refused", str(caught.exception))
+
+    def test_non_gzip_sdist_is_a_scope_failure(self) -> None:
+        """BH13-8: non-gzip input fails as ScopeFailure, not a traceback."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "fake.tar.gz"
+            fake.write_bytes(b"this is not a gzip stream")
+            with self.assertRaises(scope.ScopeFailure) as caught:
+                scope.run_scope(fake, REPO_ROOT, Path(tmp) / "work", "collect")
+        self.assertIn("extraction refused", str(caught.exception))
+
+    def test_escaping_symlink_sdist_is_a_scope_failure(self) -> None:
+        """BH13-8: an escaping symlink member fails as ScopeFailure."""
+        import tempfile
+
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+            info = tarfile.TarInfo("model_protocol_lab-0.2.0/link")
+            info.type = tarfile.SYMTYPE
+            info.linkname = "/etc/passwd"
+            archive.addfile(info)
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "fake.tar.gz"
+            fake.write_bytes(buffer.getvalue())
+            with self.assertRaises(scope.ScopeFailure) as caught:
+                scope.run_scope(fake, REPO_ROOT, Path(tmp) / "work", "collect")
+        self.assertIn("extraction refused", str(caught.exception))
 
 
 class WiringTests(unittest.TestCase):

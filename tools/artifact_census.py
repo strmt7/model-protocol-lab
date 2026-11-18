@@ -16,7 +16,11 @@ checks classes, not a frozen member list):
   ``model_protocol_lab/`` is a ``.py`` module or ``py.typed``.
   Anything else (weights, notes, loose ``.pyc``) is named and the
   build is refused, whether or not the backend would have packaged
-  it. Build-excluded directories (``__pycache__`` and the rest of
+  it. Entries are judged by type as well as name: a symlink, FIFO,
+  socket or device in the package tree is named as non-regular and
+  refused, so the build's refusal vocabulary is never escaped by a
+  special file dying inside the copy. Build-excluded directories
+  (``__pycache__`` and the rest of
   ``release_build._EXCLUDED_NAMES``, pinned equal by test) do not
   count.
 - Wheel: members are the package ``.py`` files + ``py.typed`` + the
@@ -35,7 +39,9 @@ checks classes, not a frozen member list):
   content; the ``tests/__init__.py`` and underscore-prefixed test
   helpers the checkout carries are not shipped by setuptools and
   are not required (the rule is ``test_*.py``, measured, not a
-  hardcoded exception list).
+  hardcoded exception list). Every member is enumerated, not only
+  regular files: a symlink, hardlink, FIFO or device member is a
+  named finding with its kind and target, never invisible.
 
 ``tools/release_build.py`` calls these checks on every build: the
 source tree before building, the built wheel and sdist before their
@@ -51,6 +57,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import stat
 import sys
 import tarfile
 import tomllib
@@ -150,12 +157,58 @@ def _test_modules(source: Path) -> set[str]:
     }
 
 
+def _package_entries(source: Path) -> list[Path]:
+    """Every entry under the package (dirs and files), build-pruned.
+
+    Directory entries are included so a symlinked directory is
+    judged itself, not silently skipped by the walk (os.walk does
+    not descend into symlinked directories, so without this the
+    entry is invisible).
+    """
+    package = source / _PACKAGE
+    if not package.is_dir():
+        return []
+    found: list[Path] = []
+    for current, dirs, files in os.walk(package):
+        dirs[:] = [d for d in dirs if d not in _EXCLUDED_NAMES and not d.endswith(".egg-info")]
+        for name in dirs + files:
+            found.append(Path(current) / name)
+    return sorted(found)
+
+
+def _non_regular_kind(path: Path) -> str | None:
+    """Kind of a non-regular filesystem entry, or None if regular.
+
+    Regular files and real directories return None. A symlink is
+    named as such whatever it points at: the build copies the tree,
+    and a link's target is not part of the declared tree.
+    """
+    if path.is_symlink():
+        return "symlink"
+    mode = path.lstat().st_mode
+    if stat.S_ISREG(mode) or stat.S_ISDIR(mode):
+        return None
+    if stat.S_ISFIFO(mode):
+        return "fifo"
+    if stat.S_ISSOCK(mode):
+        return "socket"
+    if stat.S_ISCHR(mode) or stat.S_ISBLK(mode):
+        return "device"
+    return "not a regular file"
+
+
 def check_source_tree(source: Path) -> list[str]:
     """Unexpected files in the package tree, as census findings."""
     findings: list[str] = []
-    for relative in sorted(_package_files(source)):
-        name = relative.rsplit("/", 1)[-1]
-        if name != "py.typed" and not name.endswith(".py"):
+    for path in _package_entries(source):
+        relative = path.relative_to(source).as_posix()
+        kind = _non_regular_kind(path)
+        if kind is not None:
+            findings.append(f"source:non-regular: {relative}: {kind}")
+            continue
+        if path.is_dir():
+            continue
+        if path.name != "py.typed" and not path.name.endswith(".py"):
             findings.append(f"source:unexpected: {relative}")
     return findings
 
@@ -181,6 +234,11 @@ def check_wheel(wheel: Path, source: Path) -> list[str]:
             and parts[0] == _PACKAGE
             and (parts[1] == "py.typed" or parts[1].endswith(".py"))
         ):
+            # Package shape is not enough: the member must be one of
+            # the source tree's declared package files (the set check
+            # the sdist census already enforces in both directions).
+            if member not in expected:
+                findings.append(f"wheel:unexpected: {member}")
             continue
         if len(parts) >= 2 and parts[0].endswith(".dist-info"):
             prefixes.add(parts[0])
@@ -197,6 +255,19 @@ def check_wheel(wheel: Path, source: Path) -> list[str]:
     return findings
 
 
+def _tar_member_kind(info: tarfile.TarInfo) -> str:
+    """Kind of a non-regular tar member, with its target where it has one."""
+    if info.issym():
+        return f"symlink to {info.linkname}"
+    if info.islnk():
+        return f"hardlink to {info.linkname}"
+    if info.isfifo():
+        return "fifo"
+    if info.isdev():
+        return "device"
+    return f"member type {info.type!r}"
+
+
 def check_sdist(sdist: Path, source: Path) -> list[str]:
     """Census findings for an sdist against the source tree."""
     findings: list[str] = []
@@ -208,13 +279,24 @@ def check_sdist(sdist: Path, source: Path) -> list[str]:
     expected |= _test_modules(source)
     expected |= set(_TEST_FILES)
     with tarfile.open(sdist, "r:gz") as archive:
-        members = [member.name for member in archive.getmembers() if member.isfile()]
+        infos = archive.getmembers()
     tops: set[str] = set()
     relative: list[str] = []
-    for member in members:
-        parts = member.split("/")
+    non_regular: list[tuple[str, str]] = []
+    for info in infos:
+        parts = info.name.split("/")
         tops.add(parts[0])
-        relative.append("/".join(parts[1:]) if len(parts) > 1 else parts[0])
+        name = "/".join(parts[1:]) if len(parts) > 1 else parts[0]
+        if info.isdir():
+            continue
+        if not info.isfile():
+            # A link, FIFO or device member is a finding with its
+            # kind and target — enumerating only regular files made
+            # it invisible, and a relative symlink can materialise
+            # through extraction into an undeclared file downstream.
+            non_regular.append((name, _tar_member_kind(info)))
+            continue
+        relative.append(name)
     for top in sorted(tops):
         if top != expected_top:
             findings.append(f"sdist:version: {top} != {expected_top}")
@@ -227,6 +309,8 @@ def check_sdist(sdist: Path, source: Path) -> list[str]:
         if name in expected:
             continue
         findings.append(f"sdist:unexpected: {name}")
+    for name, kind in non_regular:
+        findings.append(f"sdist:non-regular: {name}: {kind}")
     for member in sorted(expected - seen):
         findings.append(f"sdist:missing: {member}")
     return findings
