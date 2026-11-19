@@ -42,9 +42,11 @@ commit ``fd27b2034905f8dadd8bd6d2cc44595f4929d391``); identity binds
 the commit prefix reported in ``build_info`` (the build counter is
 recorded verbatim but is an acquisition artefact — a shallow clone
 reports ``b1`` for the same commit), the resolved model path, and
-the checkpoint's SHA-256. The vLLM arm is designed but not shipped
-in this cycle: the request/record schema already carries its fields
-(always null on the llama arm) so the schema never changes shape.
+the checkpoint's SHA-256. The vLLM arm ships as
+:class:`VllmOfflineBackend` (pinned window: vLLM 0.33.0, CPU,
+from-source build), driving the engine in-process; the two arms
+share the frozen record schema, each populating only the fields
+its stack can report.
 """
 
 from __future__ import annotations
@@ -54,8 +56,10 @@ import contextlib
 import hashlib
 import http.client
 import json
+import os
 import struct
 import threading
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterable, Mapping
@@ -82,6 +86,7 @@ __all__ = [
     "ExecutionCancelled",
     "LlamacppHttpBackend",
     "RecordSink",
+    "VllmOfflineBackend",
     "StackCapabilities",
     "StackIdentity",
     "StackObservation",
@@ -1342,6 +1347,736 @@ class LlamacppHttpBackend:
                 detail="stack_execution_failed",
             )
         return observation
+
+
+# ---------------------------------------------------------------------------
+# vLLM offline backend (pinned window: vLLM 0.33.0, CPU, from-source)
+#
+# The engine runs in-process (the offline ``LLM`` surface), so there
+# is no endpoint posture to fingerprint; identity instead binds the
+# resolved library versions, a digest of the module's install path,
+# the engine's own config read-backs, and the Tier-A environment
+# pins — every value a digest or a small scalar, because the
+# identity config passes verbatim into the default export (the
+# closed key set is ruled in docs/SERVING_BACKENDS_DESIGN.md).
+# Construction order is part of the contract: the six environment
+# pins are set into ``os.environ`` before ``vllm`` is imported (the
+# library reads them at import/init time), the checkpoint is
+# validated locally, and the A8(iii) one-configuration-per-process
+# guard refuses a second construction whose effective environment
+# digest differs from the first — an in-process engine cannot be
+# re-pinned after the fact.
+# ---------------------------------------------------------------------------
+
+#: The Tier-A environment pins for the vLLM arm, set (never
+#: ``setdefault``) into ``os.environ`` before the library is
+#: imported: CPU target, no usage statistics or tracking, offline
+#: hub, no telemetry, and the v1 engine in-process (multiprocessing
+#: off — the abort surface and the read-backs are same-process).
+_VLLM_ENV_PINS = {
+    "VLLM_TARGET_DEVICE": "cpu",
+    "VLLM_NO_USAGE_STATS": "1",
+    "VLLM_DO_NOT_TRACK": "1",
+    "HF_HUB_OFFLINE": "1",
+    "HF_HUB_DISABLE_TELEMETRY": "1",
+    "VLLM_ENABLE_V1_MULTIPROCESSING": "0",
+}
+
+#: The admitted vLLM release (the from-source CPU window the R3
+#: cycle-2 probes admitted). Compared on the release segment: the
+#: installed distribution version carries a local suffix
+#: (``0.33.0+cpu``) that ``vllm.__version__`` does not.
+_VLLM_ADMITTED_RELEASE = "0.33.0"
+
+#: SamplingParams fields the adapter reads back, in canonical
+#: order: the Tier-A tuple's keys plus the request-carried fields.
+_VLLM_SAMPLING_FIELDS = (
+    "n",
+    "temperature",
+    "top_p",
+    "top_k",
+    "min_p",
+    "repetition_penalty",
+    "presence_penalty",
+    "frequency_penalty",
+    "seed",
+    "detokenize",
+    "skip_special_tokens",
+    "logprobs",
+    "max_tokens",
+    "min_tokens",
+    "stop",
+    "stop_token_ids",
+    "ignore_eos",
+    "include_stop_str_in_output",
+)
+
+#: A8(iii) guard state: the effective-environment digest of the
+#: first vLLM construction in this process, or None.
+_VLLM_ENV_DIGEST: str | None = None
+
+
+def _vllm_env_digest() -> str:
+    """Digest of the effective vLLM environment: the six pins as
+    read back from ``os.environ``, plus the presence of the legacy
+    ``VLLM_CPU_KVCACHE_SPACE`` variable (never a Tier-A input — the
+    sizing kwarg is — but its presence changes engine behaviour, so
+    it is part of the configuration identity)."""
+    payload: dict[str, Any] = {key: os.environ.get(key) for key in _VLLM_ENV_PINS}
+    payload["VLLM_CPU_KVCACHE_SPACE_present"] = "VLLM_CPU_KVCACHE_SPACE" in os.environ
+    return sha256_hex(canonical_json(payload).encode("utf-8"))
+
+
+def _release_segment(version: str) -> str:
+    return version.split("+", 1)[0]
+
+
+def _read_declared_eos_ids(model_dir: Path) -> tuple[int, ...]:
+    """The declared EOS union from ``generation_config.json`` and
+    ``config.json`` (mirrors the llama rule: the union of what the
+    checkpoint declares, from whichever file declares it)."""
+    found: set[int] = set()
+    for name in ("generation_config.json", "config.json"):
+        try:
+            payload = json.loads((model_dir / name).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if type(payload) is not dict:
+            continue
+        raw = payload.get("eos_token_id")
+        values = raw if type(raw) is list else [raw]
+        for value in values:
+            if type(value) is int and not isinstance(value, bool) and value >= 0:
+                found.add(value)
+    return tuple(sorted(found))
+
+
+def _resolve_max_model_len(model_dir: Path, explicit: int | None) -> int:
+    """Q-V3: the context window is the checkpoint's declared value
+    (``max_position_embeddings`` / ``n_positions`` /
+    ``model_max_length``), else the explicit caller value, else
+    construction fails — never a silent default."""
+    if explicit is not None:
+        if type(explicit) is not int or isinstance(explicit, bool) or explicit <= 0:
+            raise ValueError("stack_checkpoint_unavailable")
+        return explicit
+    try:
+        payload = json.loads((model_dir / "config.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        payload = None
+    if type(payload) is dict:
+        for key in ("max_position_embeddings", "n_positions", "model_max_length"):
+            value = payload.get(key)
+            if type(value) is int and not isinstance(value, bool) and value > 0:
+                return value
+    raise ValueError("stack_checkpoint_unavailable")
+
+
+def _reported_count(output: Any, name: str) -> int | None:
+    """A non-negative int quantity the engine reported, or None
+    (absent, mistyped, and negative reports are all unreported)."""
+    value = getattr(output, name, None)
+    if type(value) is int and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
+
+
+def _failed_observation(detail: str) -> StackObservation:
+    """A non-executed cell's observation in the failure vocabulary."""
+    return StackObservation(
+        returned_ids=None,
+        finish_class="unclassified",
+        stop_winner=None,
+        cache_n_reported=None,
+        tokens_cached_reported=None,
+        tokens_evaluated_reported=None,
+        returned_text_digest=None,
+        server_detok_digest=None,
+        config_echo_digest=None,
+        detail=detail,
+    )
+
+
+class VllmOfflineBackend:
+    """An :class:`ExecutionBackend` driving vLLM's offline engine.
+
+    Construction validates the checkpoint directory locally (file
+    manifest, declared EOS union, context-window resolution) and
+    pins the Tier-A environment; :meth:`probe` imports the library,
+    constructs the engine exactly once, and runs gates G1–G4 plus
+    the abort conformance cell before freezing the identity.
+    """
+
+    def __init__(
+        self,
+        model_dir: Path,
+        *,
+        tokenizer: Any,
+        max_model_len: int | None = None,
+        kv_cache_memory_bytes: int,
+        hardware_class: str = "cpu",
+        abort_delay_s: float = 2.0,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        global _VLLM_ENV_DIGEST
+        if hardware_class not in HARDWARE_CLASSES:
+            raise ValueError("stack_checkpoint_unavailable")
+        if (
+            type(kv_cache_memory_bytes) is not int
+            or isinstance(kv_cache_memory_bytes, bool)
+            or kv_cache_memory_bytes <= 0
+        ):
+            raise ValueError("stack_checkpoint_unavailable")
+        model_dir = Path(model_dir)
+        if not model_dir.is_dir():
+            raise ValueError("stack_checkpoint_unavailable")
+        from .backends import _manifest
+
+        names = tuple(sorted(entry.name for entry in model_dir.iterdir() if entry.is_file()))
+        if not names:
+            raise ValueError("stack_checkpoint_unavailable")
+        try:
+            manifest = _manifest(model_dir, names)
+        except (OSError, ValueError) as exc:
+            raise ValueError("stack_checkpoint_unavailable") from exc
+        declared_eos_ids = _read_declared_eos_ids(model_dir)
+        if not declared_eos_ids:
+            raise ValueError("stack_checkpoint_unavailable")
+        resolved_max_model_len = _resolve_max_model_len(model_dir, max_model_len)
+        # Pin the environment before anything can import vllm, then
+        # apply the A8(iii) guard on the read-back digest.
+        for key, value in _VLLM_ENV_PINS.items():
+            os.environ[key] = value
+        digest = _vllm_env_digest()
+        if _VLLM_ENV_DIGEST is not None and digest != _VLLM_ENV_DIGEST:
+            raise ValueError("stack_config_unpinned")
+        _VLLM_ENV_DIGEST = digest
+        self._model_dir = model_dir
+        self._tokenizer = tokenizer
+        self._manifest = manifest
+        self._checkpoint_digest = sha256_hex(canonical_json(manifest).encode("utf-8"))
+        self._checkpoint_bytes = sum(int(entry["bytes"]) for entry in manifest)
+        self._declared_eos_ids = declared_eos_ids
+        self._max_model_len = resolved_max_model_len
+        self._kv_cache_memory_bytes = kv_cache_memory_bytes
+        self._hardware_class = hardware_class
+        self._abort_delay_s = abort_delay_s
+        self._sleep = sleep
+        self._llm: Any = None
+        self._engine_tokenizer: Any = None
+        self._identity: StackIdentity | None = None
+        self._capabilities: StackCapabilities | None = None
+        self.identity: StackIdentity | None = None
+
+    # -- probe (G1–G4 + the abort cell) ------------------------------------
+
+    def probe(self) -> StackIdentity:
+        if self._identity is not None:
+            return self._identity
+        try:
+            import vllm
+        except Exception as exc:
+            raise ValueError("stack_unavailable") from exc
+        import importlib.metadata
+
+        try:
+            meta_version = importlib.metadata.version("vllm")
+            torch_version = importlib.metadata.version("torch")
+            transformers_version = importlib.metadata.version("transformers")
+        except Exception as exc:
+            raise ValueError("stack_identity_unavailable") from exc
+        lib_version = str(getattr(vllm, "__version__", ""))
+        # G1: the admitted window, cross-checked between the
+        # distribution metadata and the library's own version.
+        if _release_segment(meta_version) != _VLLM_ADMITTED_RELEASE or _release_segment(
+            lib_version
+        ) != _release_segment(meta_version):
+            raise ValueError("stack_identity_unavailable")
+        try:
+            from vllm.platforms import current_platform
+
+            device_type = str(getattr(current_platform, "device_type", ""))
+            platform_class = type(current_platform).__name__
+        except Exception as exc:
+            raise ValueError("stack_identity_unavailable") from exc
+        if not device_type or platform_class == "UnspecifiedPlatform":
+            raise ValueError("stack_identity_unavailable")
+        try:
+            llm = vllm.LLM(
+                model=str(self._model_dir),
+                enforce_eager=True,
+                seed=0,
+                max_num_seqs=1,
+                max_model_len=self._max_model_len,
+                enable_prefix_caching=True,
+                tensor_parallel_size=1,
+                kv_cache_memory_bytes=self._kv_cache_memory_bytes,
+            )
+        except Exception as exc:
+            raise ValueError("stack_unavailable") from exc
+        engine = self._read_engine_config(llm)
+        env_readback = {key: os.environ.get(key) for key in _VLLM_ENV_PINS}
+        if env_readback != dict(_VLLM_ENV_PINS):
+            raise ValueError("stack_config_unpinned")
+        default_params_digest = self._default_params_digest(llm)
+        detokenizer_variant = self._detokenizer_variant(llm)
+        sentinel_ids = self._encode_sentinel()
+        self._gate_g3_exact_ids(llm, vllm, sentinel_ids)
+        self._gate_g4_tokenizer(llm, sentinel_ids)
+        abort_probe = self._run_abort_probe(llm, sentinel_ids)
+        config: dict[str, Any] = {
+            "protocol": PROTOCOL_VERSION,
+            "stack": VLLM_STACK,
+            "vllm_version": meta_version,
+            "torch_version": torch_version,
+            "transformers_version": transformers_version,
+            "vllm_module_digest": sha256_hex(
+                os.path.abspath(str(getattr(vllm, "__file__", ""))).encode("utf-8")
+            ),
+            "platform": {"device_type": device_type, "platform_class": platform_class},
+            "env": env_readback,
+            "engine": engine,
+            "default_sampling_params_digest": default_params_digest,
+            "detokenizer_variant": detokenizer_variant,
+            "declared_eos_ids": list(self._declared_eos_ids),
+            "tier_a_vllm": tier_a_sampling_params_vllm(_PROBE_SEED),
+            "abort_probe": abort_probe,
+        }
+        identity = StackIdentity(
+            stack=VLLM_STACK,
+            stack_version=meta_version,
+            checkpoint_digest=self._checkpoint_digest,
+            checkpoint_bytes=self._checkpoint_bytes,
+            tokenizer_fingerprint=_tokenizer_fingerprint(self._model_dir),
+            hardware_class=self._hardware_class,
+            declared_eos_ids=self._declared_eos_ids,
+            config=config,
+            config_fingerprint=config_fingerprint_for(config),
+        )
+        self._llm = llm
+        self._identity = identity
+        self.identity = identity
+        self._capabilities = StackCapabilities(
+            raw_token_ids=True,
+            stop_token_ids=True,
+            cached_token_reporting=True,
+            token_id_echo=True,
+            prompt_echo=True,
+            min_tokens=True,
+            include_stop_str_in_output=True,
+        )
+        return identity
+
+    def _read_engine_config(self, llm: Any) -> dict[str, Any]:
+        """G2: the engine block, read back from the constructed
+        engine's own config — never the constructor arguments."""
+        try:
+            vllm_config = llm.llm_engine.vllm_config
+            model_config = vllm_config.model_config
+            cache_config = vllm_config.cache_config
+            max_model_len = model_config.max_model_len
+            dtype_resolved = str(model_config.dtype).removeprefix("torch.")
+            block_size = cache_config.block_size
+            num_gpu_blocks = cache_config.num_gpu_blocks
+            kv_bytes = cache_config.kv_cache_memory_bytes
+        except Exception as exc:
+            raise ValueError("stack_config_unpinned") from exc
+        if (
+            type(max_model_len) is not int
+            or max_model_len != self._max_model_len
+            or not dtype_resolved
+            or type(block_size) is not int
+            or block_size <= 0
+            or type(num_gpu_blocks) is not int
+            or num_gpu_blocks <= 0
+            or type(kv_bytes) is not int
+            or kv_bytes <= 0
+        ):
+            raise ValueError("stack_config_unpinned")
+        return {
+            "checkpoint_digest": self._checkpoint_digest,
+            "seed": 0,
+            "enforce_eager": True,
+            "max_num_seqs": 1,
+            "max_model_len": max_model_len,
+            "enable_prefix_caching": True,
+            "dtype_resolved": dtype_resolved,
+            "kv_cache_memory_bytes": kv_bytes,
+            "kv_cache_sizing_input": {"kwarg_bytes": self._kv_cache_memory_bytes},
+            "block_size": block_size,
+            "num_gpu_blocks": num_gpu_blocks,
+        }
+
+    def _default_params_digest(self, llm: Any) -> str:
+        """G2: digest of the engine's default sampling params, read
+        back field by field (the library defaults are the trap —
+        temperature 1.0 and max_tokens 16 ride along unless every
+        request pins its own tuple, which Tier-A does)."""
+        try:
+            defaults = llm.get_default_sampling_params()
+            fields = {name: getattr(defaults, name) for name in _VLLM_SAMPLING_FIELDS}
+            return sha256_hex(canonical_json(fields).encode("utf-8"))
+        except Exception as exc:
+            raise ValueError("stack_config_unpinned") from exc
+
+    def _detokenizer_variant(self, llm: Any) -> str:
+        """The engine's detokenizer class name, decided by the
+        engine's own factory predicate on its own tokenizer."""
+        try:
+            from vllm.v1.engine.detokenizer import uses_fast_detokenizer
+
+            tokenizer = llm.llm_engine.output_processor.tokenizer
+            if uses_fast_detokenizer(tokenizer):
+                return "FastIncrementalDetokenizer"
+            return "SlowIncrementalDetokenizer"
+        except Exception as exc:
+            raise ValueError("stack_config_unpinned") from exc
+
+    def _encode_sentinel(self) -> tuple[int, ...]:
+        try:
+            ids = tuple(int(token) for token in self._tokenizer.encode(SENTINEL_TEXT))
+        except Exception as exc:
+            raise ValueError("stack_identity_unavailable") from exc
+        if len(ids) < 2:
+            raise ValueError("stack_identity_unavailable")
+        return ids
+
+    def _gate_g3_exact_ids(self, llm: Any, vllm_module: Any, sentinel_ids: tuple[int, ...]) -> None:
+        """G3 (exact-ids form): the engine echoes the prompt token
+        ids verbatim on the sentinel — the inverse of the llama
+        arm's text-form echo."""
+        params = self._build_sampling_params(
+            vllm_module=vllm_module,
+            request=StackRequest(
+                prompt_ids=sentinel_ids,
+                max_new_tokens=_PROBE_MAX_NEW_TOKENS,
+                seed=_PROBE_SEED,
+            ),
+        )
+        if params is None:
+            raise ValueError("stack_config_unpinned")
+        try:
+            outputs = llm.generate(
+                [self._tokens_prompt(vllm_module, sentinel_ids, None)],
+                params,
+                use_tqdm=False,
+            )
+            echoed = list(outputs[0].prompt_token_ids)
+        except Exception as exc:
+            raise ValueError("stack_identity_unavailable") from exc
+        if echoed != list(sentinel_ids):
+            raise ValueError("stack_identity_unavailable")
+
+    def _gate_g4_tokenizer(self, llm: Any, sentinel_ids: tuple[int, ...]) -> None:
+        """G4: the engine tokenizer and the lab tokenizer agree on
+        the sentinel, in both directions."""
+        try:
+            engine_tokenizer = llm.get_tokenizer()
+            engine_ids = tuple(int(token) for token in engine_tokenizer.encode(SENTINEL_TEXT))
+            engine_text = engine_tokenizer.decode(list(sentinel_ids))
+            local_text = self._tokenizer.decode(list(sentinel_ids))
+        except Exception as exc:
+            raise ValueError("stack_identity_unavailable") from exc
+        if (
+            engine_ids != sentinel_ids
+            or engine_text != SENTINEL_TEXT
+            or local_text != SENTINEL_TEXT
+        ):
+            raise ValueError("stack_identity_unavailable")
+        self._engine_tokenizer = engine_tokenizer
+
+    def _run_abort_probe(self, llm: Any, sentinel_ids: tuple[int, ...]) -> dict[str, Any]:
+        """The abort conformance cell (Step 4): enqueue the sentinel
+        at max_tokens=256, wait on the generate-family channel in a
+        daemon thread, abort at the injected delay, and read the
+        terminal from the returned outputs. The outcome degrades
+        the claim, never the probe: any failure records
+        ``terminal_observed: false``."""
+        outcome: dict[str, Any] = {
+            "surface": "llm_engine.abort_request",
+            "terminal_channel": "generate_family",
+            "terminal_observed": False,
+            "finish_reason": None,
+            "returned_tokens": None,
+            "elapsed_s": 0.0,
+        }
+        started = time.monotonic()
+        probe_error: list[Exception] = []
+        try:
+            import vllm
+
+            params = vllm.SamplingParams(
+                temperature=0.0,
+                top_p=1.0,
+                top_k=0,
+                seed=_PROBE_SEED,
+                max_tokens=256,
+                n=1,
+            )
+            rids = llm.enqueue([vllm.TokensPrompt(prompt_token_ids=list(sentinel_ids))], params)
+            holder: dict[str, Any] = {}
+
+            def _wait() -> None:
+                try:
+                    holder["outs"] = llm.wait_for_completion(use_tqdm=False)
+                except Exception:  # noqa: BLE001 -- a failed wait is a failed cell, recorded as no terminal
+                    holder["outs"] = None
+
+            thread = threading.Thread(target=_wait, daemon=True)
+            thread.start()
+            self._sleep(self._abort_delay_s)
+            llm.llm_engine.abort_request(rids)
+            thread.join(timeout=120)
+            outs = holder.get("outs") or []
+            match = next(
+                (out for out in outs if getattr(out, "request_id", None) == rids[0]),
+                None,
+            )
+            if match is not None and getattr(match, "finished", False) and match.outputs:
+                completion = match.outputs[0]
+                if completion.finish_reason == "abort":
+                    outcome["terminal_observed"] = True
+                    outcome["finish_reason"] = "abort"
+                    outcome["returned_tokens"] = len(completion.token_ids)
+        except Exception as exc:  # noqa: BLE001 -- the cell degrades the claim, never the probe
+            probe_error.append(exc)
+        outcome["elapsed_s"] = round(time.monotonic() - started, 3)
+        return outcome
+
+    # -- execution ----------------------------------------------------------
+
+    def capabilities(self) -> StackCapabilities:
+        """The probed capabilities (valid after :meth:`probe`)."""
+        if self._capabilities is None:
+            raise ValueError("stack_identity_unavailable")
+        return self._capabilities
+
+    def _tokens_prompt(
+        self, vllm_module: Any, prompt_ids: Iterable[int], cache_salt: str | None
+    ) -> Any:
+        return vllm_module.TokensPrompt(prompt_token_ids=list(prompt_ids), cache_salt=cache_salt)
+
+    def _build_sampling_params(
+        self,
+        *,
+        vllm_module: Any,
+        request: StackRequest,
+        skip_special_tokens: bool = True,
+    ) -> Any:
+        """Construct the request's ``SamplingParams`` from the
+        Tier-A tuple + request fields and verify the constructed
+        object's post-normalization fields against the canonical
+        expectation. Returns the params, or None when a field
+        cannot be made canonical (the caller records
+        ``stack_config_unpinned``)."""
+        expected: dict[str, Any] = dict(tier_a_sampling_params_vllm(request.seed))
+        expected.update(
+            {
+                "max_tokens": request.max_new_tokens,
+                "min_tokens": request.min_tokens,
+                "stop": list(request.stop_texts),
+                "stop_token_ids": list(request.stop_token_ids),
+                "ignore_eos": request.ignore_eos,
+                "include_stop_str_in_output": request.include_stop_str_in_output,
+                "skip_special_tokens": skip_special_tokens,
+            }
+        )
+        try:
+            params = vllm_module.SamplingParams(**expected)
+            for name in _VLLM_SAMPLING_FIELDS:
+                if getattr(params, name) != expected[name]:
+                    return None
+        except Exception:  # noqa: BLE001 -- an unverifiable params object is unpinned by definition
+            return None
+        return params
+
+    def _params_echo_digest(self, request: StackRequest) -> str:
+        """The record's config-echo substitute on this arm: the
+        digest of the verified pre-submission expectation (G2 +
+        per-request verification stand in for a per-response echo,
+        which an in-process engine does not produce)."""
+        expected: dict[str, Any] = dict(tier_a_sampling_params_vllm(request.seed))
+        expected.update(
+            {
+                "max_tokens": request.max_new_tokens,
+                "min_tokens": request.min_tokens,
+                "stop": list(request.stop_texts),
+                "stop_token_ids": list(request.stop_token_ids),
+                "ignore_eos": request.ignore_eos,
+                "include_stop_str_in_output": request.include_stop_str_in_output,
+                "skip_special_tokens": True,
+            }
+        )
+        return sha256_hex(canonical_json(expected).encode("utf-8"))
+
+    def execute(
+        self, request: StackRequest, *, cancel: threading.Event | None = None
+    ) -> StackObservation:
+        if self.identity is None or self._llm is None:
+            raise ValueError("stack_identity_unavailable")
+        if cancel is not None and cancel.is_set():
+            raise ExecutionCancelled
+        import vllm
+
+        params = self._build_sampling_params(vllm_module=vllm, request=request)
+        if params is None:
+            return _failed_observation("stack_config_unpinned")
+        echo_digest = self._params_echo_digest(request)
+        prompt = self._tokens_prompt(vllm, request.prompt_ids, request.cache_salt)
+        try:
+            outputs = self._llm.generate([prompt], params, use_tqdm=False)
+        except Exception:  # noqa: BLE001 -- engine failure is an observation, never a raw traceback in a record
+            return _failed_observation("stack_execution_failed")
+        observation = self._classify(request, outputs, echo_digest)
+        if observation is None:
+            return _failed_observation("stack_response_unclassified")
+        if observation.returned_ids is not None and self._stream_has_special(
+            observation.returned_ids
+        ):
+            paired = self._paired_no_special_digest(request)
+            if paired is not None:
+                observation = StackObservation(
+                    returned_ids=observation.returned_ids,
+                    finish_class=observation.finish_class,
+                    stop_winner=observation.stop_winner,
+                    cache_n_reported=observation.cache_n_reported,
+                    tokens_cached_reported=observation.tokens_cached_reported,
+                    tokens_evaluated_reported=observation.tokens_evaluated_reported,
+                    returned_text_digest=observation.returned_text_digest,
+                    server_detok_digest=observation.server_detok_digest,
+                    config_echo_digest=observation.config_echo_digest,
+                    detail=observation.detail,
+                    cache_creation_tokens_reported=observation.cache_creation_tokens_reported,
+                    returned_text_digest_no_special=paired,
+                )
+        return observation
+
+    def _stream_has_special(self, ids: tuple[int, ...]) -> bool:
+        """The paired-arm trigger: the stream holds a special token
+        (the engine tokenizer's special set; the declared EOS ids
+        when the set cannot be read)."""
+        special: Any = None
+        if self._engine_tokenizer is not None:
+            special = getattr(self._engine_tokenizer, "all_special_ids", None)
+        special_ids = (
+            {int(token) for token in special}
+            if type(special) is list and special
+            else set(self._declared_eos_ids)
+        )
+        return any(token in special_ids for token in ids)
+
+    def _paired_no_special_digest(self, request: StackRequest) -> str | None:
+        """The same request with ``skip_special_tokens=False``: the
+        text the primary arm's pinned detokenization suppressed."""
+        import vllm
+
+        params = self._build_sampling_params(
+            vllm_module=vllm, request=request, skip_special_tokens=False
+        )
+        if params is None:
+            return None
+        prompt = self._tokens_prompt(vllm, request.prompt_ids, request.cache_salt)
+        try:
+            outputs = self._llm.generate([prompt], params, use_tqdm=False)
+            text = outputs[0].outputs[0].text
+        except Exception:  # noqa: BLE001 -- the paired arm is auxiliary; its failure leaves the field unmeasured
+            return None
+        if type(text) is not str:
+            return None
+        return _text_digest(text)
+
+    def _classify(
+        self, request: StackRequest, outputs: Any, echo_digest: str
+    ) -> StackObservation | None:
+        """One generate-family output → an observation (Q-V5 winner
+        rules; the frozen finish-class vocabulary; no overshoot
+        allowance on this arm). None means unclassifiable."""
+        try:
+            output = outputs[0]
+            completion = output.outputs[0]
+            raw_ids = completion.token_ids
+            finish_reason = completion.finish_reason
+            finished = output.finished
+        except Exception:  # noqa: BLE001 -- a malformed output object is unclassifiable, not a crash
+            return None
+        if not finished or finish_reason is None:
+            return None
+        if finish_reason not in FINISH_CLASSES:
+            return None
+        if finish_reason == "error":
+            return _failed_observation("stack_execution_failed")
+        if type(raw_ids) not in (list, tuple) or any(
+            type(token) is not int or isinstance(token, bool) or token < 0 for token in raw_ids
+        ):
+            return _failed_observation("stack_response_invalid")
+        ids = tuple(int(token) for token in raw_ids)
+        if len(ids) > request.max_new_tokens:
+            return _failed_observation("stack_response_invalid")
+        text = completion.text
+        if type(text) is not str:
+            return _failed_observation("stack_response_invalid")
+        winner: dict[str, Any] | None = None
+        if finish_reason == "stop":
+            stop_reason = completion.stop_reason
+            if type(stop_reason) is str:
+                if stop_reason not in request.stop_texts:
+                    return _failed_observation("stack_response_invalid")
+                winner = {
+                    "kind": "stop_text",
+                    "index": request.stop_texts.index(stop_reason),
+                    "digest": _text_digest(stop_reason),
+                }
+            elif type(stop_reason) is int and not isinstance(stop_reason, bool):
+                winner = {"kind": "stop_token", "id": stop_reason}
+            elif stop_reason is None:
+                if ids and ids[-1] in self._declared_eos_ids:
+                    winner = {"kind": "eos", "id": ids[-1]}
+            else:
+                return _failed_observation("stack_response_invalid")
+        server_detok_digest: str | None = None
+        if self._engine_tokenizer is not None:
+            try:
+                server_detok_digest = _text_digest(
+                    self._engine_tokenizer.decode(list(ids), skip_special_tokens=False)
+                )
+            except Exception:  # noqa: BLE001 -- an undecodable stream leaves the cross-check unobservable
+                server_detok_digest = None
+        return StackObservation(
+            returned_ids=ids,
+            finish_class=finish_reason,
+            stop_winner=winner,
+            cache_n_reported=None,
+            tokens_cached_reported=_reported_count(output, "num_cached_tokens"),
+            tokens_evaluated_reported=None,
+            returned_text_digest=_text_digest(text),
+            server_detok_digest=server_detok_digest,
+            config_echo_digest=echo_digest,
+            detail="",
+            cache_creation_tokens_reported=_reported_count(output, "num_cache_creation_tokens"),
+        )
+
+    # -- Step 5 seams ---------------------------------------------------------
+
+    def reset_cache(self) -> bool:
+        """Erase the engine's prefix cache (P-2: the engine reports
+        success with True; anything else is a failed reset)."""
+        if self._llm is None:
+            return False
+        try:
+            return self._llm.reset_prefix_cache() is True
+        except Exception:  # noqa: BLE001 -- a failed reset reports False; the cache driver decides the consequence
+            return False
+
+    def verify_identity(self) -> bool:
+        """Re-read the engine config and compare the identity-bearing
+        fields (there is no /props on this arm)."""
+        if self._llm is None or self._identity is None:
+            return False
+        try:
+            engine = self._read_engine_config(self._llm)
+        except ValueError:
+            return False
+        return bool(engine == self._identity.config["engine"])
 
 
 # ---------------------------------------------------------------------------

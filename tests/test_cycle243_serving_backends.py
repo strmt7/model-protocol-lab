@@ -20,10 +20,15 @@ from __future__ import annotations
 import contextlib
 import copy
 import hashlib
+import importlib.metadata
 import json
+import os
 import random
 import struct
+import sys
+import tempfile
 import threading
+import types
 import unittest
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -3788,3 +3793,1043 @@ class FidelityStopTokenTests(unittest.TestCase):
         record = self._run(11)
         self.assertEqual(record["mirror"]["fidelity_verdict"], "diverge")
         self.assertEqual(record["mirror"]["divergence_class"], "FIRING_STEP_DIFFERS")
+
+
+# ---------------------------------------------------------------------------
+# W6 Push 2: VllmOfflineBackend against a hostile fake `vllm` module
+# (Steps 3+4). The fake is injected into sys.modules — the backend's
+# lazy import is the seam — and importlib.metadata.version is patched
+# for the three version reads. CI never installs vllm.
+# ---------------------------------------------------------------------------
+
+
+class _VllmFakeTokenizer:
+    """Longest-match concatenative tokenizer over a fixed vocab,
+    shared by the lab side and the engine side of the fake."""
+
+    PIECES = {
+        0: "<|endoftext|>",
+        1: "The",
+        2: " capital",
+        3: " of",
+        4: " France",
+        5: " is",
+        6: " Paris",
+        7: "abc",
+        8: "a",
+        9: "b",
+        10: "c",
+        11: "ab",
+        12: "bc",
+        13: "STOP",
+    }
+    all_special_ids = [0]
+
+    def encode(self, text: str) -> list[int]:
+        ids: list[int] = []
+        rest = text
+        while rest:
+            best: tuple[int, str] | None = None
+            for token, piece in self.PIECES.items():
+                if rest.startswith(piece) and (best is None or len(piece) > len(best[1])):
+                    best = (token, piece)
+            if best is None:
+                raise ValueError("unencodable")
+            ids.append(best[0])
+            rest = rest[len(best[1]) :]
+        return ids
+
+    def decode(self, ids: list[int], skip_special_tokens: bool = False) -> str:
+        parts = []
+        for token in ids:
+            if skip_special_tokens and token in self.all_special_ids:
+                continue
+            parts.append(self.PIECES[token])
+        return "".join(parts)
+
+
+class _FakeSamplingParams:
+    """Stores the constructor kwargs as attributes verbatim (the
+    adapter reads them back for verification). ``drift`` rewrites
+    temperature on read — a sampler that cannot be made canonical."""
+
+    drift = False
+    raise_always = False
+    raise_on_paired = False
+
+    def __init__(self, **kwargs: Any) -> None:
+        if type(self).raise_always:
+            raise RuntimeError("params construction refused")
+        if type(self).raise_on_paired and kwargs.get("skip_special_tokens") is False:
+            raise RuntimeError("paired params refused")
+        self.__dict__.update(kwargs)
+        if type(self).drift:
+            self.__dict__["temperature"] = 0.5
+
+
+class _FakeTokensPrompt(dict):
+    def __init__(self, prompt_token_ids: Any = None, cache_salt: Any = None) -> None:
+        ids = list(prompt_token_ids or [])
+        super().__init__(prompt_token_ids=ids, cache_salt=cache_salt)
+        self.prompt_token_ids = ids
+        self.cache_salt = cache_salt
+
+
+class _FakeCompletion:
+    def __init__(
+        self,
+        token_ids: Any,
+        text: Any,
+        finish_reason: Any,
+        stop_reason: Any = None,
+    ) -> None:
+        self.token_ids = token_ids
+        self.text = text
+        self.finish_reason = finish_reason
+        self.stop_reason = stop_reason
+
+
+class _FakeRequestOutput:
+    def __init__(
+        self,
+        request_id: str,
+        prompt_token_ids: Any,
+        completion: _FakeCompletion,
+        *,
+        finished: bool = True,
+        num_cached_tokens: Any = 0,
+        num_cache_creation_tokens: Any = 0,
+    ) -> None:
+        self.request_id = request_id
+        self.prompt_token_ids = prompt_token_ids
+        self.outputs = [completion]
+        self.finished = finished
+        self.num_cached_tokens = num_cached_tokens
+        self.num_cache_creation_tokens = num_cache_creation_tokens
+
+
+class _FakeEngineHandle:
+    def __init__(self, llm: _FakeLLM) -> None:
+        self._llm = llm
+        self.vllm_config = llm.vllm_config
+        self.output_processor = types.SimpleNamespace(tokenizer=llm.engine_tokenizer)
+
+    def abort_request(self, rids: Any) -> None:
+        self._llm.aborted.extend(rids)
+        self._llm.abort_event.set()
+
+
+class _FakeLLM:
+    """A scripted vllm.LLM. Class attributes carry the script so the
+    backend's constructor call (which passes only kwargs) builds the
+    instance the test configured."""
+
+    script: dict[str, Any] = {}
+    instances: list[_FakeLLM] = []
+
+    def __init__(self, **kwargs: Any) -> None:
+        script = type(self).script
+        if script.get("llm_raises"):
+            raise RuntimeError("engine construction refused")
+        type(self).instances.append(self)
+        self.kwargs = kwargs
+        self.engine_tokenizer = script.get("engine_tokenizer") or _VllmFakeTokenizer()
+        if script.get("config_broken"):
+            self.vllm_config = types.SimpleNamespace()
+        else:
+            self.vllm_config = types.SimpleNamespace(
+                model_config=types.SimpleNamespace(
+                    max_model_len=script.get("readback_max_model_len", kwargs["max_model_len"]),
+                    dtype=script.get("readback_dtype", "torch.bfloat16"),
+                ),
+                cache_config=types.SimpleNamespace(
+                    block_size=script.get("block_size", 128),
+                    num_gpu_blocks=script.get("num_gpu_blocks", 56),
+                    kv_cache_memory_bytes=script.get(
+                        "readback_kv_bytes", kwargs["kv_cache_memory_bytes"]
+                    ),
+                ),
+            )
+        self.llm_engine = _FakeEngineHandle(self)
+        if script.get("processor_broken"):
+            self.llm_engine.output_processor = types.SimpleNamespace()
+        self.aborted: list[str] = []
+        self.abort_event = threading.Event()
+        self.generate_calls: list[tuple[list[int], Any]] = []
+        self.generate_handler = script.get("generate_handler")
+        self.abort_mode = script.get("abort_mode", "terminal")
+        self._rid_counter = 0
+
+    def get_default_sampling_params(self) -> _FakeSamplingParams:
+        if type(self).script.get("default_params_raises"):
+            raise RuntimeError("no default params")
+        return _FakeSamplingParams(
+            n=1,
+            temperature=1.0,
+            top_p=1.0,
+            top_k=0,
+            min_p=0.0,
+            repetition_penalty=1.0,
+            presence_penalty=0.0,
+            frequency_penalty=0.0,
+            seed=None,
+            detokenize=True,
+            skip_special_tokens=True,
+            logprobs=None,
+            max_tokens=16,
+            min_tokens=0,
+            stop=[],
+            stop_token_ids=[],
+            ignore_eos=False,
+            include_stop_str_in_output=False,
+        )
+
+    def get_tokenizer(self) -> Any:
+        return self.engine_tokenizer
+
+    def generate(
+        self, prompts: Any, params: Any, use_tqdm: bool = True
+    ) -> list[_FakeRequestOutput]:
+        prompt = prompts[0]
+        prompt_ids = list(prompt.prompt_token_ids)
+        self.generate_calls.append((prompt_ids, params))
+        if self.generate_handler is not None:
+            return self.generate_handler(prompt_ids, params)
+        completion = _FakeCompletion([8], "a", "length")
+        return [_FakeRequestOutput("fake-req", prompt_ids, completion)]
+
+    def enqueue(self, prompts: Any, params: Any) -> list[str]:
+        if self.abort_mode == "enqueue_raises":
+            raise RuntimeError("enqueue refused")
+        self._rid_counter += 1
+        rid = f"fake-req-{self._rid_counter}"
+        self._pending = (rid, list(prompts[0].prompt_token_ids))
+        return [rid]
+
+    def wait_for_completion(self, use_tqdm: bool = True) -> list[_FakeRequestOutput]:
+        if self.abort_mode == "wait_raises":
+            raise RuntimeError("wait failed")
+        rid, prompt_ids = self._pending
+        self.abort_event.wait(timeout=5)
+        if self.abort_mode == "no_terminal":
+            return []
+        if self.abort_mode == "wrong_finish":
+            completion = _FakeCompletion([8, 9], "ab", "length")
+        else:
+            completion = _FakeCompletion([8, 9, 10], "abc", "abort")
+        return [_FakeRequestOutput(rid, prompt_ids, completion)]
+
+    def reset_prefix_cache(self) -> bool:
+        if type(self).script.get("reset_raises"):
+            raise RuntimeError("reset refused")
+        return type(self).script.get("reset_result", True)
+
+
+class _UnspecifiedPlatform:
+    device_type = ""
+
+
+class _CpuPlatform:
+    device_type = "cpu"
+
+
+def _fake_vllm_module(script: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Install the fake vllm module tree into sys.modules; returns
+    the saved entries for restoration."""
+    _FakeLLM.script = dict(script or {})
+    _FakeLLM.instances = []
+    _FakeSamplingParams.drift = bool((script or {}).get("params_drift"))
+    module = types.ModuleType("vllm")
+    module.__version__ = (script or {}).get("lib_version", "0.33.0")
+    module.__file__ = "/fake/vllm/__init__.py"
+    module.LLM = _FakeLLM
+    module.SamplingParams = _FakeSamplingParams
+    module.TokensPrompt = _FakeTokensPrompt
+    platforms = types.ModuleType("vllm.platforms")
+    platform = (script or {}).get("platform") or _CpuPlatform()
+    platforms.current_platform = platform
+    module.platforms = platforms
+    detokenizer = types.ModuleType("vllm.v1.engine.detokenizer")
+    detokenizer.uses_fast_detokenizer = lambda tokenizer: bool(_FakeLLM.script.get("detok_fast"))
+    v1 = types.ModuleType("vllm.v1")
+    engine_pkg = types.ModuleType("vllm.v1.engine")
+    engine_pkg.detokenizer = detokenizer
+    v1.engine = engine_pkg
+    module.v1 = v1
+    saved: dict[str, Any] = {}
+    for name, fake in {
+        "vllm": module,
+        "vllm.platforms": platforms,
+        "vllm.v1": v1,
+        "vllm.v1.engine": engine_pkg,
+        "vllm.v1.engine.detokenizer": detokenizer,
+    }.items():
+        saved[name] = sys.modules.get(name)
+        sys.modules[name] = fake
+    return saved
+
+
+def _restore_modules(saved: dict[str, Any]) -> None:
+    for name, previous in saved.items():
+        if previous is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = previous
+
+
+_FAKE_VERSIONS = {"vllm": "0.33.0+cpu", "torch": "2.14.0+cpu", "transformers": "5.20.2"}
+
+
+def _fake_metadata_version(name: str) -> str:
+    if name in _FAKE_VERSIONS:
+        return _FAKE_VERSIONS[name]
+    return _REAL_METADATA_VERSION(name)
+
+
+_REAL_METADATA_VERSION = importlib.metadata.version
+
+
+class _VllmBackendCase(unittest.TestCase):
+    """Shared fixture: checkpoint dir + env/module hygiene."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.model_dir = Path(self._tmp.name) / "ckpt"
+        self.model_dir.mkdir()
+        (self.model_dir / "config.json").write_text(
+            json.dumps({"eos_token_id": 0, "max_position_embeddings": 512}),
+            encoding="utf-8",
+        )
+        (self.model_dir / "generation_config.json").write_text(
+            json.dumps({"eos_token_id": 0}), encoding="utf-8"
+        )
+        (self.model_dir / "tokenizer.json").write_text("{}", encoding="utf-8")
+        (self.model_dir / "model.safetensors").write_bytes(b"weights")
+        self._saved_env = {
+            key: os.environ.get(key)
+            for key in list(servingbackends._VLLM_ENV_PINS) + ["VLLM_CPU_KVCACHE_SPACE"]
+        }
+        self.addCleanup(self._restore_env)
+        servingbackends._VLLM_ENV_DIGEST = None
+        self.addCleanup(setattr, servingbackends, "_VLLM_ENV_DIGEST", None)
+
+    def _restore_env(self) -> None:
+        for key, value in self._saved_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def install_fake(self, script: dict[str, Any] | None = None) -> None:
+        saved = _fake_vllm_module(script)
+        self.addCleanup(_restore_modules, saved)
+        patcher = mock.patch.object(importlib.metadata, "version", _fake_metadata_version)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def make_backend(self, **overrides: Any) -> servingbackends.VllmOfflineBackend:
+        kwargs: dict[str, Any] = {
+            "tokenizer": _VllmFakeTokenizer(),
+            "kv_cache_memory_bytes": 512 * 1024 * 1024,
+            "sleep": lambda _seconds: None,
+        }
+        kwargs.update(overrides)
+        return servingbackends.VllmOfflineBackend(self.model_dir, **kwargs)
+
+
+class VllmConstructionTests(_VllmBackendCase):
+    def test_missing_checkpoint_dir(self) -> None:
+        with self.assertRaises(ValueError) as caught:
+            servingbackends.VllmOfflineBackend(
+                Path(self._tmp.name) / "nope",
+                tokenizer=_VllmFakeTokenizer(),
+                kv_cache_memory_bytes=1024,
+            )
+        self.assertEqual(str(caught.exception), "stack_checkpoint_unavailable")
+
+    def test_empty_eos_union_fails(self) -> None:
+        (self.model_dir / "config.json").write_text(
+            json.dumps({"max_position_embeddings": 512}), encoding="utf-8"
+        )
+        (self.model_dir / "generation_config.json").write_text("{}", encoding="utf-8")
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend()
+        self.assertEqual(str(caught.exception), "stack_checkpoint_unavailable")
+
+    def test_window_resolution(self) -> None:
+        backend = self.make_backend()
+        self.assertEqual(backend._max_model_len, 512)
+        explicit = self.make_backend(max_model_len=256)
+        self.assertEqual(explicit._max_model_len, 256)
+        (self.model_dir / "config.json").write_text(
+            json.dumps({"eos_token_id": 0}), encoding="utf-8"
+        )
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend()
+        self.assertEqual(str(caught.exception), "stack_checkpoint_unavailable")
+        rescued = self.make_backend(max_model_len=128)
+        self.assertEqual(rescued._max_model_len, 128)
+
+    def test_env_drift_second_construction_refused(self) -> None:
+        self.make_backend()
+        os.environ["VLLM_CPU_KVCACHE_SPACE"] = "8"
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend()
+        self.assertEqual(str(caught.exception), "stack_config_unpinned")
+
+    def test_import_failure_is_stack_unavailable(self) -> None:
+        backend = self.make_backend()
+        saved = sys.modules.get("vllm")
+        sys.modules["vllm"] = None  # type: ignore[assignment]
+        self.addCleanup(
+            lambda: (
+                sys.modules.__setitem__("vllm", saved)
+                if saved is not None
+                else sys.modules.pop("vllm", None)
+            )
+        )
+        with self.assertRaises(ValueError) as caught:
+            backend.probe()
+        self.assertEqual(str(caught.exception), "stack_unavailable")
+
+
+class VllmProbeGateTests(_VllmBackendCase):
+    def test_identity_config_closed_key_set(self) -> None:
+        self.install_fake()
+        backend = self.make_backend()
+        identity = backend.probe()
+        self.assertEqual(identity.stack, "vllm")
+        self.assertEqual(identity.stack_version, "0.33.0+cpu")
+        self.assertEqual(identity.declared_eos_ids, (0,))
+        self.assertEqual(
+            set(identity.config),
+            {
+                "protocol",
+                "stack",
+                "vllm_version",
+                "torch_version",
+                "transformers_version",
+                "vllm_module_digest",
+                "platform",
+                "env",
+                "engine",
+                "default_sampling_params_digest",
+                "detokenizer_variant",
+                "declared_eos_ids",
+                "tier_a_vllm",
+                "abort_probe",
+            },
+        )
+        engine = identity.config["engine"]
+        self.assertEqual(
+            set(engine),
+            {
+                "checkpoint_digest",
+                "seed",
+                "enforce_eager",
+                "max_num_seqs",
+                "max_model_len",
+                "enable_prefix_caching",
+                "dtype_resolved",
+                "kv_cache_memory_bytes",
+                "kv_cache_sizing_input",
+                "block_size",
+                "num_gpu_blocks",
+            },
+        )
+        self.assertEqual(engine["block_size"], 128)
+        self.assertEqual(engine["num_gpu_blocks"], 56)
+        self.assertEqual(engine["kv_cache_memory_bytes"], 512 * 1024 * 1024)
+        self.assertEqual(engine["dtype_resolved"], "bfloat16")
+        self.assertEqual(engine["max_model_len"], 512)
+        self.assertEqual(identity.config["env"], dict(servingbackends._VLLM_ENV_PINS))
+        self.assertEqual(
+            identity.config["tier_a_vllm"],
+            servingbackends.tier_a_sampling_params_vllm(1234),
+        )
+        self.assertEqual(identity.config["detokenizer_variant"], "SlowIncrementalDetokenizer")
+        self.assertEqual(
+            identity.config["platform"], {"device_type": "cpu", "platform_class": "_CpuPlatform"}
+        )
+        self.assertEqual(
+            identity.config_fingerprint,
+            servingbackends.config_fingerprint_for(identity.config),
+        )
+        abort = identity.config["abort_probe"]
+        self.assertTrue(abort["terminal_observed"])
+        self.assertEqual(abort["finish_reason"], "abort")
+        self.assertEqual(abort["returned_tokens"], 3)
+        caps = backend.capabilities()
+        self.assertTrue(all(caps.as_dict().values()))
+        self.assertTrue(backend.verify_identity())
+        self.assertTrue(backend.reset_cache())
+
+    def test_g1_version_window(self) -> None:
+        self.install_fake({"lib_version": "0.34.0"})
+        backend = self.make_backend()
+        with self.assertRaises(ValueError) as caught:
+            backend.probe()
+        self.assertEqual(str(caught.exception), "stack_identity_unavailable")
+
+    def test_g1_platform_lie(self) -> None:
+        self.install_fake({"platform": _UnspecifiedPlatform()})
+        backend = self.make_backend()
+        with self.assertRaises(ValueError) as caught:
+            backend.probe()
+        self.assertEqual(str(caught.exception), "stack_identity_unavailable")
+
+    def test_g2_readback_lie_is_unpinned(self) -> None:
+        self.install_fake({"block_size": -1})
+        backend = self.make_backend()
+        with self.assertRaises(ValueError) as caught:
+            backend.probe()
+        self.assertEqual(str(caught.exception), "stack_config_unpinned")
+
+    def test_g3_prompt_echo_lie(self) -> None:
+        def lying_handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            completion = _FakeCompletion([8], "a", "length")
+            return [_FakeRequestOutput("fake-req", [999], completion)]
+
+        self.install_fake({"generate_handler": lying_handler})
+        backend = self.make_backend()
+        with self.assertRaises(ValueError) as caught:
+            backend.probe()
+        self.assertEqual(str(caught.exception), "stack_identity_unavailable")
+
+    def test_abort_no_terminal_degrades_claim_only(self) -> None:
+        self.install_fake({"abort_mode": "no_terminal"})
+        backend = self.make_backend()
+        identity = backend.probe()
+        abort = identity.config["abort_probe"]
+        self.assertFalse(abort["terminal_observed"])
+        self.assertIsNone(abort["finish_reason"])
+        self.assertIsNone(abort["returned_tokens"])
+
+    def test_abort_wrong_finish_degrades_claim_only(self) -> None:
+        self.install_fake({"abort_mode": "wrong_finish"})
+        backend = self.make_backend()
+        identity = backend.probe()
+        self.assertFalse(identity.config["abort_probe"]["terminal_observed"])
+
+
+class VllmExecuteTests(_VllmBackendCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.install_fake()
+        self.backend = self.make_backend()
+        self.backend.probe()
+        self.llm = _FakeLLM.instances[-1]
+
+    def _execute(self, handler: Any, **request_kwargs: Any) -> Any:
+        self.llm.generate_handler = handler
+        request = servingbackends.StackRequest(
+            prompt_ids=(1, 2), max_new_tokens=8, seed=7, **request_kwargs
+        )
+        return self.backend.execute(request)
+
+    def test_execute_before_probe_refused(self) -> None:
+        fresh = self.make_backend()
+        with self.assertRaises(ValueError) as caught:
+            fresh.execute(servingbackends.StackRequest(prompt_ids=(1,), max_new_tokens=4, seed=0))
+        self.assertEqual(str(caught.exception), "stack_identity_unavailable")
+
+    def test_stop_text_winner(self) -> None:
+        def handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            completion = _FakeCompletion([7], "abc", "stop", "abc")
+            return [
+                _FakeRequestOutput(
+                    "r",
+                    prompt_ids,
+                    completion,
+                    num_cached_tokens=128,
+                    num_cache_creation_tokens=64,
+                )
+            ]
+
+        observation = self._execute(handler, stop_texts=("abc",))
+        self.assertEqual(observation.finish_class, "stop")
+        self.assertEqual(
+            observation.stop_winner,
+            {
+                "kind": "stop_text",
+                "index": 0,
+                "digest": servingbackends._text_digest("abc"),
+            },
+        )
+        self.assertEqual(observation.tokens_cached_reported, 128)
+        self.assertEqual(observation.cache_creation_tokens_reported, 64)
+        self.assertIsNone(observation.cache_n_reported)
+        self.assertIsNotNone(observation.config_echo_digest)
+        self.assertEqual(observation.detail, "")
+
+    def test_eos_winner_from_null_stop_reason(self) -> None:
+        def handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            completion = _FakeCompletion([8, 0], "a<|endoftext|>", "stop", None)
+            return [_FakeRequestOutput("r", prompt_ids, completion)]
+
+        observation = self._execute(handler)
+        self.assertEqual(observation.stop_winner, {"kind": "eos", "id": 0})
+
+    def test_null_stop_reason_without_eos_has_no_winner(self) -> None:
+        def handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            completion = _FakeCompletion([8, 9], "ab", "stop", None)
+            return [_FakeRequestOutput("r", prompt_ids, completion)]
+
+        observation = self._execute(handler)
+        self.assertEqual(observation.finish_class, "stop")
+        self.assertIsNone(observation.stop_winner)
+
+    def test_stop_token_winner(self) -> None:
+        def handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            completion = _FakeCompletion([8, 9], "ab", "stop", 9)
+            return [_FakeRequestOutput("r", prompt_ids, completion)]
+
+        observation = self._execute(handler, stop_token_ids=(9,))
+        self.assertEqual(observation.stop_winner, {"kind": "stop_token", "id": 9})
+
+    def test_unknown_stop_string_is_invalid(self) -> None:
+        def handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            completion = _FakeCompletion([7], "abc", "stop", "not-submitted")
+            return [_FakeRequestOutput("r", prompt_ids, completion)]
+
+        observation = self._execute(handler, stop_texts=("abc",))
+        self.assertEqual(observation.detail, "stack_response_invalid")
+        self.assertIsNone(observation.returned_ids)
+
+    def test_overshoot_is_invalid(self) -> None:
+        def handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            completion = _FakeCompletion([8] * 9, "a" * 9, "length")
+            return [_FakeRequestOutput("r", prompt_ids, completion)]
+
+        observation = self._execute(handler)
+        self.assertEqual(observation.detail, "stack_response_invalid")
+
+    def test_error_and_unfinished_and_raise(self) -> None:
+        def error_handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            return [_FakeRequestOutput("r", prompt_ids, _FakeCompletion([], "", "error"))]
+
+        self.assertEqual(self._execute(error_handler).detail, "stack_execution_failed")
+
+        def unfinished_handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            return [
+                _FakeRequestOutput("r", prompt_ids, _FakeCompletion([8], "a", None), finished=False)
+            ]
+
+        self.assertEqual(self._execute(unfinished_handler).detail, "stack_response_unclassified")
+
+        def raising_handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            raise RuntimeError("engine died")
+
+        self.assertEqual(self._execute(raising_handler).detail, "stack_execution_failed")
+
+    def test_sampler_drift_is_unpinned(self) -> None:
+        _FakeSamplingParams.drift = True
+        self.addCleanup(setattr, _FakeSamplingParams, "drift", False)
+        observation = self._execute(
+            lambda p, params: [_FakeRequestOutput("r", p, _FakeCompletion([8], "a", "length"))]
+        )
+        self.assertEqual(observation.detail, "stack_config_unpinned")
+
+    def test_paired_arm_only_for_special_streams(self) -> None:
+        calls: list[bool] = []
+
+        def handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            calls.append(bool(params.skip_special_tokens))
+            text = "a" if params.skip_special_tokens else "a<|endoftext|>"
+            completion = _FakeCompletion([8, 0], text, "length")
+            return [_FakeRequestOutput("r", prompt_ids, completion)]
+
+        observation = self._execute(handler)
+        self.assertEqual(calls, [True, False])
+        self.assertEqual(
+            observation.returned_text_digest_no_special,
+            servingbackends._text_digest("a<|endoftext|>"),
+        )
+
+        calls.clear()
+
+        def plain_handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            calls.append(bool(params.skip_special_tokens))
+            return [_FakeRequestOutput("r", prompt_ids, _FakeCompletion([8], "a", "length"))]
+
+        observation = self._execute(plain_handler)
+        self.assertEqual(calls, [True])
+        self.assertIsNone(observation.returned_text_digest_no_special)
+
+    def test_cancel_raises(self) -> None:
+        cancel = threading.Event()
+        cancel.set()
+        with self.assertRaises(servingbackends.ExecutionCancelled):
+            self.backend.execute(
+                servingbackends.StackRequest(prompt_ids=(1,), max_new_tokens=4, seed=0),
+                cancel=cancel,
+            )
+
+    def test_verify_identity_detects_drift(self) -> None:
+        self.llm.vllm_config.cache_config.block_size = 64
+        self.assertFalse(self.backend.verify_identity())
+
+
+class _ExplodingPlatform:
+    @property
+    def device_type(self) -> str:
+        raise RuntimeError("platform unreadable")
+
+
+class _LyingEngineTokenizer(_VllmFakeTokenizer):
+    def encode(self, text: str) -> list[int]:
+        return [1, 2]
+
+
+class _RaisingEngineTokenizer(_VllmFakeTokenizer):
+    def encode(self, text: str) -> list[int]:
+        raise RuntimeError("tokenizer dead")
+
+
+class _StreamDecodeTokenizer(_VllmFakeTokenizer):
+    """Decodes the sentinel (so G4 passes) but refuses any other
+    stream (so execute's detokenization cross-check is unobservable)."""
+
+    def decode(self, ids: list[int], skip_special_tokens: bool = False) -> str:
+        if list(ids) != [1, 2, 3, 4, 5]:
+            raise RuntimeError("stream undecodable")
+        return super().decode(ids, skip_special_tokens=skip_special_tokens)
+
+
+class VllmFailureBranchTests(_VllmBackendCase):
+    """Every defensive branch of the vLLM backend, driven through
+    the hostile fake: construction validation, probe gate failures,
+    abort-cell failures, and classification edges."""
+
+    # -- construction / local validation --------------------------------
+
+    def test_bad_hardware_class_and_kv_bytes(self) -> None:
+        with self.assertRaises(ValueError):
+            self.make_backend(hardware_class="tpu")
+        with self.assertRaises(ValueError):
+            self.make_backend(kv_cache_memory_bytes=0)
+        with self.assertRaises(ValueError):
+            self.make_backend(kv_cache_memory_bytes=True)
+
+    def test_empty_directory(self) -> None:
+        empty = Path(self._tmp.name) / "empty"
+        empty.mkdir()
+        with self.assertRaises(ValueError) as caught:
+            servingbackends.VllmOfflineBackend(
+                empty,
+                tokenizer=_VllmFakeTokenizer(),
+                kv_cache_memory_bytes=1024,
+            )
+        self.assertEqual(str(caught.exception), "stack_checkpoint_unavailable")
+
+    def test_eos_union_forms(self) -> None:
+        # List form + bool junk ignored + malformed sibling file.
+        (self.model_dir / "config.json").write_text(
+            json.dumps({"eos_token_id": [0, 50256, True], "n_positions": 256}),
+            encoding="utf-8",
+        )
+        (self.model_dir / "generation_config.json").write_text("{not json", encoding="utf-8")
+        backend = self.make_backend()
+        self.assertEqual(backend._declared_eos_ids, (0, 50256))
+        self.assertEqual(backend._max_model_len, 256)
+
+    def test_window_explicit_validation(self) -> None:
+        with self.assertRaises(ValueError):
+            self.make_backend(max_model_len=0)
+        with self.assertRaises(ValueError):
+            self.make_backend(max_model_len=True)
+        (self.model_dir / "config.json").unlink()
+        with self.assertRaises(ValueError):
+            self.make_backend()
+        rescued = self.make_backend(max_model_len=64)
+        self.assertEqual(rescued._max_model_len, 64)
+
+    def test_manifest_failure(self) -> None:
+        patcher = mock.patch.object(backends, "_manifest", side_effect=OSError("unreadable member"))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend()
+        self.assertEqual(str(caught.exception), "stack_checkpoint_unavailable")
+
+    def test_non_dict_config_payload_ignored(self) -> None:
+        (self.model_dir / "config.json").write_text("[1, 2]", encoding="utf-8")
+        (self.model_dir / "generation_config.json").write_text(
+            json.dumps({"eos_token_id": [3]}), encoding="utf-8"
+        )
+        backend = self.make_backend(max_model_len=64)
+        self.assertEqual(backend._declared_eos_ids, (3,))
+
+    # -- probe gates ------------------------------------------------------
+
+    def test_probe_is_idempotent_and_capabilities_gate(self) -> None:
+        self.install_fake()
+        backend = self.make_backend()
+        with self.assertRaises(ValueError):
+            backend.capabilities()
+        first = backend.probe()
+        self.assertIs(backend.probe(), first)
+
+    def test_metadata_failure(self) -> None:
+        self.install_fake()
+        real = _fake_metadata_version
+
+        def broken(name: str) -> str:
+            if name == "torch":
+                raise RuntimeError("no metadata")
+            return real(name)
+
+        patcher = mock.patch.object(importlib.metadata, "version", broken)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend().probe()
+        self.assertEqual(str(caught.exception), "stack_identity_unavailable")
+
+    def test_platform_unreadable(self) -> None:
+        self.install_fake({"platform": _ExplodingPlatform()})
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend().probe()
+        self.assertEqual(str(caught.exception), "stack_identity_unavailable")
+
+    def test_engine_construction_failure(self) -> None:
+        self.install_fake({"llm_raises": True})
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend().probe()
+        self.assertEqual(str(caught.exception), "stack_unavailable")
+
+    def test_env_mutation_between_construction_and_probe(self) -> None:
+        self.install_fake()
+        backend = self.make_backend()
+        os.environ["HF_HUB_OFFLINE"] = "0"
+        with self.assertRaises(ValueError) as caught:
+            backend.probe()
+        self.assertEqual(str(caught.exception), "stack_config_unpinned")
+
+    def test_config_broken_readback(self) -> None:
+        self.install_fake({"config_broken": True})
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend().probe()
+        self.assertEqual(str(caught.exception), "stack_config_unpinned")
+
+    def test_default_params_failure(self) -> None:
+        self.install_fake({"default_params_raises": True})
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend().probe()
+        self.assertEqual(str(caught.exception), "stack_config_unpinned")
+
+    def test_fast_detokenizer_variant(self) -> None:
+        self.install_fake({"detok_fast": True})
+        identity = self.make_backend().probe()
+        self.assertEqual(identity.config["detokenizer_variant"], "FastIncrementalDetokenizer")
+
+    def test_processor_broken(self) -> None:
+        self.install_fake({"processor_broken": True})
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend().probe()
+        self.assertEqual(str(caught.exception), "stack_config_unpinned")
+
+    def test_sentinel_encode_failures(self) -> None:
+        self.install_fake()
+
+        class _RaisingTokenizer(_VllmFakeTokenizer):
+            def encode(self, text: str) -> list[int]:
+                raise RuntimeError("no encode")
+
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend(tokenizer=_RaisingTokenizer()).probe()
+        self.assertEqual(str(caught.exception), "stack_identity_unavailable")
+
+        class _ShortTokenizer(_VllmFakeTokenizer):
+            def encode(self, text: str) -> list[int]:
+                return [1]
+
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend(tokenizer=_ShortTokenizer()).probe()
+        self.assertEqual(str(caught.exception), "stack_identity_unavailable")
+
+    def test_g3_params_drift_fails_probe(self) -> None:
+        self.install_fake({"params_drift": True})
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend().probe()
+        self.assertEqual(str(caught.exception), "stack_config_unpinned")
+
+    def test_g3_generate_raises(self) -> None:
+        def raising_handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            raise RuntimeError("generate dead")
+
+        self.install_fake({"generate_handler": raising_handler})
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend().probe()
+        self.assertEqual(str(caught.exception), "stack_identity_unavailable")
+
+    def test_g4_engine_tokenizer_lies_and_raises(self) -> None:
+        self.install_fake({"engine_tokenizer": _LyingEngineTokenizer()})
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend().probe()
+        self.assertEqual(str(caught.exception), "stack_identity_unavailable")
+        self.install_fake({"engine_tokenizer": _RaisingEngineTokenizer()})
+        with self.assertRaises(ValueError) as caught:
+            self.make_backend().probe()
+        self.assertEqual(str(caught.exception), "stack_identity_unavailable")
+
+    def test_abort_wait_and_enqueue_failures(self) -> None:
+        self.install_fake({"abort_mode": "wait_raises"})
+        identity = self.make_backend().probe()
+        self.assertFalse(identity.config["abort_probe"]["terminal_observed"])
+        self.install_fake({"abort_mode": "enqueue_raises"})
+        identity = self.make_backend().probe()
+        self.assertFalse(identity.config["abort_probe"]["terminal_observed"])
+
+    # -- execute branches ---------------------------------------------------
+
+    def _probed(self, script: dict[str, Any] | None = None) -> Any:
+        self.install_fake(script)
+        backend = self.make_backend()
+        backend.probe()
+        return backend, _FakeLLM.instances[-1]
+
+    def test_params_construction_failure_is_unpinned(self) -> None:
+        backend, _llm = self._probed()
+        _FakeSamplingParams.raise_always = True
+        self.addCleanup(setattr, _FakeSamplingParams, "raise_always", False)
+        observation = backend.execute(
+            servingbackends.StackRequest(prompt_ids=(1, 2), max_new_tokens=4, seed=1)
+        )
+        self.assertEqual(observation.detail, "stack_config_unpinned")
+
+    def test_classify_malformed_outputs(self) -> None:
+        backend, llm = self._probed()
+        request = servingbackends.StackRequest(prompt_ids=(1, 2), max_new_tokens=4, seed=1)
+        llm.generate_handler = lambda p, params: [object()]
+        self.assertEqual(backend.execute(request).detail, "stack_response_unclassified")
+        llm.generate_handler = lambda p, params: [
+            _FakeRequestOutput("r", p, _FakeCompletion([8], "a", "banana"))
+        ]
+        self.assertEqual(backend.execute(request).detail, "stack_response_unclassified")
+        llm.generate_handler = lambda p, params: [
+            _FakeRequestOutput("r", p, _FakeCompletion(["x"], "a", "length"))
+        ]
+        self.assertEqual(backend.execute(request).detail, "stack_response_invalid")
+        llm.generate_handler = lambda p, params: [
+            _FakeRequestOutput("r", p, _FakeCompletion([8], None, "length"))
+        ]
+        self.assertEqual(backend.execute(request).detail, "stack_response_invalid")
+        llm.generate_handler = lambda p, params: [
+            _FakeRequestOutput("r", p, _FakeCompletion([8], "a", "stop", 1.5))
+        ]
+        self.assertEqual(backend.execute(request).detail, "stack_response_invalid")
+
+    def test_paired_arm_failures_leave_field_unmeasured(self) -> None:
+        backend, llm = self._probed()
+        request = servingbackends.StackRequest(prompt_ids=(1, 2), max_new_tokens=4, seed=1)
+        calls = {"n": 0}
+
+        def flaky(prompt_ids: list[int], params: Any) -> list[Any]:
+            calls["n"] += 1
+            if calls["n"] > 1:
+                raise RuntimeError("paired died")
+            return [_FakeRequestOutput("r", prompt_ids, _FakeCompletion([8, 0], "a", "length"))]
+
+        llm.generate_handler = flaky
+        observation = backend.execute(request)
+        self.assertEqual(observation.returned_ids, (8, 0))
+        self.assertIsNone(observation.returned_text_digest_no_special)
+
+        def bad_text(prompt_ids: list[int], params: Any) -> list[Any]:
+            text = "a" if params.skip_special_tokens else None
+            return [_FakeRequestOutput("r", prompt_ids, _FakeCompletion([8, 0], text, "length"))]
+
+        llm.generate_handler = bad_text
+        observation = backend.execute(request)
+        self.assertIsNone(observation.returned_text_digest_no_special)
+
+        _FakeSamplingParams.raise_on_paired = True
+        self.addCleanup(setattr, _FakeSamplingParams, "raise_on_paired", False)
+        llm.generate_handler = lambda p, params: [
+            _FakeRequestOutput("r", p, _FakeCompletion([8, 0], "a", "length"))
+        ]
+        observation = backend.execute(request)
+        self.assertIsNone(observation.returned_text_digest_no_special)
+
+    def test_execute_detok_unobservable(self) -> None:
+        backend, llm = self._probed({"engine_tokenizer": _StreamDecodeTokenizer()})
+        llm.generate_handler = lambda p, params: [
+            _FakeRequestOutput("r", p, _FakeCompletion([8, 9], "ab", "length"))
+        ]
+        observation = backend.execute(
+            servingbackends.StackRequest(prompt_ids=(1, 2), max_new_tokens=4, seed=1)
+        )
+        self.assertEqual(observation.returned_ids, (8, 9))
+        self.assertIsNone(observation.server_detok_digest)
+
+    def test_mistyped_cache_reports_are_unreported(self) -> None:
+        backend, llm = self._probed()
+        llm.generate_handler = lambda p, params: [
+            _FakeRequestOutput(
+                "r",
+                p,
+                _FakeCompletion([8], "a", "length"),
+                num_cached_tokens=-5,
+                num_cache_creation_tokens="junk",
+            )
+        ]
+        observation = backend.execute(
+            servingbackends.StackRequest(prompt_ids=(1, 2), max_new_tokens=4, seed=1)
+        )
+        self.assertIsNone(observation.tokens_cached_reported)
+        self.assertIsNone(observation.cache_creation_tokens_reported)
+
+    def test_empty_stream_stop_has_no_winner(self) -> None:
+        backend, llm = self._probed()
+        llm.generate_handler = lambda p, params: [
+            _FakeRequestOutput("r", p, _FakeCompletion([], "", "stop", None))
+        ]
+        observation = backend.execute(
+            servingbackends.StackRequest(prompt_ids=(1, 2), max_new_tokens=4, seed=1)
+        )
+        self.assertEqual(observation.returned_ids, ())
+        self.assertIsNone(observation.stop_winner)
+
+    def test_special_set_fallback_to_declared_eos(self) -> None:
+        class _NoSpecialsTokenizer(_VllmFakeTokenizer):
+            all_special_ids: list[int] = []
+
+        backend, llm = self._probed({"engine_tokenizer": _NoSpecialsTokenizer()})
+        calls: list[bool] = []
+
+        def handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            calls.append(bool(params.skip_special_tokens))
+            return [_FakeRequestOutput("r", prompt_ids, _FakeCompletion([8, 0], "a", "length"))]
+
+        llm.generate_handler = handler
+        observation = backend.execute(
+            servingbackends.StackRequest(prompt_ids=(1, 2), max_new_tokens=4, seed=1)
+        )
+        # The declared-EOS fallback set still sees token 0 as special.
+        self.assertEqual(calls, [True, False])
+        self.assertIsNotNone(observation.returned_text_digest_no_special)
+
+    def test_missing_engine_tokenizer_degrades_gracefully(self) -> None:
+        backend, llm = self._probed()
+        backend._engine_tokenizer = None
+        llm.generate_handler = lambda p, params: [
+            _FakeRequestOutput("r", p, _FakeCompletion([8, 0], "a", "length"))
+        ]
+        observation = backend.execute(
+            servingbackends.StackRequest(prompt_ids=(1, 2), max_new_tokens=4, seed=1)
+        )
+        self.assertEqual(observation.returned_ids, (8, 0))
+        self.assertIsNone(observation.server_detok_digest)
+        # The declared-EOS fallback still triggers the paired arm.
+        self.assertIsNotNone(observation.returned_text_digest_no_special)
+
+    def test_reset_and_verify_failure_branches(self) -> None:
+        fresh = self.make_backend()
+        self.assertFalse(fresh.reset_cache())
+        self.assertFalse(fresh.verify_identity())
+        backend, llm = self._probed({"reset_raises": True})
+        self.assertFalse(backend.reset_cache())
+        llm.llm_engine.vllm_config = types.SimpleNamespace()
+        self.assertFalse(backend.verify_identity())
