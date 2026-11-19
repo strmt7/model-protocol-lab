@@ -1638,20 +1638,44 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     exec_cmd.add_argument(
+        "--stack",
+        default="llamacpp",
+        choices=("llamacpp", "vllm"),
+        help="Serving stack to measure (default: llamacpp, the HTTP server arm)",
+    )
+    exec_cmd.add_argument(
         "--base-url",
-        required=True,
-        help="Loopback base URL of the running llama.cpp server, e.g. http://127.0.0.1:8080",
+        default=None,
+        help="Loopback base URL of the running llama.cpp server, e.g. "
+        "http://127.0.0.1:8080 (llamacpp stack only; required there)",
     )
     exec_cmd.add_argument(
         "--api-key",
-        required=True,
-        help="Operator API key the server was launched with (never recorded)",
+        default=None,
+        help="Operator API key the server was launched with (never "
+        "recorded; llamacpp stack only, required there)",
     )
     exec_cmd.add_argument(
         "--gguf",
-        required=True,
+        default=None,
         type=Path,
-        help="Local GGUF checkpoint file the server is serving (identity binding)",
+        help="Local GGUF checkpoint file the server is serving "
+        "(identity binding; llamacpp stack only, required there)",
+    )
+    exec_cmd.add_argument(
+        "--max-model-len",
+        type=int,
+        default=None,
+        help="Context-length override for the engine (vllm stack "
+        "only; required there only when the checkpoint config "
+        "declares none)",
+    )
+    exec_cmd.add_argument(
+        "--kv-cache-mib",
+        type=int,
+        default=None,
+        help="KV-cache size in mebibytes (vllm stack only; required "
+        "there — explicit CPU KV sizing is mandatory)",
     )
     exec_cmd.add_argument(
         "--model",
@@ -1723,8 +1747,8 @@ def build_parser() -> argparse.ArgumentParser:
     exec_cmd.add_argument(
         "--timeout",
         type=float,
-        default=120.0,
-        help="Per-request HTTP timeout in seconds",
+        default=None,
+        help="Per-request HTTP timeout in seconds (llamacpp stack only; default 120)",
     )
     exec_cmd.add_argument(
         "--hardware-class",

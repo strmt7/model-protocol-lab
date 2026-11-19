@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (external-audit W6 — the vLLM serving stack for exec-backends, 2026-11-19)
+
+- **`exec-backends` measures a second serving stack.** The new
+  `--stack` option (`llamacpp`, the default, or `vllm`) selects
+  the stack under measurement. The vLLM arm runs the engine
+  in-process (vLLM 0.33.0, CPU) and takes `--kv-cache-mib`
+  (required there: explicit CPU KV-cache sizing is mandatory)
+  and `--max-model-len` (an optional context-length override).
+  Each stack's options are required on their own arm and
+  rejected, never silently ignored, on the other: `--gguf`,
+  `--base-url`, `--api-key` and `--timeout` are llamacpp-only.
+  Records keep the frozen `exec-backends-protocol-1` schema on
+  both stacks. The `serve` packaging extra pins the admitted
+  engine release exactly (`vllm==0.33.0`); CPU hosts build that
+  release from source, as the published wheel is CUDA-only.
+
 ### Fixed (external-audit W4 repair — Python 3.11 pathlib dispatch in a report-pair test, 2026-11-16)
 
 - **A report-pair coverage test no longer builds its path

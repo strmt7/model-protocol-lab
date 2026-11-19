@@ -469,6 +469,9 @@ class ServingBackendsTestBase(unittest.TestCase):
 
         values: dict[str, Any] = {
             "command": "exec-backends",
+            "stack": "llamacpp",
+            "max_model_len": None,
+            "kv_cache_mib": None,
             "base_url": server.url if server is not None else "http://127.0.0.1:9",
             "api_key": API_KEY,
             "gguf": self.gguf,
@@ -1420,7 +1423,14 @@ class CliHandlerTests(ServingBackendsTestBase):
         args = handler.call_args[0][0]
         self.assertEqual(args.command, "exec-backends")
         self.assertEqual(args.hardware_class, "cpu")
-        self.assertEqual(args.timeout, 120.0)
+        # --timeout defaults to None at parse time; the handler
+        # applies the 120-second default on the llamacpp arm (the
+        # None default is what makes an explicit --timeout on the
+        # vllm arm detectable and rejectable).
+        self.assertIsNone(args.timeout)
+        self.assertEqual(args.stack, "llamacpp")
+        self.assertIsNone(args.kv_cache_mib)
+        self.assertIsNone(args.max_model_len)
 
 
 if __name__ == "__main__":
@@ -4260,7 +4270,7 @@ class VllmProbeGateTests(_VllmBackendCase):
         self.assertTrue(abort["terminal_observed"])
         self.assertEqual(abort["finish_reason"], "abort")
         self.assertEqual(abort["returned_tokens"], 3)
-        caps = backend.capabilities()
+        caps = backend.capabilities
         self.assertTrue(all(caps.as_dict().values()))
         self.assertTrue(backend.verify_identity())
         self.assertTrue(backend.reset_cache())
@@ -4567,7 +4577,7 @@ class VllmFailureBranchTests(_VllmBackendCase):
         self.install_fake()
         backend = self.make_backend()
         with self.assertRaises(ValueError):
-            backend.capabilities()
+            _ = backend.capabilities
         first = backend.probe()
         self.assertIs(backend.probe(), first)
 
@@ -4979,3 +4989,283 @@ class VllmCacheSequenceTests(_VllmBackendCase):
         )
         salts = [call[2].cache_salt for call in llm.generate_calls]
         self.assertEqual(salts, [None, "salt-1"])
+
+
+# ---------------------------------------------------------------------------
+# W6 Push 4: Steps 6+7 — CLI --stack dispatch, per-stack argument
+# discipline, the SA-02-shaped conservation pin on both stacks, and
+# the serve extra.
+# ---------------------------------------------------------------------------
+
+
+class CliStackValidationTests(ServingBackendsTestBase):
+    """Per-stack CLI requirements: each stack's options are required
+    on their own arm and rejected on the other (parser.error, exit 2
+    via SystemExit), before any backend is constructed."""
+
+    def _parser(self) -> Any:
+        import argparse
+
+        return argparse.ArgumentParser(prog="exec-backends")
+
+    def _run(self, out: Path, **overrides: Any) -> int:
+        with (
+            mock.patch(
+                "model_protocol_lab.doctor._build_primary_tokenizer",
+                return_value=FakeTokenizer(),
+            ),
+            mock.patch.object(
+                servingbackends, "_load_hf_tokenizer", return_value=_VllmFakeTokenizer()
+            ),
+        ):
+            return servingbackends.run_exec_backends(
+                self._args(None, out, **overrides), self._parser()
+            )
+
+    def _vllm_overrides(self, **extra: Any) -> dict[str, Any]:
+        values: dict[str, Any] = {
+            "stack": "vllm",
+            "base_url": None,
+            "api_key": None,
+            "gguf": None,
+            "timeout": None,
+            "kv_cache_mib": 512,
+        }
+        values.update(extra)
+        return values
+
+    def test_llama_arm_requirements(self) -> None:
+        out = Path(self._tmpdir.name)
+        with self.assertRaises(SystemExit):
+            self._run(out / "a.json", base_url=None)
+        with self.assertRaises(SystemExit):
+            self._run(out / "b.json", gguf=None)
+        with self.assertRaises(SystemExit):
+            self._run(out / "c.json", kv_cache_mib=512)
+        with self.assertRaises(SystemExit):
+            self._run(out / "d.json", max_model_len=1024)
+
+    def test_unknown_stack_rejected(self) -> None:
+        out = Path(self._tmpdir.name) / "u.json"
+        with self.assertRaises(SystemExit):
+            self._run(out, stack="bogus")
+
+    def test_load_hf_tokenizer_is_local_only(self) -> None:
+        calls: dict[str, Any] = {}
+        fake = types.ModuleType("transformers")
+
+        class _AutoTokenizer:
+            @staticmethod
+            def from_pretrained(path: str, **kwargs: Any) -> str:
+                calls["path"] = path
+                calls["kwargs"] = kwargs
+                return "tok"
+
+        fake.AutoTokenizer = _AutoTokenizer  # type: ignore[attr-defined]
+        with mock.patch.dict(sys.modules, {"transformers": fake}):
+            result = servingbackends._load_hf_tokenizer(Path("/ckpt"))
+        self.assertEqual(result, "tok")
+        self.assertEqual(calls["path"], "/ckpt")
+        self.assertEqual(calls["kwargs"], {"local_files_only": True})
+
+    def test_vllm_arm_rejections_construct_nothing(self) -> None:
+        saved = _fake_vllm_module({})
+        self.addCleanup(_restore_modules, saved)
+        out = Path(self._tmpdir.name)
+        for name, extra in (
+            ("gguf", {"gguf": self.gguf}),
+            ("base_url", {"base_url": "http://127.0.0.1:8080"}),
+            ("api_key", {"api_key": "k"}),
+            ("timeout", {"timeout": 5.0}),
+            ("missing_kv", {"kv_cache_mib": None}),
+            ("zero_kv", {"kv_cache_mib": 0}),
+            ("bad_len", {"max_model_len": 0}),
+        ):
+            with self.assertRaises(SystemExit, msg=name):
+                self._run(out / f"{name}.json", **self._vllm_overrides(**extra))
+        self.assertEqual(_FakeLLM.instances, [])
+
+
+class VllmHandlerEndToEndTests(_VllmBackendCase):
+    """The full CLI handler on the vllm arm against the fake engine:
+    exit 0 and an available section whose identity names the stack."""
+
+    def test_handler_vllm_end_to_end(self) -> None:
+        self.install_fake()
+        model_dir = self.model_dir
+        out = Path(self._tmp.name) / "vllm-artifact.json"
+        import argparse
+
+        args = argparse.Namespace(
+            command="exec-backends",
+            stack="vllm",
+            max_model_len=None,
+            kv_cache_mib=512,
+            base_url=None,
+            api_key=None,
+            gguf=None,
+            model=model_dir,
+            out=out,
+            prompt_ids="1,2,3",
+            stops=None,
+            eos_id=None,
+            min_tokens=0,
+            max_new_tokens=8,
+            results=None,
+            cache_cold_ids=None,
+            cache_shared_ids=None,
+            cache_divergent_ids=None,
+            seed=0,
+            timeout=None,
+            hardware_class="cpu",
+        )
+        with mock.patch.object(
+            servingbackends, "_load_hf_tokenizer", return_value=_VllmFakeTokenizer()
+        ):
+            code = servingbackends.run_exec_backends(
+                args, argparse.ArgumentParser(prog="exec-backends")
+            )
+        self.assertEqual(code, 0)
+        doc = json.loads(out.read_text(encoding="utf-8"))
+        section = doc["serving_backends"]
+        self.assertTrue(section["available"])
+        self.assertEqual(section["identity"]["stack"], "vllm")
+
+
+class ConservationPinTests(ServingBackendsTestBase):
+    """SA-02-shaped pin (derived counts; the audit key set is frozen
+    by the mirror): for a budget-degraded stage,
+    n_planned == n_executions + n_degraded + n_not_executed, with
+    every count derived independently from the records."""
+
+    def _assert_conservation(self, stage: dict[str, Any], n_planned: int) -> None:
+        records = stage["records"]
+        audit = stage["audit"]
+        standalone = [r for r in records if r["cache_position"] == "standalone"]
+        executed = [r for r in standalone if r["cell_detail"] == ""]
+        degraded = [
+            r for r in standalone if r["cell_detail"] == servingbackends.EXECUTION_BUDGET_DETAIL
+        ]
+        not_executed = [
+            r
+            for r in standalone
+            if r["cell_detail"] not in ("", servingbackends.EXECUTION_BUDGET_DETAIL)
+        ]
+        # The audit's universe is the plan cells: its planned count
+        # reconciles exactly against independently derived record
+        # counts, and its execution counter equals the derived
+        # executed count.
+        self.assertEqual(audit["n_planned_cells"], n_planned)
+        self.assertEqual(audit["n_executions"], len(executed))
+        self.assertEqual(n_planned, len(executed) + len(degraded) + len(not_executed))
+        self.assertEqual(audit["n_records"], len(records))
+        # The cache tail is present and every arm is accounted for:
+        # executed, or budget-degraded once the budget is spent.
+        cache_records = [r for r in records if r["cache_position"] != "standalone"]
+        self.assertEqual(len(cache_records), 4)
+        self.assertTrue(
+            all(
+                r["cell_detail"] in ("", servingbackends.EXECUTION_BUDGET_DETAIL)
+                for r in cache_records
+            )
+        )
+
+    def _cells(self, backend_decode: Any) -> list[dict[str, Any]]:
+        return [
+            {
+                "candidate": "t",
+                "fixture": f"t{i}",
+                "request": servingbackends.StackRequest(
+                    prompt_ids=(1, 2, 3), seed=7, max_new_tokens=4, eos_id=0
+                ),
+                "cache_position": "standalone",
+            }
+            for i in range(3)
+        ]
+
+    def test_conservation_llama_budget_degraded(self) -> None:
+        with _FakeServer(self.gguf) as server:
+            backend = self.probed_backend(server)
+            seen = {"n": 0}
+
+            def on_record(record: dict[str, Any]) -> bool:
+                seen["n"] += 1
+                return seen["n"] < 2
+
+            stage = servingbackends.run_stage(
+                backend,
+                plan_cells=self._cells(backend.decode_ids),
+                fidelity_input=None,
+                cache_prompts={
+                    "cold_ids": (8, 12),
+                    "shared_prefix_ids": (8, 12, 9),
+                    "divergent_control_ids": (1, 2),
+                },
+                seed=0,
+                decode=backend.decode_ids,
+                capabilities=backend.capabilities,
+                on_record=on_record,
+            )
+            self._assert_conservation(stage, 3)
+
+    def test_conservation_vllm_budget_degraded(self) -> None:
+        saved_env = dict(os.environ)
+        saved_digest = servingbackends._VLLM_ENV_DIGEST
+        try:
+            self._conservation_vllm_budget_degraded()
+        finally:
+            os.environ.clear()
+            os.environ.update(saved_env)
+            servingbackends._VLLM_ENV_DIGEST = saved_digest
+
+    def _conservation_vllm_budget_degraded(self) -> None:
+        saved = _fake_vllm_module({})
+        self.addCleanup(_restore_modules, saved)
+        patcher = mock.patch.object(importlib.metadata, "version", _fake_metadata_version)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        tokenizer = _VllmFakeTokenizer()
+        model_dir = Path(self._tmpdir.name) / "hf-model"
+        model_dir.mkdir()
+        (model_dir / "config.json").write_text(
+            json.dumps({"max_position_embeddings": 4096}), encoding="utf-8"
+        )
+        (model_dir / "generation_config.json").write_text(
+            json.dumps({"eos_token_id": 0}), encoding="utf-8"
+        )
+        backend = servingbackends.VllmOfflineBackend(
+            model_dir, tokenizer=tokenizer, kv_cache_memory_bytes=512 * 1024 * 1024
+        )
+        backend.probe()
+        seen = {"n": 0}
+
+        def on_record(record: dict[str, Any]) -> bool:
+            seen["n"] += 1
+            return seen["n"] < 2
+
+        stage = servingbackends.run_stage(
+            backend,
+            plan_cells=self._cells(None),
+            fidelity_input=None,
+            cache_prompts={
+                "cold_ids": (1, 2, 3, 4),
+                "shared_prefix_ids": (1, 2, 9, 9),
+                "divergent_control_ids": (13, 10),
+            },
+            seed=0,
+            decode=lambda ids: tokenizer.decode(list(ids)),
+            capabilities=backend.capabilities,
+            on_record=on_record,
+        )
+        self._assert_conservation(stage, 3)
+
+
+class ServeExtraTests(unittest.TestCase):
+    """Step 7: the serve extra pins the admitted vLLM release
+    exactly (extras are alternatives, not a union)."""
+
+    def test_serve_extra_exact_pin(self) -> None:
+        import tomllib
+
+        project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+        self.assertEqual(project["project"]["optional-dependencies"]["serve"], ["vllm==0.33.0"])

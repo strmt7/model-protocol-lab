@@ -65,7 +65,7 @@ import urllib.request
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from . import diffbackends
 
@@ -688,6 +688,9 @@ class ExecutionBackend(Protocol):
     """
 
     identity: StackIdentity | None
+
+    @property
+    def capabilities(self) -> StackCapabilities: ...
 
     def probe(self) -> StackIdentity: ...
 
@@ -1853,6 +1856,7 @@ class VllmOfflineBackend:
 
     # -- execution ----------------------------------------------------------
 
+    @property
     def capabilities(self) -> StackCapabilities:
         """The probed capabilities (valid after :meth:`probe`)."""
         if self._capabilities is None:
@@ -3001,7 +3005,7 @@ class _BudgetSpent(Exception):
 
 
 def run_stage(
-    backend: LlamacppHttpBackend,
+    backend: ExecutionBackend,
     *,
     plan_cells: list[dict[str, Any]],
     fidelity_input: dict[str, Any] | None,
@@ -3222,6 +3226,64 @@ def _extract_observations(doc: Any) -> list[dict[str, Any]]:
     return observations
 
 
+def _load_hf_tokenizer(model_dir: Path) -> Any:
+    """Load the checkpoint directory's HF tokenizer (the vLLM arm's
+    lab tokenizer). Lazy: transformers arrives with the hf/serve
+    extras, never with the base install. Local files only — the lab
+    never reaches the network for a checkpoint the operator named
+    on disk."""
+    from transformers import AutoTokenizer
+
+    return AutoTokenizer.from_pretrained(  # nosec B615 -- local_files_only, no download occurs
+        str(model_dir), local_files_only=True
+    )
+
+
+def _validate_stack_args(args: Any, parser: argparse.ArgumentParser) -> str:
+    """Per-stack CLI requirements, enforced by hand (argparse cannot
+    express them): each stack's options are required on their own
+    arm and rejected, never silently ignored, on the other. Runs
+    before any expensive setup (RTI-03); every refusal is
+    parser.error (exit 2). Returns the stack name."""
+    stack = str(getattr(args, "stack", LLAMACPP_STACK))
+    gguf = getattr(args, "gguf", None)
+    base_url = getattr(args, "base_url", None)
+    api_key = getattr(args, "api_key", None)
+    timeout = getattr(args, "timeout", None)
+    kv_cache_mib = getattr(args, "kv_cache_mib", None)
+    max_model_len = getattr(args, "max_model_len", None)
+    if stack == VLLM_STACK:
+        if gguf is not None or base_url is not None or api_key is not None:
+            parser.error(
+                "exec-backends: --gguf, --base-url and --api-key belong to the "
+                "llamacpp stack and are rejected with --stack vllm"
+            )
+        if timeout is not None:
+            parser.error("exec-backends: --timeout is HTTP-only and is rejected with --stack vllm")
+        if kv_cache_mib is None:
+            parser.error(
+                "exec-backends: --kv-cache-mib is required with --stack vllm "
+                "(explicit CPU KV-cache sizing is mandatory)"
+            )
+        if int(kv_cache_mib) <= 0:
+            parser.error("exec-backends: --kv-cache-mib must be a positive number of mebibytes")
+        if max_model_len is not None and int(max_model_len) <= 0:
+            parser.error("exec-backends: --max-model-len must be positive")
+    elif stack == LLAMACPP_STACK:
+        if base_url is None or api_key is None or gguf is None:
+            parser.error(
+                "exec-backends: --base-url, --api-key and --gguf are required with --stack llamacpp"
+            )
+        if kv_cache_mib is not None or max_model_len is not None:
+            parser.error(
+                "exec-backends: --kv-cache-mib and --max-model-len belong to "
+                "the vllm stack and are rejected with --stack llamacpp"
+            )
+    else:
+        parser.error(f"exec-backends: unknown --stack {stack!r}")
+    return stack
+
+
 def run_exec_backends(args: Any, parser: argparse.ArgumentParser) -> int:
     """Run the ``exec-backends`` subcommand; return the exit code.
 
@@ -3241,6 +3303,7 @@ def run_exec_backends(args: Any, parser: argparse.ArgumentParser) -> int:
     out = Path(args.out)
     if out.exists():
         parser.error(f"exec-backends: output artifact already exists: {out}")
+    stack = _validate_stack_args(args, parser)
     # Every CLI-local validation runs before any expensive setup
     # (RTI-03): the tokenizer load, the checkpoint-bound backend
     # construction and the probe. Pre-fix an invalid invocation paid
@@ -3320,7 +3383,10 @@ def run_exec_backends(args: Any, parser: argparse.ArgumentParser) -> int:
 
     model_dir = Path(args.model)
     try:
-        tokenizer = _build_primary_tokenizer(model_dir)
+        if stack == VLLM_STACK:
+            tokenizer = _load_hf_tokenizer(model_dir)
+        else:
+            tokenizer = _build_primary_tokenizer(model_dir)
         fingerprint = _tokenizer_fingerprint(model_dir)
     except Exception as exc:  # noqa: BLE001 -- loader failures map to exit 1
         print(
@@ -3328,16 +3394,28 @@ def run_exec_backends(args: Any, parser: argparse.ArgumentParser) -> int:
             file=sys.stderr,
         )
         return 1
+    backend: ExecutionBackend
     try:
-        backend = LlamacppHttpBackend(
-            args.base_url,
-            api_key=args.api_key,
-            gguf_path=Path(args.gguf),
-            tokenizer=tokenizer,
-            tokenizer_fingerprint=fingerprint,
-            hardware_class=args.hardware_class,
-            timeout_s=float(args.timeout),
-        )
+        if stack == VLLM_STACK:
+            backend = VllmOfflineBackend(
+                model_dir,
+                tokenizer=tokenizer,
+                max_model_len=getattr(args, "max_model_len", None),
+                kv_cache_memory_bytes=int(args.kv_cache_mib) * 1024 * 1024,
+                hardware_class=args.hardware_class,
+            )
+        else:
+            backend = LlamacppHttpBackend(
+                args.base_url,
+                api_key=args.api_key,
+                gguf_path=Path(args.gguf),
+                tokenizer=tokenizer,
+                tokenizer_fingerprint=fingerprint,
+                hardware_class=args.hardware_class,
+                timeout_s=float(args.timeout)
+                if getattr(args, "timeout", None) is not None
+                else 120.0,
+            )
     except ValueError as exc:
         print(f"exec-backends: {exc}", file=sys.stderr)
         return 2 if str(exc) == "stack_endpoint_refused" else 1
@@ -3420,6 +3498,16 @@ def run_exec_backends(args: Any, parser: argparse.ArgumentParser) -> int:
     except OSError:
         print("exec-backends: cannot write the output artifact", file=sys.stderr)
         return 1
+    # The stage's decode callable is per-stack: the llama arm asks
+    # the server's detokenizer (decode_ids); the vLLM arm decodes
+    # through the loaded HF tokenizer, the in-process equivalent.
+    if stack == VLLM_STACK:
+
+        def decode(ids: tuple[int, ...]) -> str:
+            return str(tokenizer.decode(list(ids), skip_special_tokens=False))
+
+    else:
+        decode = cast("LlamacppHttpBackend", backend).decode_ids
     try:
         stage = run_stage(
             backend,
@@ -3427,7 +3515,7 @@ def run_exec_backends(args: Any, parser: argparse.ArgumentParser) -> int:
             fidelity_input=fidelity_input,
             cache_prompts=cache_prompts,
             seed=int(args.seed),
-            decode=backend.decode_ids,
+            decode=decode,
             capabilities=backend.capabilities,
             on_record=sink.append,
         )
