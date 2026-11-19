@@ -77,6 +77,7 @@ __all__ = [
     "MAX_RECORD_BYTES",
     "PROTOCOL_VERSION",
     "SENTINEL_TEXT",
+    "VLLM_STACK",
     "ExecutionBackend",
     "ExecutionCancelled",
     "LlamacppHttpBackend",
@@ -97,6 +98,7 @@ __all__ = [
     "run_stage",
     "sha256_hex",
     "tier_a_sampler_params",
+    "tier_a_sampling_params_vllm",
 ]
 
 #: The execution-protocol version string, bound into every identity
@@ -104,9 +106,12 @@ __all__ = [
 #: that produced it.
 PROTOCOL_VERSION = "exec-backends-protocol-1"
 
-#: Stack identifier for the llama.cpp arm (the vLLM arm's ``"vllm"``
-#: is a design value with no shipped constructor in this cycle).
+#: Stack identifier for the llama.cpp arm.
 LLAMACPP_STACK = "llamacpp"
+
+#: Stack identifier for the vLLM arm (admitted window: vLLM 0.33.0,
+#: CPU, from-source build — see docs/SERVING_BACKENDS_DESIGN.md).
+VLLM_STACK = "vllm"
 
 #: The pinned llama.cpp build window (§8.6 of the design record):
 #: tag ``b12182``; the commit is the identity — ``build_info``
@@ -241,6 +246,51 @@ def tier_a_sampler_params(seed: int) -> dict[str, Any]:
         "n_probs": 0,
         "seed": seed,
     }
+
+
+def tier_a_sampling_params_vllm(seed: int) -> dict[str, Any]:
+    """The Tier-A deterministic sampler tuple for the vLLM arm.
+
+    The post-normalization canonical values (R3 cycle-2 readiness
+    V-4): vLLM accepts ``top_k=-1`` but normalizes it to ``0``, and
+    the record carries the value the engine itself reports back.
+    ``repetition_penalty`` is this stack's name for the llama tuple's
+    ``repeat_penalty`` (pinned at the same neutral 1.0). The tuple
+    pins the whole submitted surface because the library defaults
+    are the trap: an unpinned request inherits temperature 1.0 and
+    ``max_tokens`` 16 from ``SamplingParams`` defaults (R3 cycle-2
+    P-4), so Tier-A leaves nothing unpinned. ``skip_special_tokens``
+    is the primary arm's pinned value; the paired no-special arm a
+    record's ``returned_text_digest_no_special`` comes from runs
+    with it False and is not the recorded configuration.
+    """
+    _checked_seed(seed)
+    return {
+        "temperature": 0.0,
+        "top_p": 1.0,
+        "top_k": 0,
+        "min_p": 0.0,
+        "repetition_penalty": 1.0,
+        "presence_penalty": 0.0,
+        "frequency_penalty": 0.0,
+        "seed": seed,
+        "n": 1,
+        "detokenize": True,
+        "skip_special_tokens": True,
+        "logprobs": None,
+    }
+
+
+def _sampler_for(stack: str, seed: int) -> dict[str, Any]:
+    """The producing stack's Tier-A tuple at ``seed``.
+
+    Records serialize the sampler expectation of the stack that
+    produced them; the diff-reports mirror carries its own copy of
+    each stack's tuple and compares per stack.
+    """
+    if stack == VLLM_STACK:
+        return tier_a_sampling_params_vllm(seed)
+    return tier_a_sampler_params(seed)
 
 
 def config_fingerprint_for(config: Mapping[str, Any]) -> str:
@@ -488,11 +538,15 @@ class StackRequest:
         if self.cache_mode not in CACHE_POSITIONS:
             raise ValueError("stack_request_invalid")
 
-    def request_config(self) -> dict[str, Any]:
+    def request_config(self, sampler: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """The recorded request configuration (§6.3): verbatim fields.
 
         Stop texts appear as digests, never raw (the winner is a list
         index, so the texts themselves are never needed downstream).
+        ``sampler`` is the producing stack's Tier-A tuple (the record
+        builder passes :func:`_sampler_for` of the identity's stack);
+        the default is the llama tuple, so a bare call serializes
+        exactly as it always has.
         """
         return {
             "max_new_tokens": self.max_new_tokens,
@@ -505,7 +559,7 @@ class StackRequest:
             "cache_salt_present": self.cache_salt is not None,
             "cache_mode": self.cache_mode,
             "seed": self.seed,
-            "sampler": tier_a_sampler_params(self.seed),
+            "sampler": dict(sampler) if sampler is not None else tier_a_sampler_params(self.seed),
         }
 
 
@@ -590,6 +644,15 @@ class StackObservation:
     server_detok_digest: str | None
     config_echo_digest: str | None
     detail: str = ""
+    #: vLLM-shaped cache quantity (``num_cache_creation_tokens``):
+    #: prompt tokens the engine computed and wrote to its prefix
+    #: cache. Always None on the llama arm, whose server reports no
+    #: such quantity.
+    cache_creation_tokens_reported: int | None = None
+    #: Digest of the paired arm's text (the same request run with
+    #: ``skip_special_tokens=False`` on the vLLM arm). Always None
+    #: on the llama arm, whose detokenization has no such pairing.
+    returned_text_digest_no_special: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -599,7 +662,9 @@ class StackObservation:
             "cache_n_reported": self.cache_n_reported,
             "tokens_cached_reported": self.tokens_cached_reported,
             "tokens_evaluated_reported": self.tokens_evaluated_reported,
+            "cache_creation_tokens_reported": self.cache_creation_tokens_reported,
             "returned_text_digest": self.returned_text_digest,
+            "returned_text_digest_no_special": self.returned_text_digest_no_special,
             "server_detok_digest": self.server_detok_digest,
             "config_echo_digest": self.config_echo_digest,
             "detail": self.detail,
@@ -1283,13 +1348,55 @@ class LlamacppHttpBackend:
 # The mirror predictor (§5.5) and the execution record (§6.3)
 #
 # The predictor derives, from the returned ids alone, the firing
-# step and winner the stack *should* have reported under the generic
-# scan semantics: decode prefixes in order; a stop text completes at
-# the first step whose decoded prefix contains it; the EOS fires at
-# its first position (unless ignore_eos); the earliest completion
-# wins. A stop text and the EOS completing at the same step are a
-# documented tie: the step is certain, the winner is the tied set.
+# step and winner the stack *should* have reported under the
+# producing stack's stop model (see predict_stop_outcome: the
+# generic scan for llama-shaped stacks, the executed vLLM model
+# for the vllm stack). The earliest completion wins. Two candidate
+# kinds completing at the same step are a documented tie: the step
+# is certain, the winner is the tied set.
 # ---------------------------------------------------------------------------
+
+
+def _vllm_stop_text_steps(
+    *,
+    decode: Callable[[tuple[int, ...]], str],
+    returned_ids: tuple[int, ...],
+    stop_texts: tuple[str, ...],
+    min_tokens: int,
+) -> dict[int, int]:
+    """Per-stop firing steps under vLLM's detokenizer stop model.
+
+    The firing rule is the lab's own executed port of the engine's
+    ``check_stop_strings`` (:func:`backends.emulate_vllm_holdback`):
+    checks run only once the step exceeds ``min_tokens``, and the
+    search window covers only the tail, so a stop fully completed
+    during the gated period is never refound (R3 cycle-2 S52b/S52d;
+    W6 PF-2 confirmed the rule at the exact gate-crossing step).
+    Reusing the port — never a second model of it — is what makes a
+    producer/predictor divergence a finding about the engine, not
+    about two disagreeing reimplementations.
+    """
+    from .backends import emulate_vllm_holdback
+
+    class _DecodeShim:
+        """Adapt the predictor's decode callable to the port's
+        ``core.Backend`` decode surface."""
+
+        def decode(self, ids: tuple[int, ...]) -> str:
+            return decode(tuple(ids))
+
+    shim = _DecodeShim()
+    steps: dict[int, int] = {}
+    for index, text in enumerate(stop_texts):
+        outcome = emulate_vllm_holdback(
+            shim,  # type: ignore[arg-type]
+            returned_ids,
+            text,
+            min_tokens=min_tokens,
+        )
+        if outcome.available and outcome.fired:
+            steps[index] = len(outcome.truncated_ids)
+    return steps
 
 
 def predict_stop_outcome(
@@ -1299,8 +1406,27 @@ def predict_stop_outcome(
     stop_texts: tuple[str, ...],
     eos_id: int | None,
     ignore_eos: bool = False,
+    min_tokens: int = 0,
+    stop_token_ids: tuple[int, ...] = (),
+    stop_model: str = "generic",
 ) -> dict[str, Any]:
-    """Predict the stop outcome of a returned stream (generic scan).
+    """Predict the stop outcome of a returned stream.
+
+    Two stop models, selected by the producing stack (the driver
+    passes its identity's stack; direct callers get the generic
+    scan, which is the shipped llama semantics):
+
+    * ``generic`` — decode prefixes in order; a stop text completes
+      at the first step whose decoded prefix contains it; the EOS
+      fires at its first position (unless ``ignore_eos``);
+      ``min_tokens`` and ``stop_token_ids`` do not exist in this
+      model and are ignored.
+    * ``vllm`` — the executed 0.33.0 semantics (R3 cycle-2 + W6
+      PF-2/PF-3/PF-4): stop texts follow the detokenizer port
+      (:func:`_vllm_stop_text_steps`); stop token ids and the EOS
+      are gated by ``min_tokens`` in the sampler itself — a gated
+      token is masked out of the stream, so a candidate exists only
+      at a step beyond the floor.
 
     Returns the predicted firing step (1-based position of the
     completing token, or None), the predicted winner, the per-stop
@@ -1314,27 +1440,57 @@ def predict_stop_outcome(
     # containment scan, after the caller's decode work had run.
     if any(type(text) is not str for text in stop_texts):
         raise ValueError("invalid_stop_texts")
+    if stop_model not in ("generic", "vllm"):
+        raise ValueError("invalid_stop_model")
+    if stop_model == "vllm":
+        if type(min_tokens) is not int or isinstance(min_tokens, bool) or min_tokens < 0:
+            raise ValueError("stack_request_invalid")
+        stop_token_ids = _checked_token_ids(stop_token_ids, "stack_request_invalid")
     prefixes: list[str] = []
     for step in range(1, len(returned_ids) + 1):
         prefixes.append(decode(returned_ids[:step]))
     full_text = prefixes[-1] if prefixes else decode(())
-    stop_steps: dict[int, int] = {}
-    for index, text in enumerate(stop_texts):
-        for step, prefix in enumerate(prefixes, start=1):
-            if text in prefix:
-                stop_steps[index] = step
-                break
-    eos_step: int | None = None
-    if eos_id is not None and not ignore_eos:
+    token_winner: dict[str, Any] | None = None
+    token_step: int | None = None
+    if stop_model == "vllm":
+        stop_steps = _vllm_stop_text_steps(
+            decode=decode,
+            returned_ids=returned_ids,
+            stop_texts=stop_texts,
+            min_tokens=min_tokens,
+        )
         for position, token in enumerate(returned_ids):
-            if token == eos_id:
-                eos_step = position + 1
+            step = position + 1
+            if step > min_tokens and token in stop_token_ids:
+                token_step = step
+                token_winner = {"kind": "stop_token", "id": token}
                 break
+        eos_step = None
+        if eos_id is not None and not ignore_eos:
+            for position, token in enumerate(returned_ids):
+                if token == eos_id and position + 1 > min_tokens:
+                    eos_step = position + 1
+                    break
+    else:
+        stop_steps = {}
+        for index, text in enumerate(stop_texts):
+            for step, prefix in enumerate(prefixes, start=1):
+                if text in prefix:
+                    stop_steps[index] = step
+                    break
+        eos_step = None
+        if eos_id is not None and not ignore_eos:
+            for position, token in enumerate(returned_ids):
+                if token == eos_id:
+                    eos_step = position + 1
+                    break
     candidates: list[tuple[int, int, dict[str, Any]]] = []
     for index, step in stop_steps.items():
         candidates.append((step, 0, {"kind": "stop_text", "index": index}))
+    if token_winner is not None and token_step is not None:
+        candidates.append((token_step, 1, token_winner))
     if eos_step is not None:
-        candidates.append((eos_step, 1, {"kind": "eos", "id": eos_id}))
+        candidates.append((eos_step, 2, {"kind": "eos", "id": eos_id}))
     firing_step: int | None = None
     winner: dict[str, Any] | None = None
     tie = False
@@ -1449,12 +1605,24 @@ def _fidelity_verdict(
         observed_kind = winner["kind"]
         if predicted_kind != observed_kind:
             if prediction["precedence_tie"]:
-                tied = {"stop_text", "eos"}
+                tied = {"stop_text", "stop_token", "eos"}
                 if observed_kind in tied:
                     return "agree", None, "", ""
             if observed_kind == "eos":
                 return "diverge", "EOS_OVER_STR_PRECEDENCE", "eos won over a stop text", ""
             return "diverge", "STR_OVER_EOS_PRECEDENCE", "stop text won over eos", ""
+        if observed_kind == "stop_token":
+            if winner.get("id") != predicted_winner.get("id"):
+                # The stream at the firing step holds exactly one
+                # token; a different winning id is a different
+                # firing event, not a tie resolution.
+                return (
+                    "diverge",
+                    "FIRING_STEP_DIFFERS",
+                    "stack's stop token differs from the stream at the firing step",
+                    "",
+                )
+            return "agree", None, "", ""
         if observed_kind == "stop_text":
             stack_index = winner.get("index")
             if stack_index is not None and stack_index != predicted_winner["index"]:
@@ -1504,7 +1672,7 @@ def build_execution_record(
     if not cell_detail and observation.detail:
         cell_detail = observation.detail
     prompt_digest = _ids_digest(request.prompt_ids)
-    request_config = request.request_config()
+    request_config = request.request_config(_sampler_for(identity.stack, request.seed))
     request_digest = sha256_hex(
         canonical_json({"config": request_config, "prompt_id_digest": prompt_digest}).encode(
             "utf-8"
@@ -1540,13 +1708,13 @@ def build_execution_record(
         if observation.returned_ids is not None
         else None,
         "returned_text_digest": observation.returned_text_digest,
-        "returned_text_digest_no_special": None,  # vLLM-shaped; always null on llama
+        "returned_text_digest_no_special": observation.returned_text_digest_no_special,
         "finish_class": observation.finish_class,
         "stop_winner": observation.stop_winner,
         "cache_n_reported": observation.cache_n_reported,
         "tokens_cached_reported": observation.tokens_cached_reported,
         "tokens_evaluated_reported": observation.tokens_evaluated_reported,
-        "cache_creation_tokens_reported": None,  # vLLM-shaped; always null on llama
+        "cache_creation_tokens_reported": observation.cache_creation_tokens_reported,
         "mirror": mirror,
         "cell_detail": cell_detail,
     }
@@ -1692,6 +1860,9 @@ def execute_cell(
             stop_texts=request.stop_texts,
             eos_id=request.eos_id,
             ignore_eos=request.ignore_eos,
+            min_tokens=request.min_tokens,
+            stop_token_ids=request.stop_token_ids,
+            stop_model="vllm" if identity.stack == VLLM_STACK else "generic",
         )
     else:
         prediction = _empty_prediction()

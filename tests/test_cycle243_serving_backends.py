@@ -32,6 +32,7 @@ from typing import Any
 from unittest import mock
 
 from model_protocol_lab import (
+    backends,
     diffbackends,
     diffreports,
     experiments,
@@ -3326,3 +3327,464 @@ class CoverageRecoveryTests(ServingBackendsTestBase):
             )
             self.assertTrue(stage["audit"]["budget_spent"])
             self.assertEqual(stage["detail"], servingbackends.EXECUTION_BUDGET_DETAIL)
+
+
+# ---------------------------------------------------------------------------
+# W6 Push 1: the vLLM Tier-A tuple, the two-model predictor, and the
+# observation plumbing the vLLM-shaped record fields ride on. The
+# llama expectations above stay byte-identical (B1); everything here
+# is additive.
+# ---------------------------------------------------------------------------
+
+
+class VllmTierATupleTests(unittest.TestCase):
+    """Plan C13: the vLLM tuple is the post-normalization canonical
+    surface (top_k 0, repetition_penalty), pinned whole."""
+
+    def test_exact_tuple(self) -> None:
+        self.assertEqual(
+            servingbackends.tier_a_sampling_params_vllm(7),
+            {
+                "temperature": 0.0,
+                "top_p": 1.0,
+                "top_k": 0,
+                "min_p": 0.0,
+                "repetition_penalty": 1.0,
+                "presence_penalty": 0.0,
+                "frequency_penalty": 0.0,
+                "seed": 7,
+                "n": 1,
+                "detokenize": True,
+                "skip_special_tokens": True,
+                "logprobs": None,
+            },
+        )
+
+    def test_seed_validation(self) -> None:
+        for bad in (-1, True, "3"):
+            with self.assertRaises(ValueError) as caught:
+                servingbackends.tier_a_sampling_params_vllm(bad)  # type: ignore[arg-type]
+            self.assertEqual(str(caught.exception), "stack_request_invalid")
+
+    def test_sampler_dispatch(self) -> None:
+        self.assertEqual(
+            servingbackends._sampler_for(servingbackends.VLLM_STACK, 3),
+            servingbackends.tier_a_sampling_params_vllm(3),
+        )
+        self.assertEqual(
+            servingbackends._sampler_for(servingbackends.LLAMACPP_STACK, 3),
+            servingbackends.tier_a_sampler_params(3),
+        )
+        # An unknown stack falls back to the llama tuple (the mirror
+        # owns stack admission; the producer never invents a tuple).
+        self.assertEqual(
+            servingbackends._sampler_for("other", 3),
+            servingbackends.tier_a_sampler_params(3),
+        )
+
+    def test_request_config_default_is_the_llama_tuple(self) -> None:
+        request = servingbackends.StackRequest(prompt_ids=(10,), max_new_tokens=4, seed=5)
+        self.assertEqual(
+            request.request_config()["sampler"],
+            servingbackends.tier_a_sampler_params(5),
+        )
+        self.assertEqual(
+            request.request_config(servingbackends.tier_a_sampling_params_vllm(5))["sampler"],
+            servingbackends.tier_a_sampling_params_vllm(5),
+        )
+
+
+class PredictorVllmModelTests(unittest.TestCase):
+    """Plan Step 2 + PF-2/PF-3/PF-4: the vllm stop model is the
+    executed detokenizer port for texts and sampler masking for
+    token ids and the EOS."""
+
+    def test_gate_crossing_span_fires_at_completion_step(self) -> None:
+        # "abc" begins at step 1 (token 13 = "ab") and completes at
+        # step 2 (token 12 = "c"); min_tokens=1: the completion step
+        # is beyond the gate, so the port fires (W6 PF-2 shape).
+        predicted = servingbackends.predict_stop_outcome(
+            decode=fake_decode,
+            returned_ids=(13, 12),
+            stop_texts=("abc",),
+            eos_id=None,
+            min_tokens=1,
+            stop_model="vllm",
+        )
+        self.assertEqual(predicted["stop_steps"], {"0": 2})
+        self.assertEqual(predicted["predicted_firing_step"], 2)
+        self.assertEqual(predicted["predicted_winner"], {"kind": "stop_text", "index": 0})
+
+    def test_gated_completion_is_never_refound(self) -> None:
+        # The stop completes exactly at the gated step 2 and the
+        # tail window never sees it again (R3 S52b; PF-2's other
+        # arm): the vllm model predicts no fire, the generic model
+        # fires at 2 — the pair discriminates the two models.
+        ids = (13, 12, 10)
+        vllm = servingbackends.predict_stop_outcome(
+            decode=fake_decode,
+            returned_ids=ids,
+            stop_texts=("abc",),
+            eos_id=None,
+            min_tokens=2,
+            stop_model="vllm",
+        )
+        self.assertEqual(vllm["stop_steps"], {})
+        self.assertIsNone(vllm["predicted_firing_step"])
+        self.assertIsNone(vllm["predicted_winner"])
+        generic = servingbackends.predict_stop_outcome(
+            decode=fake_decode,
+            returned_ids=ids,
+            stop_texts=("abc",),
+            eos_id=None,
+            min_tokens=2,
+        )
+        self.assertEqual(generic["predicted_firing_step"], 2)
+
+    def test_stop_token_ids_gated_by_min_tokens(self) -> None:
+        # PF-3 shape: token 12 occurs at steps 3 and 6; the gated
+        # occurrence is masked out of the stream, so only the later
+        # one can win.
+        ids = (10, 11, 12, 10, 11, 12)
+        floored = servingbackends.predict_stop_outcome(
+            decode=fake_decode,
+            returned_ids=ids,
+            stop_texts=(),
+            eos_id=None,
+            min_tokens=4,
+            stop_token_ids=(12,),
+            stop_model="vllm",
+        )
+        self.assertEqual(floored["predicted_firing_step"], 6)
+        self.assertEqual(floored["predicted_winner"], {"kind": "stop_token", "id": 12})
+        unfloored = servingbackends.predict_stop_outcome(
+            decode=fake_decode,
+            returned_ids=ids,
+            stop_texts=(),
+            eos_id=None,
+            min_tokens=0,
+            stop_token_ids=(12,),
+            stop_model="vllm",
+        )
+        self.assertEqual(unfloored["predicted_firing_step"], 3)
+
+    def test_eos_gated_by_min_tokens(self) -> None:
+        # PF-4 shape: the EOS at step 2 is masked when the floor
+        # covers it; ignore_eos removes the candidate entirely.
+        ids = (10, EOS, 11)
+        floored = servingbackends.predict_stop_outcome(
+            decode=fake_decode,
+            returned_ids=ids,
+            stop_texts=(),
+            eos_id=EOS,
+            min_tokens=4,
+            stop_model="vllm",
+        )
+        self.assertIsNone(floored["predicted_winner"])
+        unfloored = servingbackends.predict_stop_outcome(
+            decode=fake_decode,
+            returned_ids=ids,
+            stop_texts=(),
+            eos_id=EOS,
+            min_tokens=0,
+            stop_model="vllm",
+        )
+        self.assertEqual(unfloored["predicted_firing_step"], 2)
+        self.assertEqual(unfloored["predicted_winner"], {"kind": "eos", "id": EOS})
+        ignored = servingbackends.predict_stop_outcome(
+            decode=fake_decode,
+            returned_ids=ids,
+            stop_texts=(),
+            eos_id=EOS,
+            ignore_eos=True,
+            min_tokens=0,
+            stop_model="vllm",
+        )
+        self.assertIsNone(ignored["predicted_winner"])
+
+    def test_text_and_token_tie_at_one_step(self) -> None:
+        # "abc" completes at step 2 and token 12 is a stop token at
+        # the same step: the step is certain, the winner is a tie,
+        # and the text kind takes documented precedence.
+        predicted = servingbackends.predict_stop_outcome(
+            decode=fake_decode,
+            returned_ids=(13, 12),
+            stop_texts=("abc",),
+            eos_id=None,
+            min_tokens=0,
+            stop_token_ids=(12,),
+            stop_model="vllm",
+        )
+        self.assertEqual(predicted["predicted_firing_step"], 2)
+        self.assertTrue(predicted["precedence_tie"])
+        self.assertEqual(predicted["predicted_winner"], {"kind": "stop_text", "index": 0})
+
+    def test_differential_against_the_executed_port(self) -> None:
+        # The predictor's text steps must equal the port's firing
+        # step on every stream — the port is the executed model of
+        # the engine, so agreement here is the Step-2 acceptance.
+        rng = random.Random(2436)  # noqa: S311 -- deterministic test seed
+        tokenizer = FakeTokenizer()
+        pool = [6, 7, 10, 11, 12, 13, 14]
+        stop_pool = ["abc", "bc", "ab", "a", "STOP", "abcabc"]
+        for trial in range(300):
+            ids = tuple(rng.choice(pool) for _ in range(rng.randrange(0, 9)))
+            text = rng.choice(stop_pool)
+            floor = rng.choice([0, 1, 2, 4])
+            outcome = backends.emulate_vllm_holdback(tokenizer, ids, text, min_tokens=floor)
+            expected = len(outcome.truncated_ids) if outcome.available and outcome.fired else None
+            predicted = servingbackends.predict_stop_outcome(
+                decode=fake_decode,
+                returned_ids=ids,
+                stop_texts=(text,),
+                eos_id=None,
+                min_tokens=floor,
+                stop_model="vllm",
+            )
+            self.assertEqual(
+                predicted["stop_steps"],
+                {"0": expected} if expected is not None else {},
+                f"trial {trial}: ids={ids} stop={text!r} floor={floor}",
+            )
+            self.assertEqual(predicted["predicted_firing_step"], expected)
+
+    def test_generic_model_ignores_the_vllm_parameters(self) -> None:
+        # The generic scan has no min_tokens and no token-stop
+        # candidates: a step-1 completion fires at 1 under any floor.
+        predicted = servingbackends.predict_stop_outcome(
+            decode=fake_decode,
+            returned_ids=(12,),
+            stop_texts=("c",),
+            eos_id=None,
+            min_tokens=9,
+            stop_token_ids=(12,),
+        )
+        self.assertEqual(predicted["predicted_firing_step"], 1)
+        self.assertEqual(predicted["predicted_winner"], {"kind": "stop_text", "index": 0})
+
+    def test_invalid_model_and_parameters(self) -> None:
+        with self.assertRaises(ValueError) as caught:
+            servingbackends.predict_stop_outcome(
+                decode=fake_decode,
+                returned_ids=(10,),
+                stop_texts=(),
+                eos_id=None,
+                stop_model="polled",  # type: ignore[arg-type]
+            )
+        self.assertEqual(str(caught.exception), "invalid_stop_model")
+        with self.assertRaises(ValueError) as caught:
+            servingbackends.predict_stop_outcome(
+                decode=fake_decode,
+                returned_ids=(10,),
+                stop_texts=(),
+                eos_id=None,
+                min_tokens=-1,
+                stop_model="vllm",
+            )
+        self.assertEqual(str(caught.exception), "stack_request_invalid")
+        with self.assertRaises(ValueError) as caught:
+            servingbackends.predict_stop_outcome(
+                decode=fake_decode,
+                returned_ids=(10,),
+                stop_texts=(),
+                eos_id=None,
+                stop_token_ids=(-1,),
+                stop_model="vllm",
+            )
+        self.assertEqual(str(caught.exception), "stack_request_invalid")
+
+
+def _identity_for(stack: str) -> servingbackends.StackIdentity:
+    return servingbackends.StackIdentity(
+        stack=stack,
+        stack_version="0.33.0" if stack == servingbackends.VLLM_STACK else "test",
+        checkpoint_digest="0" * 64,
+        checkpoint_bytes=1,
+        tokenizer_fingerprint="sha256:" + "0" * 64,
+        hardware_class="cpu",
+        declared_eos_ids=(EOS,),
+        config={},
+        config_fingerprint="0" * 64,
+    )
+
+
+class _StubBackend:
+    """Minimal ExecutionBackend double for execute_cell wiring."""
+
+    def __init__(self, identity: servingbackends.StackIdentity, observation: Any) -> None:
+        self.identity = identity
+        self._observation = observation
+
+    def execute(self, request: servingbackends.StackRequest) -> Any:
+        return self._observation
+
+
+class ExecuteCellStackDerivationTests(unittest.TestCase):
+    """execute_cell derives the sampler tuple and the stop model
+    from the producing identity's stack."""
+
+    def _run(self, stack: str, min_tokens: int) -> dict[str, Any]:
+        observation = servingbackends.StackObservation(
+            returned_ids=(13, 12),
+            finish_class="stop",
+            stop_winner={
+                "kind": "stop_text",
+                "index": 0,
+                "digest": servingbackends._text_digest("abc"),
+            },
+            cache_n_reported=None,
+            tokens_cached_reported=None,
+            tokens_evaluated_reported=None,
+            # The stack trims the stop string: its returned text is
+            # the empty prefix before "abc".
+            returned_text_digest=servingbackends._text_digest(""),
+            server_detok_digest=None,
+            config_echo_digest=None,
+        )
+        backend = _StubBackend(_identity_for(stack), observation)
+        request = servingbackends.StackRequest(
+            prompt_ids=(10,),
+            max_new_tokens=8,
+            stop_texts=("abc",),
+            min_tokens=min_tokens,
+            seed=11,
+        )
+        return servingbackends.execute_cell(
+            backend,  # type: ignore[arg-type]
+            request=request,
+            decode=fake_decode,
+            candidate="c",
+            fixture="f",
+        )
+
+    def test_vllm_identity_records_vllm_sampler_and_model(self) -> None:
+        record = self._run(servingbackends.VLLM_STACK, min_tokens=2)
+        self.assertEqual(
+            record["request_config"]["sampler"],
+            servingbackends.tier_a_sampling_params_vllm(11),
+        )
+        # Under the vllm model the gated completion never refires:
+        # the mirror prediction is empty while the stack claims a
+        # stop — a spurious-stop divergence, by design.
+        self.assertIsNone(record["mirror"]["predicted_winner"])
+        self.assertEqual(record["mirror"]["fidelity_verdict"], "diverge")
+        self.assertEqual(record["mirror"]["divergence_class"], "SPURIOUS_STOP")
+
+    def test_llama_identity_records_llama_sampler_and_generic_model(self) -> None:
+        record = self._run(servingbackends.LLAMACPP_STACK, min_tokens=2)
+        self.assertEqual(
+            record["request_config"]["sampler"],
+            servingbackends.tier_a_sampler_params(11),
+        )
+        # The generic scan ignores the floor: the completion at
+        # step 2 is the prediction, and the record agrees.
+        self.assertEqual(record["mirror"]["predicted_firing_step"], 2)
+        self.assertEqual(record["mirror"]["fidelity_verdict"], "agree")
+
+    def test_absent_record_uses_the_identity_stack_sampler(self) -> None:
+        request = servingbackends.StackRequest(prompt_ids=(10,), max_new_tokens=4, seed=3)
+        record = servingbackends._absent_record(
+            request=request,
+            identity=_identity_for(servingbackends.VLLM_STACK),
+            candidate="c",
+            fixture="f",
+            cache_position="standalone",
+            detail="capability_absent: test",
+        )
+        self.assertEqual(
+            record["request_config"]["sampler"],
+            servingbackends.tier_a_sampling_params_vllm(3),
+        )
+
+
+class ObservationPlumbingTests(unittest.TestCase):
+    """Plan C4: the two vLLM-shaped record fields are observation
+    fields now — None unless a backend reports them."""
+
+    def test_defaults_are_none_and_serialize(self) -> None:
+        observation = servingbackends.StackObservation(
+            returned_ids=(10,),
+            finish_class="length",
+            stop_winner=None,
+            cache_n_reported=None,
+            tokens_cached_reported=None,
+            tokens_evaluated_reported=None,
+            returned_text_digest=None,
+            server_detok_digest=None,
+            config_echo_digest=None,
+        )
+        self.assertIsNone(observation.cache_creation_tokens_reported)
+        self.assertIsNone(observation.returned_text_digest_no_special)
+        as_dict = observation.as_dict()
+        self.assertIn("cache_creation_tokens_reported", as_dict)
+        self.assertIn("returned_text_digest_no_special", as_dict)
+        self.assertIsNone(as_dict["cache_creation_tokens_reported"])
+        self.assertIsNone(as_dict["returned_text_digest_no_special"])
+
+    def test_record_threads_observation_values(self) -> None:
+        observation = servingbackends.StackObservation(
+            returned_ids=(10,),
+            finish_class="length",
+            stop_winner=None,
+            cache_n_reported=None,
+            tokens_cached_reported=64,
+            tokens_evaluated_reported=None,
+            returned_text_digest=servingbackends._text_digest("a"),
+            server_detok_digest=None,
+            config_echo_digest=None,
+            cache_creation_tokens_reported=128,
+            returned_text_digest_no_special="ab" * 32,
+        )
+        backend = _StubBackend(_identity_for(servingbackends.VLLM_STACK), observation)
+        request = servingbackends.StackRequest(prompt_ids=(10,), max_new_tokens=4, seed=1)
+        record = servingbackends.execute_cell(
+            backend,  # type: ignore[arg-type]
+            request=request,
+            decode=fake_decode,
+            candidate="c",
+            fixture="f",
+        )
+        self.assertEqual(record["cache_creation_tokens_reported"], 128)
+        self.assertEqual(record["returned_text_digest_no_special"], "ab" * 32)
+
+
+class FidelityStopTokenTests(unittest.TestCase):
+    """_fidelity_verdict on an observed stop_token winner: the id
+    must be the token the stream holds at the firing step."""
+
+    def _run(self, observed_id: int) -> dict[str, Any]:
+        observation = servingbackends.StackObservation(
+            returned_ids=(10, 12),
+            finish_class="stop",
+            stop_winner={"kind": "stop_token", "id": observed_id},
+            cache_n_reported=None,
+            tokens_cached_reported=None,
+            tokens_evaluated_reported=None,
+            returned_text_digest=servingbackends._text_digest("ac"),
+            server_detok_digest=None,
+            config_echo_digest=None,
+        )
+        backend = _StubBackend(_identity_for(servingbackends.VLLM_STACK), observation)
+        request = servingbackends.StackRequest(
+            prompt_ids=(10,),
+            max_new_tokens=8,
+            stop_token_ids=(12,),
+            seed=11,
+        )
+        return servingbackends.execute_cell(
+            backend,  # type: ignore[arg-type]
+            request=request,
+            decode=fake_decode,
+            candidate="c",
+            fixture="f",
+        )
+
+    def test_matching_stop_token_agrees(self) -> None:
+        record = self._run(12)
+        self.assertEqual(record["mirror"]["predicted_winner"], {"kind": "stop_token", "id": 12})
+        self.assertEqual(record["mirror"]["fidelity_verdict"], "agree")
+
+    def test_different_stop_token_diverges(self) -> None:
+        record = self._run(11)
+        self.assertEqual(record["mirror"]["fidelity_verdict"], "diverge")
+        self.assertEqual(record["mirror"]["divergence_class"], "FIRING_STEP_DIFFERS")
