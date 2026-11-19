@@ -80,6 +80,10 @@ class FakeCacheBackend:
             raise RuntimeError("teardown erase boom")
         return True
 
+    def reset_cache(self):
+        """Reset cache (the Step-5 protocol seam; this double's reset is its erase)."""
+        return self.erase_slot()
+
     def execute(self, request, *, cancel=None):
         """Execute."""
         if self._fail_on_mode is not None and request.cache_mode == self._fail_on_mode:

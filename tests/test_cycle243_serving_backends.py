@@ -3992,7 +3992,7 @@ class _FakeLLM:
     ) -> list[_FakeRequestOutput]:
         prompt = prompts[0]
         prompt_ids = list(prompt.prompt_token_ids)
-        self.generate_calls.append((prompt_ids, params))
+        self.generate_calls.append((prompt_ids, params, prompt))
         if self.generate_handler is not None:
             return self.generate_handler(prompt_ids, params)
         completion = _FakeCompletion([8], "a", "length")
@@ -4833,3 +4833,149 @@ class VllmFailureBranchTests(_VllmBackendCase):
         self.assertFalse(backend.reset_cache())
         llm.llm_engine.vllm_config = types.SimpleNamespace()
         self.assertFalse(backend.verify_identity())
+
+
+# ---------------------------------------------------------------------------
+# W6 Push 3: Step 5 — the cache driver generalized to the
+# ExecutionBackend protocol (per-stack reset seam, contamination
+# quantum, and position shapes). Llama expectations above stay
+# byte-identical (B1).
+# ---------------------------------------------------------------------------
+
+
+class LlamaResetCacheSeamTests(ServingBackendsTestBase):
+    """LlamacppHttpBackend.reset_cache() is the slot erase under the
+    cache driver's protocol name."""
+
+    def test_reset_cache_delegates_to_slot_erase(self) -> None:
+        with _FakeServer(self.gguf) as server:
+            backend = self.probed_backend(server)
+            self.assertTrue(backend.reset_cache())
+        with _FakeServer(self.gguf) as server:
+            server.state.erase_enabled = False
+            backend = self.probed_backend(server)
+            self.assertFalse(backend.reset_cache())
+
+
+class VllmCacheSequenceTests(_VllmBackendCase):
+    """run_cache_sequence on the vLLM arm: positions are
+    {tokens_cached, cache_creation_tokens}; the contamination
+    quantum is one full block (128 on the fake)."""
+
+    COLD = (1, 2, 3, 4)
+    SHARED = (1, 2, 9, 9)
+    DIVERGENT = (13, 10)
+
+    def _probed(self, script: dict[str, Any] | None = None) -> Any:
+        self.install_fake(script)
+        backend = self.make_backend()
+        backend.probe()
+        return backend, _FakeLLM.instances[-1]
+
+    def _run(self, backend: Any) -> dict[str, Any]:
+        tokenizer = _VllmFakeTokenizer()
+        return servingbackends.run_cache_sequence(
+            backend,
+            cold_ids=self.COLD,
+            shared_ids=self.SHARED,
+            divergent_ids=self.DIVERGENT,
+            seed=5,
+            decode=lambda ids: tokenizer.decode(list(ids)),
+        )
+
+    def _script(self, llm: Any, table: dict[tuple[int, ...], list[tuple[int, int]]]) -> None:
+        def handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            key = tuple(prompt_ids)
+            cached, creation = table[key].pop(0)
+            return [
+                _FakeRequestOutput(
+                    "r",
+                    prompt_ids,
+                    _FakeCompletion([8], "a", "length"),
+                    num_cached_tokens=cached,
+                    num_cache_creation_tokens=creation,
+                )
+            ]
+
+        llm.generate_handler = handler
+
+    def test_g5l_shapes(self) -> None:
+        backend, llm = self._probed()
+        self._script(
+            llm,
+            {
+                self.COLD: [(0, 512), (384, 128)],
+                self.SHARED: [(128, 256)],
+                self.DIVERGENT: [(0, 384)],
+            },
+        )
+        result = self._run(backend)
+        self.assertTrue(result["available"])
+        self.assertEqual(result["detail"], "")
+        self.assertEqual(
+            result["positions"],
+            {
+                "cold": {"tokens_cached": 0, "cache_creation_tokens": 512},
+                "warm_repeat": {"tokens_cached": 384, "cache_creation_tokens": 128},
+                "shared_prefix": {"tokens_cached": 128, "cache_creation_tokens": 256},
+                "divergent_control": {"tokens_cached": 0, "cache_creation_tokens": 384},
+            },
+        )
+        self.assertEqual(len(result["records"]), 4)
+
+    def test_contamination_at_one_block(self) -> None:
+        backend, llm = self._probed()
+        self._script(
+            llm,
+            {
+                self.COLD: [(0, 512), (384, 128)],
+                self.SHARED: [(128, 256)],
+                self.DIVERGENT: [(128, 256)],
+            },
+        )
+        result = self._run(backend)
+        self.assertEqual(result["detail"], "cache_protocol_contaminated")
+        backend2, llm2 = self._probed()
+        self._script(
+            llm2,
+            {
+                self.COLD: [(128, 384), (384, 128)],
+                self.SHARED: [(128, 256)],
+                self.DIVERGENT: [(0, 384)],
+            },
+        )
+        result2 = self._run(backend2)
+        self.assertEqual(result2["detail"], "cache_protocol_contaminated")
+
+    def test_reset_failure_records_absent_cells(self) -> None:
+        backend, _llm = self._probed({"reset_result": False})
+        result = self._run(backend)
+        self.assertFalse(result["available"])
+        self.assertEqual(result["detail"], servingbackends.CAPABILITY_ABSENT)
+        self.assertEqual(len(result["records"]), 4)
+        self.assertEqual(result["positions"], {})
+
+    def test_unreported_quantities_are_capability_absent(self) -> None:
+        backend, llm = self._probed()
+        self._script(
+            llm,
+            {
+                self.COLD: [(None, 512), (384, 128)],
+                self.SHARED: [(128, 256)],
+                self.DIVERGENT: [(0, 384)],
+            },
+        )
+        result = self._run(backend)
+        self.assertEqual(result["detail"], servingbackends.CAPABILITY_ABSENT)
+
+    def test_cache_salt_passed_through_tokens_prompt(self) -> None:
+        backend, llm = self._probed()
+        llm.generate_calls.clear()
+        backend.execute(servingbackends.StackRequest(prompt_ids=(1, 2), max_new_tokens=4, seed=3))
+        backend.execute(
+            servingbackends.StackRequest(
+                prompt_ids=(1, 2), max_new_tokens=4, seed=3, cache_salt="salt-1"
+            )
+        )
+        salts = [call[2].cache_salt for call in llm.generate_calls]
+        self.assertEqual(salts, [None, "salt-1"])

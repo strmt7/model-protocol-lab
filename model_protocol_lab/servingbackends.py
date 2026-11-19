@@ -695,6 +695,10 @@ class ExecutionBackend(Protocol):
         self, request: StackRequest, *, cancel: threading.Event | None = None
     ) -> StackObservation: ...
 
+    def reset_cache(self) -> bool: ...
+
+    def verify_identity(self) -> bool: ...
+
 
 def _absent_observation() -> StackObservation:
     return StackObservation(
@@ -938,6 +942,10 @@ class LlamacppHttpBackend:
             if time.monotonic() >= deadline:
                 raise ValueError("stack_unreachable")
             time.sleep(0.25)
+
+    def reset_cache(self) -> bool:
+        """The cache driver's name for the slot erase (Step 5 seam)."""
+        return self.erase_slot()
 
     def erase_slot(self) -> bool:
         """Erase slot 0 (A2 hygiene); availability is posture data."""
@@ -2612,8 +2620,21 @@ def execute_cell(
     )
 
 
+def _cache_reset_available(identity: StackIdentity) -> bool:
+    """Per-stack cache-reset availability (Step 5): the llama arm's
+    reset is posture-gated (slot erase is a server launch option,
+    read from the probed identity); the vLLM arm's reset is part of
+    the probed engine surface (``reset_prefix_cache``, P-2), so a
+    probed vLLM identity always offers it — a reset that then fails
+    is handled by the sequence's failed-reset path, not here."""
+    if identity.stack == VLLM_STACK:
+        return True
+    posture = identity.config.get("posture")
+    return type(posture) is dict and posture.get("slot_erase_available") is True
+
+
 def run_cache_sequence(
-    backend: LlamacppHttpBackend,
+    backend: ExecutionBackend,
     *,
     cold_ids: tuple[int, ...],
     shared_ids: tuple[int, ...],
@@ -2626,16 +2647,19 @@ def run_cache_sequence(
 ) -> dict[str, Any]:
     """The measured cache companion protocol (§5.4), in order.
 
-    Identity re-read at the start (A8(i)); erase; the four arms
-    (cold, warm repeat, shared prefix, divergent control); erase
-    again; identity re-read at the end. The end erase and re-read
+    Identity re-read at the start (A8(i)); reset; the four arms
+    (cold, warm repeat, shared prefix, divergent control); reset
+    again; identity re-read at the end. The end reset and re-read
     are the sequence's teardown and run on every exit from the arm
-    loop, including aborts (RTI-05). Cold follows C-3: the first
-    arm after a completed erase on the probed server — a cold or
-    divergent arm reporting reuse above one quantum marks the
-    sequence ``cache_protocol_contaminated`` whatever erase returned.
-    On a server without slot erase (the fallback posture) all four
-    cells are recorded ``capability_absent`` and no arm executes.
+    loop, including aborts (RTI-05). The contamination quantum and
+    the recorded position shape are per-stack: llama judges reuse
+    by ``cache_n`` above one quantum and records
+    ``{cache_n, tokens_cached, tokens_evaluated}``; vLLM judges by
+    ``tokens_cached`` reaching one full block (the block size read
+    back at G2) and records ``{tokens_cached,
+    cache_creation_tokens}``. On a stack whose reset is unavailable
+    (the llama fallback posture) all four cells are recorded
+    ``capability_absent`` and no arm executes.
     """
     from .core import request_seed_for
 
@@ -2664,9 +2688,7 @@ def run_cache_sequence(
             cache_mode=position,
         )
 
-    posture = identity.config.get("posture")
-    erase_available = type(posture) is dict and posture.get("slot_erase_available") is True
-    if not erase_available:
+    if not _cache_reset_available(identity):
         for position, ids in prompts.items():
             emit(
                 _absent_record(
@@ -2692,7 +2714,7 @@ def run_cache_sequence(
             "records": [],
             "positions": {},
         }
-    if not backend.erase_slot():
+    if not backend.reset_cache():
         for position, ids in prompts.items():
             emit(
                 _absent_record(
@@ -2742,7 +2764,7 @@ def run_cache_sequence(
         # exception, when there is one, still propagates unchanged
         # after teardown.
         with contextlib.suppress(Exception):
-            backend.erase_slot()
+            backend.reset_cache()
         identity_kept = False
         with contextlib.suppress(Exception):
             identity_kept = backend.verify_identity()
@@ -2752,20 +2774,42 @@ def run_cache_sequence(
     if identity_changed:
         detail = "stack_identity_changed_during_run"
     by_position = {record["cache_position"]: record for record in records}
-    cold_n = by_position["cold"]["cache_n_reported"]
-    divergent_n = by_position["divergent_control"]["cache_n_reported"]
-    if cold_n is None or divergent_n is None:
-        detail = detail or CAPABILITY_ABSENT
-    elif cold_n > LLAMA_CACHE_QUANTUM or divergent_n > LLAMA_CACHE_QUANTUM:
-        detail = "cache_protocol_contaminated"
-    positions = {
-        position: {
-            "cache_n": record["cache_n_reported"],
-            "tokens_cached": record["tokens_cached_reported"],
-            "tokens_evaluated": record["tokens_evaluated_reported"],
+    if identity.stack == VLLM_STACK:
+        engine = identity.config.get("engine")
+        block_size = engine.get("block_size") if type(engine) is dict else None
+        cold_cached = by_position["cold"]["tokens_cached_reported"]
+        divergent_cached = by_position["divergent_control"]["tokens_cached_reported"]
+        if (
+            cold_cached is None
+            or divergent_cached is None
+            or type(block_size) is not int
+            or block_size <= 0
+        ):
+            detail = detail or CAPABILITY_ABSENT
+        elif cold_cached >= block_size or divergent_cached >= block_size:
+            detail = "cache_protocol_contaminated"
+        positions = {
+            position: {
+                "tokens_cached": record["tokens_cached_reported"],
+                "cache_creation_tokens": record["cache_creation_tokens_reported"],
+            }
+            for position, record in by_position.items()
         }
-        for position, record in by_position.items()
-    }
+    else:
+        cold_n = by_position["cold"]["cache_n_reported"]
+        divergent_n = by_position["divergent_control"]["cache_n_reported"]
+        if cold_n is None or divergent_n is None:
+            detail = detail or CAPABILITY_ABSENT
+        elif cold_n > LLAMA_CACHE_QUANTUM or divergent_n > LLAMA_CACHE_QUANTUM:
+            detail = "cache_protocol_contaminated"
+        positions = {
+            position: {
+                "cache_n": record["cache_n_reported"],
+                "tokens_cached": record["tokens_cached_reported"],
+                "tokens_evaluated": record["tokens_evaluated_reported"],
+            }
+            for position, record in by_position.items()
+        }
     return {
         "attempted": True,
         "available": True,
