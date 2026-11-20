@@ -22834,6 +22834,7 @@ _SERVING_CELL_DETAILS = frozenset(
         "stack_response_invalid",
         "stack_response_unclassified",
         "stack_execution_failed",
+        "stack_config_unpinned",
         "serving_backends_record_budget_exceeded",
     }
 )
@@ -22857,6 +22858,78 @@ _SERVING_TIER_A = {
     "dynatemp_range": 0.0,
     "n_probs": 0,
 }
+_SERVING_STACK_VLLM = "vllm"
+_SERVING_STACKS = frozenset({_SERVING_STACK, _SERVING_STACK_VLLM})
+# The vLLM arm's Tier-A tuple (the mirror's own copy, seedless; the
+# probe seed 1234 is pinned where the identity config is checked).
+_SERVING_TIER_A_VLLM = {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": 0,
+    "min_p": 0.0,
+    "repetition_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "n": 1,
+    "detokenize": True,
+    "skip_special_tokens": True,
+    "logprobs": None,
+}
+_SERVING_VLLM_PROBE_SEED = 1234
+_SERVING_VLLM_ENV = {
+    "VLLM_TARGET_DEVICE": "cpu",
+    "VLLM_NO_USAGE_STATS": "1",
+    "VLLM_DO_NOT_TRACK": "1",
+    "HF_HUB_OFFLINE": "1",
+    "HF_HUB_DISABLE_TELEMETRY": "1",
+    "VLLM_ENABLE_V1_MULTIPROCESSING": "0",
+}
+_SERVING_VLLM_CONFIG_KEYS = frozenset(
+    {
+        "protocol",
+        "stack",
+        "vllm_version",
+        "torch_version",
+        "transformers_version",
+        "vllm_module_digest",
+        "platform",
+        "env",
+        "engine",
+        "default_sampling_params_digest",
+        "detokenizer_variant",
+        "declared_eos_ids",
+        "tier_a_vllm",
+        "abort_probe",
+    }
+)
+_SERVING_VLLM_ENGINE_KEYS = frozenset(
+    {
+        "checkpoint_digest",
+        "seed",
+        "enforce_eager",
+        "max_num_seqs",
+        "max_model_len",
+        "enable_prefix_caching",
+        "dtype_resolved",
+        "kv_cache_memory_bytes",
+        "kv_cache_sizing_input",
+        "block_size",
+        "num_gpu_blocks",
+    }
+)
+_SERVING_VLLM_ABORT_KEYS = frozenset(
+    {
+        "surface",
+        "terminal_channel",
+        "terminal_observed",
+        "finish_reason",
+        "returned_tokens",
+        "elapsed_s",
+    }
+)
+_SERVING_VLLM_DETOKENIZER_VARIANTS = frozenset(
+    {"FastIncrementalDetokenizer", "SlowIncrementalDetokenizer"}
+)
 
 
 def _serving_hex64(value: Any) -> bool:
@@ -22910,14 +22983,20 @@ def _serving_valid_winner(value: Any, *, predicted: bool) -> bool:
     return False
 
 
-def _serving_valid_record(record: Any, declared_eos: list[int]) -> bool:
+def _serving_valid_record(
+    record: Any, declared_eos: list[int], stack: str = _SERVING_STACK
+) -> bool:
     """One execution record, recompute standard (cycle 243).
 
     Every stored leaf is type-gated before any membership test,
     lookup, or arithmetic (the cycle-241 discipline); digests are
     recomputed from the stored ids/config; the disposition is
     recomputed from the stored digest triple; EOS attribution is
-    checked against the identity's declared set.
+    checked against the identity's declared set. The sampler
+    expectation, the two producer-impossible fields, and the
+    overshoot tolerance are per-stack (W6 Step 8): the vLLM arm
+    legitimately reports a no-special-token digest and cache
+    creation counts, and never overshoots its token cap.
     """
     if type(record) is not dict or set(record) != {
         "request_digest",
@@ -22993,10 +23072,11 @@ def _serving_valid_record(record: Any, declared_eos: list[int]) -> bool:
         return False
     if type(config["seed"]) is not int or config["seed"] < 0:
         return False
+    tier_a = _SERVING_TIER_A_VLLM if stack == _SERVING_STACK_VLLM else _SERVING_TIER_A
     sampler = config["sampler"]
-    if type(sampler) is not dict or set(sampler) != set(_SERVING_TIER_A) | {"seed"}:
+    if type(sampler) is not dict or set(sampler) != set(tier_a) | {"seed"}:
         return False
-    expected_sampler = {**_SERVING_TIER_A, "seed": config["seed"]}
+    expected_sampler = {**tier_a, "seed": config["seed"]}
     if not _recomputed_equal(sampler, expected_sampler):
         return False
     if not _serving_hex64(record["request_digest"]):
@@ -23020,10 +23100,19 @@ def _serving_valid_record(record: Any, declared_eos: list[int]) -> bool:
         record["returned_text_digest"]
     ):
         return False
-    if record["returned_text_digest_no_special"] is not None:
-        return False
-    if record["cache_creation_tokens_reported"] is not None:
-        return False
+    if stack == _SERVING_STACK_VLLM:
+        if record["returned_text_digest_no_special"] is not None and not _serving_hex64(
+            record["returned_text_digest_no_special"]
+        ):
+            return False
+        creation = record["cache_creation_tokens_reported"]
+        if creation is not None and (type(creation) is not int or creation < 0):
+            return False
+    else:
+        if record["returned_text_digest_no_special"] is not None:
+            return False
+        if record["cache_creation_tokens_reported"] is not None:
+            return False
     if (
         type(record["finish_class"]) is not str
         or record["finish_class"] not in _SERVING_FINISH_CLASSES
@@ -23153,9 +23242,10 @@ def _serving_valid_record(record: Any, declared_eos: list[int]) -> bool:
         and (record["cell_detail"] != "eos_attribution_mismatch" or verdict != "diverge")
     ):
         return False
+    overshoot = 0 if stack == _SERVING_STACK_VLLM else 1
     if (
         returned is not None
-        and len(returned) > config["max_new_tokens"] + 1
+        and len(returned) > config["max_new_tokens"] + overshoot
         and record["cell_detail"] != "stack_response_invalid"
     ):
         return False
@@ -23167,8 +23257,11 @@ def _serving_valid_record(record: Any, declared_eos: list[int]) -> bool:
     )
 
 
-def _serving_recompute_rows(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The stop-matrix companion derivation, re-implemented."""
+def _serving_recompute_rows(
+    records: list[dict[str, Any]], stack: str = _SERVING_STACK
+) -> list[dict[str, Any]]:
+    """The stop-matrix companion derivation, re-implemented. The
+    cells key is the payload's own stack (W6 Step 8)."""
     rows: list[dict[str, Any]] = []
     for record in records:
         if record.get("cache_position") != "standalone":
@@ -23206,7 +23299,7 @@ def _serving_recompute_rows(records: list[dict[str, Any]]) -> list[dict[str, Any
                 "fixture": record.get("fixture"),
                 "candidate": record.get("candidate"),
                 "arm": arm,
-                "cells": {"llamacpp": cell},
+                "cells": {stack: cell},
                 "flips": flips,
             }
         )
@@ -23252,6 +23345,143 @@ def _serving_recompute_fidelity(records: list[dict[str, Any]]) -> dict[str, Any]
         "counts": counts,
         "divergence_classes": classes,
     }
+
+
+def _serving_valid_llama_config(
+    config: dict[str, Any], identity: dict[str, Any], declared: list[int]
+) -> bool:
+    """The llamacpp identity config, exactly as the producer emits
+    it (the pre-W6 checks, verbatim)."""
+    if set(config) != {
+        "protocol",
+        "stack",
+        "build_info",
+        "total_slots",
+        "model_path_digest",
+        "checkpoint_sha256",
+        "declared_eos_ids",
+        "generation_settings_digest",
+        "posture",
+        "cache_probe",
+        "tier_a",
+    }:
+        return False
+    if config["protocol"] != _SERVING_PROTOCOL_VERSION or config["stack"] != _SERVING_STACK:
+        return False
+    if config["build_info"] != identity["stack_version"]:
+        return False
+    if config["total_slots"] != 1 or type(config["total_slots"]) is not int:
+        return False
+    if not _serving_hex64(config["model_path_digest"]):
+        return False
+    if config["checkpoint_sha256"] != identity["checkpoint_digest"]:
+        return False
+    if config["declared_eos_ids"] != declared:
+        return False
+    if config["generation_settings_digest"] is not None and not _serving_hex64(
+        config["generation_settings_digest"]
+    ):
+        return False
+    posture = config["posture"]
+    if type(posture) is not dict or set(posture) != {
+        "api_key_required",
+        "slot_erase_available",
+        "endpoint_slots",
+        "ui_enabled",
+    }:
+        return False
+    if posture["api_key_required"] is not True:
+        return False
+    for key in ("slot_erase_available", "endpoint_slots", "ui_enabled"):
+        if type(posture[key]) is not bool:
+            return False
+    cache_probe = config["cache_probe"]
+    if type(cache_probe) is not dict or set(cache_probe) != {"cold_cache_n", "warm_cache_n"}:
+        return False
+    for key in ("cold_cache_n", "warm_cache_n"):
+        if cache_probe[key] is not None and (
+            type(cache_probe[key]) is not int or cache_probe[key] < 0
+        ):
+            return False
+    return _recomputed_equal(config["tier_a"], _SERVING_TIER_A)
+
+
+def _serving_valid_vllm_config(
+    config: dict[str, Any], identity: dict[str, Any], declared: list[int]
+) -> bool:
+    """The vLLM identity config: the closed key set fixed in
+    advance for the adapter (digest/scalar-only), with the probed
+    values the mirror pins independently — the six environment
+    pins, the singleton eager engine shape, the Tier-A tuple at
+    the probe seed, and the generate-family abort cell."""
+    if set(config) != _SERVING_VLLM_CONFIG_KEYS:
+        return False
+    if config["protocol"] != _SERVING_PROTOCOL_VERSION or config["stack"] != _SERVING_STACK_VLLM:
+        return False
+    if config["vllm_version"] != identity["stack_version"]:
+        return False
+    for key in ("torch_version", "transformers_version"):
+        if type(config[key]) is not str or not config[key]:
+            return False
+    if not _serving_hex64(config["vllm_module_digest"]):
+        return False
+    if config["platform"] != {"device_type": "cpu", "platform_class": "CpuPlatform"}:
+        return False
+    if config["env"] != _SERVING_VLLM_ENV:
+        return False
+    engine = config["engine"]
+    if type(engine) is not dict or set(engine) != _SERVING_VLLM_ENGINE_KEYS:
+        return False
+    if engine["checkpoint_digest"] != identity["checkpoint_digest"]:
+        return False
+    if engine["seed"] != 0 or type(engine["seed"]) is not int:
+        return False
+    if engine["enforce_eager"] is not True or engine["enable_prefix_caching"] is not True:
+        return False
+    if engine["max_num_seqs"] != 1 or type(engine["max_num_seqs"]) is not int:
+        return False
+    if type(engine["max_model_len"]) is not int or engine["max_model_len"] < 1:
+        return False
+    if type(engine["dtype_resolved"]) is not str or not engine["dtype_resolved"]:
+        return False
+    kv_bytes = engine["kv_cache_memory_bytes"]
+    if type(kv_bytes) is not int or kv_bytes <= 0:
+        return False
+    if engine["kv_cache_sizing_input"] != {"kwarg_bytes": kv_bytes}:
+        return False
+    if type(engine["block_size"]) is not int or engine["block_size"] < 1:
+        return False
+    if type(engine["num_gpu_blocks"]) is not int or engine["num_gpu_blocks"] < 1:
+        return False
+    if not _serving_hex64(config["default_sampling_params_digest"]):
+        return False
+    if type(config["detokenizer_variant"]) is not str or (
+        config["detokenizer_variant"] not in _SERVING_VLLM_DETOKENIZER_VARIANTS
+    ):
+        return False
+    if config["declared_eos_ids"] != declared:
+        return False
+    if not _recomputed_equal(
+        config["tier_a_vllm"], {**_SERVING_TIER_A_VLLM, "seed": _SERVING_VLLM_PROBE_SEED}
+    ):
+        return False
+    abort = config["abort_probe"]
+    if type(abort) is not dict or set(abort) != _SERVING_VLLM_ABORT_KEYS:
+        return False
+    if abort["surface"] != "llm_engine.abort_request":
+        return False
+    if abort["terminal_channel"] != "generate_family":
+        return False
+    if type(abort["terminal_observed"]) is not bool:
+        return False
+    if abort["finish_reason"] not in (None, "abort"):
+        return False
+    if abort["returned_tokens"] is not None and (
+        type(abort["returned_tokens"]) is not int or abort["returned_tokens"] < 0
+    ):
+        return False
+    elapsed = abort["elapsed_s"]
+    return type(elapsed) in (int, float) and not isinstance(elapsed, bool) and elapsed >= 0
 
 
 def _valid_serving_backends(payload: Any) -> bool:
@@ -23304,8 +23534,9 @@ def _valid_serving_backends(payload: Any) -> bool:
         "config_fingerprint",
     }:
         return False
-    if identity["stack"] != _SERVING_STACK:
+    if type(identity["stack"]) is not str or identity["stack"] not in _SERVING_STACKS:
         return False
+    stack = identity["stack"]
     if type(identity["stack_version"]) is not str or not identity["stack_version"]:
         return False
     if not _serving_hex64(identity["checkpoint_digest"]):
@@ -23330,58 +23561,12 @@ def _valid_serving_backends(payload: Any) -> bool:
     if declared != sorted(set(declared)):
         return False
     config = identity["config"]
-    if type(config) is not dict or set(config) != {
-        "protocol",
-        "stack",
-        "build_info",
-        "total_slots",
-        "model_path_digest",
-        "checkpoint_sha256",
-        "declared_eos_ids",
-        "generation_settings_digest",
-        "posture",
-        "cache_probe",
-        "tier_a",
-    }:
+    if type(config) is not dict:
         return False
-    if config["protocol"] != _SERVING_PROTOCOL_VERSION or config["stack"] != _SERVING_STACK:
-        return False
-    if config["build_info"] != identity["stack_version"]:
-        return False
-    if config["total_slots"] != 1 or type(config["total_slots"]) is not int:
-        return False
-    if not _serving_hex64(config["model_path_digest"]):
-        return False
-    if config["checkpoint_sha256"] != identity["checkpoint_digest"]:
-        return False
-    if config["declared_eos_ids"] != declared:
-        return False
-    if config["generation_settings_digest"] is not None and not _serving_hex64(
-        config["generation_settings_digest"]
-    ):
-        return False
-    posture = config["posture"]
-    if type(posture) is not dict or set(posture) != {
-        "api_key_required",
-        "slot_erase_available",
-        "endpoint_slots",
-        "ui_enabled",
-    }:
-        return False
-    if posture["api_key_required"] is not True:
-        return False
-    for key in ("slot_erase_available", "endpoint_slots", "ui_enabled"):
-        if type(posture[key]) is not bool:
+    if stack == _SERVING_STACK_VLLM:
+        if not _serving_valid_vllm_config(config, identity, declared):
             return False
-    cache_probe = config["cache_probe"]
-    if type(cache_probe) is not dict or set(cache_probe) != {"cold_cache_n", "warm_cache_n"}:
-        return False
-    for key in ("cold_cache_n", "warm_cache_n"):
-        if cache_probe[key] is not None and (
-            type(cache_probe[key]) is not int or cache_probe[key] < 0
-        ):
-            return False
-    if not _recomputed_equal(config["tier_a"], _SERVING_TIER_A):
+    elif not _serving_valid_llama_config(config, identity, declared):
         return False
     if not _serving_hex64(identity["config_fingerprint"]):
         return False
@@ -23404,12 +23589,12 @@ def _valid_serving_backends(payload: Any) -> bool:
     if type(records) is not list or len(records) > _SERVING_MAX_RECORDS:
         return False
     for record in records:
-        if not _serving_valid_record(record, declared):
+        if not _serving_valid_record(record, declared, stack):
             return False
     stop_matrix = payload["stop_matrix"]
     if type(stop_matrix) is not dict or set(stop_matrix) != {"available", "rows"}:
         return False
-    expected_rows = _serving_recompute_rows(records)
+    expected_rows = _serving_recompute_rows(records, stack)
     if stop_matrix["available"] is not bool(len(expected_rows)):
         return False
     if not _recomputed_equal(stop_matrix["rows"], expected_rows):
@@ -23427,11 +23612,17 @@ def _valid_serving_backends(payload: Any) -> bool:
             "serving_backends_record_budget_exceeded",
         ):
             continue
-        expected_positions[record["cache_position"]] = {
-            "cache_n": record["cache_n_reported"],
-            "tokens_cached": record["tokens_cached_reported"],
-            "tokens_evaluated": record["tokens_evaluated_reported"],
-        }
+        if stack == _SERVING_STACK_VLLM:
+            expected_positions[record["cache_position"]] = {
+                "tokens_cached": record["tokens_cached_reported"],
+                "cache_creation_tokens": record["cache_creation_tokens_reported"],
+            }
+        else:
+            expected_positions[record["cache_position"]] = {
+                "cache_n": record["cache_n_reported"],
+                "tokens_cached": record["tokens_cached_reported"],
+                "tokens_evaluated": record["tokens_evaluated_reported"],
+            }
     if not _recomputed_equal(cache["positions"], expected_positions):
         return False
     if cache["available"] is not bool(len(expected_positions)):
@@ -23446,12 +23637,21 @@ def _valid_serving_backends(payload: Any) -> bool:
         (record for record in cache_records if record["cache_position"] == "divergent_control"),
         None,
     )
-    contaminated = any(
-        record is not None
-        and type(record["cache_n_reported"]) is int
-        and record["cache_n_reported"] > 1
-        for record in (cold, divergent)
-    )
+    if stack == _SERVING_STACK_VLLM:
+        block_size = config["engine"]["block_size"]
+        contaminated = any(
+            record is not None
+            and type(record["tokens_cached_reported"]) is int
+            and record["tokens_cached_reported"] >= block_size
+            for record in (cold, divergent)
+        )
+    else:
+        contaminated = any(
+            record is not None
+            and type(record["cache_n_reported"]) is int
+            and record["cache_n_reported"] > 1
+            for record in (cold, divergent)
+        )
     if contaminated and cache["detail"] != "cache_protocol_contaminated":
         return False
     if cache["detail"] == "cache_protocol_contaminated" and not contaminated:
@@ -23587,6 +23787,14 @@ def diff_serving_backends(old: Any, new: Any) -> dict[str, Any]:
     new_records = {record["request_digest"]: record for record in new["records"]}
     records_added = sorted(set(new_records) - set(old_records))
     records_removed = sorted(set(old_records) - set(new_records))
+    cache_metrics: tuple[tuple[str, str], ...]
+    if old["identity"]["stack"] == _SERVING_STACK_VLLM:
+        cache_metrics = (
+            ("tokens_cached_reported", "tokens_cached_reported"),
+            ("cache_creation_tokens_reported", "cache_creation_tokens_reported"),
+        )
+    else:
+        cache_metrics = (("cache_n_reported", "cache_n_reported"),)
     record_drift: list[dict[str, Any]] = []
     for digest in sorted(set(old_records) & set(new_records)):
         old_record = old_records[digest]
@@ -23598,11 +23806,7 @@ def diff_serving_backends(old: Any, new: Any) -> dict[str, Any]:
                 new_record["mirror"]["fidelity_verdict"],
             ),
             ("finish_class", old_record["finish_class"], new_record["finish_class"]),
-            (
-                "cache_n_reported",
-                old_record["cache_n_reported"],
-                new_record["cache_n_reported"],
-            ),
+            *((metric, old_record[key], new_record[key]) for metric, key in cache_metrics),
             ("cell_detail", old_record["cell_detail"], new_record["cell_detail"]),
         ):
             if old_value != new_value:

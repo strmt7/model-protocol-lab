@@ -13642,12 +13642,18 @@ def serving_backends_analysis(stage: dict[str, Any]) -> dict[str, Any]:
             if mirror.get("fidelity_verdict") == "diverge" and mirror.get("divergence_class")
             else []
         )
+        # The cells key is the stage identity's stack. A stage
+        # without an identity predates stack-keying (run_stage
+        # cannot produce one — it raises without an identity), so
+        # the historical llamacpp key is the only honest fallback.
+        stage_identity = stage.get("identity")
+        stack_key = stage_identity.get("stack") if type(stage_identity) is dict else None
         rows.append(
             {
                 "fixture": record.get("fixture"),
                 "candidate": record.get("candidate"),
                 "arm": arm,
-                "cells": {"llamacpp": cell},
+                "cells": {stack_key if type(stack_key) is str and stack_key else "llamacpp": cell},
                 "flips": flips,
             }
         )

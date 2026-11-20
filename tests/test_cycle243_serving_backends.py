@@ -4039,7 +4039,7 @@ class _UnspecifiedPlatform:
     device_type = ""
 
 
-class _CpuPlatform:
+class CpuPlatform:
     device_type = "cpu"
 
 
@@ -4056,7 +4056,7 @@ def _fake_vllm_module(script: dict[str, Any] | None = None) -> dict[str, Any]:
     module.SamplingParams = _FakeSamplingParams
     module.TokensPrompt = _FakeTokensPrompt
     platforms = types.ModuleType("vllm.platforms")
-    platform = (script or {}).get("platform") or _CpuPlatform()
+    platform = (script or {}).get("platform") or CpuPlatform()
     platforms.current_platform = platform
     module.platforms = platforms
     detokenizer = types.ModuleType("vllm.v1.engine.detokenizer")
@@ -4260,7 +4260,7 @@ class VllmProbeGateTests(_VllmBackendCase):
         )
         self.assertEqual(identity.config["detokenizer_variant"], "SlowIncrementalDetokenizer")
         self.assertEqual(
-            identity.config["platform"], {"device_type": "cpu", "platform_class": "_CpuPlatform"}
+            identity.config["platform"], {"device_type": "cpu", "platform_class": "CpuPlatform"}
         )
         self.assertEqual(
             identity.config_fingerprint,
@@ -5269,3 +5269,298 @@ class ServeExtraTests(unittest.TestCase):
 
         project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
         self.assertEqual(project["project"]["optional-dependencies"]["serve"], ["vllm==0.33.0"])
+
+
+# ---------------------------------------------------------------------------
+# W6 Push 5: Steps 8+9 — the diff mirror and the section builder
+# keyed by the payload's own stack.
+# ---------------------------------------------------------------------------
+
+
+class VllmMirrorTests(_VllmBackendCase, ServingBackendsTestBase):
+    """A truthful fake-vllm section validates and self-diffs as
+    unchanged; cross-stack replays and tampering fail."""
+
+    def setUp(self) -> None:
+        _VllmBackendCase.setUp(self)
+        ServingBackendsTestBase.setUp(self)
+
+    def _section(self) -> dict[str, Any]:
+        from model_protocol_lab import experiments
+
+        self.install_fake()
+        backend = self.make_backend()
+        backend.probe()
+        llm = _FakeLLM.instances[-1]
+        table: dict[tuple[int, ...], list[tuple[int, int]]] = {
+            (1, 2, 3, 4): [(0, 512), (384, 128)],
+            (1, 2, 9, 9): [(128, 256)],
+            (13, 10): [(0, 384)],
+        }
+
+        def handler(prompt_ids: list[int], params: Any) -> list[Any]:
+            key = tuple(prompt_ids)
+            if key in table:
+                cached, creation = table[key].pop(0)
+                return [
+                    _FakeRequestOutput(
+                        "r",
+                        prompt_ids,
+                        _FakeCompletion([8], "a", "length"),
+                        num_cached_tokens=cached,
+                        num_cache_creation_tokens=creation,
+                    )
+                ]
+            return [_FakeRequestOutput("r", prompt_ids, _FakeCompletion([8], "a", "length"))]
+
+        llm.generate_handler = handler
+        tokenizer = _VllmFakeTokenizer()
+        stage = servingbackends.run_stage(
+            backend,
+            plan_cells=[
+                {
+                    "candidate": "t",
+                    "fixture": "t0",
+                    "request": servingbackends.StackRequest(
+                        prompt_ids=(1, 2, 3), seed=7, max_new_tokens=4, eos_id=0
+                    ),
+                    "cache_position": "standalone",
+                }
+            ],
+            fidelity_input=None,
+            cache_prompts={
+                "cold_ids": (1, 2, 3, 4),
+                "shared_prefix_ids": (1, 2, 9, 9),
+                "divergent_control_ids": (13, 10),
+            },
+            seed=0,
+            decode=lambda ids: tokenizer.decode(list(ids)),
+            capabilities=backend.capabilities,
+        )
+        return experiments.serving_backends_analysis(stage)
+
+    def test_vllm_section_validates_and_self_diffs_unchanged(self) -> None:
+        section = self._section()
+        self.assertEqual(section["identity"]["stack"], "vllm")
+        self.assertEqual(set(section["stop_matrix"]["rows"][0]["cells"]), {"vllm"})
+        self.assertTrue(diffreports._valid_serving_backends(section))
+        diff = diffreports.diff_serving_backends(section, section)
+        self.assertEqual(diff["available"], "both")
+        self.assertFalse(diff["changed"])
+
+    def test_vllm_cache_drift_uses_vllm_metrics(self) -> None:
+        section = self._section()
+        other = copy.deepcopy(section)
+        cold = next(r for r in other["records"] if r["cache_position"] == "cold")
+        cold["tokens_cached_reported"] = 7
+        other["cache"]["positions"]["cold"]["tokens_cached"] = 7
+        # A consistently re-measured section (record + positions
+        # moved together, as a second run would report) stays valid,
+        # and the differ must see the drift on the vllm metric.
+        self.assertTrue(diffreports._valid_serving_backends(other))
+        diff = diffreports.diff_serving_backends(section, other)
+        self.assertTrue(diff["changed"])
+        metrics = {entry["metric"] for entry in diff["record_drift"]}
+        self.assertIn("tokens_cached_reported", metrics)
+
+    def test_cross_stack_record_replay_fails(self) -> None:
+        vllm_section = self._section()
+        llama_records = self._llama_records()
+        swapped = copy.deepcopy(vllm_section)
+        swapped["records"] = llama_records + [
+            r for r in vllm_section["records"] if r["cache_position"] != "standalone"
+        ]
+        self.assertFalse(diffreports._valid_serving_backends(swapped))
+
+    def _llama_records(self) -> list[dict[str, Any]]:
+        with _FakeServer(self.gguf) as server:
+            backend = ServingBackendsTestBase.make_backend(self, server)
+            backend.probe()
+            record = servingbackends.execute_cell(
+                backend,
+                request=servingbackends.StackRequest(
+                    prompt_ids=(8, 12), seed=7, max_new_tokens=4, eos_id=EOS
+                ),
+                decode=backend.decode_ids,
+                candidate="t",
+                fixture="t0",
+            )
+        return [record]
+
+    def test_tampered_vllm_identity_config_fails(self) -> None:
+        section = self._section()
+        tampered = copy.deepcopy(section)
+        tampered["identity"]["config"]["engine"]["enforce_eager"] = False
+        tampered["identity"]["config_fingerprint"] = "sha256:" + servingbackends.sha256_hex(
+            servingbackends.canonical_json(tampered["identity"]["config"]).encode("utf-8")
+        )
+        self.assertFalse(diffreports._valid_serving_backends(tampered))
+        tampered2 = copy.deepcopy(section)
+        tampered2["identity"]["config"]["env"]["VLLM_TARGET_DEVICE"] = "gpu"
+        tampered2["identity"]["config_fingerprint"] = "sha256:" + servingbackends.sha256_hex(
+            servingbackends.canonical_json(tampered2["identity"]["config"]).encode("utf-8")
+        )
+        self.assertFalse(diffreports._valid_serving_backends(tampered2))
+
+    def _llama_section(self) -> dict[str, Any]:
+        from model_protocol_lab import experiments
+
+        with _FakeServer(self.gguf) as server:
+            backend = ServingBackendsTestBase.make_backend(self, server)
+            backend.probe()
+            stage = servingbackends.run_stage(
+                backend,
+                plan_cells=[
+                    {
+                        "candidate": "t",
+                        "fixture": "t0",
+                        "request": servingbackends.StackRequest(
+                            prompt_ids=(8, 12), seed=7, max_new_tokens=4, eos_id=EOS
+                        ),
+                        "cache_position": "standalone",
+                    }
+                ],
+                fidelity_input=None,
+                cache_prompts=None,
+                seed=0,
+                decode=backend.decode_ids,
+                capabilities=backend.capabilities,
+            )
+        return experiments.serving_backends_analysis(stage)
+
+    def test_llama_section_hard_rejects_stay(self) -> None:
+        section = self._llama_section()
+        self.assertTrue(diffreports._valid_serving_backends(section))
+        # A vllm record replayed under the llama identity fails
+        # (sampler expectation + the llama-only hard rejects).
+        vllm_section = self._section()
+        swapped = copy.deepcopy(section)
+        swapped["records"] = [
+            r for r in vllm_section["records"] if r["cache_position"] == "standalone"
+        ]
+        self.assertFalse(diffreports._valid_serving_backends(swapped))
+        # And a llama record carrying the vllm-only field stays
+        # producer-impossible on the llama arm.
+        tampered = copy.deepcopy(section)
+        tampered["records"][0]["returned_text_digest_no_special"] = "a" * 64
+        self.assertFalse(diffreports._valid_serving_backends(tampered))
+
+    def test_tampered_cache_creation_fails(self) -> None:
+        section = self._section()
+        tampered = copy.deepcopy(section)
+        cold = next(r for r in tampered["records"] if r["cache_position"] == "cold")
+        cold["cache_creation_tokens_reported"] = -1
+        self.assertFalse(diffreports._valid_serving_backends(tampered))
+
+    def test_unavailable_diff_is_neither(self) -> None:
+        from model_protocol_lab import experiments
+
+        unavailable = experiments.serving_backends_analysis(
+            {"available": False, "detail": "stack_unavailable"}
+        )
+        diff = diffreports.diff_serving_backends(unavailable, unavailable)
+        self.assertEqual(diff["available"], "neither")
+        self.assertFalse(diff["changed"])
+
+
+class VllmMirrorBranchTests(VllmMirrorTests):
+    """Every rejection branch of the vLLM mirror config validator,
+    plus the per-stack record/cache/diff branches. Config tampers
+    recompute the fingerprint so the named branch is what fails."""
+
+    def _tampered_config(self, mutate: Any) -> dict[str, Any]:
+        section = self._section()
+        tampered = copy.deepcopy(section)
+        mutate(tampered["identity"]["config"])
+        tampered["identity"]["config_fingerprint"] = "sha256:" + servingbackends.sha256_hex(
+            servingbackends.canonical_json(tampered["identity"]["config"]).encode("utf-8")
+        )
+        return tampered
+
+    def test_config_branch_matrix(self) -> None:
+        def engine(mutate: Any) -> Any:
+            return lambda config: mutate(config["engine"])
+
+        def abort(mutate: Any) -> Any:
+            return lambda config: mutate(config["abort_probe"])
+
+        cases: dict[str, Any] = {
+            "missing_key": lambda c: c.pop("abort_probe"),
+            "protocol": lambda c: c.update(protocol="exec-backends-protocol-9"),
+            "config_stack": lambda c: c.update(stack="llamacpp"),
+            "version_mismatch": lambda c: c.update(vllm_version="9.9.9"),
+            "torch_empty": lambda c: c.update(torch_version=""),
+            "module_digest": lambda c: c.update(vllm_module_digest="x"),
+            "platform": lambda c: c.update(
+                platform={"device_type": "gpu", "platform_class": "CpuPlatform"}
+            ),
+            "engine_key": engine(lambda e: e.pop("seed")),
+            "engine_checkpoint": engine(lambda e: e.update(checkpoint_digest="0" * 64)),
+            "engine_seed": engine(lambda e: e.update(seed=1)),
+            "engine_seqs": engine(lambda e: e.update(max_num_seqs=2)),
+            "engine_len": engine(lambda e: e.update(max_model_len=0)),
+            "engine_dtype": engine(lambda e: e.update(dtype_resolved="")),
+            "engine_kv_zero": engine(lambda e: e.update(kv_cache_memory_bytes=0)),
+            "engine_sizing": engine(lambda e: e.update(kv_cache_sizing_input={"kwarg_bytes": 1})),
+            "engine_block": engine(lambda e: e.update(block_size=0)),
+            "engine_blocks": engine(lambda e: e.update(num_gpu_blocks=0)),
+            "params_digest": lambda c: c.update(default_sampling_params_digest="x"),
+            "detok_variant": lambda c: c.update(detokenizer_variant="Other"),
+            "declared": lambda c: c.update(declared_eos_ids=[9]),
+            "tier_a": lambda c: c["tier_a_vllm"].update(temperature=0.5),
+            "abort_key": abort(lambda a: a.pop("surface")),
+            "abort_surface": abort(lambda a: a.update(surface="other")),
+            "abort_channel": abort(lambda a: a.update(terminal_channel="poll")),
+            "abort_observed": abort(lambda a: a.update(terminal_observed="yes")),
+            "abort_finish": abort(lambda a: a.update(finish_reason="stop")),
+            "abort_tokens": abort(lambda a: a.update(returned_tokens=-1)),
+            "abort_elapsed": abort(lambda a: a.update(elapsed_s=-0.5)),
+            "abort_elapsed_type": abort(lambda a: a.update(elapsed_s="x")),
+        }
+        for name, mutate in cases.items():
+            with self.subTest(case=name):
+                self.assertFalse(diffreports._valid_serving_backends(self._tampered_config(mutate)))
+
+    def test_record_branch_matrix(self) -> None:
+        section = self._section()
+        bad_digest = copy.deepcopy(section)
+        standalone = bad_digest["records"][0]
+        standalone["returned_text_digest_no_special"] = "zz"
+        self.assertFalse(diffreports._valid_serving_backends(bad_digest))
+        overshoot = copy.deepcopy(section)
+        record = overshoot["records"][0]
+        record["returned_ids"] = [8] * (record["request_config"]["max_new_tokens"] + 1)
+        record["returned_id_digest"] = diffreports._serving_ids_digest(record["returned_ids"])
+        self.assertFalse(diffreports._valid_serving_backends(overshoot))
+        bad_creation = copy.deepcopy(section)
+        cold = next(r for r in bad_creation["records"] if r["cache_position"] == "cold")
+        cold["cache_creation_tokens_reported"] = "x"
+        self.assertFalse(diffreports._valid_serving_backends(bad_creation))
+
+    def test_cache_contamination_coherence(self) -> None:
+        section = self._section()
+        contaminated = copy.deepcopy(section)
+        cold = next(r for r in contaminated["records"] if r["cache_position"] == "cold")
+        cold["tokens_cached_reported"] = 128
+        contaminated["cache"]["positions"]["cold"]["tokens_cached"] = 128
+        # One full block on the cold arm is contamination; the
+        # section does not say so -> incoherent.
+        self.assertFalse(diffreports._valid_serving_backends(contaminated))
+        flagged = copy.deepcopy(section)
+        flagged["cache"]["detail"] = "cache_protocol_contaminated"
+        # Flagged but the quantities are honest -> incoherent.
+        self.assertFalse(diffreports._valid_serving_backends(flagged))
+        honest = copy.deepcopy(section)
+        cold2 = next(r for r in honest["records"] if r["cache_position"] == "cold")
+        cold2["tokens_cached_reported"] = 128
+        honest["cache"]["positions"]["cold"]["tokens_cached"] = 128
+        honest["cache"]["detail"] = "cache_protocol_contaminated"
+        self.assertTrue(diffreports._valid_serving_backends(honest))
+
+    def test_cross_stack_diff_is_incomparable(self) -> None:
+        llama_section = self._llama_section()
+        vllm_section = self._section()
+        diff = diffreports.diff_serving_backends(llama_section, vllm_section)
+        self.assertEqual(diff["available"], "both")
+        self.assertFalse(diff["comparable"])
+        self.assertIn("stack", {entry["field"] for entry in diff["identity_drift"]})
