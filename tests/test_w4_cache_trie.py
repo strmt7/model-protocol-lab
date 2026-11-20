@@ -34,7 +34,11 @@ GOLDEN = {
     "distinct_block_prefixes": 2,
     "mean_prompt_tokens": 3.0,
     "n": 5,
-    "n_duplicate_prompts": 3,
+    # SCI-B-02 correction: exact multiplicity gives 2 here (the two
+    # occurrences of the one repeated prompt); the pre-audit prefix
+    # count gave 3 by also counting (1, 2), a proper prefix of
+    # longer prompts, as a duplicate.
+    "n_duplicate_prompts": 2,
     "n_evaluable": 5,
     "potential_block_fraction": 0.8,
     "potential_token_fraction": 0.8666666666666667,
@@ -44,7 +48,15 @@ GOLDEN = {
 
 
 def _reference_profile(records, block_size):
-    """The pre-swap dict-of-tuples algorithm, kept as the oracle."""
+    """The pre-swap dict-of-tuples algorithm, kept as the oracle.
+
+    One deliberate deviation: ``n_duplicate_prompts`` follows the
+    SCI-B-02-corrected exact-multiplicity rule, not the pre-swap
+    prefix count — the external audit found the prefix count
+    wrong (a proper prefix of a longer prompt is not a duplicate),
+    and the oracle must not keep asserting the audited defect.
+    Every other quantity is the pre-swap reference verbatim.
+    """
     from model_protocol_lab.cacheprofile import is_evaluable_prompt
 
     n = len(records)
@@ -73,6 +85,9 @@ def _reference_profile(records, block_size):
         for end in range(1, len(prompt) + 1):
             prefix = prompt[:end]
             counts[prefix] = counts.get(prefix, 0) + 1
+    exact: dict = {}
+    for prompt in prompts:
+        exact[prompt] = exact.get(prompt, 0) + 1
     total_tokens = sum(len(prompt) for prompt in prompts)
     cacheable_tokens = 0
     for prompt in prompts:
@@ -104,7 +119,7 @@ def _reference_profile(records, block_size):
         "achievable_block_fraction": block_size
         * (block_cacheable_blocks - distinct_block_prefixes)
         / total_tokens,
-        "n_duplicate_prompts": sum(1 for prompt in prompts if counts[prompt] >= 2),
+        "n_duplicate_prompts": sum(1 for prompt in prompts if exact[prompt] >= 2),
     }
 
 

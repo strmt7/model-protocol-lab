@@ -1245,5 +1245,37 @@ class CacheProfileMutationGateTests(unittest.TestCase):
         )
 
 
+class SciB02ExactDuplicateTests(unittest.TestCase):
+    """SCI-B-02 (external audit): n_duplicate_prompts counts exact
+    prompt multiplicity, never prefix multiplicity — a prompt that
+    is a proper prefix of a longer one is not a duplicate."""
+
+    def test_prefix_of_longer_prompt_is_not_a_duplicate(self):
+        """Test prefix of longer prompt is not a duplicate."""
+        cell = candidate_cache_profile([[1], [1, 2]])
+        self.assertEqual(cell["n_duplicate_prompts"], 0)
+
+    def test_exact_multiplicity_counts_every_repeated_occurrence(self):
+        """Test exact multiplicity counts repeated occurrences."""
+        self.assertEqual(candidate_cache_profile([[1], [1], [1, 2]])["n_duplicate_prompts"], 2)
+        self.assertEqual(
+            candidate_cache_profile([[1, 2], [1, 2], [1, 2]])["n_duplicate_prompts"], 3
+        )
+        self.assertEqual(candidate_cache_profile([[1, 2], [1, 2]])["n_duplicate_prompts"], 2)
+
+    def test_trie_storage_is_linear_in_prompt_length(self):
+        """Test trie storage is linear in prompt length."""
+        # SCI-B-02/SCI-B-04 scaling pin: one unique length-1024
+        # prompt retains exactly 1024 trie nodes (the pre-trie
+        # dict-of-prefix-tuples retained 524,800 token references).
+        from model_protocol_lab.cacheprofile import _prefix_trie
+
+        _root, node_count = _prefix_trie([tuple(range(1024))])
+        self.assertEqual(node_count, 1024)
+        cell = candidate_cache_profile([list(range(1024))])
+        self.assertEqual(cell["shared_prefixes"], 0)
+        self.assertEqual(cell["n_duplicate_prompts"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

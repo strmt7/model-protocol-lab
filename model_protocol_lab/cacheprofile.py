@@ -209,20 +209,24 @@ def candidate_cache_profile(
     root, _node_count = _prefix_trie(prompts)
     total_tokens = sum(len(prompt) for prompt in prompts)
     # One walk per prompt down the trie: position k is cacheable iff
-    # the node at depth k+1 is shared (count >= 2), and the terminal
-    # node's count decides duplication -- a prompt that is a proper
-    # prefix of a longer one counts, exactly as the pre-swap
-    # counts[prompt] lookup did.
+    # the node at depth k+1 is shared (count >= 2).
     cacheable_tokens = 0
-    n_duplicate_prompts = 0
     for prompt in prompts:
         node = root
         for token in prompt:
             node = node.children[token]
             if node.count >= 2:
                 cacheable_tokens += 1
-        if node.count >= 2:
-            n_duplicate_prompts += 1
+    # Duplication is exact-prompt multiplicity, counted separately
+    # (SCI-B-02): a prompt that is merely a proper prefix of a
+    # longer one is not a duplicate, so the terminal trie node's
+    # passing count -- which conflates the two -- must not decide
+    # it. The count is of occurrences: every occurrence of a prompt
+    # that appears at least twice counts.
+    multiplicity: dict[tuple[int, ...], int] = {}
+    for prompt in prompts:
+        multiplicity[prompt] = multiplicity.get(prompt, 0) + 1
+    n_duplicate_prompts = sum(count for count in multiplicity.values() if count >= 2)
     shared_prefixes, block_cacheable_blocks, distinct_block_prefixes = _trie_aggregates(
         root, block_size
     )
