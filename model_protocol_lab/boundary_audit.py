@@ -160,7 +160,12 @@ def audit_search_observations(
     for family in sorted(family_checks):
         fp, fu, fr = boundary_problem_rate(family_checks[family])
         per_family[family] = {"n_usable": fu, "n_problem": fp, "rate": fr}
-    n_unusable = n_observations - sum(1 for checks in family_checks.values() for c in checks)
+    # Conservation (SA-02): every observation is either usable or
+    # unusable — the no-prompt exclusions AND the checks that
+    # degraded to unusable on a tokenizer failure. Subtracting all
+    # appended checks (the pre-fix formula) made the failed checks
+    # vanish from the accounting.
+    n_unusable = n_observations - n_usable
     return {
         "available": n_usable > 0,
         "n_observations": n_observations,

@@ -612,3 +612,100 @@ class TestMutationGate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Sa02ConservationTests(unittest.TestCase):
+    """SA-02 (external audit): the exclusion counts conserve —
+    n_observations == n_usable + n_unusable for every mixture of
+    missing prompts and encode/decode failures."""
+
+    @staticmethod
+    def _entries(observations: list, name: str = "chatml/x") -> list:
+        return [{"format": {"name": name}, "observations": observations}]
+
+    def test_single_decode_failure_conserves(self):
+        """Test single decode failure conserves."""
+
+        def bad_decode(ids):
+            raise RuntimeError("decode boom")
+
+        out = audit_search_observations(
+            self._entries([{"input_text": "hello", "input_ids": (1, 2), "output_ids": (3,)}]),
+            _identity_encode,
+            bad_decode,
+        )
+        self.assertEqual(out["n_observations"], 1)
+        self.assertEqual(out["n_usable"], 0)
+        self.assertEqual(out["n_unusable"], 1)
+        self.assertFalse(out["available"])
+        self.assertIsNone(out["overall_rate"])
+
+    def test_encode_failure_conserves(self):
+        """Test encode failure conserves."""
+
+        def bad_encode(text):
+            raise RuntimeError("encode boom")
+
+        out = audit_search_observations(
+            self._entries([{"input_text": "hello", "input_ids": (1, 2), "output_ids": (3,)}]),
+            bad_encode,
+            _identity_decode,
+        )
+        self.assertEqual(out["n_observations"], 1)
+        self.assertEqual(out["n_usable"], 0)
+        self.assertEqual(out["n_unusable"], 1)
+
+    def test_mixture_conserves(self):
+        """Test mixture conserves."""
+
+        def flaky_decode(ids):
+            if tuple(ids) == (9,):
+                raise RuntimeError("decode boom")
+            return _identity_decode(ids)
+
+        entries = [
+            {
+                "format": {"name": "chatml/x"},
+                "observations": [
+                    # usable, no problem
+                    {"input_text": "ab", "input_ids": (97, 98), "output_ids": (99,)},
+                    # decode failure -> unusable check
+                    {"input_text": "zz", "input_ids": (122, 122), "output_ids": (9,)},
+                    # no recorded prompt -> unusable, no check
+                    {"input_ids": (1,), "output_ids": (2,)},
+                ],
+            },
+            {
+                "format": {"name": "llama3/y"},
+                "observations": [
+                    # usable with a boundary problem: the joint
+                    # encoding of "ab" + "c" is (97, 98, 99) but the
+                    # stored prompt ids claim only (97,)
+                    {"input_text": "ab", "input_ids": (97,), "output_ids": (99,)},
+                ],
+            },
+        ]
+        out = audit_search_observations(entries, _identity_encode, flaky_decode)
+        self.assertEqual(out["n_observations"], 4)
+        self.assertEqual(out["n_usable"], 2)
+        self.assertEqual(out["n_unusable"], 2)
+        self.assertEqual(out["n_observations"], out["n_usable"] + out["n_unusable"])
+        self.assertEqual(out["n_problem"], 1)
+        self.assertTrue(out["available"])
+        self.assertEqual(out["per_candidate"]["chatml/x"]["n_usable"], 1)
+        self.assertEqual(out["per_candidate"]["chatml/x"]["n_observations"], 3)
+        self.assertEqual(out["per_candidate"]["llama3/y"]["n_usable"], 1)
+
+    def test_zero_usable_stays_unavailable(self):
+        """Test zero usable stays unavailable."""
+        out = audit_search_observations(
+            self._entries([{"input_ids": (1,), "output_ids": (2,)}]),
+            _identity_encode,
+            _identity_decode,
+        )
+        self.assertEqual(out["n_observations"], 1)
+        self.assertEqual(out["n_usable"], 0)
+        self.assertEqual(out["n_unusable"], 1)
+        self.assertFalse(out["available"])
+        self.assertIsNone(out["overall_rate"])
+        self.assertEqual(out["n_problem"], 0)
