@@ -1207,9 +1207,11 @@ pool is the search split, the measurement set is the held-out split
 (the contamination guard). Per candidate, `gain` is the mean over the
 two orders of the per-fixture verdict-change rate (k-shot vs 0-shot)
 in [0, 1], and `order_sensitivity` is the population standard
-deviation of the two per-order change rates in [0, 0.5]; only fixtures
-with a verdict on both sides are evaluable (missing verdicts are
-excluded, never counted as unchanged). The selection rule is
+deviation of the two per-order change rates in [0, 0.5]; the two
+headline statistics are computed on the fixtures with a verdict on
+all three arms — the population `n_evaluable` counts — while each
+per-order rate keeps its own pairwise denominator (missing verdicts
+are excluded, never counted as unchanged). The selection rule is
 re-applied per arm (baseline / order_a / order_b) and each arm's
 (decision, winner) is compared against the primary run. The
 falsifiable claim frozen in advance (in `fewshot.py`) is a gain of ~0 and

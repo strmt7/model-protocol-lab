@@ -866,11 +866,16 @@ class FewshotGainMalformedTests(unittest.TestCase):
         self.assertTrue(out["available"])
         cand = out["per_candidate"]["c0"]
         self.assertEqual(cand["n_evaluable"], 1)
-        # order_a: f0 changed (1/1); order_b: f0 unchanged, f1 changed (1/2).
+        # Per-order rates stay pairwise: order_a f0 changed (1/1);
+        # order_b f0 unchanged, f1 changed (1/2).
         self.assertEqual(cand["per_order"]["order_a"]["change_rate"], 1.0)
         self.assertEqual(cand["per_order"]["order_b"]["change_rate"], 0.5)
-        self.assertAlmostEqual(cand["gain"], 0.75)
-        self.assertAlmostEqual(cand["order_sensitivity"], 0.25)
+        # The headlines use the frozen common population {f0} only
+        # (SCI-B-03): order_a changed (1/1), order_b unchanged (0/1).
+        # The pre-audit expectations (gain 0.75, sensitivity 0.25)
+        # averaged the pairwise rates across different cohorts.
+        self.assertAlmostEqual(cand["gain"], 0.5)
+        self.assertAlmostEqual(cand["order_sensitivity"], 0.5)
 
     def test_fully_none_arms_excluded(self):
         """Test fully none arms excluded."""
@@ -915,6 +920,9 @@ class FewshotOracleTests(unittest.TestCase):
 
     Random verdict maps are fed through the real ``fewshot_gain`` and
     through an independently written oracle; every number must match.
+    The oracle's headline rates are computed on the common
+    three-arm population (SCI-B-03); its per-order rates stay
+    pairwise, matching the producer's split.
     """
 
     @staticmethod
@@ -940,7 +948,13 @@ class FewshotOracleTests(unittest.TestCase):
         full = sum(1 for v in verdicts.values() if all(x is not None for x in v.values()))
         if full == 0:
             return None
-        valid = [r for r in rates.values() if r is not None]
+        common = [f for f, v in verdicts.items() if all(x is not None for x in v.values())]
+        common_baseline = {f: baseline[f] for f in common}
+        headline = [
+            cls._oracle_rate(common_baseline, {f: verdicts[f][arm] for f in common})
+            for arm in ("order_a", "order_b")
+        ]
+        valid = [r for r in headline if r is not None]
         gain = sum(valid) / len(valid)
         mean = sum(valid) / len(valid)
         sens = math.sqrt(sum((r - mean) ** 2 for r in valid) / len(valid))
@@ -1740,3 +1754,80 @@ class FewshotRedTeamTests(unittest.TestCase):
         text = "\n".join(diffreports._render_fewshot_summary(diff))
         self.assertNotIn("\x1b", text)
         self.assertNotIn("\x07", text)
+
+
+class SciB03CommonPopulationTests(unittest.TestCase):
+    """SCI-B-03 (external audit): the comparative headlines (gain,
+    order_sensitivity) are computed on the frozen common
+    baseline/A/B population — the same population n_evaluable
+    counts — while per-order rates stay pairwise with their own
+    denominators."""
+
+    @staticmethod
+    def _stage(verdicts: dict) -> dict:
+        return {
+            "available": True,
+            "n_eval": len(verdicts),
+            "demo_ids": ["d0", "d1"],
+            "k": 2,
+            "per_candidate": {"tmpl_a": {"n_eval": len(verdicts), "verdicts": verdicts}},
+        }
+
+    def _entry(self, verdicts: dict) -> dict:
+        analysis = fewshot_gain("tmpl_a", "selected", ("tmpl_a",), self._stage(verdicts))
+        self.assertTrue(analysis["available"])
+        return analysis["per_candidate"]["tmpl_a"]
+
+    def test_audit_example_headlines_are_zero(self):
+        """Test audit example headlines are zero."""
+        entry = self._entry(
+            {
+                "f1": {"baseline": True, "order_a": True, "order_b": True},
+                "f2": {"baseline": True, "order_a": False, "order_b": None},
+            }
+        )
+        self.assertEqual(entry["n_evaluable"], 1)
+        self.assertEqual(entry["gain"], 0.0)
+        self.assertEqual(entry["order_sensitivity"], 0.0)
+        # The arm-specific rates keep their own denominators.
+        self.assertEqual(entry["per_order"]["order_a"]["change_rate"], 0.5)
+        self.assertEqual(entry["per_order"]["order_a"]["n_evaluable"], 2)
+        self.assertEqual(entry["per_order"]["order_b"]["change_rate"], 0.0)
+        self.assertEqual(entry["per_order"]["order_b"]["n_evaluable"], 1)
+
+    def test_missing_arm_permutation_and_outside_cell_drop(self):
+        """Test missing arm permutation and outside cell drop."""
+        # The mirror-image stage (order_a missing instead of
+        # order_b) yields the same headlines.
+        entry = self._entry(
+            {
+                "f1": {"baseline": True, "order_a": True, "order_b": True},
+                "f2": {"baseline": True, "order_a": None, "order_b": False},
+            }
+        )
+        self.assertEqual(entry["gain"], 0.0)
+        self.assertEqual(entry["order_sensitivity"], 0.0)
+        # Dropping/adding a cell outside the common population
+        # (here: no baseline verdict) must not move the headline.
+        entry2 = self._entry(
+            {
+                "f1": {"baseline": True, "order_a": True, "order_b": True},
+                "f2": {"baseline": True, "order_a": False, "order_b": None},
+                "f3": {"baseline": None, "order_a": False, "order_b": False},
+            }
+        )
+        self.assertEqual(entry2["gain"], 0.0)
+        self.assertEqual(entry2["order_sensitivity"], 0.0)
+        self.assertEqual(entry2["n_evaluable"], 1)
+
+    def test_genuine_complete_case_difference_detectable(self):
+        """Test genuine complete case difference detectable."""
+        entry = self._entry(
+            {
+                "f1": {"baseline": True, "order_a": False, "order_b": True},
+                "f2": {"baseline": True, "order_a": True, "order_b": True},
+            }
+        )
+        self.assertEqual(entry["n_evaluable"], 2)
+        self.assertEqual(entry["gain"], 0.25)
+        self.assertEqual(entry["order_sensitivity"], 0.25)

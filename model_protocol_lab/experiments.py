@@ -2307,10 +2307,13 @@ def fewshot_gain(
     Answers "do demos move verdicts, and does the demo order matter,
     differently per template?": per candidate, ``gain`` (mean over the
     two demo orders of the k-shot vs 0-shot verdict-change rate) and
-    ``order_sensitivity`` (population std of the two per-order rates).
-    The selection rule is re-applied per arm (baseline, order_a,
-    order_b) and each arm's (decision, winner) is compared against the
-    primary run.
+    ``order_sensitivity`` (population std of the two per-order rates),
+    both computed on the frozen common population of fixtures with a
+    verdict on all three arms — the population ``n_evaluable``
+    counts (SCI-B-03). The ``per_order`` rates stay pairwise, each
+    with its own denominator. The selection rule is re-applied per
+    arm (baseline, order_a, order_b) and each arm's (decision,
+    winner) is compared against the primary run.
 
     The pre-registered falsifiable claim (see :mod:`fewshot`) is that
     gain and order_sensitivity are identical across families; family
@@ -2374,8 +2377,23 @@ def fewshot_gain(
             excluded.append(name)
             continue
         baseline = {fid: per_arm["baseline"] for fid, per_arm in verdicts.items()}
+        # The comparative headlines (gain, order_sensitivity) are
+        # computed on the frozen common population — the fixtures
+        # with a verdict on all three arms, exactly the population
+        # n_evaluable counts (SCI-B-03). Computing each order's
+        # headline rate on its own pairwise population mixes
+        # cohorts: a fixture missing only order_b would move the
+        # order_a rate and hence both headlines while contributing
+        # nothing to the common case. The per-order rates below
+        # stay pairwise, reported with their own denominators.
+        common = [
+            fid
+            for fid, per_arm in verdicts.items()
+            if all(per_arm[arm] is not None for arm in FEWSHOT_ARMS)
+        ]
+        common_baseline = {fid: baseline[fid] for fid in common}
         order_rates: dict[str, dict[str, Any]] = {}
-        rate_values: list[float | None] = []
+        headline_rates: list[float | None] = []
         for arm in ("order_a", "order_b"):
             arm_verdicts = {fid: per_arm[arm] for fid, per_arm in verdicts.items()}
             # _fewshot_entry_valid guarantees the verdict maps, so
@@ -2386,16 +2404,20 @@ def fewshot_gain(
                 "n_changed": computed["n_changed"],
                 "n_evaluable": computed["n_evaluable"],
             }
-            rate_values.append(computed["rate"])
+            common_computed = change_rate(
+                common_baseline, {fid: verdicts[fid][arm] for fid in common}
+            )
+            headline_rates.append(common_computed["rate"])
         # change_rate only yields floats in [0, 1] or None, so
         # order_sensitivity cannot raise here either.
-        sensitivity = order_sensitivity(tuple(rate_values))
-        # Both orders always contribute a rate here: n_full >= 1 (checked
-        # above) guarantees each (baseline, order) pair at least one
-        # evaluable fixture, so the filter below is provably nonempty
-        # (documented, not defended: a defensive fallback would be dead
-        # code and an uncoverable line).
-        valid_rates = [rate for rate in rate_values if rate is not None]
+        sensitivity = order_sensitivity(tuple(headline_rates))
+        # Both orders always contribute a headline rate here:
+        # n_full >= 1 (checked above) means the common population
+        # is nonempty, so each common-population rate is a float
+        # and the filter below is provably nonempty (documented,
+        # not defended: a defensive fallback would be dead code
+        # and an uncoverable line).
+        valid_rates = [rate for rate in headline_rates if rate is not None]
         gain = sum(valid_rates) / len(valid_rates)
         results[name] = {
             "gain": gain,
