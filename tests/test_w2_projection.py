@@ -412,5 +412,163 @@ class SaveReportAdmissionTests(unittest.TestCase):
             self.assertIs(saved["raw_evidence_included"], False)
 
 
+class VllmServingProjectionTests(unittest.TestCase):
+    """W6 Step 10: the vLLM identity config projects to exactly the
+    extended allowlist (digest/scalar-only keys); a planted raw
+    path key is dropped in the default view and retained in the
+    evidence view."""
+
+    def _result(self) -> dict:
+        return {
+            "schema_version": 1,
+            "serving_backends": {
+                "available": True,
+                "records": [],
+                "identity": {
+                    "stack": "vllm",
+                    "config": {
+                        "protocol": "exec-backends-protocol-1",
+                        "stack": "vllm",
+                        "vllm_version": "0.33.0+cpu",
+                        "torch_version": "2.14.0+cpu",
+                        "transformers_version": "5.20.2",
+                        "vllm_module_digest": "a" * 64,
+                        "platform": {"device_type": "cpu", "platform_class": "CpuPlatform"},
+                        "env": {"VLLM_TARGET_DEVICE": "cpu"},
+                        "engine": {"block_size": 128, "seed": 0},
+                        "default_sampling_params_digest": "b" * 64,
+                        "detokenizer_variant": "SlowIncrementalDetokenizer",
+                        "declared_eos_ids": [0],
+                        "tier_a_vllm": {"temperature": 0.0},
+                        "abort_probe": {"terminal_observed": True},
+                        "model_path": _SENTINEL_PATH,
+                        "endpoint_url": _SENTINEL_ENDPOINT,
+                    },
+                    "config_fingerprint": "f" * 64,
+                },
+            },
+        }
+
+    def test_vllm_config_projects_to_extended_allowlist(self) -> None:
+        public = reporting._public_view(self._result(), False)
+        config = public["serving_backends"]["identity"]["config"]
+        self.assertEqual(
+            set(config),
+            {
+                "protocol",
+                "stack",
+                "vllm_version",
+                "torch_version",
+                "transformers_version",
+                "vllm_module_digest",
+                "platform",
+                "env",
+                "engine",
+                "default_sampling_params_digest",
+                "detokenizer_variant",
+                "declared_eos_ids",
+                "tier_a_vllm",
+                "abort_probe",
+            },
+        )
+        text = json.dumps(public)
+        self.assertNotIn(_SENTINEL_PATH, text)
+        self.assertNotIn(_SENTINEL_ENDPOINT, text)
+
+    def test_evidence_view_retains_planted_keys(self) -> None:
+        public = reporting._public_view(self._result(), True)
+        config = public["serving_backends"]["identity"]["config"]
+        self.assertEqual(config["model_path"], _SENTINEL_PATH)
+        self.assertEqual(config["endpoint_url"], _SENTINEL_ENDPOINT)
+
+
+class VllmServingRenderTests(unittest.TestCase):
+    """W6 Step 10: the rendered section speaks per-stack — the
+    vLLM arm ran in-process (never "over HTTP") with its own cache
+    quantities; the llama prose is unchanged."""
+
+    def _section(self, stack: str) -> dict:
+        if stack == "vllm":
+            identity = {
+                "stack": "vllm",
+                "stack_version": "0.33.0+cpu",
+                "hardware_class": "cpu",
+                "checkpoint_digest": "c" * 64,
+                "config_fingerprint": "f" * 64,
+                "config": {"engine": {"block_size": 128}},
+            }
+            positions = {
+                "cold": {"tokens_cached": 0, "cache_creation_tokens": 512},
+                "warm_repeat": {"tokens_cached": 384, "cache_creation_tokens": 128},
+            }
+            cells = {
+                "vllm": {
+                    "fired": False,
+                    "available": True,
+                    "firing_step": None,
+                    "disposition": None,
+                    "verdict": "agree",
+                }
+            }
+        else:
+            identity = {
+                "stack": "llamacpp",
+                "stack_version": "b12182",
+                "hardware_class": "cpu",
+                "checkpoint_digest": "c" * 64,
+                "config_fingerprint": "f" * 64,
+                "config": {},
+            }
+            positions = {
+                "cold": {"cache_n": 0, "tokens_cached": 0, "tokens_evaluated": 4},
+                "warm_repeat": {"cache_n": 3, "tokens_cached": 3, "tokens_evaluated": 1},
+            }
+            cells = {
+                "llamacpp": {
+                    "fired": False,
+                    "available": True,
+                    "firing_step": None,
+                    "disposition": None,
+                    "verdict": "agree",
+                }
+            }
+        return {
+            "serving_backends": {
+                "available": True,
+                "identity": identity,
+                "capabilities": {"raw_token_ids": True},
+                "fidelity": {"verdict": "fidelity_agree", "counts": {"agree": 1}},
+                "cache": {"available": True, "detail": "", "positions": positions},
+                "stop_matrix": {
+                    "available": True,
+                    "rows": [
+                        {
+                            "fixture": "fx",
+                            "candidate": "cand",
+                            "arm": "plain",
+                            "cells": cells,
+                            "flips": [],
+                        }
+                    ],
+                },
+            }
+        }
+
+    def test_vllm_prose_and_cache_table(self) -> None:
+        html = reporting.render_html(self._section("vllm"))
+        self.assertIn("in-process", html)
+        self.assertNotIn("over HTTP", html)
+        self.assertIn("tokens_cached, the engine's own reuse count", html)
+        self.assertIn("whole blocks of 128 tokens", html)
+        self.assertIn("<th>cache_creation_tokens</th>", html)
+        self.assertIn("cand", html)
+
+    def test_llama_prose_unchanged(self) -> None:
+        html = reporting.render_html(self._section("llamacpp"))
+        self.assertIn("over HTTP", html)
+        self.assertIn("cache_n, the slot layer's own reuse count", html)
+        self.assertIn("<th>tokens_evaluated</th>", html)
+
+
 if __name__ == "__main__":
     unittest.main()

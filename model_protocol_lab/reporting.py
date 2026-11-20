@@ -365,6 +365,26 @@ _SERVING_CONFIG_ALLOWLIST = frozenset(
         "posture",
         "cache_probe",
         "tier_a",
+        # The vLLM arm's closed key set (W6 Step 10): every added
+        # key is digest/scalar-only by construction — version
+        # strings, a module digest, the platform pair, the six
+        # pinned environment values, the engine's scalar read-backs,
+        # a digest of the engine's default sampling parameters, the
+        # detokenizer variant name, the Tier-A tuple, and the abort
+        # probe's scalars. Keys carrying raw paths or URLs are
+        # excluded by the adapter's closed-set ruling itself, not
+        # by this projection.
+        "vllm_version",
+        "torch_version",
+        "transformers_version",
+        "vllm_module_digest",
+        "platform",
+        "env",
+        "engine",
+        "default_sampling_params_digest",
+        "detokenizer_variant",
+        "tier_a_vllm",
+        "abort_probe",
     }
 )
 
@@ -10782,7 +10802,7 @@ def _enumeration_convention_section(result: dict[str, Any]) -> str:
 
 def _serving_backends_section(result: dict[str, Any]) -> str:
     """Serving-stack measurement: what a real serving stack did
-    with exact token ids, measured over HTTP (cycle 243).
+    with exact token ids (cycle 243; the vLLM arm added by W6).
 
     Renders the ``serving_backends`` payload (see
     experiments.serving_backends_analysis): the stack identity the
@@ -10792,6 +10812,9 @@ def _serving_backends_section(result: dict[str, Any]) -> str:
     serving-stack stop matrix rows. Digests and counts only; no
     prompt or completion text is rendered. Every payload-derived
     value below goes through _escape_text, never bare escape().
+    The transport prose and the cache table branch on the stack:
+    the llamacpp arm is measured over HTTP, the vLLM arm runs
+    in-process, and each arm's cache quantities are its own.
     """
     probe: Any = result.get("serving_backends")
     if type(probe) is not dict or not probe.get("available"):
@@ -10808,6 +10831,8 @@ def _serving_backends_section(result: dict[str, Any]) -> str:
     identity = probe.get("identity")
     if type(identity) is not dict:
         return ""
+    stack = identity.get("stack")
+    is_vllm = stack == "vllm"
     capabilities = probe.get("capabilities")
     if type(capabilities) is not dict:
         return ""
@@ -10840,18 +10865,51 @@ def _serving_backends_section(result: dict[str, Any]) -> str:
             entry = cache["positions"].get(position)
             if type(entry) is not dict:
                 continue
-            position_rows.append(
-                "<tr><td>"
-                + _text(position)
-                + "</td><td>"
-                + _count(entry.get("cache_n"))
-                + "</td><td>"
-                + _count(entry.get("tokens_cached"))
-                + "</td><td>"
-                + _count(entry.get("tokens_evaluated"))
-                + "</td></tr>"
+            if is_vllm:
+                position_rows.append(
+                    "<tr><td>"
+                    + _text(position)
+                    + "</td><td>"
+                    + _count(entry.get("tokens_cached"))
+                    + "</td><td>"
+                    + _count(entry.get("cache_creation_tokens"))
+                    + "</td></tr>"
+                )
+            else:
+                position_rows.append(
+                    "<tr><td>"
+                    + _text(position)
+                    + "</td><td>"
+                    + _count(entry.get("cache_n"))
+                    + "</td><td>"
+                    + _count(entry.get("tokens_cached"))
+                    + "</td><td>"
+                    + _count(entry.get("tokens_evaluated"))
+                    + "</td></tr>"
+                )
+        if position_rows and is_vllm:
+            engine = identity.get("config", {}).get("engine")
+            block_size = engine.get("block_size") if type(engine) is dict else None
+            block_note = (
+                f" of {_count(block_size)} tokens"
+                if type(block_size) is int and block_size > 0
+                else ""
             )
-        if position_rows:
+            cache_rows = (
+                "<p>Measured cache companion (sequence detail: "
+                + _text(cache.get("detail") or "ok")
+                + "). The headline quantity is tokens_cached, the "
+                "engine's own reuse count, quantized to whole blocks"
+                + block_note
+                + "; cache_creation_tokens counts the tokens the "
+                "engine wrote into the cache on that arm.</p>"
+                + "<table><thead><tr><th>Position</th><th>tokens_cached</th>"
+                + "<th>cache_creation_tokens</th></tr></thead>"
+                + "<tbody>"
+                + "".join(position_rows)
+                + "</tbody></table>"
+            )
+        elif position_rows:
             cache_rows = (
                 "<p>Measured cache companion (sequence detail: "
                 + _text(cache.get("detail") or "ok")
@@ -10872,7 +10930,11 @@ def _serving_backends_section(result: dict[str, Any]) -> str:
             if type(row) is not dict:
                 continue
             cells = row.get("cells")
-            cell = cells.get("llamacpp") if type(cells) is dict else None
+            cell = (
+                cells.get(stack if type(stack) is str else "llamacpp")
+                if type(cells) is dict
+                else None
+            )
             if type(cell) is not dict:
                 continue
             # An unavailable cell observed nothing: it renders as
@@ -10916,14 +10978,24 @@ def _serving_backends_section(result: dict[str, Any]) -> str:
     return (
         '<section class="card" id="serving-backends">'
         "<h2>Serving-stack measurement (exec-backends)</h2>"
-        "<p>The lab drove a real serving stack over HTTP with raw "
-        "token ids under a pinned deterministic sampler configuration "
-        "and recorded what the stack did — firing step, stop winner, "
-        "disposition, cache reuse — against the lab's own predictor. "
-        "Verdicts are keyed to the stack identity below: a different "
-        "build, checkpoint, or configuration is a different "
-        "measurement, not a comparable one.</p>"
-        "<p>Stack: "
+        + (
+            "<p>The lab ran a real serving stack in-process with raw "
+            "token ids under a pinned deterministic sampler configuration "
+            "and recorded what the stack did — firing step, stop winner, "
+            "disposition, cache reuse — against the lab's own predictor. "
+            "Verdicts are keyed to the stack identity below: a different "
+            "build, checkpoint, or configuration is a different "
+            "measurement, not a comparable one.</p>"
+            if is_vllm
+            else "<p>The lab drove a real serving stack over HTTP with raw "
+            "token ids under a pinned deterministic sampler configuration "
+            "and recorded what the stack did — firing step, stop winner, "
+            "disposition, cache reuse — against the lab's own predictor. "
+            "Verdicts are keyed to the stack identity below: a different "
+            "build, checkpoint, or configuration is a different "
+            "measurement, not a comparable one.</p>"
+        )
+        + "<p>Stack: "
         + _text(identity.get("stack"))
         + " "
         + _text(identity.get("stack_version"))
