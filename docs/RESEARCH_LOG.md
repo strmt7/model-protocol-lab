@@ -12117,3 +12117,78 @@ stop text or answer text; if the mirror accepts a section whose
 stored fingerprint does not recompute; or if a capability the
 stack lacks is ever executed in degraded form instead of recorded
 absent. None has been observed.
+
+## W6 — the vLLM serving arm: a second real stack under the frozen protocol (2026-11-19)
+
+What shipped: `VllmOfflineBackend`, a second `ExecutionBackend`
+beside the cycle-243 llama.cpp backend, selected by
+`exec-backends --stack vllm`, measuring vLLM 0.33.0 in-process on
+a CPU host of this class (from-source build; the PyPI wheel is
+CUDA-only). The record schema did not move — the frozen
+`exec-backends-protocol-1` carried the second stack with no new
+fields, because cycle 243 had already admitted the vLLM-shaped
+ones as null-on-llama data. Around the backend: the stop
+predictor's vLLM model (stop texts through the shipped
+holdback-emulation port; stop-token IDs and EOS under sampler
+masking), the cache driver generalized to the backend protocol
+(per-stack reset seam, contamination quantum, position shapes),
+per-stack CLI argument discipline (each stack's options required
+on their own arm, rejected on the other), the `serve` extra
+pinning `vllm==0.33.0`, the diff mirror and section builder keyed
+by the payload's own stack, and the report renderer and public
+projection speaking per-stack (in-process prose, the engine's
+own cache quantities, a projection allowlist extended by exactly
+the adapter's closed config key set).
+
+The claim this makes is a combination, not a first: a
+measured-vs-emulated fidelity verdict — the lab's own stop
+predictor checked against a real, pinned serving stack's actual
+behaviour on exact token IDs — now executed against **two**
+independent stacks whose stop and cache semantics genuinely
+differ (HTTP slot cache versus block-quantized prefix cache;
+server detokenizer versus in-process incremental detokenizer),
+with every verdict keyed to a fingerprinted stack identity and
+recomputable by an independent mirror that shares no code with
+the producer. Either arm alone is a measurement; the pair, under
+one frozen schema with cross-stack pairs ruled not comparable,
+is the instrument.
+
+Execution corrected the design three times, and the corrections
+are the evidence the arm is real: a natural EOS stop reports a
+null `stop_reason` (not the EOS ID); `min_tokens` is detokenizer
+windowing for stop texts and sampler masking for token IDs and
+EOS (not a floor — the pre-build plan's interim exclusion of
+floored combinations was dropped once the probes showed the
+rule was modelable, and the shipped predictor models it);
+`cpu_kvcache_space_bytes` does not exist at 0.33.0, so CPU KV
+sizing is explicit and recorded. The probe campaign also read
+back the engine's trap defaults (temperature 1.0, a 16-token
+cap) — the reason every request pins the full Tier-A tuple — and
+settled the abort cell's channel: at 0.33.0 the abort terminal
+arrives only on the generate family, so the conformance cell
+runs there and there is no polled-step driver.
+
+Verification shape: eight gated pushes, each with the full
+protocol (latest ruff/bandit, mypy default/strict/win32, full
+pytest, the exact CI command, precise coverage at or above the
+standing floor, llama baselines B1–B3 byte-identical at every
+step). CI evidence runs against a hostile fake `vllm` module —
+the real engine is not a CI dependency — and the fake earned its
+keep twice over: the handler's first end-to-end run exposed a
+missing `@property` on the backend's capabilities that no
+fake-layer test had ever read, and the mirror's first validation
+of a produced section exposed the fake's platform class name
+drifting from the real one the probe campaign had recorded.
+Real-stack admission is the separate conformance run of the
+shipped CLI against the from-source engine (the Step-12 runbook
+in the W6 build plan); its evidence lives with the build
+records, not in this log's claims.
+
+Falsification: this entry's claims fall if a vLLM section
+validates whose environment pins or engine read-backs differ
+from the pinned values; if a cold or divergent arm reports a
+full KV block of reuse without a contamination mark; if a
+shipped record's returned IDs exceed its token cap; if any
+llama.cpp output byte changes under the stack-keyed mirror,
+builder, or renderer; or if a cross-stack diff reports a pair
+comparable. None has been observed.

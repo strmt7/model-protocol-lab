@@ -48,6 +48,9 @@ Not shipped in cycle 243:
 - a GGUF converter or any other checkpoint-supply tooling;
 - any change to the Hugging Face generation backend.
 
+(The three vLLM items shipped later, in W6 — see "The vLLM arm"
+below. The converter and HF-backend items still stand.)
+
 The schema and vocabularies carry vLLM-shaped request fields so the
 later adapter does not need a schema change. Against llama.cpp,
 exercising an unsupported field records a `capability_absent` cell:
@@ -424,34 +427,88 @@ denominators, measured on one checkpoint on one host. They are
 regression references for this build, not a property claimed of
 llama.cpp, of other checkpoints, or of other hosts.
 
-## The vLLM arm, recorded but not built
+## The vLLM arm (shipped in W6)
 
-The request schema, capability shape, and record fields already
-carry everything the vLLM adapter needs; no vLLM code ships in
-cycle 243, no `serve` extra exists, and the §8.6 vLLM window is
-unset. Three facts are recorded now so the later cycle does not
-have to re-derive them:
+The vLLM adapter ships as `VllmOfflineBackend` in
+`servingbackends.py`, selected by `exec-backends --stack vllm`.
+The supported window is vLLM **0.33.0** on a CPU host of this
+class, running a from-source `VLLM_TARGET_DEVICE=cpu` build; the
+`serve` extra pins the release exactly (`vllm==0.33.0`). The
+admission evidence is the R3 cycle-2 probe campaign (five named
+probes against the real engine) and the W6 conformance run of the
+shipped CLI; CI evidence runs against a hostile fake `vllm`
+module, because the real engine is not a CI dependency.
+
+Three facts recorded before the build, still load-bearing:
 
 1. The distribution route is refuted for CPU-only hosts: the
    vLLM 0.33.0 PyPI wheel ships only the CUDA extension, and no
    official CPU wheel exists. A supported vLLM host is therefore a
    GPU host, or a CPU host running a from-source
-   `VLLM_TARGET_DEVICE=cpu` build. Any future install instruction
-   that implies `pip install` suffices on a CPU-only host is
-   wrong.
-2. The adapter will pin, before importing vLLM, the five-variable
-   environment block: `VLLM_NO_USAGE_STATS=1`,
+   `VLLM_TARGET_DEVICE=cpu` build. Any install instruction that
+   implies `pip install` suffices on a CPU-only host is wrong.
+2. The adapter pins, before importing vLLM, a six-variable
+   environment block — the five recorded variables
+   (`VLLM_TARGET_DEVICE=cpu`, `VLLM_NO_USAGE_STATS=1`,
    `VLLM_DO_NOT_TRACK=1`, `HF_HUB_OFFLINE=1`,
-   `HF_HUB_DISABLE_TELEMETRY=1`, and `VLLM_TARGET_DEVICE=cpu`
-   (the fifth scoped to CPU hosts; the first four are the egress
-   controls, read back at the vLLM probe's G2 equivalent and
-   fingerprinted).
+   `HF_HUB_DISABLE_TELEMETRY=1`) plus
+   `VLLM_ENABLE_V1_MULTIPROCESSING=0`, which keeps the engine in
+   this process so the probe's read-backs describe the engine
+   that executes. The pins are set into the process environment,
+   read back at the probe, recorded in the identity, and a second
+   construction under a different environment digest is refused
+   (`stack_config_unpinned`).
 3. The gpt2 GGUF used as spike evidence was produced by an
    operator-side conversion that strips twelve `*.attn.bias`
    buffers the b12182 converter forwards incorrectly. That strip
    step belongs to the evidence pipeline. The lab ships no
    converter (the §9.5 non-goal stands), and no shipped code path
    depends on the stripped file.
+
+Three corrections the probe campaign executed against the real
+engine, which the adapter and the stop predictor now carry:
+
+- A natural end-of-sequence stop reports a **null** `stop_reason`
+  (the design's first draft expected the EOS ID there). An
+  integer `stop_reason` means a stop-token ID won; a string means
+  a stop text won; finish `stop` with a null reason and the final
+  token equal to the declared EOS ID means EOS won.
+- `min_tokens` is not a pure floor. For stop texts it is
+  detokenizer windowing: incremental matching starts only after
+  the gated prefix, and a stop that completes inside that prefix
+  is never re-found. For stop-token IDs and EOS it is sampler
+  masking: the candidate does not exist at or before the gated
+  step. The predictor models both rules; the combinations are
+  measured, not excluded.
+- `cpu_kvcache_space_bytes` does not exist at 0.33.0. Explicit
+  CPU KV sizing is therefore required (`--kv-cache-mib`), the
+  engine is constructed with `kv_cache_memory_bytes`, and the
+  identity records the read-back value and the sizing input.
+
+The identity's config is a closed key set, fixed before the
+build: version strings for the three distributions, a digest of
+the installed `vllm` module path, the platform pair, the six
+environment pins, the engine read-backs (checkpoint digest,
+seed, eager/singleton/prefix-caching pins, resolved dtype, KV
+sizing and its input, block size, block count), a digest of the
+engine's default sampling parameters (whose trap defaults —
+temperature 1.0, a 16-token cap — are exactly why every request
+pins the full Tier-A tuple explicitly), the detokenizer variant,
+the declared EOS set, the Tier-A tuple at the probe seed, and
+the abort probe record. Nothing in the set carries a raw path or
+a prompt; the public projection passes the set through an
+allowlist of exactly these keys.
+
+The abort conformance cell runs at probe time through the
+generate family only: a long sentinel generation is enqueued, a
+completion wait runs on a thread, `abort_request` is issued, and
+the terminal the generate call returns is recorded
+(`finish_reason: "abort"` when it materializes). At 0.33.0 the
+abort's terminal record does not arrive on the polled-step
+channel, so there is no polled-step driver and no per-request
+abort measurement; a probe whose terminal does not materialize
+records `terminal_observed: false` and the identity claims no
+abort conformance.
 
 ## Falsification
 
@@ -464,7 +521,14 @@ artifact, containing a raw stop text or answer text; a
 `diff-reports` mirror accepting a section whose stored fingerprint
 does not recompute from its stored identity block; or a capability
 the stack lacks being executed in a degraded form instead of
-recorded absent. None has been observed; the cycle-243 test suite
-pins each one against a hostile fake, and the probe and cache
-claims were executed against the real b12182 binary before the
-code shipped.
+recorded absent. For the vLLM arm, add: a mirror accepting a
+vLLM section whose environment pins, engine read-backs, or
+Tier-A tuple differ from the pinned values; a cold or divergent
+arm reporting a full KV block of reuse without the sequence
+being marked contaminated; or a shipped record whose returned
+IDs exceed the request's token cap. None has been observed; the
+cycle-243 test suite pins each one against a hostile fake, the
+probe and cache claims were executed against the real b12182
+binary before the llama.cpp code shipped, and the vLLM claims
+were executed against the real 0.33.0 engine in the R3 cycle-2
+probe campaign and the W6 conformance run.

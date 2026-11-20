@@ -3669,9 +3669,76 @@ general claim about a vendor.
 
 Supported window: llama.cpp build **b12182** only (commit
 `fd27b2034905f8dadd8bd6d2cc44595f4929d391`), over the native HTTP
-API. The vLLM-shaped request fields exist in the schema, but there
-is no vLLM adapter yet and no supported vLLM window; see
-`docs/SERVING_BACKENDS_DESIGN.md`.
+API. A second stack is supported through `--stack vllm`: vLLM
+**0.33.0**, running in-process on a CPU host of this class (the
+admission evidence is the R3 cycle-2 probe campaign plus the W6
+conformance run, both against a from-source CPU build; see
+`docs/SERVING_BACKENDS_DESIGN.md`). Records keep the same frozen
+`exec-backends-protocol-1` schema on both stacks, and a section
+measured on one stack is never comparable to the other — the diff
+mirror keys every expectation by the section's own stack and
+reports cross-stack pairs as not comparable.
+
+```sh
+model-protocol-lab exec-backends \
+  --stack vllm \
+  --model path/to/checkpoint \
+  --kv-cache-mib 512 \
+  --out serving-records-vllm.json
+```
+
+On the vLLM arm, `--model` is the Hugging Face checkpoint
+directory and `--kv-cache-mib` is **required**: explicit CPU
+KV-cache sizing is mandatory, because the engine's default sizing
+assumes a GPU memory budget this host class does not have; the
+sizing input is recorded in the identity. `--max-model-len` is an
+optional context-length override, required only when the
+checkpoint's own config declares none. The llama.cpp options are
+rejected on this arm, never silently ignored — `--gguf`,
+`--base-url`, `--api-key`, and `--timeout` each end the invocation
+with exit 2 — and `--kv-cache-mib`/`--max-model-len` are likewise
+rejected on the llama.cpp arm. Install routes differ by host: on
+a GPU host the pinned release installs from the `serve` extra
+(`vllm==0.33.0`); on a CPU-only host that wheel cannot work — it
+ships only the CUDA extension and no official CPU wheel exists —
+so a CPU host builds 0.33.0 from source with
+`VLLM_TARGET_DEVICE=cpu`. Do not read `pip install vllm` as a CPU
+route.
+
+The vLLM probe proves, before any cell runs: the installed
+release is the pinned one (the distribution metadata and the
+module agree); the platform is a real CPU device class; the
+engine's read-back configuration matches the pinned construction
+(single sequence, eager execution, prefix caching on, the
+requested KV sizing) — a construction under a different
+environment than an earlier one in the same process is refused
+(`stack_config_unpinned`); the engine echoes a sentinel prompt's
+token IDs exactly; and the engine's tokenizer agrees with the
+lab's in both directions. The probe also runs one abort cell
+through the generate family — a long generation is enqueued, an
+abort is issued, and the terminal record the generate call
+returns is recorded in the identity (`finish_reason: "abort"`
+when the terminal materializes). That probe cell is the whole
+abort claim: there is no per-request abort measurement, and a
+probe whose terminal does not materialize records
+`terminal_observed: false` and claims nothing.
+
+Stop semantics on this arm follow the engine's own rules, as
+executed in the probe campaign, not the lab's first guess at
+them. A natural end-of-sequence stop reports a **null**
+`stop_reason`: an integer means a stop-token ID won, a string
+means a stop text won, and a null reason with the final token
+equal to the EOS ID means EOS won. `min_tokens` is not a pure
+floor: for stop texts it is detokenizer windowing (a stop that
+completes inside the gated prefix is never re-found afterwards),
+and for stop-token IDs and EOS it is sampler masking (the
+candidate simply does not exist at or before the gated step).
+The cache companion reads the engine's own quantities:
+`tokens_cached` (quantized to whole KV blocks — the block size
+is in the identity) is the headline, with `cache_creation_tokens`
+beside it; a cold or divergent arm reporting a full block or
+more of reuse marks the sequence `cache_protocol_contaminated`,
+exactly as on the llama.cpp arm.
 
 Start the server yourself, under this launch line (the lab does
 not spawn one). Create the slot-save directory first — the b12182

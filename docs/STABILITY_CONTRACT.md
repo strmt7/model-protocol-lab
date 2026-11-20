@@ -75,7 +75,7 @@ Envelope-shape validation gaps found by the audit are RTI-06 (ledger).
 | `LocalHFBackend` | `backends.py` | supported via the `hf` extra | Linux proven in CI; Windows install currently broken (RR-07) |
 | Prompt-transform wrappers (`TruncatedPromptBackend`, `TokenTruncatedPromptBackend`, `TokenHealingBackend`) | `backends.py` | experimental | wrap any core backend; used by mutation/healing arms |
 | `LlamacppHttpBackend` | `servingbackends.py` (`ExecutionBackend` protocol) | experimental | one pinned stack build (llama.cpp b12182), loopback only, API key required; proven by the cycle-243 probes |
-| vLLM (any route) | — | **explicitly unsupported** | no adapter ships; the PyPI wheel is CUDA-only and the CPU from-source route is unproven on this host; a W6 work item, not a capability |
+| `VllmOfflineBackend` | `servingbackends.py` (`ExecutionBackend` protocol) | experimental | one pinned release (vLLM 0.33.0), in-process; CPU hosts run the from-source build (the PyPI wheel is CUDA-only); proven by the R3 cycle-2 probes and the W6 conformance run |
 | Synthetic backends in tests/fixtures | tests, `examples/` | not a product capability | deterministic stand-ins for tests; never presented as measurement evidence |
 
 The template catalog holds **29 format families** (`catalog.CATALOG`),
