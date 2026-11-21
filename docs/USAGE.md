@@ -319,7 +319,7 @@ reports "no template declared" and the run continues. This makes
 "sequences its own template would never produce" mechanically checkable
 instead of a slogan.
 
-### 8.2 Stop-behavior isolation matrix
+### 8.2 Stop-behavior isolation matrix (`stop_matrix`)
 
 For the frozen winner, `run` re-measures every fixture under emulated
 competitor stop semantics and reports which semantics flip the verdict:
@@ -441,7 +441,9 @@ exact byte where the prompt ends.
 Every `run` recomputes the search-stage decision at every smaller token
 budget from the recorded outputs and reports it as `budget_frontier` in
 `results.json` and the HTML report -- answering "was the token cap
-load-bearing for this verdict?" with no extra model calls.
+load-bearing for this verdict?" with no extra model calls. The companion
+floor computation over the held-out split is recorded under the
+`held_out_budget_floor` key.
 
 The derivation is exact, not sampled: for an observation that passed
 natively with the boundary first occurring at token offset `cut`, it passes
@@ -4016,7 +4018,11 @@ in mind.
 ## 11. Differential backend stop testing (`diff-backends`)
 
 When a run verdict surprises you, the suspect is sometimes not the weights
-or the format hypothesis but the backend's stop behavior. `diff-backends`
+or the format hypothesis but the backend's stop behavior. The same
+computation also runs inside `run`: whenever a winning candidate and its
+boundary are available, the winner's recorded observations are checked
+against the emulations and the outcome is stored as the
+`backend_divergences` section of `results.json`. `diff-backends`
 runs the lab's stop emulations -- HF `StopStringCriteria`
 (`hf_stop_string`), vLLM's detokenizer holdback with stop-string stripping
 (`vllm_holdback_strip`) and keeping (`vllm_holdback_keep`), SGLang's

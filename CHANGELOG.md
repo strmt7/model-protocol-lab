@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (external-audit W7 — the typed section registry, 2026-11-21)
+
+- **One typed registry row per results section.** The new
+  `model_protocol_lab.registry` module carries a frozen
+  `Instrument` record for each of the 65 section keys a
+  `results.json` can hold: its producer and measurement stage,
+  its diff key with the differ and mirror validator that consume
+  it (or the recorded reason it is intentionally not diffed),
+  the privacy-projection rule the default export applies to it,
+  its USAGE documentation anchor and its requesting CLI flag.
+  The diff dispatch tables in `diffreports` are now derived
+  views of the registry, and registry pins resolve every dotted
+  path, anchor and flag against the live tree, so a renamed
+  producer, differ or flag fails a test instead of silently
+  orphaning a section. Report outputs are unchanged.
+
 ### Added (external-audit W6 — the vLLM serving stack for exec-backends, 2026-11-19)
 
 - **`exec-backends` measures a second serving stack.** The new

@@ -31,6 +31,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from .registry import INSTRUMENTS
+
 # results.json with --include-evidence carries per-fixture token-ID arrays;
 # 32 MiB comfortably covers the largest runs this lab produces (100 search +
 # 100 held-out fixtures at the 4096-token cap) while keeping a hostile file
@@ -111,111 +113,22 @@ _PRIMARY_WINNER_DECISIONS = frozenset({"compatible_on_fixture_set", "held_out_fa
 # oracle's expected-identical dict, so a new producer section
 # cannot silently go undispatched. Push 4's section-state
 # publication and reporting's save_report admission gate consume
-# the same table.
+# the same table. Since W7 the table itself lives in
+# model_protocol_lab.registry (one typed Instrument row per key);
+# the three names below are derived views of it.
 # ---------------------------------------------------------------------
 
 _SECTION_PAIRS: list[tuple[str, str]] = [
-    ("budget_frontier", "frontier"),
-    ("held_out_budget_floor", "held_out_floor"),
-    ("budget", "budget"),
-    ("boundary_audit", "boundary_audit"),
-    ("selection_robustness", "selection_robustness"),
-    ("transfer", "transfer"),
-    ("contamination", "contamination"),
-    ("perturbation", "perturbation"),
-    ("token_healing", "token_healing"),
-    ("hierarchy", "hierarchy"),
-    ("prefill", "prefill"),
-    ("portfolio", "portfolio"),
-    ("synthhistory", "synthhistory"),
-    ("batch_invariance", "batch_invariance"),
-    ("position", "position"),
-    ("stop_cause", "stop_cause"),
-    ("ws_canonical", "ws_canonical"),
-    ("structured", "structured"),
-    ("deliforge", "deliforge"),
-    ("fewshot", "fewshot"),
-    ("faketurn", "faketurn"),
-    ("toolcall", "toolcall"),
-    ("verbosity", "verbosity"),
-    ("refusals", "refusals"),
-    ("scorerlens", "scorerlens"),
-    ("aliasing", "aliasing"),
-    ("repetition", "repetition"),
-    ("distraction", "distraction"),
-    ("leading", "leading"),
-    ("numform", "numform"),
-    ("dateline", "dateline"),
-    ("multiturn", "multiturn"),
-    ("needle", "needle"),
-    ("placement", "placement"),
-    ("canonical_form", "canonical_form"),
-    ("instruction_distance", "instruction_distance"),
-    ("history_frame", "history_frame"),
-    ("prune_sweep", "prune_sweep"),
-    ("record_notation", "record_notation"),
-    ("invisible_chars", "invisible_chars"),
-    ("confusable_skeleton", "confusable_skeleton"),
-    ("compatibility_form", "compatibility_form"),
-    ("enumeration_convention", "enumeration_convention"),
-    ("typographic_emphasis", "typographic_emphasis"),
-    ("choice_audit", "choice_audit"),
-    ("precision", "precision"),
-    ("confidence", "confidence"),
-    ("rotation", "rotation"),
-    ("density", "density"),
-    ("field_order", "field_order"),
-    ("cache_profile", "cache_profile"),
-    ("template_robustness", "template_robustness"),
-    ("ablation", "ablation"),
-    ("confidentiality", "confidentiality"),
-    ("answer_collision", "answer_collision"),
-    ("serving_backends", "serving_backends"),
-    ("negation", "negation"),
+    (instrument.key, diff_key)
+    for instrument in INSTRUMENTS
+    if (diff_key := instrument.diff_key) is not None
 ]
 SECTION_DIFF_KEYS: dict[str, str] = dict(_SECTION_PAIRS)
 
 UNDISPATCHED_SECTIONS: dict[str, str] = {
-    "sensitivity_sweep": (
-        "opt-in single-run CLI diagnostic attached in cli.py's fail-softened "
-        "diagnostics block (the code's own contract: diagnostics must not "
-        "fail the run); it describes the winning candidate of one run, is "
-        "not a per-candidate measurement stage, and has no cross-run "
-        "recompute standard to diff against"
-    ),
-    "sensitivity_sweep_tokens": (
-        "opt-in single-run CLI diagnostic attached in cli.py's fail-softened "
-        "diagnostics block, token-axis twin of sensitivity_sweep; same "
-        "disposition"
-    ),
-    "stop_matrix": (
-        "opt-in single-run CLI diagnostic attached in cli.py's fail-softened "
-        "diagnostics block; a per-run stop-behaviour matrix with no "
-        "cross-run recompute standard"
-    ),
-    "logprob_diagnostic": (
-        "opt-in single-run CLI diagnostic attached in cli.py's fail-softened "
-        "diagnostics block; free-prose diagnostic output, not a structured "
-        "measurement stage"
-    ),
-    "template_conformance": (
-        "doctor / diff-backends diagnostic surface: it is compared, where "
-        "applicable, by the diff-backends tool's own conformance logic; it "
-        "is not a per-run measurement section of results.json"
-    ),
-    "template_firewall": (
-        "doctor diagnostic surface (template firewall audit); no stored "
-        "per-run measurement payload is produced for diff-reports"
-    ),
-    "marker_isolation": (
-        "doctor diagnostic surface (chat-marker isolation audit); no "
-        "stored per-run measurement payload is produced for diff-reports"
-    ),
-    "backend_divergences": (
-        "diff-backends diagnostic surface: the divergence listing is the "
-        "output of the backend-comparison tool itself, not an input "
-        "section two runs can be diffed on"
-    ),
+    instrument.key: reason
+    for instrument in INSTRUMENTS
+    if (reason := instrument.undispatched_reason) is not None
 }
 
 
