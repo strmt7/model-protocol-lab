@@ -80,9 +80,13 @@ By-design (documented, not fixed):
 """
 
 import copy
+import importlib
 import importlib.util
 import json
+import os
 import random
+import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -713,21 +717,59 @@ class AttachDiagnosticsTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+_REPORTING_FAMILY = (
+    "reporting.py",
+    "reporting_core.py",
+    "reporting_text.py",
+    "reporting_forms.py",
+    "reporting_probes.py",
+    "reporting_runlevel.py",
+)
+
+_MUTANT_SCRATCH = Path(tempfile.gettempdir()) / f"cycle22_mutants_{os.getpid()}"
+
+
 def _load_mutant(name, replacements):
-    """Load a mutated copy of reporting.py from source text."""
-    source = Path(reporting.__file__).read_text(encoding="utf-8")
-    for old, new in replacements:
-        if old not in source:
-            raise AssertionError(f"mutant {name}: anchor not found: {old[:70]!r}")
-        source = source.replace(old, new, 1)
-    with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / f"mut_reporting_{name}.py"
-        path.write_text(source, encoding="utf-8")
-        spec = importlib.util.spec_from_file_location(f"mut_reporting_{name}", path)
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-    return module
+    """Load a mutated copy of the reporting family from source text.
+
+    W7-2: reporting.py is a facade over five family modules since
+    the split, so the copy is a scratch package holding all six
+    files; each replacement is applied to the one file whose text
+    carries its anchor (asserted unique across the family). The
+    returned module is the scratch package's facade, whose surface
+    is the original reporting surface. The scratch package stays
+    registered in sys.modules so the core module's call-time lazy
+    imports resolve to the mutated copies, not the real family.
+    """
+    workdir = _MUTANT_SCRATCH / name
+    if workdir.exists():
+        shutil.rmtree(workdir)
+    pkgdir = workdir / "mutpkg"
+    pkgdir.mkdir(parents=True)
+    (pkgdir / "__init__.py").write_text("", encoding="utf-8")
+    pending = list(replacements)
+    for fname in _REPORTING_FAMILY:
+        text = (Path(reporting.__file__).parent / fname).read_text(encoding="utf-8")
+        still = []
+        for old, new in pending:
+            if old in text:
+                assert text.count(old) == 1, f"mutant {name}: anchor ambiguous: {old[:70]!r}"
+                text = text.replace(old, new, 1)
+            else:
+                still.append((old, new))
+        pending = still
+        (pkgdir / fname).write_text(text, encoding="utf-8")
+    if pending:
+        raise AssertionError(f"mutant {name}: anchor not found: {pending[0][0][:70]!r}")
+    pkg_name = f"cycle22_mutant_{name}"
+    spec = importlib.util.spec_from_file_location(
+        pkg_name, pkgdir / "__init__.py", submodule_search_locations=[str(pkgdir)]
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[pkg_name] = module
+    spec.loader.exec_module(module)
+    return importlib.import_module(f"{pkg_name}.reporting")
 
 
 def _prefix_public_view(result, include_evidence):

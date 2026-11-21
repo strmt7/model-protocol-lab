@@ -86,27 +86,51 @@ def _paths(svg: str) -> list[tuple[str, str, str]]:
 
 
 def _load_mutant(source_path: Path, old: str, new: str, tag: str):
-    """Load a mutated copy of reporting.py from a PID-scoped tmp dir."""
+    """Load a mutated copy of reporting.py from a PID-scoped tmp dir.
+
+    W7-2: reporting.py is a facade over five family modules since
+    the split, so the copy is a scratch package holding all six
+    files; the mutant is applied to the one file whose text carries
+    the anchor. The returned module is the package's facade, whose
+    surface is the original reporting surface.
+    """
     workdir = _SCRATCH / tag
     if workdir.exists():
         shutil.rmtree(workdir)
-    workdir.mkdir(parents=True)
-    text = source_path.read_text(encoding="utf-8")
+    pkgdir = workdir / "mutpkg"
+    pkgdir.mkdir(parents=True)
+    (pkgdir / "__init__.py").write_text("", encoding="utf-8")
+    found = False
+    for name in (
+        "reporting.py",
+        "reporting_core.py",
+        "reporting_text.py",
+        "reporting_forms.py",
+        "reporting_probes.py",
+        "reporting_runlevel.py",
+    ):
+        text = (source_path.parent / name).read_text(encoding="utf-8")
+        if old and old in text:
+            assert text.count(old) == 1, f"mutant anchor ambiguous: {old[:60]!r}"
+            text = text.replace(old, new, 1)
+            found = True
+        (pkgdir / name).write_text(text, encoding="utf-8")
     if old:
-        assert old in text, f"mutant anchor missing: {old[:60]!r}"
-        text = text.replace(old, new, 1)
-    (workdir / "reporting.py").write_text(text, encoding="utf-8")
+        assert found, f"mutant anchor missing: {old[:60]!r}"
+    pkg_name = f"cycle121_mutant_{tag}"
     spec = importlib.util.spec_from_file_location(
-        f"cycle121_mutant_{tag}", workdir / "reporting.py"
+        pkg_name, pkgdir / "__init__.py", submodule_search_locations=[str(pkgdir)]
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
+    sys.modules[pkg_name] = module
     try:
         spec.loader.exec_module(module)
+        facade = importlib.import_module(f"{pkg_name}.reporting")
     finally:
-        sys.modules.pop(spec.name, None)
-    return module
+        for key in [k for k in sys.modules if k == pkg_name or k.startswith(pkg_name + ".")]:
+            sys.modules.pop(key, None)
+    return facade
 
 
 class TestHandDerivedGeometry(unittest.TestCase):

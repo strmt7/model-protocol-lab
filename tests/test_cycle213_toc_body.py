@@ -27,6 +27,7 @@ import unittest
 from pathlib import Path
 
 from model_protocol_lab import reporting as reporting_mod
+from model_protocol_lab import reporting_core as reporting_core_mod
 from tests.test_cycle33_reporting_verify import _full_result
 from tests.test_cycle209_canonicalform import _payload as _canonical_payload
 from tests.test_cycle212_negation import _payload as _negation_payload
@@ -198,7 +199,10 @@ class RenderHtmlSourceGuardTests(unittest.TestCase):
     @staticmethod
     def _render_html_parts():
         """Render html parts."""
-        source = Path(reporting_mod.__file__).read_text(encoding="utf-8")
+        # W7-2: render_html lives in reporting_core.py since the
+        # split; the facade only re-exports it, so the guard reads
+        # the defining module's source.
+        source = Path(reporting_core_mod.__file__).read_text(encoding="utf-8")
         tree = ast.parse(source)
         render = next(
             (

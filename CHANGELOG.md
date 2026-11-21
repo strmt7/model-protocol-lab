@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (external-audit W7 — the reporting split, 2026-11-21)
+
+- **`reporting.py` is now a facade over five modules.** The
+  report builder's implementation lives in `reporting_core`
+  (envelope, public view, HTML assembly), `reporting_text`,
+  `reporting_forms`, `reporting_probes` and `reporting_runlevel`
+  (the per-instrument section renderers, by family). The facade
+  re-exports the full original surface — every public and
+  underscore-private name importers use — so no call site
+  changes, and report outputs are byte-identical (the committed
+  sample report still regenerates exactly). Family modules
+  import only the core; the core resolves family renderers
+  lazily at call time, keeping the module graph acyclic. Per-
+  module line budgets derived from the W7 census are pinned by
+  test, and the cycle-124 margin mutation gate now mutates
+  `reporting_core.py`, where its target code lives.
+
 ### Added (external-audit W7 — the typed section registry, 2026-11-21)
 
 - **One typed registry row per results section.** The new

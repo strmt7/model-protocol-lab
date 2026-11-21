@@ -1489,7 +1489,22 @@ class TestMutantGate(unittest.TestCase):
         """Set up the test fixture."""
         if _MUTANT_ROOT.exists():
             shutil.rmtree(_MUTANT_ROOT)
-        src = Path(reporting.__file__).read_text(encoding="utf-8")
+        # W7-2: reporting.py is a facade over five family modules;
+        # the copy is the whole family, and each mutant is applied
+        # to the one file whose text carries its anchor (the prepend
+        # rides on the first replacement's home file).
+        pkg_src = Path(reporting.__file__).parent
+        srcs = {
+            name: (pkg_src / name).read_text(encoding="utf-8")
+            for name in (
+                "reporting.py",
+                "reporting_core.py",
+                "reporting_text.py",
+                "reporting_forms.py",
+                "reporting_probes.py",
+                "reporting_runlevel.py",
+            )
+        }
         jobs = [("control", [], list(_CHECKS), "")]
         jobs.extend((pkg, repl, checks, pre) for pkg, repl, checks, pre in _MUTANTS)
         for pkg, replacements, _checks, prepend in jobs:
@@ -1500,12 +1515,20 @@ class TestMutantGate(unittest.TestCase):
                 f"MAX_DIVERGENCE_OBSERVATIONS = {MAX_DIVERGENCE_OBSERVATIONS}\n",
                 encoding="utf-8",
             )
-            text = src
+            texts = dict(srcs)
+            first_home: str | None = None
             for old, new in replacements:
-                assert old in text, f"mutant anchor missing in {pkg}: {old!r}"
-                assert text.count(old) == 1, f"mutant anchor ambiguous in {pkg}: {old!r}"
-                text = text.replace(old, new, 1)
-            (pkgdir / "reporting.py").write_text(prepend + text, encoding="utf-8")
+                homes = [name for name, text in texts.items() if old in text]
+                assert len(homes) == 1, f"mutant anchor missing/ambiguous in {pkg}: {old!r}"
+                home = homes[0]
+                if first_home is None:
+                    first_home = home
+                assert texts[home].count(old) == 1, f"mutant anchor ambiguous in {pkg}: {old!r}"
+                texts[home] = texts[home].replace(old, new, 1)
+            if prepend and first_home is not None:
+                texts[first_home] = prepend + texts[first_home]
+            for name, text in texts.items():
+                (pkgdir / name).write_text(text, encoding="utf-8")
         sys.path.insert(0, str(_MUTANT_ROOT))
 
     @classmethod

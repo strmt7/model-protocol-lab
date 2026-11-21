@@ -300,14 +300,14 @@ class TestProtocol(unittest.TestCase):
         ]
         for token in banned:
             self.assertNotIn(token, stage_segment)
-        reporting_src = (root / "reporting.py").read_text(encoding="utf-8")
-        section = reporting_src[
-            reporting_src.index("def _dateline_section") : reporting_src.index(
-                "def _cache_profile_section"
-            )
-        ]
-        for token in banned:
-            self.assertNotIn(token, section)
+        # W7-2: reporting.py split into a facade + five family
+        # modules; the scan covers the whole family (stronger than
+        # the original _dateline_section.._cache_profile_section
+        # slice of the monolith).
+        for path in sorted(root.glob("reporting*.py")):
+            section = path.read_text(encoding="utf-8")
+            for token in banned:
+                self.assertNotIn(token, section, f"{token} in {path.name}")
 
 
 class TestScreen(unittest.TestCase):

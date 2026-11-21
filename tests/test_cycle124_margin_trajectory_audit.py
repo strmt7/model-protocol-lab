@@ -232,7 +232,10 @@ class TestSectionWiring(unittest.TestCase):
 class TestMutationGate(unittest.TestCase):
     """Test mutation gate."""
 
-    SOURCE = _REPO_ROOT / "model_protocol_lab" / "reporting.py"
+    # W7-2: margin_trajectory and the margin chart live in
+    # reporting_core.py since the reporting split; the gate mutates
+    # the implementation module (reporting.py is the facade now).
+    SOURCE = _REPO_ROOT / "model_protocol_lab" / "reporting_core.py"
 
     MUTANTS = [
         # Leader margin computed as runner-up minus leader (sign flip).
@@ -293,7 +296,7 @@ class TestMutationGate(unittest.TestCase):
                 # leave a .pyc whose (mtime, size) still validates
                 # against the reverted source, poisoning later imports
                 # with mutant bytecode (see the cycle-135 gate fix).
-                for _pyc in self.SOURCE.parent.glob("__pycache__/reporting.*.pyc"):
+                for _pyc in self.SOURCE.parent.glob("__pycache__/reporting_core.*.pyc"):
                     _pyc.unlink(missing_ok=True)
             if proc.returncode != 0:
                 killed.append(mutant)
