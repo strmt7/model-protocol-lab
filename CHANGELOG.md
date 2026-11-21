@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Removed (external-audit W7 — tracked generated files, RR-16)
+
+- **The 107 tracked generated files are gone.** The built
+  documentation output under `site/` (101 files) and the
+  stale `model_protocol_lab.egg-info/` metadata (6 files,
+  still claiming version 0.1.0) were tracked by accident;
+  both paths were already covered by `.gitignore` (which
+  is unchanged), so the removal is a one-time tree
+  correction in a single commit. Generated output no
+  longer drifts against the sources it was built from.
+
 ### Changed (external-audit W7 — the diffreports split, 2026-11-21)
 
 - **`diffreports.py` is now a facade over five modules.** The
