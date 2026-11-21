@@ -23,9 +23,17 @@ FAMILY_BUDGETS: dict[str, tuple[int, int]] = {
     "reporting_forms": (2136, 2856),
     "reporting_probes": (2778, 3595),
     "reporting_runlevel": (3833, 4808),
+    "experiments_core": (2091, 2804),
+    "experiments_text": (2549, 3331),
+    "experiments_forms": (2840, 3665),
+    "experiments_probes": (4365, 5419),
+    "experiments_runlevel": (4260, 5299),
 }
+# Facade budgets: lines measured at split time + 300, rounded to the
+# nearest 50 (reporting: 311 -> 600; experiments: 719 -> 1000).
 FACADE_BUDGETS: dict[str, int] = {
     "reporting": 600,
+    "experiments": 1000,
 }
 
 

@@ -1137,7 +1137,7 @@ class FewshotMutationGateTests(unittest.TestCase):
     def test_mutant_gain_max_caught(self):
         """Test mutant gain max caught."""
         self._run_gate(
-            "experiments",
+            "experiments_runlevel",  # W7-2b: the gated stage lives in this family module
             "gain_max",
             "        gain = sum(valid_rates) / len(valid_rates)",
             "        gain = max(valid_rates)  # MUTANT",

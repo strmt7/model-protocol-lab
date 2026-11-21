@@ -38,7 +38,7 @@ import random
 import unittest
 from unittest import mock
 
-from model_protocol_lab import experiments
+from model_protocol_lab import experiments, experiments_runlevel
 from model_protocol_lab.core import first_boundary
 from model_protocol_lab.experiments import budget_frontier
 
@@ -706,7 +706,9 @@ class BudgetFrontierSensitivityTests(unittest.TestCase):
             return None if cut is None else cut + 1
 
         search, kwargs = self._passing_case()
-        with mock.patch.object(experiments, "first_boundary", side_effect=shifted):
+        # W7-2b: budget_frontier lives in experiments_runlevel; the
+        # patch must land in its own module namespace.
+        with mock.patch.object(experiments_runlevel, "first_boundary", side_effect=shifted):
             mutated = budget_frontier(search, **kwargs)
         oracle = _oracle_budget_frontier(search, **kwargs)
         mismatches = _compare(mutated, oracle)
@@ -729,7 +731,7 @@ class BudgetFrontierSensitivityTests(unittest.TestCase):
             return max(0, real_bisect_right(sorted_mins, budget) - 1)
 
         search, kwargs = self._passing_case()
-        with mock.patch.object(experiments, "bisect_right", side_effect=undercount):
+        with mock.patch.object(experiments_runlevel, "bisect_right", side_effect=undercount):
             mutated = budget_frontier(search, **kwargs)
         oracle = _oracle_budget_frontier(search, **kwargs)
         mismatches = _compare(mutated, oracle)

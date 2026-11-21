@@ -638,7 +638,7 @@ class FixupMutationGateTests(unittest.TestCase):
     def test_mutant_f2_stage_skips_schema_validation_caught(self):
         """Test mutant f2 stage skips schema validation caught."""
         self._run_gate(
-            "experiments",
+            "experiments_probes",  # W7-2b: the gated stage lives in this family module
             "f2_skipped_schema_validation",
             "            validate_schema_def(schema)\n",
             "            None  # MUTANT\n",

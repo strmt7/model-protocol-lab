@@ -703,7 +703,7 @@ class PositionMutationGateTests(unittest.TestCase):
         # The mutant counts non-exact observations as "correct": the
         # scenario pins the all-exact count, so it fails on the mutant.
         self._run_gate(
-            "experiments",
+            "experiments_forms",  # W7-2b: the gated stage lives in this family module
             "position_no_exact",
             "        correct = sum(1 for obs in report.observations"
             " if obs.exact_match and obs.boundary_found)",

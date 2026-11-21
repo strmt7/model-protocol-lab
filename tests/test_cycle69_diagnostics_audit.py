@@ -1697,10 +1697,15 @@ def _write_package_copy(dest: Path, mutate: tuple[str, str] | None) -> Path:
     shutil.copytree(PKG_DIR, dest / "model_protocol_lab")
     if mutate is not None:
         anchor, replacement = mutate
-        target = dest / "model_protocol_lab" / "experiments.py"
-        source = target.read_text(encoding="utf-8")
-        assert source.count(anchor) == 1, f"anchor not unique/found: {anchor!r}"
-        target.write_text(source.replace(anchor, replacement), encoding="utf-8")
+        # W7-2b: experiments.py is a facade over five family
+        # modules; the anchor lives in exactly one family file.
+        fam = sorted((dest / "model_protocol_lab").glob("experiments*.py"))
+        total = sum(p.read_text(encoding="utf-8").count(anchor) for p in fam)
+        assert total == 1, f"anchor not unique/found: {anchor!r}"
+        for target in fam:
+            source = target.read_text(encoding="utf-8")
+            if anchor in source:
+                target.write_text(source.replace(anchor, replacement), encoding="utf-8")
     return dest / "model_protocol_lab"
 
 

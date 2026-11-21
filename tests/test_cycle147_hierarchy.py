@@ -869,7 +869,7 @@ class HierarchyMutationGateTests(unittest.TestCase):
     def test_mutant_inverted_flip_detection_caught(self):
         """Test mutant inverted flip detection caught."""
         self._run_gate(
-            "experiments",
+            "experiments_probes",  # W7-2b: the gated stage lives in this family module
             "inverted_flip",
             """    for position in sorted(per_condition):
         verdict = per_condition[position]

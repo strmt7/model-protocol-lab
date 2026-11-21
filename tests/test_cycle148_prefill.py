@@ -971,7 +971,7 @@ class PrefillMutationGateTests(unittest.TestCase):
     def test_mutant_inverted_flip_detection_caught(self):
         """Test mutant inverted flip detection caught."""
         self._run_gate(
-            "experiments",
+            "experiments_probes",  # W7-2b: the gated stage lives in this family module
             "inverted_flip",
             """    for prefill_id in sorted(per_condition):
         verdict = per_condition[prefill_id]
@@ -1006,7 +1006,7 @@ class PrefillMutationGateTests(unittest.TestCase):
     def test_mutant_swapped_honor_branches_caught(self):
         """Test mutant swapped honor branches caught."""
         self._run_gate(
-            "experiments",
+            "experiments_probes",  # W7-2b: the gated stage lives in this family module
             "swapped_honor",
             """            if honors_prefill(obs.answer, prefill_text):
                 honored += 1

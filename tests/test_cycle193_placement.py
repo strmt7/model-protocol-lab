@@ -25,7 +25,7 @@ import threading
 import unittest
 from unittest import mock
 
-from model_protocol_lab import cli, diffreports, experiments, placement
+from model_protocol_lab import cli, diffreports, experiments, experiments_probes, placement
 from model_protocol_lab.core import Format, Generation
 from model_protocol_lab.diffreports import _valid_placement, diff_placement
 from model_protocol_lab.reporting import render_html
@@ -690,7 +690,9 @@ class TestStage(unittest.TestCase):
             event.set()
             return outcome
 
-        with mock.patch.object(experiments, "_placement_cell", wrapper):
+        # W7-2b: placement_stage lives in experiments_probes; the
+        # patch must land in its own module namespace.
+        with mock.patch.object(experiments_probes, "_placement_cell", wrapper):
             stage = experiments.placement_stage(
                 backend,
                 FORMATS,
@@ -718,7 +720,7 @@ class TestStage(unittest.TestCase):
             return None, None
 
         backend = _WordBackend()
-        with mock.patch.object(experiments, "_placement_cell", neither):
+        with mock.patch.object(experiments_probes, "_placement_cell", neither):
             stage = experiments.placement_stage(
                 backend,
                 FORMATS[:1],

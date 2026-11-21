@@ -563,7 +563,7 @@ class PortfolioMutationGateTests(unittest.TestCase):
     def test_mutant_loosened_pass_predicate_caught(self):
         """Test mutant loosened pass predicate caught."""
         self._run_gate(
-            "experiments",
+            "experiments_runlevel",  # W7-2b: the gated stage lives in this family module
             "loosened_pass",
             '                if obs.get("exact_match") is True and obs.get("boundary_found") is True:',  # noqa: E501
             '                if obs.get("exact_match") is True or obs.get("boundary_found") is True:  # MUTANT',  # noqa: E501

@@ -37,7 +37,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from model_protocol_lab import backends, cli, diffreports, experiments, rotation
+from model_protocol_lab import backends, cli, diffreports, experiments, experiments_forms, rotation
 from model_protocol_lab import doctor as doctor_mod
 from model_protocol_lab import reporting as reporting_mod
 from model_protocol_lab.core import Format, Generation
@@ -953,7 +953,9 @@ class TestStage(unittest.TestCase):
             event.set()
             return outcome
 
-        with mock.patch.object(experiments, "_rotation_cell", wrapper):
+        # W7-2b: rotation_stage lives in experiments_forms; the
+        # patch must land in its own module namespace.
+        with mock.patch.object(experiments_forms, "_rotation_cell", wrapper):
             stage = experiments.rotation_stage(
                 backend,
                 FORMATS,
@@ -1590,7 +1592,7 @@ class TestStageGapBranches(unittest.TestCase):
         # (None, None) -- the record carries the arm as absent
         # with an empty detail, which the validator then
         # rejects downstream rather than the stage guessing.
-        with mock.patch.object(experiments, "_rotation_cell", return_value=(None, None)):
+        with mock.patch.object(experiments_forms, "_rotation_cell", return_value=(None, None)):
             payload = _payload()
         self.assertTrue(payload["available"])
         record = payload["candidates"]["rt-a"]["records"][0]

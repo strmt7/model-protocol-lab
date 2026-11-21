@@ -729,7 +729,8 @@ class SynthhistoryMutationGateTests(unittest.TestCase):
         """Pass predicate scenario."""
         expected = "A" * 16
         # The experiments mutant reuses the real synthhistory module
-        # (only experiments.py is rewritten), so build fixtures from the
+        # (only experiments_runlevel.py is rewritten — W7-2b moved
+        # synthhistory_stage there), so build fixtures from the
         # real module here.
 
         real_built, _ = build_history_fixtures((_case("f1", expected),), condition="history_2")
@@ -748,7 +749,7 @@ class SynthhistoryMutationGateTests(unittest.TestCase):
     def test_mutant_loosened_pass_predicate_caught(self):
         """Test mutant loosened pass predicate caught."""
         self._run_gate(
-            "experiments",
+            "experiments_runlevel",
             "loosened_pass",
             "        passed = sum(1 for obs in report.observations if obs.exact_match and obs.boundary_found)",  # noqa: E501
             "        passed = sum(1 for obs in report.observations if obs.exact_match or obs.boundary_found)  # MUTANT",  # noqa: E501

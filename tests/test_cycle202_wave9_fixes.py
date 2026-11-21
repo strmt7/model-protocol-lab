@@ -234,7 +234,15 @@ class TestFingerprintGuard(unittest.TestCase):
         # stage that builds a protocol from a backend routes the read
         # through the guard (the enumeration the wave-9 briefs counted
         # three times: 21 call sites across 12 stage functions).
-        source = (REPO_ROOT / "model_protocol_lab" / "experiments.py").read_text(encoding="utf-8")
+        # W7-2b: experiments.py split into a facade + five family
+        # modules; the audit covers the whole family (the NotIn
+        # patterns against the concatenation, each stage body sliced
+        # from the family module that defines it).
+        pkg = REPO_ROOT / "model_protocol_lab"
+        family = {
+            p.name: p.read_text(encoding="utf-8") for p in sorted(pkg.glob("experiments*.py"))
+        }
+        source = "".join(family.values())
         self.assertNotIn("str(backend.fingerprint)", source)
         self.assertNotIn('str(getattr(native_backend, "fingerprint"', source)
         self.assertNotIn('str(getattr(bf16_backend, "fingerprint"', source)
@@ -255,9 +263,10 @@ class TestFingerprintGuard(unittest.TestCase):
         )
         for name in stages:
             with self.subTest(stage=name):
-                start = source.index(f"def {name}(")
-                nxt = source.find("\ndef ", start + 1)
-                body = source[start:] if nxt == -1 else source[start:nxt]
+                stage_src = next(text for text in family.values() if f"def {name}(" in text)
+                start = stage_src.index(f"def {name}(")
+                nxt = stage_src.find("\ndef ", start + 1)
+                body = stage_src[start:] if nxt == -1 else stage_src[start:nxt]
                 self.assertIn("_backend_fingerprint(", body)
 
 

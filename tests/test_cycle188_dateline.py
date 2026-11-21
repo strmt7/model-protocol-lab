@@ -286,20 +286,22 @@ class TestProtocol(unittest.TestCase):
 
     def test_no_clock_or_locale_calls(self):
         """Test no clock or locale calls."""
-        # G10 pin: the module, the stage/analysis segment of
-        # experiments.py, and the reporting section must not read
-        # the wall clock or the locale.
+        # G10 pin: the module, the experiments family (the stage
+        # segment's post-split home), and the reporting family must
+        # not read the wall clock or the locale.
         root = Path(__file__).resolve().parent.parent / "model_protocol_lab"
         banned = (".today(", "datetime.now(", "strftime(", "strptime(", "time.time(")
         module_src = (root / "dateline.py").read_text(encoding="utf-8")
         for token in banned:
             self.assertNotIn(token, module_src)
-        experiments_src = (root / "experiments.py").read_text(encoding="utf-8")
-        stage_segment = experiments_src[
-            experiments_src.index("def dateline_stage") : experiments_src.index("def numform_stage")
-        ]
-        for token in banned:
-            self.assertNotIn(token, stage_segment)
+        # W7-2b: experiments.py split into a facade + five family
+        # modules; the scan covers the whole family (stronger than
+        # the original dateline_stage..numform_stage slice of the
+        # monolith, same widening as the reporting scan below).
+        for path in sorted(root.glob("experiments*.py")):
+            section = path.read_text(encoding="utf-8")
+            for token in banned:
+                self.assertNotIn(token, section, f"{token} in {path.name}")
         # W7-2: reporting.py split into a facade + five family
         # modules; the scan covers the whole family (stronger than
         # the original _dateline_section.._cache_profile_section

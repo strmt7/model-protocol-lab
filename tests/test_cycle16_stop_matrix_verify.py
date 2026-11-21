@@ -704,15 +704,29 @@ class StopMatrixSensitivityTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp, True)
         pkg_name = f"c16sens_{tag}"
         shutil.copytree(src_dir, os.path.join(tmp, pkg_name))
-        exp_path = os.path.join(tmp, pkg_name, "experiments.py")
-        with open(exp_path, encoding="utf-8") as handle:
-            src = handle.read()
+        # W7-2b: experiments.py is a facade over five family
+        # modules; each patch lands in the family file carrying its
+        # anchor, with the exact-occurrence guard counted across
+        # the whole experiments family in the copy.
+        dest_dir = os.path.join(tmp, pkg_name)
+        fam_paths = sorted(
+            os.path.join(dest_dir, name)
+            for name in os.listdir(dest_dir)
+            if name.startswith("experiments") and name.endswith(".py")
+        )
+        fam_src: dict[str, str] = {}
+        for path in fam_paths:
+            with open(path, encoding="utf-8") as handle:
+                fam_src[path] = handle.read()
         for old, new, expected_count in patches:
-            actual = src.count(old)
+            actual = sum(text.count(old) for text in fam_src.values())
             assert actual == expected_count, (tag, old, actual)
-            src = src.replace(old, new)
-        with open(exp_path, "w", encoding="utf-8") as handle:
-            handle.write(src)
+            for path, text in fam_src.items():
+                if old in text:
+                    fam_src[path] = text.replace(old, new)
+        for path, text in fam_src.items():
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(text)
         sys.path.insert(0, tmp)
         self.addCleanup(sys.path.remove, tmp)
         experiments_mod = importlib.import_module(f"{pkg_name}.experiments")

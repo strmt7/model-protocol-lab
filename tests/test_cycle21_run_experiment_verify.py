@@ -1270,13 +1270,18 @@ def run_mutated(mutation_name=None, scenario="majority"):
         shutil.copytree(REPO_ROOT / "model_protocol_lab", mutdir / "model_protocol_lab")
         if mutation_name is not None:
             old, new, _ = MUTATIONS[mutation_name]
-            target = mutdir / "model_protocol_lab" / "experiments.py"
-            text = target.read_text()
-            if text.count(old) != 1:
+            # W7-2b: experiments.py is a facade over five family
+            # modules; the anchor lives in exactly one family file.
+            fam = sorted((mutdir / "model_protocol_lab").glob("experiments*.py"))
+            total = sum(p.read_text().count(old) for p in fam)
+            if total != 1:
                 raise AssertionError(
-                    f"mutation anchor not unique/found for {mutation_name}: count={text.count(old)}"
+                    f"mutation anchor not unique/found for {mutation_name}: count={total}"
                 )
-            target.write_text(text.replace(old, new, 1))
+            for target in fam:
+                text = target.read_text()
+                if old in text:
+                    target.write_text(text.replace(old, new, 1))
             scenario = MUTATIONS[mutation_name][2]
         driver = Path(tmp) / "driver.py"
         driver.write_text(

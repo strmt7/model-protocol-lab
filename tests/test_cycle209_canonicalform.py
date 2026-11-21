@@ -26,7 +26,7 @@ import unicodedata
 import unittest
 
 from model_protocol_lab import canonicalform as cf
-from model_protocol_lab import diffreports, experiments
+from model_protocol_lab import diffreports, experiments, experiments_text
 from model_protocol_lab import reporting as reporting_mod
 from model_protocol_lab.backends import Generation
 from model_protocol_lab.core import Fixture, Format, Message, evaluate
@@ -1905,7 +1905,9 @@ class FullRunGapTests(unittest.TestCase):
         from unittest import mock
 
         backend = _WordBackend()
-        with mock.patch.object(experiments, "_canonical_form_cell", return_value=(None, None)):
+        # W7-2b: the canonical-form stage lives in
+        # experiments_text; the patch must land in its own namespace.
+        with mock.patch.object(experiments_text, "_canonical_form_cell", return_value=(None, None)):
             stage = experiments.canonicalform_stage(
                 backend,
                 (_CHATML,),

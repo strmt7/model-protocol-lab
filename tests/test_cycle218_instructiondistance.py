@@ -41,7 +41,7 @@ import threading
 import unittest
 from unittest import mock
 
-from model_protocol_lab import diffreports, experiments
+from model_protocol_lab import diffreports, experiments, experiments_probes
 from model_protocol_lab import instructiondistance as idm
 from model_protocol_lab import reporting as reporting_mod
 from model_protocol_lab.backends import Generation
@@ -929,7 +929,9 @@ class GapStageTests(unittest.TestCase):
             )
 
         stub = mock.Mock(aggregate_eligible=False, observations=[])
-        with mock.patch.object(experiments, "evaluate", return_value=stub):
+        # W7-2b: the instruction-distance stage lives in
+        # experiments_probes; the patch must land in its namespace.
+        with mock.patch.object(experiments_probes, "evaluate", return_value=stub):
             detail, cell = experiments._instruction_distance_cell(
                 backend,
                 _CHATML,

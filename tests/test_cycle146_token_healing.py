@@ -1296,7 +1296,7 @@ class HealingMutationGateTests(unittest.TestCase):
             self.assertTrue(d["falsification"]["prediction_holds"])
 
         self._run_gate(
-            "experiments",
+            "experiments_runlevel",  # W7-2b: the gated stage lives in this family module
             "weakened_falsification",
             "            prediction_holds = (not verdict_changed) or seam_fragile",
             "            prediction_holds = verdict_changed and seam_fragile  # MUTANT",

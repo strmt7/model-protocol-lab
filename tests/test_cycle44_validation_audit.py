@@ -228,11 +228,14 @@ class ValidationToolchainTests(unittest.TestCase):
         # typographicemphasis.py is the 74th, cycle 237;
         # servingbackends.py is the 75th, cycle 243;
         # platform_caps.py is the 76th, W3;
-        # render_worker.py is the 77th, W4.)
+        # render_worker.py is the 77th, W4.
+        # W7-2a: the five reporting family modules bring the live
+        # count to 84; W7-2b: the five experiments family modules
+        # bring it to 89.)
         """Mypy clean 58 source files."""
         proc = run_tool("mypy", "model_protocol_lab", timeout=600)
         self.assertEqual(proc.returncode, 0, proc.stdout[-1000:])
-        self.assertIn("84 source files", proc.stdout)
+        self.assertIn("89 source files", proc.stdout)
 
     def test_bandit_zero_issues_at_any_severity(self):
         # Doc claims a remaining Low/Medium B105 false positive; actual:
@@ -499,7 +502,10 @@ class ValidationDocsTests(unittest.TestCase):
 
     def test_teacher_forced_logprob_diagnostic_present(self):
         """Teacher forced logprob diagnostic present."""
-        text = (REPO_ROOT / "model_protocol_lab" / "experiments.py").read_text(encoding="utf-8")
+        # W7-2b: experiments.py split into a facade + five family
+        # modules; the diagnostic's docstring lives in the family.
+        pkg = REPO_ROOT / "model_protocol_lab"
+        text = "".join(p.read_text(encoding="utf-8") for p in sorted(pkg.glob("experiments*.py")))
         cli_text = (REPO_ROOT / "model_protocol_lab" / "cli.py").read_text(encoding="utf-8")
         self.assertIn("Teacher-forced log-likelihood", cli_text)
         self.assertIn("teacher-forced logprob", text)

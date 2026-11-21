@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (external-audit W7 — the experiments split, 2026-11-21)
+
+- **`experiments.py` is now a facade over five modules.** The
+  experiment runner's implementation lives in `experiments_core`
+  (the run loop, boundary resolution, fingerprints),
+  `experiments_text`, `experiments_forms`, `experiments_probes`
+  and `experiments_runlevel` (the per-instrument stage builders,
+  by family). The facade re-exports the full original surface —
+  every public and underscore-private name importers use — so
+  no call site changes, and experiment outputs are unchanged.
+  Family modules import only the core, plus the one measured
+  cross-family edge (`experiments_runlevel` reads
+  `_faketurn_cell_view` from `experiments_probes`); the module
+  graph stays acyclic. Per-module line budgets derived from the
+  W7 census are pinned by test, and the test suite's copy-based
+  mutation gates now land each patch in the family file that
+  carries its anchor.
+
 ### Changed (external-audit W7 — the reporting split, 2026-11-21)
 
 - **`reporting.py` is now a facade over five modules.** The

@@ -716,20 +716,25 @@ _MUTANT_ROOT = Path(tempfile.gettempdir()) / f"mpl_cycle19_taxonomy_mutants_{os.
 
 def _build_mutant(package_name, replacements):
     """Copy the package under a fresh top-level name, apply textual mutations
-    to its experiments.py, and import the mutated module.
+    to its experiments family, and import the mutated module.
     """
     src = Path(real.__file__).resolve().parent
     dest = _MUTANT_ROOT / package_name
     if dest.exists():
         shutil.rmtree(dest)
     shutil.copytree(src, dest, ignore=shutil.ignore_patterns("__pycache__"))
-    path = dest / "experiments.py"
-    text = path.read_text(encoding="utf-8")
+    # W7-2b: experiments.py is a facade over five family modules;
+    # each replacement lands in the family file carrying its anchor,
+    # with the exact-occurrence guard counted across the family.
+    fam = {p: p.read_text(encoding="utf-8") for p in sorted(dest.glob("experiments*.py"))}
     for old, new, expected_count in replacements:
-        found = text.count(old)
+        found = sum(text.count(old) for text in fam.values())
         assert found == expected_count, (package_name, old[:60], found, expected_count)
-        text = text.replace(old, new)
-    path.write_text(text, encoding="utf-8")
+        for p, text in fam.items():
+            if old in text:
+                fam[p] = text.replace(old, new)
+    for p, text in fam.items():
+        p.write_text(text, encoding="utf-8")
     if str(_MUTANT_ROOT) not in sys.path:
         sys.path.insert(0, str(_MUTANT_ROOT))
     return importlib.import_module(f"{package_name}.experiments")

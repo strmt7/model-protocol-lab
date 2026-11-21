@@ -712,7 +712,7 @@ class VerbosityMutationGateTests(unittest.TestCase):
     def test_mutant_capped_strict_caught(self):
         """Test mutant capped strict caught."""
         self._run_gate(
-            "experiments",
+            "experiments_runlevel",  # W7-2b: the gated stage lives in this family module
             "capped_strict",
             "            (generated, minimal[fixture_id], generated >= max_new_tokens)",
             "            (generated, minimal[fixture_id], generated > max_new_tokens)  # MUTANT",

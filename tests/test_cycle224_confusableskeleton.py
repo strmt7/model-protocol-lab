@@ -43,7 +43,14 @@ from pathlib import Path
 from statistics import NormalDist
 from unittest import mock
 
-from model_protocol_lab import canonicalform, density, diffreports, experiments, reporting
+from model_protocol_lab import (
+    canonicalform,
+    density,
+    diffreports,
+    experiments,
+    experiments_text,
+    reporting,
+)
 from model_protocol_lab import confusableskeleton as cs
 from model_protocol_lab.core import Format, Generation
 
@@ -1762,7 +1769,9 @@ class TestGapPassStage(unittest.TestCase):
         stub = mock.Mock()
         stub.aggregate_eligible = False
         stub.observations = []
-        with mock.patch.object(experiments, "evaluate", return_value=stub):
+        # W7-2b: the confusable-skeleton stage lives in
+        # experiments_text; the patch must land in its namespace.
+        with mock.patch.object(experiments_text, "evaluate", return_value=stub):
             stage = experiments.confusable_skeleton_stage(
                 backend,
                 (_CHATML,),
@@ -2129,7 +2138,7 @@ class TestGapPass2(unittest.TestCase):
             event.set()
             return report
 
-        with mock.patch.object(experiments, "evaluate", fake_evaluate):
+        with mock.patch.object(experiments_text, "evaluate", fake_evaluate):
             stage = experiments.confusable_skeleton_stage(
                 backend,
                 (_CHATML,),
