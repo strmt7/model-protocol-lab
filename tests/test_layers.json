@@ -284,6 +284,7 @@
       "test_w5_pack_limits.py",
       "test_w5_rebuild_check.py",
       "test_w5_sdist_scope.py",
+      "test_wave14_repairs.py",
       "test_workflows.py"
     ],
     "hf": [
@@ -444,9 +445,9 @@
     ]
   },
   "module_counts": {
-    "base": 268,
+    "base": 269,
     "hf": 12,
     "posix": 1,
-    "total": 281
+    "total": 282
   }
 }

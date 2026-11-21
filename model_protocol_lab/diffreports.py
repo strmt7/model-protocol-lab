@@ -22876,6 +22876,10 @@ _SERVING_TIER_A_VLLM = {
     "logprobs": None,
 }
 _SERVING_VLLM_PROBE_SEED = 1234
+# The abort cell's own cap (the producer enqueues the sentinel at
+# max_tokens=256): an observed terminal's stream length cannot
+# exceed it.
+_SERVING_VLLM_ABORT_MAX_TOKENS = 256
 _SERVING_VLLM_ENV = {
     "VLLM_TARGET_DEVICE": "cpu",
     "VLLM_NO_USAGE_STATS": "1",
@@ -23214,6 +23218,32 @@ def _serving_valid_record(
         return False
     if verdict == "agree" and divergence_class is not None:
         return False
+    if verdict == "agree":
+        # Agreement is a claim about a prediction meeting an
+        # observation; the record's own fields must not disprove
+        # it (BH14-6). The producer diverges on a firing with no
+        # prediction (SPURIOUS_STOP) and on a prediction with no
+        # firing (MISSING_STOP_AT_CAP), is unobservable when the
+        # predicted step is missing, and diverges when the steps
+        # differ — so an agree record needs both sides present at
+        # the same step. A stop-token winner the request never
+        # listed (and that is not a declared EOS) could not have
+        # been predicted from this record's own configuration.
+        predicted_winner = mirror["predicted_winner"]
+        if winner is not None and (predicted_winner is None or step is None):
+            return False
+        if winner is None and predicted_winner is not None:
+            return False
+        if winner is not None and returned is not None and step != len(returned):
+            return False
+        if (
+            type(winner) is dict
+            and winner.get("kind") == "stop_token"
+            and type(winner.get("id")) is int
+            and winner["id"] not in config["stop_token_ids"]
+            and winner["id"] not in declared_eos
+        ):
+            return False
     if winner is not None and type(winner) is dict and winner.get("kind") == "stop_text":
         stack_digest = record["returned_text_digest"]
         if stack_digest is None:
@@ -23479,6 +23509,21 @@ def _serving_valid_vllm_config(
     if abort["returned_tokens"] is not None and (
         type(abort["returned_tokens"]) is not int or abort["returned_tokens"] < 0
     ):
+        return False
+    # Cross-field coherence (BH14-5): the fields only mean
+    # something together — an observed terminal is a finished
+    # "abort" terminal with the stream length it returned (at
+    # most the cell's 256 tokens); an unobserved one carries
+    # neither the reason nor the length.
+    if abort["terminal_observed"]:
+        if abort["finish_reason"] != "abort":
+            return False
+        if (
+            type(abort["returned_tokens"]) is not int
+            or abort["returned_tokens"] > _SERVING_VLLM_ABORT_MAX_TOKENS
+        ):
+            return False
+    elif abort["finish_reason"] is not None or abort["returned_tokens"] is not None:
         return False
     elapsed = abort["elapsed_s"]
     return type(elapsed) in (int, float) and not isinstance(elapsed, bool) and elapsed >= 0

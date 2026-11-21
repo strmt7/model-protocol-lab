@@ -1846,9 +1846,16 @@ class VllmOfflineBackend:
             if match is not None and getattr(match, "finished", False) and match.outputs:
                 completion = match.outputs[0]
                 if completion.finish_reason == "abort":
+                    # The three fields are set atomically, after
+                    # the stream length is read: a terminal whose
+                    # token ids cannot be sized was not observed
+                    # in the record's sense, and the degrade-softly
+                    # handler above must find the outcome still
+                    # unobserved (BH14-5).
+                    returned_tokens = len(completion.token_ids)
                     outcome["terminal_observed"] = True
                     outcome["finish_reason"] = "abort"
-                    outcome["returned_tokens"] = len(completion.token_ids)
+                    outcome["returned_tokens"] = returned_tokens
         except Exception as exc:  # noqa: BLE001 -- the cell degrades the claim, never the probe
             probe_error.append(exc)
         outcome["elapsed_s"] = round(time.monotonic() - started, 3)
@@ -1966,13 +1973,17 @@ class VllmOfflineBackend:
     def _stream_has_special(self, ids: tuple[int, ...]) -> bool:
         """The paired-arm trigger: the stream holds a special token
         (the engine tokenizer's special set; the declared EOS ids
-        when the set cannot be read)."""
+        when the set cannot be read). A member that is not an exact
+        int makes the set unreadable as ids — a tokenizer that
+        confuses ``all_special_tokens`` with ``all_special_ids``
+        must degrade this auxiliary check to the declared-EOS
+        fallback, never raise out of ``execute`` (BH14-1)."""
         special: Any = None
         if self._engine_tokenizer is not None:
             special = getattr(self._engine_tokenizer, "all_special_ids", None)
         special_ids = (
-            {int(token) for token in special}
-            if type(special) is list and special
+            set(special)
+            if type(special) is list and special and all(type(token) is int for token in special)
             else set(self._declared_eos_ids)
         )
         return any(token in special_ids for token in ids)
@@ -2110,8 +2121,9 @@ def _vllm_stop_text_steps(
     returned_ids: tuple[int, ...],
     stop_texts: tuple[str, ...],
     min_tokens: int,
-) -> dict[int, int]:
-    """Per-stop firing steps under vLLM's detokenizer stop model.
+) -> dict[int, tuple[int, str | None]]:
+    """Per-stop (firing step, stripped text) under vLLM's
+    detokenizer stop model.
 
     The firing rule is the lab's own executed port of the engine's
     ``check_stop_strings`` (:func:`backends.emulate_vllm_holdback`):
@@ -2121,7 +2133,11 @@ def _vllm_stop_text_steps(
     W6 PF-2 confirmed the rule at the exact gate-crossing step).
     Reusing the port — never a second model of it — is what makes a
     producer/predictor divergence a finding about the engine, not
-    about two disagreeing reimplementations.
+    about two disagreeing reimplementations. The stripped text is
+    the port's own truncation at the *firing* occurrence: a stop
+    that completed during the gate and again at firing is stripped
+    at the second occurrence, exactly as the engine returns it
+    (BH14-2).
     """
     from .backends import emulate_vllm_holdback
 
@@ -2133,7 +2149,7 @@ def _vllm_stop_text_steps(
             return decode(tuple(ids))
 
     shim = _DecodeShim()
-    steps: dict[int, int] = {}
+    steps: dict[int, tuple[int, str | None]] = {}
     for index, text in enumerate(stop_texts):
         outcome = emulate_vllm_holdback(
             shim,  # type: ignore[arg-type]
@@ -2142,7 +2158,7 @@ def _vllm_stop_text_steps(
             min_tokens=min_tokens,
         )
         if outcome.available and outcome.fired:
-            steps[index] = len(outcome.truncated_ids)
+            steps[index] = (len(outcome.truncated_ids), outcome.returned_text)
     return steps
 
 
@@ -2179,7 +2195,10 @@ def predict_stop_outcome(
     completing token, or None), the predicted winner, the per-stop
     completion steps, the tie flag, and the disposition basis
     digests (local detokenization of the full stream, and of the
-    stream truncated at the winning stop's first occurrence).
+    stream truncated at the winning stop's firing occurrence —
+    the first occurrence under the generic model, whose firing
+    completion is the first; the port's truncation under the
+    vLLM model).
     """
     # Stop texts are strings (S4-2): the same invalid_stop_texts code
     # the CLI validator (diffbackends._checked_stop_texts) raises. A
@@ -2199,13 +2218,16 @@ def predict_stop_outcome(
     full_text = prefixes[-1] if prefixes else decode(())
     token_winner: dict[str, Any] | None = None
     token_step: int | None = None
+    stripped_text_by_index: dict[int, str | None] = {}
     if stop_model == "vllm":
-        stop_steps = _vllm_stop_text_steps(
+        outcomes = _vllm_stop_text_steps(
             decode=decode,
             returned_ids=returned_ids,
             stop_texts=stop_texts,
             min_tokens=min_tokens,
         )
+        stop_steps = {index: step for index, (step, _text) in outcomes.items()}
+        stripped_text_by_index = {index: text for index, (_step, text) in outcomes.items()}
         for position, token in enumerate(returned_ids):
             step = position + 1
             if step > min_tokens and token in stop_token_ids:
@@ -2249,10 +2271,20 @@ def predict_stop_outcome(
     stripped_digest: str | None = None
     predicted_disposition: str | None = None
     if winner is not None and winner["kind"] == "stop_text":
-        stop_text = stop_texts[int(winner["index"])]
-        start = full_text.find(stop_text)
-        if start >= 0:
-            stripped_digest = _text_digest(full_text[:start])
+        winner_index = int(winner["index"])
+        stop_text = stop_texts[winner_index]
+        if stop_model == "vllm":
+            # The engine truncates at the firing occurrence, which
+            # the port already computed; the first occurrence in
+            # the text is a different, shorter prefix whenever the
+            # stop also completed during the min_tokens gate.
+            stripped_text = stripped_text_by_index.get(winner_index)
+            if stripped_text is not None:
+                stripped_digest = _text_digest(stripped_text)
+        else:
+            start = full_text.find(stop_text)
+            if start >= 0:
+                stripped_digest = _text_digest(full_text[:start])
         predicted_disposition = "stripped"
     return {
         "predicted_firing_step": firing_step,
@@ -3000,6 +3032,66 @@ def load_records_artifact(path: Path) -> dict[str, Any]:
     }
 
 
+def _cache_positions_from_records(
+    identity: StackIdentity, records: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """The cache companion's positions over a (possibly partial)
+    record set, in the per-stack shape the section builder and the
+    diff mirror derive from the same records: executed arms only —
+    capability-absent and budget-omitted records carry no
+    measurement and contribute no position."""
+    positions: dict[str, Any] = {}
+    for record in records:
+        position = record["cache_position"]
+        if position == "standalone":
+            continue
+        if record["cell_detail"] in (CAPABILITY_ABSENT, EXECUTION_BUDGET_DETAIL):
+            continue
+        if identity.stack == VLLM_STACK:
+            positions[position] = {
+                "tokens_cached": record["tokens_cached_reported"],
+                "cache_creation_tokens": record["cache_creation_tokens_reported"],
+            }
+        else:
+            positions[position] = {
+                "cache_n": record["cache_n_reported"],
+                "tokens_cached": record["tokens_cached_reported"],
+                "tokens_evaluated": record["tokens_evaluated_reported"],
+            }
+    return positions
+
+
+def _cache_contamination_over(identity: StackIdentity, records: list[dict[str, Any]]) -> bool:
+    """The contamination judgement over a (possibly partial)
+    record set, on the mirror's rule: the cold or divergent arm
+    reported reuse at or above the stack's quantum (vLLM: one
+    full block; llama: above one quantum)."""
+    by_position = {
+        record["cache_position"]: record
+        for record in records
+        if record["cache_position"] != "standalone"
+    }
+    cold = by_position.get("cold")
+    divergent = by_position.get("divergent_control")
+    if identity.stack == VLLM_STACK:
+        engine = identity.config.get("engine")
+        block_size = engine.get("block_size") if type(engine) is dict else None
+        if type(block_size) is not int or block_size <= 0:
+            return False
+        return any(
+            record is not None
+            and type(record["tokens_cached_reported"]) is int
+            and record["tokens_cached_reported"] >= block_size
+            for record in (cold, divergent)
+        )
+    return any(
+        record is not None
+        and type(record["cache_n_reported"]) is int
+        and record["cache_n_reported"] > LLAMA_CACHE_QUANTUM
+        for record in (cold, divergent)
+    )
+
+
 class _BudgetSpent(Exception):
     """Internal: the records-artifact byte budget is spent."""
 
@@ -3141,11 +3233,25 @@ def run_stage(
                     "positions": sequence["positions"],
                 }
             else:
+                # The budget tripped inside the sequence: the arms
+                # that already executed are real measurements in
+                # the records, so the cache block reports their
+                # partial positions with the budget detail —
+                # degrading coherently, like the plan-cell trip —
+                # instead of disowning them (BH14-7). A partial
+                # cold/divergent arm that already breached the
+                # quantum keeps the contamination detail, the
+                # completed sequence's own precedence.
+                positions = _cache_positions_from_records(identity, records)
                 cache_result = {
                     "attempted": True,
-                    "available": False,
-                    "detail": EXECUTION_BUDGET_DETAIL,
-                    "positions": {},
+                    "available": bool(positions),
+                    "detail": (
+                        "cache_protocol_contaminated"
+                        if _cache_contamination_over(identity, records)
+                        else EXECUTION_BUDGET_DETAIL
+                    ),
+                    "positions": positions,
                 }
     return {
         "available": True,

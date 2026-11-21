@@ -10888,7 +10888,8 @@ def _serving_backends_section(result: dict[str, Any]) -> str:
                     + "</td></tr>"
                 )
         if position_rows and is_vllm:
-            engine = identity.get("config", {}).get("engine")
+            config = identity.get("config")
+            engine = config.get("engine") if type(config) is dict else None
             block_size = engine.get("block_size") if type(engine) is dict else None
             block_note = (
                 f" of {_count(block_size)} tokens"

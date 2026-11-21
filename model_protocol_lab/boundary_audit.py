@@ -36,6 +36,24 @@ class BoundaryCheck:
     usable: bool = True
 
 
+def _exact_ids(values: Any) -> tuple[int, ...] | None:
+    """A recorded id sequence, or None when it is not exactly ints.
+
+    The lab's validators demand exact ``int`` for recorded token
+    ids (``_checked_token_ids``, ``is_evaluable_prompt``): a bare
+    ``int()`` conversion silently coerces strings and truncates
+    floats into measurements of data that was never recorded, and
+    an infinite float escapes as ``OverflowError`` — neither is a
+    usable check (BH14-3). Bool members are not ids either
+    (``type(True) is bool``).
+    """
+    if type(values) not in (list, tuple):
+        return None
+    if any(type(item) is not int for item in values):
+        return None
+    return tuple(values)
+
+
 def check_boundary(
     prompt_text: str,
     prompt_ids: Sequence[int],
@@ -52,16 +70,17 @@ def check_boundary(
     """
     if type(prompt_text) is not str:
         return BoundaryCheck(has_problem=False, first_divergence_index=None, usable=False)
-    try:
-        prompt_seq = tuple(int(i) for i in prompt_ids)
-        completion_seq = tuple(int(i) for i in completion_ids)
-    except (TypeError, ValueError):
+    prompt_seq = _exact_ids(prompt_ids)
+    completion_seq = _exact_ids(completion_ids)
+    if prompt_seq is None or completion_seq is None:
         return BoundaryCheck(has_problem=False, first_divergence_index=None, usable=False)
     try:
         completion_text = decode(completion_seq)
         if type(completion_text) is not str:
             return BoundaryCheck(has_problem=False, first_divergence_index=None, usable=False)
-        joint = tuple(int(i) for i in encode(prompt_text + completion_text))
+        joint = _exact_ids(encode(prompt_text + completion_text))
+        if joint is None:
+            return BoundaryCheck(has_problem=False, first_divergence_index=None, usable=False)
     except Exception:  # noqa: BLE001 -- backend encode/decode may raise; unusable, not fatal
         return BoundaryCheck(has_problem=False, first_divergence_index=None, usable=False)
     expected = prompt_seq + completion_seq
@@ -111,6 +130,8 @@ def audit_search_observations(
     failures degrade individual checks to unusable.
     """
     per_candidate: dict[str, dict[str, Any]] = {}
+    candidate_checks: dict[str, list[BoundaryCheck]] = {}
+    candidate_counts: dict[str, int] = {}
     family_checks: dict[str, list[BoundaryCheck]] = {}
     n_observations = 0
     try:
@@ -146,14 +167,22 @@ def audit_search_observations(
                     decode,
                 )
             )
-        n_problem, n_usable, rate = boundary_problem_rate(checks)
+        # Duplicate format names merge into the one candidate
+        # rollup — counts and checks accumulate, never overwrite —
+        # so the per-candidate sums conserve against the overall
+        # counts (SA-02's principle one level down, BH14-4), the
+        # same accumulation the per-family rollup already uses.
+        candidate_checks.setdefault(name, []).extend(checks)
+        candidate_counts[name] = candidate_counts.get(name, 0) + n_candidate_obs
+        family_checks.setdefault(_family_of(name), []).extend(checks)
+    for name, checks_for_name in candidate_checks.items():
+        n_problem, n_usable, rate = boundary_problem_rate(checks_for_name)
         per_candidate[name] = {
-            "n_observations": n_candidate_obs,
+            "n_observations": candidate_counts[name],
             "n_usable": n_usable,
             "n_problem": n_problem,
             "rate": rate,
         }
-        family_checks.setdefault(_family_of(name), []).extend(checks)
     all_checks = [c for checks in family_checks.values() for c in checks]
     n_problem, n_usable, rate = boundary_problem_rate(all_checks)
     per_family = {}

@@ -2686,7 +2686,10 @@ class CoverageRecoveryTests(ServingBackendsTestBase):
         byte budget spent mid-plan, the remaining planned cells are
         recorded as budget omissions; when it trips inside the
         cache sequence, the sequence reports the budget detail and
-        no arm result is invented."""
+        no arm result is invented: the cache block carries exactly
+        the arms that executed (their records are in the section,
+        and the diff mirror recomputes the positions from them --
+        BH14-7), never a position for an arm that did not run."""
         with _FakeServer(self.gguf) as server:
             backend = self.probed_backend(server)
             cells = [
@@ -2739,7 +2742,16 @@ class CoverageRecoveryTests(ServingBackendsTestBase):
                 stage["cache_sequence"]["detail"],
                 servingbackends.EXECUTION_BUDGET_DETAIL,
             )
-            self.assertFalse(stage["cache_sequence"]["available"])
+            # The sink refused the first (cold) cache record after
+            # the arm executed: its position is reported, the three
+            # arms that never ran are not, and the section the
+            # stage produces passes its own mirror (BH14-7; the
+            # pre-fix shape reported no positions and the mirror
+            # declared the section invalid).
+            self.assertTrue(stage["cache_sequence"]["available"])
+            self.assertEqual(set(stage["cache_sequence"]["positions"]), {"cold"})
+            section = experiments.serving_backends_analysis(stage)
+            self.assertTrue(diffreports._valid_serving_backends(section))
 
     def test_loader_line_shapes(self) -> None:
         """Spec: A8(iv) -- a single-line artifact that is not JSON,

@@ -21794,6 +21794,25 @@ def _o_sb_record_valid(record: Any, declared: list) -> bool:
         return False
     if verdict == "agree" and divergence_class is not None:
         return False
+    if verdict == "agree":
+        # BH14-6 agree coherence, mirroring the production block:
+        # both sides present at the same step, and no stop-token
+        # winner the record's own configuration rules out.
+        predicted_winner = mirror["predicted_winner"]
+        if winner is not None and (predicted_winner is None or step is None):
+            return False
+        if winner is None and predicted_winner is not None:
+            return False
+        if winner is not None and returned is not None and step != len(returned):
+            return False
+        if (
+            type(winner) is dict
+            and winner.get("kind") == "stop_token"
+            and type(winner.get("id")) is int
+            and winner["id"] not in config["stop_token_ids"]
+            and winner["id"] not in declared
+        ):
+            return False
     if winner is not None and type(winner) is dict and winner.get("kind") == "stop_text":
         stack_digest = record["returned_text_digest"]
         if stack_digest is None:
