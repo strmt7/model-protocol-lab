@@ -892,7 +892,7 @@ class MutationGateTests(unittest.TestCase):
     def test_mutant_diff_rate_disjunct_dropped_caught(self):
         """Test mutant diff rate disjunct dropped caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_runlevel",  # W7-2c: the gated differ lives in this family module
             "diff_rate_disjunct",
             "        or answer_collision_rate_drift\n",
             "        or []  # MUTANT\n",

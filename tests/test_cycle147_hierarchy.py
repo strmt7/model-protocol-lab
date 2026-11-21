@@ -897,7 +897,7 @@ class HierarchyMutationGateTests(unittest.TestCase):
     def test_mutant_dropped_flips_disjunct_caught(self):
         """Test mutant dropped flips disjunct caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_probes",  # W7-2c: the gated differ lives in this family module
             "dropped_flips_disjunct",
             'flips_changed = _flip_key(old.get("flips")) != _flip_key(new.get("flips"))',
             'flips_changed = _flip_key(old.get("flips")) == _flip_key(new.get("flips"))  # MUTANT',  # noqa: E501
@@ -917,7 +917,7 @@ class HierarchyMutationGateTests(unittest.TestCase):
     def test_mutant_dropped_group_disjunct_caught(self):
         """Test mutant dropped group disjunct caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_probes",  # W7-2c: the gated differ lives in this family module
             "dropped_group_disjunct",
             "group_changed = old_groups != new_groups",
             "group_changed = old_groups == new_groups  # MUTANT",

@@ -1289,7 +1289,7 @@ class StructuredMutationGateTests(unittest.TestCase):
     def test_mutant_dropped_rate_drift_caught(self):
         """Test mutant dropped rate drift caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_probes",  # W7-2c: the gated differ lives in this family module
             "dropped_structured_rate_drift",
             "        structured_rate_drift\n"
             "        or structured_gap_drift\n"
@@ -1315,7 +1315,7 @@ class StructuredMutationGateTests(unittest.TestCase):
     def test_mutant_dropped_gap_drift_caught(self):
         """Test mutant dropped gap drift caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_probes",  # W7-2c: the gated differ lives in this family module
             "dropped_structured_gap_drift",
             "        structured_rate_drift\n"
             "        or structured_gap_drift\n"

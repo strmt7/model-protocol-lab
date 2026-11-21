@@ -844,7 +844,7 @@ class FaketurnMutationGateTests(unittest.TestCase):
     def test_mutant_diff_source_drift_ignored_caught(self):
         """Test mutant diff source drift ignored caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_probes",  # W7-2c: the gated differ lives in this family module
             "source_drift_ignored",
             "        or faketurn_source_drift\n",
             "        # or faketurn_source_drift  # MUTANT\n",

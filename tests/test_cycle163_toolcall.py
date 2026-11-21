@@ -1178,7 +1178,7 @@ class ToolcallMutationGateTests(unittest.TestCase):
     def test_mutant_diff_args_drift_ignored_caught(self):
         """Test mutant diff args drift ignored caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_probes",  # W7-2c: the gated differ lives in this family module
             "args_drift_ignored",
             "        or toolcall_args_drift\n",
             "        # or toolcall_args_drift  # MUTANT\n",

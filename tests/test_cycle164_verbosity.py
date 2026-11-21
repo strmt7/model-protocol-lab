@@ -738,7 +738,7 @@ class VerbosityMutationGateTests(unittest.TestCase):
     def test_mutant_diff_iqr_drift_ignored_caught(self):
         """Test mutant diff iqr drift ignored caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_runlevel",  # W7-2c: the gated differ lives in this family module
             "iqr_drift_ignored",
             "        or verbosity_iqr_drift\n",
             "        # or verbosity_iqr_drift  # MUTANT\n",

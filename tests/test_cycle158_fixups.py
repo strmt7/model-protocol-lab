@@ -701,7 +701,7 @@ class FixupMutationGateTests(unittest.TestCase):
     def test_mutant_f5_contradictory_cell_accepted_caught(self):
         """Test mutant f5 contradictory cell accepted caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_probes",  # W7-2c: the gated differ lives in this family module
             "f5_contradictory_cell",
             "                if other is not None and other > parse_rate:\n"
             "                    return False\n",

@@ -722,7 +722,7 @@ class PositionMutationGateTests(unittest.TestCase):
     def test_mutant_dropped_index_drift_caught(self):
         """Test mutant dropped index drift caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_forms",  # W7-2c: the gated differ lives in this family module
             "dropped_index_drift",
             "        or index_drift\n",
             "        or []  # MUTANT\n",
@@ -739,7 +739,7 @@ class PositionMutationGateTests(unittest.TestCase):
     def test_mutant_dropped_mean_drift_caught(self):
         """Test mutant dropped mean drift caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_forms",  # W7-2c: the gated differ lives in this family module
             "dropped_mean_drift",
             "        or mean_index_changed\n",
             "        or False  # MUTANT\n",

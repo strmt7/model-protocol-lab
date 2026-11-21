@@ -37,7 +37,15 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from model_protocol_lab import backends, cli, diffreports, experiments, experiments_forms, rotation
+from model_protocol_lab import (
+    backends,
+    cli,
+    diffreports,
+    diffreports_forms,
+    experiments,
+    experiments_forms,
+    rotation,
+)
 from model_protocol_lab import doctor as doctor_mod
 from model_protocol_lab import reporting as reporting_mod
 from model_protocol_lab.core import Format, Generation
@@ -1411,7 +1419,9 @@ class TestValidatorGapBattery(unittest.TestCase):
                 return 0
             return original(seed, index, slot, counter)
 
-        with mock.patch.object(diffreports, "_rotation_derive", scripted):
+        # W7-2c: diff_rotation lives in diffreports_forms; the
+        # patch must land in its own module namespace.
+        with mock.patch.object(diffreports_forms, "_rotation_derive", scripted):
             mirrored = diffreports._rotation_generate(0)
         self.assertTrue(
             any(slot < 20 and counter > 0 for _, slot, counter in calls),

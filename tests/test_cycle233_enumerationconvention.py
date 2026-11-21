@@ -38,8 +38,8 @@ from statistics import NormalDist
 from unittest import mock
 
 from model_protocol_lab import diffreports as dr
+from model_protocol_lab import diffreports_text, experiments, reporting
 from model_protocol_lab import enumerationconvention as ec
-from model_protocol_lab import experiments, reporting
 from model_protocol_lab.core import Format, Generation
 
 _CHATML = Format("chatml", "", "<|im_start|>user\n", "<|im_start|>assistant\n", "<|im_end|>\n")
@@ -1953,7 +1953,9 @@ class TestGapBatteryStageAndMirror(unittest.TestCase):
                 return real_derive(seed, index, slot - 1, counter)
             return real_derive(seed, index, slot, counter)
 
-        with mock.patch.object(dr, "_enumerationconvention_derive", side_effect=colliding):
+        with mock.patch.object(
+            diffreports_text, "_enumerationconvention_derive", side_effect=colliding
+        ):
             cases = dr._enumerationconvention_generate(0)
         self.assertEqual(len(cases), 24)
         values = [v for c in cases for v in c["values"]]
@@ -2089,7 +2091,7 @@ class TestGapBatteryStageAndMirror(unittest.TestCase):
         check(lambda p: p["audit"].update(by_reason={"x": -1}))
         check(lambda p: p.update(detail="oops"))
         check(lambda p: p.update(available=False))
-        with mock.patch.object(dr, "_ENUMERATIONCONVENTION_MAX_RECORDS_BYTES", 1):
+        with mock.patch.object(diffreports_text, "_ENUMERATIONCONVENTION_MAX_RECORDS_BYTES", 1):
             capped = copy.deepcopy(base)
             expected_protocol = dr._enumerationconvention_protocol(
                 capped["protocol"]["seed"], capped["protocol"]["backend_fingerprint"]
@@ -2279,13 +2281,15 @@ class TestGapBatteryMirrorAggregate(unittest.TestCase):
         no_text = dict(good, answer_text=None)
         self.assertFalse(dr._enumerationconvention_cell_ok(no_text, digest))
         with (
-            mock.patch.object(dr, "_enumerationconvention_derive", side_effect=lambda *args: 0),
+            mock.patch.object(
+                diffreports_text, "_enumerationconvention_derive", side_effect=lambda *args: 0
+            ),
             self.assertRaises(dr._EnumerationConventionMirrorExhausted),
         ):
             dr._enumerationconvention_generate(0)
         base = _valid_payload()
         with mock.patch.object(
-            dr,
+            diffreports_text,
             "_enumerationconvention_protocol",
             side_effect=dr._EnumerationConventionMirrorExhausted("x"),
         ):
@@ -2299,7 +2303,9 @@ class TestGapBatteryMirrorAggregate(unittest.TestCase):
                 raise dr._EnumerationConventionMirrorExhausted("x")
             return real_generate(seed)
 
-        with mock.patch.object(dr, "_enumerationconvention_generate", side_effect=flaky):
+        with mock.patch.object(
+            diffreports_text, "_enumerationconvention_generate", side_effect=flaky
+        ):
             self.assertFalse(dr._valid_enumeration_convention(copy.deepcopy(base)))
         bogus = copy.deepcopy(base)
         bogus["candidates"]["chatml"]["status"] = "bogus"

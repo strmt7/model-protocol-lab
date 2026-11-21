@@ -1159,7 +1159,7 @@ class DeliforgeMutationGateTests(unittest.TestCase):
     def test_mutant_diff_gap_drift_ignored_caught(self):
         """Test mutant diff gap drift ignored caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_runlevel",  # W7-2c: the gated differ lives in this family module
             "deliforge_gap_drift_ignored",
             '    result["changed"] = bool(\n'
             "        deliforge_gap_drift\n"

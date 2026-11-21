@@ -1323,7 +1323,7 @@ class HealingMutationGateTests(unittest.TestCase):
             self.assertTrue(mod.diff_token_healing(old, new)["changed"])
 
         self._run_gate(
-            "diffreports",
+            "diffreports_runlevel",  # W7-2c: the gated differ lives in this family module
             "dropped_flip_disjunct",
             '    result["changed"] = bool(\n'
             "        flip_changed\n"

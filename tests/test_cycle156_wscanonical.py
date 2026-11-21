@@ -1058,7 +1058,7 @@ class WsCanonicalMutationGateTests(unittest.TestCase):
     def test_mutant_dropped_rate_drift_caught(self):
         """Test mutant dropped rate drift caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_text",  # W7-2c: the gated differ lives in this family module
             "dropped_ws_rate_drift",
             "        rate_drift\n"
             "        or robust_flips\n"
@@ -1089,7 +1089,7 @@ class WsCanonicalMutationGateTests(unittest.TestCase):
     def test_mutant_dropped_robust_flip_caught(self):
         """Test mutant dropped robust flip caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_text",  # W7-2c: the gated differ lives in this family module
             "dropped_ws_robust_flip",
             "        rate_drift\n"
             "        or robust_flips\n"

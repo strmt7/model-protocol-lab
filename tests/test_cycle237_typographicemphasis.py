@@ -54,7 +54,7 @@ from math import comb, factorial
 from statistics import NormalDist
 from unittest import mock
 
-from model_protocol_lab import cli, experiments, reporting
+from model_protocol_lab import cli, diffreports_text, experiments, reporting
 from model_protocol_lab import diffreports as dr
 from model_protocol_lab import typographicemphasis as te
 from model_protocol_lab.core import Format, Generation
@@ -1862,14 +1862,14 @@ class TestCoverageBattery(unittest.TestCase):
         """Mirror regeneration exhaustion validates
         false (both redraw loops)."""
         payload = _valid_payload()
-        with mock.patch.object(dr, "_typographicemphasis_derive", lambda *args: 0):
+        with mock.patch.object(diffreports_text, "_typographicemphasis_derive", lambda *args: 0):
             self.assertFalse(dr._valid_typographic_emphasis(payload))
         real = dr._typographicemphasis_derive
 
         def colliding(seed, index, slot, counter):
             return 0 if slot in (0, 1) else real(seed, index, slot, counter)
 
-        with mock.patch.object(dr, "_typographicemphasis_derive", colliding):
+        with mock.patch.object(diffreports_text, "_typographicemphasis_derive", colliding):
             self.assertFalse(dr._valid_typographic_emphasis(payload))
 
     def test_mirror_tamper_battery(self):
@@ -2338,7 +2338,7 @@ class TestCoverageBattery(unittest.TestCase):
 
         real_generate = dr._typographicemphasis_generate
         with mock.patch.object(
-            dr,
+            diffreports_text,
             "_typographicemphasis_generate",
             side_effect=[real_generate(0), dr._TypographicEmphasisMirrorExhausted()],
         ):

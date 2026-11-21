@@ -23,6 +23,7 @@ from threading import Event
 from unittest import mock
 
 from model_protocol_lab import diffreports as dr
+from model_protocol_lab import diffreports_forms
 from model_protocol_lab import numform as nf
 from model_protocol_lab.cli import _run_numform_probe
 from model_protocol_lab.confidentiality import mcnemar_exact_p
@@ -1320,7 +1321,9 @@ class TestValidatorBattery(unittest.TestCase):
             return flaky
 
         with mock.patch.object(
-            dr, "_numform_compare_partner", make_flaky(dr._numform_compare_partner)
+            diffreports_forms,
+            "_numform_compare_partner",
+            make_flaky(diffreports_forms._numform_compare_partner),
         ):
             _construction, rows = dr._numform_generated(0)
         digest = hashlib.sha256(

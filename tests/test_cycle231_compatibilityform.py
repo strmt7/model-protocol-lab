@@ -47,7 +47,14 @@ from pathlib import Path
 from statistics import NormalDist
 from unittest import mock
 
-from model_protocol_lab import canonicalform, density, diffreports, experiments, reporting
+from model_protocol_lab import (
+    canonicalform,
+    density,
+    diffreports,
+    diffreports_text,
+    experiments,
+    reporting,
+)
 from model_protocol_lab import compatibilityform as cf
 from model_protocol_lab import diffreports as dr
 from model_protocol_lab.core import Format, Generation
@@ -1847,7 +1854,9 @@ class TestCoverageGaps(unittest.TestCase):
     def test_mirror_exhaustion_rejected(self):
         """Mirror exhaustion rejected."""
         payload, _backend, _stage = _payload("perfect")
-        with mock.patch.object(diffreports, "_compatibilityform_derive", lambda *args: 7):
+        # W7-2c: the compatibility-form differ lives in
+        # diffreports_text; the patch must land in its namespace.
+        with mock.patch.object(diffreports_text, "_compatibilityform_derive", lambda *args: 7):
             self.assertFalse(diffreports._valid_compatibility_form(payload))
 
     def test_mirror_unavailable_entry_shapes(self):

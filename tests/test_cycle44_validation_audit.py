@@ -231,11 +231,12 @@ class ValidationToolchainTests(unittest.TestCase):
         # render_worker.py is the 77th, W4.
         # W7-2a: the five reporting family modules bring the live
         # count to 84; W7-2b: the five experiments family modules
-        # bring it to 89.)
+        # bring it to 89; W7-2c: the five diffreports family
+        # modules bring it to 94.)
         """Mypy clean 58 source files."""
         proc = run_tool("mypy", "model_protocol_lab", timeout=600)
         self.assertEqual(proc.returncode, 0, proc.stdout[-1000:])
-        self.assertIn("89 source files", proc.stdout)
+        self.assertIn("94 source files", proc.stdout)
 
     def test_bandit_zero_issues_at_any_severity(self):
         # Doc claims a remaining Low/Medium B105 false positive; actual:

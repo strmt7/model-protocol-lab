@@ -7,9 +7,12 @@ dashboard escaping, the CLI, diff_surface_noise, tempdir mutation gates,
 and Hypothesis properties.
 """
 
+import importlib
 import importlib.util
 import json
 import os
+import shutil
+import sys
 import tempfile
 import threading
 import unittest
@@ -1031,11 +1034,80 @@ class CLITests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+_DIFFREPORTS_FAMILY = (
+    "diffreports.py",
+    "diffreports_core.py",
+    "diffreports_text.py",
+    "diffreports_forms.py",
+    "diffreports_probes.py",
+    "diffreports_runlevel.py",
+)
+_DR_MUTANT_SCRATCH = Path(tempfile.gettempdir()) / f"mpl_cycle165_mutants_{os.getpid()}"
+
+
+def _load_diffreports_family_mutant(name, old_text, new_text):
+    """Load a mutated scratch-package copy of the diffreports family.
+
+    W7-2c: diffreports.py is a facade over five family modules,
+    and this gate's anchor lives in diffreports_runlevel while
+    its scenario's differ lives in diffreports_core, so the
+    mutant must be the whole family: the whole package is copied
+    to a scratch package, the anchor's family file is mutated
+    (the anchor must occur exactly once across the family), and
+    the scratch facade is returned. The scratch package stays
+    registered in sys.modules so the core module's call-time
+    lazy imports resolve to the mutated copies, not the real
+    family.
+    """
+    pkg_root = Path(sn.__file__).parent
+    texts = {fname: (pkg_root / fname).read_text(encoding="utf-8") for fname in _DIFFREPORTS_FAMILY}
+    total = sum(text.count(old_text) for text in texts.values())
+    assert total == 1, f"mutant {name}: anchor not unique: count={total}"
+    workdir = _DR_MUTANT_SCRATCH / name
+    if workdir.exists():
+        shutil.rmtree(workdir)
+    pkgdir = workdir / "mutpkg"
+    pkgdir.mkdir(parents=True)
+    (pkgdir / "__init__.py").write_text("", encoding="utf-8")
+    # The whole package is copied, not just the family: family
+    # modules also resolve call-time relative imports of sibling
+    # modules (.registry, .experiments, .negation) inside the
+    # scratch package, so every relative import lands on a copy.
+    for path in pkg_root.glob("*.py"):
+        if path.name not in texts:
+            (pkgdir / path.name).write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    for fname, text in texts.items():
+        if old_text in text:
+            text = text.replace(old_text, new_text)
+        (pkgdir / fname).write_text(text, encoding="utf-8")
+    pkg_name = f"cycle165_mutant_{name}"
+    spec = importlib.util.spec_from_file_location(
+        pkg_name, pkgdir / "__init__.py", submodule_search_locations=[str(pkgdir)]
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[pkg_name] = module
+    spec.loader.exec_module(module)
+    return importlib.import_module(f"{pkg_name}.diffreports")
+
+
 class SurfaceNoiseMutationGateTests(unittest.TestCase):
     """Surface noise mutation gate tests."""
 
     def _run_gate(self, module_name, name, old_text, new_text, scenario):
         """Run gate."""
+        if module_name == "diffreports":
+            # W7-2c: whole-family scratch mutant (see the loader).
+            from model_protocol_lab import diffreports as real_dr
+
+            mutant = _load_diffreports_family_mutant(name, old_text, new_text)
+            scenario(real_dr)  # passes on the real module: non-vacuous
+            try:
+                with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
+                    scenario(mutant)
+            finally:
+                shutil.rmtree(_DR_MUTANT_SCRATCH / name, ignore_errors=True)
+            return
         mod = __import__(f"model_protocol_lab.{module_name}", fromlist=["x"])
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")

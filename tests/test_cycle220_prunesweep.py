@@ -31,7 +31,7 @@ from fractions import Fraction
 from math import comb
 from unittest import mock
 
-from model_protocol_lab import diffreports, experiments, reporting
+from model_protocol_lab import diffreports, diffreports_probes, experiments, reporting
 from model_protocol_lab import prunesweep as ps
 from model_protocol_lab.confidentiality import mcnemar_exact_p
 from model_protocol_lab.core import Format, Generation
@@ -2130,7 +2130,9 @@ class GapCoverageTests(unittest.TestCase):
         """The mirror's digest and cell helpers behave on direct unit inputs, including the
         patched-digest path.
         """
-        with mock.patch.object(diffreports, "_prunesweep_digest", return_value="0" * 64):
+        # W7-2c: the prune-sweep differ lives in
+        # diffreports_probes; the patch must land in its namespace.
+        with mock.patch.object(diffreports_probes, "_prunesweep_digest", return_value="0" * 64):
             template = diffreports._PRUNESWEEP_TEMPLATES[1]
             sentence = template.format(
                 subject=diffreports._PRUNESWEEP_SUBJECTS[0],

@@ -779,7 +779,7 @@ class SynthhistoryMutationGateTests(unittest.TestCase):
     def test_mutant_dropped_flips_disjunct_caught(self):
         """Test mutant dropped flips disjunct caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_runlevel",  # W7-2c: the gated differ lives in this family module
             "dropped_flips_disjunct",
             '        or any(entry["changed"] for entry in condition_changed.values())\n'
             "        or flips_changed\n"

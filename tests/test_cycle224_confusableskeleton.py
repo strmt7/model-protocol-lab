@@ -47,6 +47,7 @@ from model_protocol_lab import (
     canonicalform,
     density,
     diffreports,
+    diffreports_text,
     experiments,
     experiments_text,
     reporting,
@@ -1523,7 +1524,9 @@ class TestCoverageGaps(unittest.TestCase):
     def test_mirror_exhaustion_rejected(self):
         """Mirror exhaustion rejected."""
         payload, _backend, _stage = _payload("perfect")
-        with mock.patch.object(diffreports, "_confusableskeleton_derive", lambda *args: 7):
+        # W7-2c: the confusable-skeleton differ lives in
+        # diffreports_text; patches must land in its namespace.
+        with mock.patch.object(diffreports_text, "_confusableskeleton_derive", lambda *args: 7):
             self.assertFalse(diffreports._valid_confusable_skeleton(payload))
 
     def test_mirror_unavailable_entry_shapes(self):
@@ -1885,7 +1888,7 @@ class TestGapPassMirror(unittest.TestCase):
         """Mirror audit failure branches."""
         with mock.patch.dict(diffreports._CONFUSABLESKELETON_FROZEN_REPLACEMENTS, {"a": "ж"}):
             self.assertFalse(diffreports._confusableskeleton_population_audit()["ok"])
-        with mock.patch.object(diffreports, "_CONFUSABLESKELETON_CONTROL_CHARACTERS", ("a",)):
+        with mock.patch.object(diffreports_text, "_CONFUSABLESKELETON_CONTROL_CHARACTERS", ("a",)):
             self.assertFalse(diffreports._confusableskeleton_population_audit()["ok"])
         self.assertTrue(diffreports._confusableskeleton_population_audit()["ok"])
 
@@ -2004,7 +2007,7 @@ class TestGapPassMirror(unittest.TestCase):
             return tampered if seed == 0 else genuine
 
         payload, _backend, _stage = _payload("perfect")
-        with mock.patch.object(diffreports, "_confusableskeleton_generate", fake_generate):
+        with mock.patch.object(diffreports_text, "_confusableskeleton_generate", fake_generate):
             self.assertFalse(diffreports._valid_confusable_skeleton(payload))
 
     def test_mirror_type_hostile_payloads(self):

@@ -752,7 +752,7 @@ class StopCauseMutationGateTests(unittest.TestCase):
     def test_mutant_dropped_cause_drift_caught(self):
         """Test mutant dropped cause drift caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_runlevel",  # W7-2c: the gated differ lives in this family module
             "dropped_cause_drift",
             "        cause_drift or aggregate_drift or candidates_added or candidates_removed",
             "        aggregate_drift or candidates_added or candidates_removed  # MUTANT",
@@ -770,7 +770,7 @@ class StopCauseMutationGateTests(unittest.TestCase):
     def test_mutant_dropped_aggregate_drift_caught(self):
         """Test mutant dropped aggregate drift caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_runlevel",  # W7-2c: the gated differ lives in this family module
             "dropped_aggregate_drift",
             "        cause_drift or aggregate_drift or candidates_added or candidates_removed",
             "        cause_drift or candidates_added or candidates_removed  # MUTANT",

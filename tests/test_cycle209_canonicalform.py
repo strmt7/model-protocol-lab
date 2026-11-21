@@ -26,7 +26,7 @@ import unicodedata
 import unittest
 
 from model_protocol_lab import canonicalform as cf
-from model_protocol_lab import diffreports, experiments, experiments_text
+from model_protocol_lab import diffreports, diffreports_text, experiments, experiments_text
 from model_protocol_lab import reporting as reporting_mod
 from model_protocol_lab.backends import Generation
 from model_protocol_lab.core import Fixture, Format, Message, evaluate
@@ -1667,7 +1667,11 @@ class FullRunGapTests(unittest.TestCase):
                 "candidates": {"c": self._recompute_entry([self._mirror_record(c) for c in cases])},
             }
 
-        with mock.patch.object(diffreports, "_canonicalform_generate", return_value=stub_cases):
+        # W7-2c: the canonical-form differ lives in
+        # diffreports_text; the patch must land in its namespace.
+        with mock.patch.object(
+            diffreports_text, "_canonicalform_generate", return_value=stub_cases
+        ):
             self.assertIsNone(diffreports._canonicalform_recompute(build(stub_cases)))
         self.assertIsNotNone(diffreports._canonicalform_recompute(build(real_cases)))
 

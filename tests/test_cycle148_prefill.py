@@ -1032,7 +1032,7 @@ class PrefillMutationGateTests(unittest.TestCase):
     def test_mutant_dropped_flips_disjunct_caught(self):
         """Test mutant dropped flips disjunct caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_probes",  # W7-2c: the gated differ lives in this family module
             "dropped_flips_disjunct",
             '    old_flip_key = _flip_key(old.get("flips"))\n'
             '    new_flip_key = _flip_key(new.get("flips"))\n'
@@ -1066,7 +1066,7 @@ class PrefillMutationGateTests(unittest.TestCase):
     def test_mutant_dropped_think_disjunct_caught(self):
         """Test mutant dropped think disjunct caught."""
         self._run_gate(
-            "diffreports",
+            "diffreports_probes",  # W7-2c: the gated differ lives in this family module
             "dropped_think_disjunct",
             "think_changed = old_think != new_think",
             "think_changed = old_think == new_think  # MUTANT",

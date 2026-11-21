@@ -21,7 +21,7 @@ import threading
 import unittest
 from unittest import mock
 
-from model_protocol_lab import cli, density, diffreports, experiments
+from model_protocol_lab import cli, density, diffreports, diffreports_forms, experiments
 from model_protocol_lab.core import Format, Generation
 from model_protocol_lab.diffreports import _valid_density, diff_density
 from model_protocol_lab.reporting import render_html
@@ -839,7 +839,9 @@ class TestGapCoverage(unittest.TestCase):
                     self.assertNotIn(first["target"], {"candle", "mirror", "bridge"})
                 with (
                     mock.patch.object(density, "NEUTRAL_STATEMENTS", _PATCHED_NEUTRALS),
-                    mock.patch.object(diffreports, "_DENSITY_NEUTRALS", _PATCHED_NEUTRALS),
+                    # W7-2c: diff_density lives in diffreports_forms;
+                    # the patch must land in its own namespace.
+                    mock.patch.object(diffreports_forms, "_DENSITY_NEUTRALS", _PATCHED_NEUTRALS),
                 ):
                     self.assertEqual(diffreports._density_generate(seed), cases)
 

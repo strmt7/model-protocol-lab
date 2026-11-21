@@ -733,8 +733,8 @@ def _load_mutant(name, replacements):
     """Load a mutated copy of the reporting family from source text.
 
     W7-2: reporting.py is a facade over five family modules since
-    the split, so the copy is a scratch package holding all six
-    files; each replacement is applied to the one file whose text
+    the split, so the copy is a scratch package holding the whole
+    package; each replacement is applied to the one file whose text
     carries its anchor (asserted unique across the family). The
     returned module is the scratch package's facade, whose surface
     is the original reporting surface. The scratch package stays
@@ -747,6 +747,14 @@ def _load_mutant(name, replacements):
     pkgdir = workdir / "mutpkg"
     pkgdir.mkdir(parents=True)
     (pkgdir / "__init__.py").write_text("", encoding="utf-8")
+    # The whole package is copied alongside the family: family
+    # modules also resolve call-time relative imports of sibling
+    # modules (.diffbackends, .control_tokens) inside the scratch
+    # package, so every relative import lands on a copy.
+    pkg_root = Path(reporting.__file__).parent
+    for path in pkg_root.glob("*.py"):
+        if path.name not in _REPORTING_FAMILY:
+            (pkgdir / path.name).write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
     pending = list(replacements)
     for fname in _REPORTING_FAMILY:
         text = (Path(reporting.__file__).parent / fname).read_text(encoding="utf-8")

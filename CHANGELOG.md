@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (external-audit W7 — the diffreports split, 2026-11-21)
+
+- **`diffreports.py` is now a facade over five modules.** The
+  report differ's implementation lives in `diffreports_core`
+  (the diff orchestrator, summary and mirror validation),
+  `diffreports_text`, `diffreports_forms`, `diffreports_probes`
+  and `diffreports_runlevel` (the per-instrument section
+  differs, by family). The facade re-exports the full original
+  surface — every public and underscore-private name importers
+  use, including the registry-table comprehensions' incidental
+  walrus bindings — so no call site changes, and diff outputs
+  are byte-identical (the cycle-67 fuzz oracle and the
+  committed fixtures still match exactly). Family modules
+  import only the core; the core resolves family differs lazily
+  at call time, keeping the module graph acyclic. Per-module
+  line budgets are pinned by test (the diffreports budgets use
+  full segment mass: these families carry large per-section
+  static tables), and the test suite's mutation gates now land
+  each patch in the family file that carries its anchor.
+
 ### Changed (external-audit W7 — the experiments split, 2026-11-21)
 
 - **`experiments.py` is now a facade over five modules.** The

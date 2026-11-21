@@ -19,7 +19,16 @@ import re
 import unittest
 from pathlib import Path
 
-from model_protocol_lab import diffreports, registry, reporting
+from model_protocol_lab import (
+    diffreports,
+    diffreports_core,
+    diffreports_forms,
+    diffreports_probes,
+    diffreports_runlevel,
+    diffreports_text,
+    registry,
+    reporting,
+)
 
 # Measured naming exceptions at the W7 baseline (every other
 # dispatched key follows diff_<diff_key> / _valid_<diff_key>):
@@ -79,7 +88,21 @@ class RegistryResolutionTests(unittest.TestCase):
             self.assertTrue(callable(target), f"{diff_key}: {name} not callable")
 
     def test_differs_resolve_and_are_dispatched(self) -> None:
-        source = inspect.getsource(diffreports)
+        # W7-2c: diffreports.py is a facade over five family
+        # modules; the differs are called from diffreports_core,
+        # so dispatch reachability is checked over the whole
+        # family source.
+        source = "".join(
+            inspect.getsource(m)
+            for m in (
+                diffreports,
+                diffreports_core,
+                diffreports_text,
+                diffreports_forms,
+                diffreports_probes,
+                diffreports_runlevel,
+            )
+        )
         for diff_key in diffreports.SECTION_DIFF_KEYS.values():
             name = differ_name(diff_key)
             target = getattr(diffreports, name, None)

@@ -1355,10 +1355,12 @@ class ErrorCodeDisciplineTests(unittest.TestCase):
         # f"{name}_too_long" template in _checked_ids, so the needles pin
         # the template plus both call-site names; the exact emitted codes
         # are asserted at runtime in DiffBackendsCodeTableUnitTests.
-        "results_too_large": ("diffreports.py", ['"results_too_large"']),
-        "results_not_regular_file": ("diffreports.py", ['"results_not_regular_file"']),
-        "results_duplicate_field": ("diffreports.py", ['"results_duplicate_field"']),
-        "results_nonfinite_number": ("diffreports.py", ['"results_nonfinite_number"']),
+        # W7-2c: the results loader lives in diffreports_core
+        # (diffreports.py is its facade since the split).
+        "results_too_large": ("diffreports_core.py", ['"results_too_large"']),
+        "results_not_regular_file": ("diffreports_core.py", ['"results_not_regular_file"']),
+        "results_duplicate_field": ("diffreports_core.py", ['"results_duplicate_field"']),
+        "results_nonfinite_number": ("diffreports_core.py", ['"results_nonfinite_number"']),
         "output_ids_too_long": (
             "diffbackends.py",
             ["{name}_too_long", '"output_ids"'],

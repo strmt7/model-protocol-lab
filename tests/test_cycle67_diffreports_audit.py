@@ -138,6 +138,8 @@ import math
 import os
 import random
 import re
+import shutil
+import sys
 import tempfile
 import unicodedata
 import unittest
@@ -27254,6 +27256,63 @@ class DiffreportsFuzzTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+_DIFFREPORTS_FAMILY = (
+    "diffreports.py",
+    "diffreports_core.py",
+    "diffreports_text.py",
+    "diffreports_forms.py",
+    "diffreports_probes.py",
+    "diffreports_runlevel.py",
+)
+_MUTANT_SCRATCH = Path(tempfile.gettempdir()) / f"mpl_cycle67_mutants_{os.getpid()}"
+
+
+def _load_diffreports_mutant(name: str, old_text: str, new_text: str, replacements: int):
+    """Load a mutated copy of the diffreports family from source text.
+
+    W7-2c: diffreports.py is a facade over five family modules
+    since the split, so the copy is a scratch package holding the
+    whole package; the replacement is applied to the family file(s)
+    whose text carries the anchor (its total occurrence count
+    across the family must equal ``replacements``). The returned
+    module is the scratch package's facade, whose surface is the
+    original diffreports surface. The scratch package stays
+    registered in sys.modules so the core module's call-time lazy
+    imports resolve to the mutated copies, not the real family.
+    """
+    pkg_root = Path(diffreports.__file__).parent
+    texts = {fname: (pkg_root / fname).read_text(encoding="utf-8") for fname in _DIFFREPORTS_FAMILY}
+    total = sum(text.count(old_text) for text in texts.values())
+    assert total == replacements, f"mutant {name}: anchor not unique: count={total}"
+    assert old_text != new_text, f"mutant {name}: replacement changed nothing"
+    workdir = _MUTANT_SCRATCH / name
+    if workdir.exists():
+        shutil.rmtree(workdir)
+    pkgdir = workdir / "mutpkg"
+    pkgdir.mkdir(parents=True)
+    (pkgdir / "__init__.py").write_text("", encoding="utf-8")
+    # The whole package is copied, not just the family: family
+    # modules also resolve call-time relative imports of sibling
+    # modules (.registry, .experiments, .negation) inside the
+    # scratch package, so every relative import lands on a copy.
+    for path in pkg_root.glob("*.py"):
+        if path.name not in texts:
+            (pkgdir / path.name).write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    for fname, text in texts.items():
+        if old_text in text:
+            text = text.replace(old_text, new_text)
+        (pkgdir / fname).write_text(text, encoding="utf-8")
+    pkg_name = f"cycle67_mutant_{name}"
+    spec = importlib.util.spec_from_file_location(
+        pkg_name, pkgdir / "__init__.py", submodule_search_locations=[str(pkgdir)]
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[pkg_name] = module
+    spec.loader.exec_module(module)
+    return importlib.import_module(f"{pkg_name}.diffreports")
+
+
 class DiffreportsMutationGateTest(unittest.TestCase):
     """Diffreports mutation gate tests."""
 
@@ -27261,23 +27320,15 @@ class DiffreportsMutationGateTest(unittest.TestCase):
         self, name: str, old_text: str, new_text: str, scenario, replacements: int = 1
     ) -> None:
         """Run gate."""
-        source = Path(diffreports.__file__).read_text(encoding="utf-8")
-        self.assertEqual(source.count(old_text), replacements, f"mutant {name}: anchor not unique")
-        mutated = source.replace(old_text, new_text)
-        self.assertNotEqual(mutated, source, f"mutant {name}: replacement changed nothing")
-        with tempfile.TemporaryDirectory(prefix="c67_mut_", dir="/tmp") as tmpdir:
-            mod_path = os.path.join(tmpdir, f"diffreports_{name}.py")
-            with open(mod_path, "w", encoding="utf-8") as handle:
-                handle.write(mutated)
-            spec = importlib.util.spec_from_file_location(
-                f"model_protocol_lab.diffreports_mut_{name}", mod_path
-            )
-            assert spec is not None and spec.loader is not None
-            mutant = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mutant)
-            scenario(diffreports)  # passes on the real module: gate is non-vacuous
+        mutant = _load_diffreports_mutant(name, old_text, new_text, replacements)
+        scenario(diffreports)  # passes on the real module: gate is non-vacuous
+        try:
             with self.assertRaises(AssertionError, msg=f"mutant {name} was NOT caught"):
                 scenario(mutant)
+        finally:
+            # The mutant module stays registered in sys.modules;
+            # its files are only read while the scenario runs.
+            shutil.rmtree(_MUTANT_SCRATCH / name, ignore_errors=True)
 
     def test_mutant_dropped_planned_drift_caught(self):
         """Mutant dropped planned drift caught."""

@@ -293,6 +293,17 @@ class TestMutationGate(unittest.TestCase):
 
     SOURCE = _REPO_ROOT / "model_protocol_lab" / "diffreports.py"
 
+    # W7-2c: diffreports.py is a facade over five family modules;
+    # each mutant's anchor lives in the family file named by the
+    # parallel MUTANT_FILES entry (the span helper _diff_spans is
+    # core infrastructure; the frontier differ is runlevel).
+    MUTANT_FILES = (
+        "diffreports_runlevel.py",
+        "diffreports_runlevel.py",
+        "diffreports_core.py",
+        "diffreports_runlevel.py",
+    )
+
     MUTANTS = [
         # Winner flips silently dropped from the comparison.
         (
@@ -318,12 +329,13 @@ class TestMutationGate(unittest.TestCase):
 
     def test_mutants_are_killed(self) -> None:
         """Test mutants are killed."""
-        source = self.SOURCE.read_text()
         killed = []
         survived = []
-        for original, mutant in self.MUTANTS:
+        for (original, mutant), fname in zip(self.MUTANTS, self.MUTANT_FILES, strict=True):
+            target = _REPO_ROOT / "model_protocol_lab" / fname
+            source = target.read_text()
             self.assertIn(original, source, f"mutant anchor missing: {original!r}")
-            self.SOURCE.write_text(source.replace(original, mutant, 1))
+            target.write_text(source.replace(original, mutant, 1))
             try:
                 proc = subprocess.run(
                     [
@@ -353,12 +365,12 @@ class TestMutationGate(unittest.TestCase):
                     check=False,
                 )
             finally:
-                self.SOURCE.write_text(source)
+                target.write_text(source)
                 # Invalidate the bytecode cache: a same-size mutant can
                 # leave a .pyc whose (mtime, size) still validates
                 # against the reverted source, poisoning later imports
                 # with mutant bytecode (see the cycle-135 gate fix).
-                for _pyc in self.SOURCE.parent.glob("__pycache__/diffreports.*.pyc"):
+                for _pyc in target.parent.glob(f"__pycache__/{target.stem}.*.pyc"):
                     _pyc.unlink(missing_ok=True)
             if proc.returncode != 0:
                 killed.append(mutant)

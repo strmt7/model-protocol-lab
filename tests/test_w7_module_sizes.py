@@ -7,6 +7,13 @@ spacing. A module that outgrows its budget must split its largest
 cluster out (the census's rule) instead of silently re-becoming a
 monolith. Facades get a flat budget: they carry imports and
 re-exports only, never implementation.
+
+The diffreports families are the one measured exception to the
+def-lines formula: their per-section static tables (const
+segments) are 0.7-1.4k lines of the family's own mass, so their
+budgets use the full segment mass (def-lines + const-lines) in
+the same x 1.15 + 400 formula. The recorded "measured" figure for
+a diffreports family is that segment mass.
 """
 
 from __future__ import annotations
@@ -28,12 +35,20 @@ FAMILY_BUDGETS: dict[str, tuple[int, int]] = {
     "experiments_forms": (2840, 3665),
     "experiments_probes": (4365, 5419),
     "experiments_runlevel": (4260, 5299),
+    # diffreports: measured = def-lines + const-lines (segment mass)
+    "diffreports_core": (2214, 2946),
+    "diffreports_text": (7878, 9459),
+    "diffreports_forms": (7727, 9286),
+    "diffreports_probes": (7623, 9166),
+    "diffreports_runlevel": (5952, 7244),
 }
 # Facade budgets: lines measured at split time + 300, rounded to the
-# nearest 50 (reporting: 311 -> 600; experiments: 719 -> 1000).
+# nearest 50 (reporting: 311 -> 600; experiments: 719 -> 1000;
+# diffreports: 2304 -> 2600).
 FACADE_BUDGETS: dict[str, int] = {
     "reporting": 600,
     "experiments": 1000,
+    "diffreports": 2600,
 }
 
 
