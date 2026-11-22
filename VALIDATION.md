@@ -17,8 +17,8 @@ degrade there (checkpoint-template rendering does not: since
 W4/RR-10 it runs in an owned worker process whose deadline the
 parent enforces on every platform).
 
-- `python -m pytest -q -p no:cacheprovider` — **10501 tests collected**
-  (measured 2026-11-22, W7-6 gate). Subtests numbered in the 73k+
+- `python -m pytest -q -p no:cacheprovider` — **10518 tests collected**
+  (measured 2026-11-22, wave-15 repairs gate). Subtests numbered in the 73k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
@@ -625,7 +625,7 @@ parent enforces on every platform).
   cross-pin test guards the §6/§15 split.
 - `ruff check model_protocol_lab tests examples` — clean;
   `ruff format --check model_protocol_lab tests examples` — clean
-  (387 files in that CI scope; the repo-root scope counts more.
+  (388 files in that CI scope; the repo-root scope counts more.
   A pin test in `tests/test_cycle178_docs_currency.py` compares
   this count against a live CI-scope run).
 - `mypy model_protocol_lab` — clean (78 source files).

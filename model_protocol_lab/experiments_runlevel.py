@@ -3975,25 +3975,31 @@ def _confidentiality_cell_valid(entry: Any) -> bool:
         value = entry.get(key)
         if type(value) is not int or value < 0:
             return False
-    for key in ("treat_rate", "ctrl_rate", "mcnemar_p"):
-        value = entry.get(key)
-        if value is not None and not _share_in_unit(value):
+    # Optional-valued keys: the producer always emits them (their
+    # values may be None), so absence is malformed, not None. The
+    # recomputation below indexes them directly; requiring presence
+    # here is what keeps this validator total (wave-15 BH15-3).
+    for key, check in (
+        ("treat_rate", _share_in_unit),
+        ("ctrl_rate", _share_in_unit),
+        ("mcnemar_p", _share_in_unit),
+        ("mean_run_fraction_treat", _share_in_unit),
+        ("mean_run_fraction_ctrl", _share_in_unit),
+        ("max_run_fraction_treat", _share_in_unit),
+        ("max_run_fraction_ctrl", _share_in_unit),
+        ("marker_offset_treat", _nonnegative_number),
+        ("marker_offset_ctrl", _nonnegative_number),
+    ):
+        if key not in entry:
             return False
-    gap = entry.get("gap")
+        value = entry[key]
+        if value is not None and not check(value):
+            return False
+    if "gap" not in entry:
+        return False
+    gap = entry["gap"]
     if gap is not None and not _in_closed_range(gap, -1.0, 1.0):
         return False
-    for key in ("mean_run_fraction_treat", "mean_run_fraction_ctrl"):
-        value = entry.get(key)
-        if value is not None and not _share_in_unit(value):
-            return False
-    for key in ("max_run_fraction_treat", "max_run_fraction_ctrl"):
-        value = entry.get(key)
-        if value is not None and not _share_in_unit(value):
-            return False
-    for key in ("marker_offset_treat", "marker_offset_ctrl"):
-        value = entry.get(key)
-        if value is not None and not _nonnegative_number(value):
-            return False
     bool_keys = (
         "base_rate_zero",
         "evaluable",

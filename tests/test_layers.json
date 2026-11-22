@@ -291,6 +291,7 @@
       "test_w7_r4_gate.py",
       "test_w7_registry.py",
       "test_wave14_repairs.py",
+      "test_wave15_repairs.py",
       "test_workflows.py"
     ],
     "hf": [
@@ -451,8 +452,8 @@
     ]
   },
   "module_counts": {
-    "total": 288,
-    "base": 275,
+    "total": 289,
+    "base": 276,
     "hf": 12,
     "posix": 1
   }

@@ -14,6 +14,12 @@ the package fails here until the census is regenerated and the
 change reviewed — the census update is the deliberate act the
 policy requires.
 
+The census also counts ruff's file-level directives
+(``# ruff: noqa`` / ``# flake8: noqa``, bare and coded): one such
+line suppresses findings across a whole file while matching no
+per-line marker pattern, so without its own classes it would be
+an exclusion the gate cannot see (wave-15 BH15-4).
+
 This file is excluded from its own census: it defines the marker
 patterns as string literals, which the line-based count cannot
 distinguish from markers themselves. It carries no markers.
@@ -35,7 +41,22 @@ PATTERNS = {
     "type_ignore": re.compile(r"#\s*type:\s*ignore"),
     "pragma_no_cover": re.compile(r"#\s*pragma:\s*no cover"),
     "skipcq": re.compile(r"skip" + "cq"),
+    # File-level directives: the bare class excludes the coded
+    # form (a colon after noqa), the coded class requires it.
+    "file_noqa_ruff": re.compile(r"#\s*ruff:\s*noqa\b(?!\s*:)"),
+    "file_noqa_ruff_coded": re.compile(r"#\s*ruff:\s*noqa\s*:\s*[A-Z]"),
+    "file_noqa_flake8": re.compile(r"#\s*flake8:\s*noqa\b(?!\s*:)"),
+    "file_noqa_flake8_coded": re.compile(r"#\s*flake8:\s*noqa\s*:\s*[A-Z]"),
 }
+
+
+def _count_text(text: str) -> dict[str, int]:
+    """Count marker occurrences in one file's text."""
+    counts = dict.fromkeys(PATTERNS, 0)
+    for line in text.splitlines():
+        for name, pat in PATTERNS.items():
+            counts[name] += len(pat.findall(line))
+    return counts
 
 
 def _count_tree(tree: str) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
@@ -49,10 +70,7 @@ def _count_tree(tree: str) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
         rel = str(path.relative_to(ROOT))
         if rel == SELF:
             continue
-        counts = dict.fromkeys(PATTERNS, 0)
-        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-            for name, pat in PATTERNS.items():
-                counts[name] += len(pat.findall(line))
+        counts = _count_text(path.read_text(encoding="utf-8", errors="replace"))
         if any(counts.values()):
             per_file[rel] = counts
         for name in PATTERNS:
@@ -90,6 +108,47 @@ class MarkerCensusTests(unittest.TestCase):
             totals, _per_file = _count_tree(tree)
             with self.subTest(tree=tree):
                 self.assertEqual(totals["skipcq"], 0)
+
+
+class FileLevelDirectiveCensusTests(unittest.TestCase):
+    """Planted file-level noqa directives are counted (BH15-4).
+
+    Negative control for the census itself: every spelling ruff
+    honors as a file-level directive (executed against real ruff
+    in the wave-15 hunt: bare at the top, mid-file, and after a
+    docstring; the flake8 spelling; the coded form) must land in
+    its census class, and in no other — in particular not in the
+    per-line ``noqa`` class, whose pattern it evaded before.
+    """
+
+    SPELLINGS = {
+        "# ruff: noqa\n": "file_noqa_ruff",
+        "import os\n# ruff: noqa\n": "file_noqa_ruff",
+        '"""Doc."""\n# ruff: noqa\n': "file_noqa_ruff",
+        "# flake8: noqa\n": "file_noqa_flake8",
+        "# ruff: noqa: F401\n": "file_noqa_ruff_coded",
+        "# flake8: noqa: F401\n": "file_noqa_flake8_coded",
+    }
+
+    def test_each_spelling_counts_in_its_own_class(self):
+        """Every honored spelling is visible to the census."""
+        file_classes = [name for name in PATTERNS if name.startswith("file_noqa")]
+        for text, expected in self.SPELLINGS.items():
+            with self.subTest(spelling=text):
+                counts = _count_text(text)
+                self.assertEqual(counts[expected], 1)
+                self.assertEqual(counts["noqa"], 0)
+                for name in file_classes:
+                    if name != expected:
+                        self.assertEqual(counts[name], 0, name)
+
+    def test_plain_noqa_comment_is_not_a_file_directive(self):
+        """The per-line marker does not leak into the new classes."""
+        counts = _count_text("import os  # noqa: F401\n")
+        self.assertEqual(counts["noqa"], 1)
+        for name in PATTERNS:
+            if name.startswith("file_noqa"):
+                self.assertEqual(counts[name], 0, name)
 
 
 if __name__ == "__main__":

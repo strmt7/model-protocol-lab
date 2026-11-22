@@ -1,6 +1,10 @@
 {
  "package_per_file": {
   "model_protocol_lab/backends.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 16,
    "nosec": 2,
    "pragma_no_cover": 0,
@@ -8,6 +12,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/boundary_audit.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 1,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -15,6 +23,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/cacheprofile.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 0,
    "nosec": 3,
    "pragma_no_cover": 0,
@@ -22,6 +34,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/choiceaudit.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 0,
    "nosec": 2,
    "pragma_no_cover": 0,
@@ -29,6 +45,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/cli.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 60,
    "nosec": 3,
    "pragma_no_cover": 0,
@@ -36,6 +56,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/collision.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 5,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -43,6 +67,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/compatibilityform.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 1,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -50,6 +78,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/confidence.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 0,
    "nosec": 1,
    "pragma_no_cover": 0,
@@ -57,6 +89,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/confusableskeleton.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 1,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -64,6 +100,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/core.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 8,
    "nosec": 1,
    "pragma_no_cover": 0,
@@ -71,6 +111,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/debug.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 3,
    "nosec": 1,
    "pragma_no_cover": 0,
@@ -78,6 +122,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/deliforge.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 7,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -85,6 +133,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/determinism.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 2,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -92,6 +144,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/diffbackends.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 3,
    "nosec": 0,
    "pragma_no_cover": 1,
@@ -99,6 +155,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/diffreports_core.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 0,
    "nosec": 2,
    "pragma_no_cover": 0,
@@ -106,6 +166,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/diffreports_forms.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 1,
    "nosec": 5,
    "pragma_no_cover": 1,
@@ -113,6 +177,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/diffreports_probes.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 0,
    "nosec": 5,
    "pragma_no_cover": 0,
@@ -120,6 +188,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/diffreports_runlevel.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 3,
    "nosec": 2,
    "pragma_no_cover": 0,
@@ -127,6 +199,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/diffreports_text.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 1,
    "nosec": 4,
    "pragma_no_cover": 0,
@@ -134,6 +210,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/doctor.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 20,
    "nosec": 2,
    "pragma_no_cover": 0,
@@ -141,6 +221,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/enumerationconvention.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 1,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -148,6 +232,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/experiments_core.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 11,
    "nosec": 1,
    "pragma_no_cover": 0,
@@ -155,6 +243,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/experiments_forms.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 11,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -162,6 +254,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/experiments_probes.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 15,
    "nosec": 4,
    "pragma_no_cover": 0,
@@ -169,6 +265,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/experiments_runlevel.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 20,
    "nosec": 1,
    "pragma_no_cover": 0,
@@ -176,6 +276,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/experiments_text.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 7,
    "nosec": 22,
    "pragma_no_cover": 0,
@@ -183,6 +287,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/fixturefuzz.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 1,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -190,6 +298,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/healing.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 4,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -197,6 +309,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/invisiblechars.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 1,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -204,6 +320,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/mcp_server.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 1,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -211,6 +331,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/multiturn.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 0,
    "nosec": 3,
    "pragma_no_cover": 0,
@@ -218,6 +342,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/needle.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 0,
    "nosec": 2,
    "pragma_no_cover": 0,
@@ -225,6 +353,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/numform.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 3,
    "nosec": 0,
    "pragma_no_cover": 1,
@@ -232,6 +364,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/perturbation.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 1,
    "nosec": 1,
    "pragma_no_cover": 0,
@@ -239,6 +375,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/position.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 1,
    "nosec": 1,
    "pragma_no_cover": 0,
@@ -246,6 +386,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/precision.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 0,
    "nosec": 2,
    "pragma_no_cover": 0,
@@ -253,6 +397,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/prunesweep.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 1,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -260,6 +408,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/recordnotation.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 2,
    "nosec": 4,
    "pragma_no_cover": 0,
@@ -267,6 +419,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/render_worker.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 6,
    "nosec": 2,
    "pragma_no_cover": 0,
@@ -274,6 +430,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/scoring.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 4,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -281,6 +441,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/servingbackends.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 10,
    "nosec": 1,
    "pragma_no_cover": 0,
@@ -288,6 +452,10 @@
    "type_ignore": 1
   },
   "model_protocol_lab/surfacenoise.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 11,
    "nosec": 1,
    "pragma_no_cover": 1,
@@ -295,6 +463,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/template_audit.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 2,
    "nosec": 1,
    "pragma_no_cover": 0,
@@ -302,6 +474,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/typographicemphasis.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 1,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -309,6 +485,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab/verify.py": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 1,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -318,6 +498,10 @@
  },
  "totals": {
   "examples": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 27,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -325,6 +509,10 @@
    "type_ignore": 0
   },
   "fuzz": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 2,
    "nosec": 0,
    "pragma_no_cover": 0,
@@ -332,6 +520,10 @@
    "type_ignore": 0
   },
   "model_protocol_lab": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 247,
    "nosec": 79,
    "pragma_no_cover": 4,
@@ -339,6 +531,10 @@
    "type_ignore": 1
   },
   "repo_total": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 688,
    "nosec": 89,
    "pragma_no_cover": 18,
@@ -346,6 +542,10 @@
    "type_ignore": 348
   },
   "tests": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 407,
    "nosec": 5,
    "pragma_no_cover": 14,
@@ -353,6 +553,10 @@
    "type_ignore": 346
   },
   "tools": {
+   "file_noqa_flake8": 0,
+   "file_noqa_flake8_coded": 0,
+   "file_noqa_ruff": 0,
+   "file_noqa_ruff_coded": 0,
    "noqa": 5,
    "nosec": 5,
    "pragma_no_cover": 0,

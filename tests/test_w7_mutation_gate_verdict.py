@@ -22,6 +22,7 @@ from tests._mutation_gate import (
     ChildOutcome,
     MutantSpec,
     Verdict,
+    _parse_junit,
     classify_child,
     run_mutation_gate,
 )
@@ -126,6 +127,83 @@ class ClassifyChildTests(unittest.TestCase):
             ),
             Verdict.KILLED,
         )
+
+
+class ParseJunitSkippedTests(unittest.TestCase):
+    """BH15-1: a skipped testcase is not an executed testcase.
+
+    The helper's rule is that survival requires every registered
+    audit test executed, and the baseline requires the same. A
+    testcase carrying a ``<skipped/>`` child (a skip or xfail
+    marker) never executed its assertions, so ``_parse_junit``
+    must keep it out of ``executed`` — otherwise a baseline
+    accepts a run whose audit test never ran, and a mutant whose
+    only registered killer is skipped classifies SURVIVED
+    instead of INCONCLUSIVE. Synthetic JUnit only; no live gate.
+    """
+
+    def _parse(self, body: str):
+        """Write one synthetic JUnit document and parse it."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "out.xml"
+        path.write_text(
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            f'<testsuites><testsuite name="pytest">{body}</testsuite></testsuites>\n',
+            encoding="utf-8",
+        )
+        return _parse_junit(path)
+
+    def test_skipped_testcase_is_not_executed(self):
+        """A skipped audit testcase stays out of the executed set."""
+        failures, errors, executed, ok = self._parse(
+            '<testcase classname="mod.AuditTests" name="test_kills_it">'
+            '<skipped type="pytest.skip" message="environment-gated"/>'
+            "</testcase>"
+            '<testcase classname="mod.AuditTests" name="test_also_kills_it"/>'
+        )
+        self.assertEqual(executed, frozenset({"AuditTests::test_also_kills_it"}))
+        self.assertEqual(failures, frozenset())
+        self.assertEqual(errors, frozenset())
+        self.assertTrue(ok)
+
+    def test_all_skipped_is_not_a_parseable_execution(self):
+        """Every testcase skipped: nothing executed, parse not ok."""
+        _failures, _errors, executed, ok = self._parse(
+            '<testcase classname="mod.AuditTests" name="test_kills_it">'
+            '<skipped type="pytest.xfail" message="expected failure"/>'
+            "</testcase>"
+        )
+        self.assertEqual(executed, frozenset())
+        self.assertFalse(ok)
+
+    def test_skipped_audit_test_cannot_support_a_survived_verdict(self):
+        """rc 0 with the audit test skipped classifies INCONCLUSIVE."""
+        _failures, _errors, executed, ok = self._parse(
+            '<testcase classname="mod.AuditTests" name="test_kills_it">'
+            '<skipped type="pytest.skip" message="environment-gated"/>'
+            "</testcase>"
+            '<testcase classname="mod.Other" name="test_y"/>'
+        )
+        verdict = classify_child(
+            outcome(0, executed=executed, parse_ok=ok),
+            frozenset({"AuditTests::test_kills_it"}),
+        )
+        self.assertIs(verdict, Verdict.INCONCLUSIVE)
+
+    def test_failure_testcase_still_parsed_alongside_a_skip(self):
+        """Skips do not disturb the failure accounting of real runs."""
+        failures, _errors, executed, ok = self._parse(
+            '<testcase classname="mod.AuditTests" name="test_kills_it">'
+            '<skipped type="pytest.skip" message="environment-gated"/>'
+            "</testcase>"
+            '<testcase classname="mod.AuditTests" name="test_also_kills_it">'
+            "<failure>assert</failure>"
+            "</testcase>"
+        )
+        self.assertEqual(failures, frozenset({"AuditTests::test_also_kills_it"}))
+        self.assertEqual(executed, frozenset({"AuditTests::test_also_kills_it"}))
+        self.assertTrue(ok)
 
 
 class FakeRunner:

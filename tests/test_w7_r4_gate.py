@@ -323,7 +323,11 @@ class GateWrapperTests(_PairDir):
             self.assertEqual(json.loads(out)["gate"]["threshold_source"], "flag")
 
     def test_malformed_env_fails_closed(self):
-        for raw in ("abc", "-1", "", " 2", "2.0", "007"):
+        # The last shape passes the canonical grammar but exceeds
+        # CPython's integer-string conversion limit (BH15-2): it
+        # must fail closed like every other unusable value, never
+        # escape as a raw ValueError traceback.
+        for raw in ("abc", "-1", "", " 2", "2.0", "007", "9" * 5000):
             with self.subTest(raw=raw):
                 with mock.patch.dict(os.environ, {ENV_VAR: raw}):
                     code, out, err = _run_diff(["old.json", "new.json", "--gate"], self.dir)

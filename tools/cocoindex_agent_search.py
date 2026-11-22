@@ -279,6 +279,23 @@ def _environment(base: Path, config: Path, runtime: Path) -> dict[str, str]:
     return result
 
 
+def _pinned_settings_text(path: Path, refusal: str) -> str | None:
+    """Existing pinned-settings text, or None when the file is absent.
+
+    A file that exists but cannot be read as UTF-8 text — corrupt
+    bytes from an interrupted write, a directory in its place —
+    is exactly the "state is not what we pinned" situation the
+    settings guards exist for, so it gets the guard's fixed
+    refusal instead of a raw decode/FS error (wave-15 BH15-5).
+    """
+    if not path.exists():
+        return None
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise RuntimeError(refusal) from exc
+
+
 def index(base: Path, repo: Path = ROOT) -> None:
     """Purpose: Refresh semantic index
     Inputs: external base/checkout
@@ -293,12 +310,17 @@ def index(base: Path, repo: Path = ROOT) -> None:
     prepare_mirror(mirror, entries)
     settings = config / "global_settings.yml"
     settings.parent.mkdir(parents=True, exist_ok=True)
-    if settings.exists() and settings.read_text(encoding="utf-8") != SETTINGS:
+    existing = _pinned_settings_text(
+        settings, "CocoIndex settings changed; inspect before indexing"
+    )
+    if existing is not None and existing != SETTINGS:
         raise RuntimeError("CocoIndex settings changed; inspect before indexing")
     settings.write_text(SETTINGS, encoding="utf-8")
     project = mirror / ".cocoindex_code" / "settings.yml"
     project.parent.mkdir(parents=True, exist_ok=True)
-    previous = project.read_text(encoding="utf-8") if project.exists() else None
+    previous = _pinned_settings_text(
+        project, "CocoIndex project settings changed; inspect before indexing"
+    )
     if previous is not None and previous != PROJECT_SETTINGS:
         raise RuntimeError("CocoIndex project settings changed; inspect before indexing")
     project.write_text(PROJECT_SETTINGS, encoding="utf-8")

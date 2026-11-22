@@ -333,6 +333,89 @@ class CocoIndexIndexSettingsTests(unittest.TestCase):
                 self._index_with_mocks(base, self._ok_run(calls))
             self.assertEqual(calls, [])
 
+    def test_index_refuses_non_utf8_project_settings(self):
+        """Purpose: Pin the corrupt-state refusal (wave-15 BH15-5).
+        Inputs: project settings present but not valid UTF-8
+        (an interrupted write's residue).
+        Outputs: the guard's fixed RuntimeError refusal, ccc never
+        invoked, the corrupt bytes unmodified, no marker written —
+        never a raw UnicodeDecodeError.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            base, _global, project_settings, marker = self._fresh_state(temp)
+            project_settings.parent.mkdir(parents=True)
+            corrupt = b"\xff\xfe\x00bad utf8 \xc3\x28"
+            project_settings.write_bytes(corrupt)
+            calls: list = []
+            with self.assertRaisesRegex(RuntimeError, "project settings changed"):
+                self._index_with_mocks(base, self._ok_run(calls))
+            self.assertEqual(calls, [])
+            self.assertEqual(project_settings.read_bytes(), corrupt)
+            self.assertFalse(marker.exists())
+
+    def test_index_refuses_non_utf8_global_settings(self):
+        """Purpose: Pin the sibling guard's corrupt-state refusal.
+        Inputs: global settings present but not valid UTF-8.
+        Outputs: the fixed RuntimeError refusal, ccc never invoked.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            base, global_settings, _project, _marker = self._fresh_state(temp)
+            global_settings.parent.mkdir(parents=True)
+            corrupt = b"\xff\xfe\x00bad utf8 \xc3\x28"
+            global_settings.write_bytes(corrupt)
+            calls: list = []
+            with self.assertRaisesRegex(RuntimeError, "CocoIndex settings changed"):
+                self._index_with_mocks(base, self._ok_run(calls))
+            self.assertEqual(calls, [])
+            self.assertEqual(global_settings.read_bytes(), corrupt)
+
+    def test_index_refuses_project_settings_directory(self):
+        """Purpose: Pin the directory-in-place refusal (BH15-5).
+        Inputs: the project settings path is a directory.
+        Outputs: the fixed RuntimeError refusal, never a raw
+        IsADirectoryError; the directory is left in place.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            base, _global, project_settings, _marker = self._fresh_state(temp)
+            project_settings.mkdir(parents=True)
+            calls: list = []
+            with self.assertRaisesRegex(RuntimeError, "project settings changed"):
+                self._index_with_mocks(base, self._ok_run(calls))
+            self.assertEqual(calls, [])
+            self.assertTrue(project_settings.is_dir())
+
+    def test_index_refuses_global_settings_directory(self):
+        """Purpose: Pin the sibling guard's directory refusal.
+        Inputs: the global settings path is a directory.
+        Outputs: the fixed RuntimeError refusal, ccc never invoked.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            base, global_settings, _project, _marker = self._fresh_state(temp)
+            global_settings.mkdir(parents=True)
+            calls: list = []
+            with self.assertRaisesRegex(RuntimeError, "CocoIndex settings changed"):
+                self._index_with_mocks(base, self._ok_run(calls))
+            self.assertEqual(calls, [])
+            self.assertTrue(global_settings.is_dir())
+
+    def test_index_refuses_truncated_multibyte_project_settings(self):
+        """Purpose: Pin the truncated-write refusal (BH15-5).
+        Inputs: project settings are the pinned text plus a
+        multibyte character cut in half — valid prefix, invalid
+        UTF-8 tail.
+        Outputs: the fixed RuntimeError refusal, bytes unmodified.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            base, _global, project_settings, _marker = self._fresh_state(temp)
+            project_settings.parent.mkdir(parents=True)
+            truncated = (PROJECT_SETTINGS + "é").encode("utf-8")[:-1]
+            project_settings.write_bytes(truncated)
+            calls: list = []
+            with self.assertRaisesRegex(RuntimeError, "project settings changed"):
+                self._index_with_mocks(base, self._ok_run(calls))
+            self.assertEqual(calls, [])
+            self.assertEqual(project_settings.read_bytes(), truncated)
+
     def test_index_bootstrapped_state_is_a_fixed_point(self):
         """Purpose: Pin idempotence of the bootstrapped state (case 5).
         Inputs: fresh state.

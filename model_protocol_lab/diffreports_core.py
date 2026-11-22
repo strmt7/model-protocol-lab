@@ -2419,7 +2419,14 @@ def _resolve_gate_threshold(
     if raw is not None:
         if re.fullmatch(r"0|[1-9][0-9]*", raw) is None:
             return None
-        return int(raw), "env"
+        try:
+            return int(raw), "env"
+        except ValueError:
+            # Canonical but longer than CPython's integer-string
+            # conversion limit (4,300 digits): unusable as a
+            # threshold, so fail closed like any malformed value
+            # instead of escaping as a raw traceback (BH15-2).
+            return None
     return 0, "default"
 
 

@@ -124,6 +124,14 @@ def _parse_junit(path: Path) -> tuple[frozenset[str], frozenset[str], frozenset[
     for tc in tree.getroot().iter("testcase"):
         classname = tc.get("classname") or ""
         ident = f"{classname.split('.')[-1]}::{tc.get('name')}"
+        # A testcase carrying <skipped/> (a skip or xfail marker)
+        # never executed its assertions: it is not evidence that
+        # the test ran, so it stays out of `executed` (BH15-1).
+        # Counting it let a baseline accept a run whose audit test
+        # never ran and let a mutant classify SURVIVED on a killer
+        # that never fired.
+        if tc.find("skipped") is not None:
+            continue
         executed.add(ident)
         if tc.find("failure") is not None:
             failures.add(ident)
