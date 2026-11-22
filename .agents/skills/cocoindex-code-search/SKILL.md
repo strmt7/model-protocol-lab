@@ -17,7 +17,13 @@ part of the lab's measurement runtime or training data.
    The first index may download a local embedding
    model and take several minutes. Installation and index data stay in a
    computed user cache, outside the live checkout; `AGENT_CODE_HOME` may
-   override it with an absolute path.
+   override it with an absolute path. On the first index for a checkout,
+   the wrapper writes both settings files from its pinned in-repo
+   constants; if an existing settings file differs from those constants,
+   indexing refuses with a "settings changed" error — inspect the file
+   under the `AGENT_CODE_HOME` cache (`config/<digest>/global_settings.yml`,
+   `mirrors/<digest>/.cocoindex_code/settings.yml`) rather than editing
+   it to match blindly.
 2. Run `<python> tools/cocoindex_agent_search.py search --limit 5
    "conceptual question"`. Search rejects source changes until `index`
    refreshes the code-only mirror. Successful searches record a local,

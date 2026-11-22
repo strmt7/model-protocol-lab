@@ -299,7 +299,7 @@ def index(base: Path, repo: Path = ROOT) -> None:
     project = mirror / ".cocoindex_code" / "settings.yml"
     project.parent.mkdir(parents=True, exist_ok=True)
     previous = project.read_text(encoding="utf-8") if project.exists() else None
-    if previous != PROJECT_SETTINGS:
+    if previous is not None and previous != PROJECT_SETTINGS:
         raise RuntimeError("CocoIndex project settings changed; inspect before indexing")
     project.write_text(PROJECT_SETTINGS, encoding="utf-8")
     runtime.mkdir(parents=True, exist_ok=True)

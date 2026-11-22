@@ -14,8 +14,12 @@ from unittest.mock import patch
 
 from tools.cocoindex_agent_search import (
     CONFIG_DIGEST,
+    PROJECT_SETTINGS,
     ROOT,
+    SETTINGS,
+    ccc_path,
     home,
+    index,
     paths,
     prepare_mirror,
     search,
@@ -216,6 +220,131 @@ class CocoIndexAgentSearchTests(unittest.TestCase):
                 ):
                     run.return_value.stdout = unsafe
                     tracked_files(root)
+
+
+class CocoIndexIndexSettingsTests(unittest.TestCase):
+    """First-run bootstrap contracts for index() settings handling.
+
+    Census section 5 adjudication: the project-settings guard refused
+    the absent case (previous is None) as if the file had changed, so
+    the documented install -> index flow was unreachable from a fresh
+    state. These tests pin the resolved semantics: absent bootstraps
+    from the pinned constants, identical indexes, changed refuses.
+    """
+
+    def _fresh_state(self, temp: str) -> tuple[Path, Path, Path, Path]:
+        """Build a fresh base/repo pair with a fake installed ccc.
+
+        Returns (base, global_settings, project_settings, marker).
+        """
+        base = Path(temp)
+        source = base / "source.py"
+        source.write_text("pass\n", encoding="utf-8")
+        venv, mirror, config, _runtime = paths(base, base)
+        command = ccc_path(venv)
+        command.parent.mkdir(parents=True)
+        command.write_text("#!/bin/sh\n", encoding="utf-8")
+        global_settings = config / "global_settings.yml"
+        project_settings = mirror / ".cocoindex_code" / "settings.yml"
+        marker = base / "active" / (mirror.name + ".json")
+        return base, global_settings, project_settings, marker
+
+    def _index_with_mocks(self, base: Path, run) -> None:
+        source = base / "source.py"
+        entries = [("source.py", source)]
+        with (
+            patch("tools.cocoindex_agent_search.tracked_files", return_value=entries),
+            patch("tools.cocoindex_agent_search._run", run),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            index(base, repo=base)
+
+    @staticmethod
+    def _ok_run(calls: list) -> object:
+        def run(args, **kwargs):
+            calls.append(args)
+            return subprocess.CompletedProcess(args, 0, stdout="Indexing: done error: 0")
+
+        return run
+
+    def test_index_bootstraps_absent_settings_and_indexes(self):
+        """Purpose: Pin the first-run fix (census section 5.2 case 1).
+        Inputs: fresh state, neither settings file present.
+        Outputs: both files written from the pinned constants, ccc
+        index invoked once, marker bound to CONFIG_DIGEST.
+        Mutant killer: reverting the guard to `previous !=
+        PROJECT_SETTINGS` makes index() raise here.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            base, global_settings, project_settings, marker = self._fresh_state(temp)
+            calls: list = []
+            self._index_with_mocks(base, self._ok_run(calls))
+            self.assertEqual(project_settings.read_text(encoding="utf-8"), PROJECT_SETTINGS)
+            self.assertEqual(global_settings.read_text(encoding="utf-8"), SETTINGS)
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0][1], "index")
+            self.assertEqual(json.loads(marker.read_text())["config_digest"], CONFIG_DIGEST)
+
+    def test_index_accepts_identical_project_settings(self):
+        """Purpose: Regression-pin the pre-fix working path (case 2).
+        Inputs: project settings pre-written byte-identical.
+        Outputs: index succeeds; file content unchanged.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            base, _global, project_settings, marker = self._fresh_state(temp)
+            project_settings.parent.mkdir(parents=True)
+            project_settings.write_text(PROJECT_SETTINGS, encoding="utf-8")
+            calls: list = []
+            self._index_with_mocks(base, self._ok_run(calls))
+            self.assertEqual(project_settings.read_text(encoding="utf-8"), PROJECT_SETTINGS)
+            self.assertEqual(len(calls), 1)
+            self.assertTrue(marker.exists())
+
+    def test_index_refuses_changed_project_settings(self):
+        """Purpose: Pin the drift refusal the guard exists for (case 3).
+        Inputs: project settings present with one extra byte.
+        Outputs: RuntimeError, ccc never invoked, bytes unmodified,
+        no marker written.
+        Mutant killer: dropping the refusal makes index() proceed.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            base, _global, project_settings, marker = self._fresh_state(temp)
+            project_settings.parent.mkdir(parents=True)
+            drifted = PROJECT_SETTINGS + "x"
+            project_settings.write_text(drifted, encoding="utf-8")
+            calls: list = []
+            with self.assertRaisesRegex(RuntimeError, "project settings changed"):
+                self._index_with_mocks(base, self._ok_run(calls))
+            self.assertEqual(calls, [])
+            self.assertEqual(project_settings.read_text(encoding="utf-8"), drifted)
+            self.assertFalse(marker.exists())
+
+    def test_index_refuses_changed_global_settings(self):
+        """Purpose: Pin the sibling global guard's refusal (case 4).
+        Inputs: global settings present with one extra byte.
+        Outputs: RuntimeError, ccc never invoked.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            base, global_settings, _project, _marker = self._fresh_state(temp)
+            global_settings.parent.mkdir(parents=True)
+            global_settings.write_text(SETTINGS + "x", encoding="utf-8")
+            calls: list = []
+            with self.assertRaisesRegex(RuntimeError, "CocoIndex settings changed"):
+                self._index_with_mocks(base, self._ok_run(calls))
+            self.assertEqual(calls, [])
+
+    def test_index_bootstrapped_state_is_a_fixed_point(self):
+        """Purpose: Pin idempotence of the bootstrapped state (case 5).
+        Inputs: fresh state.
+        Outputs: two consecutive index() runs both succeed.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            base, _global, _project, marker = self._fresh_state(temp)
+            calls: list = []
+            self._index_with_mocks(base, self._ok_run(calls))
+            self._index_with_mocks(base, self._ok_run(calls))
+            self.assertEqual(len(calls), 2)
+            self.assertTrue(marker.exists())
 
 
 if __name__ == "__main__":

@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (external-audit W7 — agent-search first-run bootstrap)
+
+- **First-run `index` no longer refuses on absent project settings.**
+  The CocoIndex agent-search wrapper's project-settings guard treated
+  a missing settings file (`previous is None`) as changed settings,
+  so the documented `install` → `index` flow could never complete
+  from a fresh state — the sibling global-settings guard in the same
+  function already bootstrapped on absence. Absent project settings
+  now bootstrap from the wrapper's pinned constant, exactly like the
+  global file; a present-but-changed file is still refused with the
+  same message. Five contract tests pin the absent, identical,
+  changed, sibling-guard, and idempotence cases, including mutant
+  killers for both directions of the condition.
+
 ### Fixed (external-audit W7 — mutation-gate verdicts and marker census, RR-15/RR-17)
 
 - **Mutation gates now prove their kills (RR-15).** The six
