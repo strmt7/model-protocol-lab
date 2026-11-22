@@ -184,12 +184,22 @@ crashes on non-string dict keys fixed fail-closed).
 - **ReDoS:** the two regexes are linear char classes (100 kB near-miss in ~1 ms);
   no nested quantifiers or alternation.
 - **Deserialization:** `NaN`/`Infinity`/duplicate keys rejected; 2 MB cap before
-  `json.loads`; no `pickle`/`yaml`/`marshal`/`eval`/`subprocess` in the package.
-- **Supply chain:** the only network-adjacent calls are two `from_pretrained`
+  `json.loads`; no `pickle`/`yaml`/`marshal`/`eval` in the package. The
+  package's one subprocess use is its own render worker
+  (`render_worker.py`), which spawns the package's own interpreter to
+  render checkpoint templates under a parent-enforced deadline; its
+  containment contract is recorded in this file.
+- **Supply chain:** the checkpoint-loading path's only calls are two `from_pretrained`
   (`local_files_only=True`, `trust_remote_code=False`, `token=False`), one
   `PreTrainedTokenizerFast(tokenizer_file=…)` (local file), and
-  `importlib.metadata.version()` (local). No `hf_hub_download`,
-  `snapshot_download`, sockets, or HTTP clients anywhere. This is the
+  `importlib.metadata.version()` (local). No `hf_hub_download` or
+  `snapshot_download` anywhere, and the loading path opens no sockets.
+  The package's one network surface outside that path is the serving
+  measurement's HTTP client, pinned to a loopback llama.cpp server the
+  operator runs (`servingbackends.py`); the vLLM arm runs in-process,
+  and the repository tooling under `tools/` talks HTTPS to GitHub and
+  DeepSource as operator tooling, never in the measurement path. For
+  the loading path, this is the
   structural defense against the CVE-2026-80047 class (transformers writing
   remote repository code to the local module cache before the trust-consent
   check): the lab never loads remote repositories and never enables
@@ -301,8 +311,9 @@ the latest line.
 
 ## Verifying a release
 
-Releases are built reproducibly and published with PEP 740
-attestations (see `.github/workflows/release.yml`). To verify an
+Releases are built reproducibly; when a release is published it
+will carry PEP 740 attestations (see `.github/workflows/release.yml`).
+No release has been published yet. To verify an
 artifact you downloaded:
 
 ```sh
@@ -381,10 +392,12 @@ The [DeepSource GitHub integration](https://app.deepsource.com/gh/strmt7/model-p
 analyzes commits and pull requests through the `deepsource-io` GitHub
 App. The connection is app-only. Through cycle 221 there was no
 DeepSource config file in this repo and analyzer settings lived in
-the DeepSource dashboard; since cycle 222 the repo carries a
-`.deepsource.toml`, but it holds only the few settings the
+the DeepSource dashboard; since cycle 222 the repo carried a
+`.deepsource.toml`, but it held only the few settings the
 remediation below adjudicated — an exclusion for two prose files
-and two analyzer meta pins, each justified in the file itself. It is
+and two analyzer meta pins, each justified in the file itself. (The
+file was withdrawn later in cycle 222 — see the remediation record
+below; the repo carries no DeepSource config file today.) It is
 not a copied configuration: do not copy another repository's
 analyzer set into this repo's docs or audits. The enabled set for
 this repo is whatever its own DeepSource configuration says, and
@@ -430,7 +443,10 @@ acceptance — only a complete, source-matched inventory manifest
 does. When the credential is absent, the guard reports
 NOT-CONFIGURED explicitly and fails closed; that is a missing input,
 not a passing check, and the input is the `DEEPSOURCE_TOKEN` secret
-in the repo's Actions settings.
+in the repo's Actions settings. Since 2026-11-10 the operative
+blocker is not the credential: the DeepSource quota is exhausted,
+the item is parked as blocked-external (ledger RR-05) with a refill
+watch armed, and the guard stays fail-closed meanwhile.
 
 ### DeepSource remediation (cycle 222)
 

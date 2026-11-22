@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (external-audit W7 — documentation truth pass, RR-16 closed, 2026-11-22)
+
+- **Living docs corrected to match the shipped implementation.**
+  README's status line no longer claims "production-hardened": it
+  states the baseline is not yet release-ready (the ledger's own
+  verdict) and reports the measured counts (10,501 tests collected
+  by pytest; 10,495 run under the exact CI command; 95.62% combined
+  line-and-branch coverage). The default-export answer-text
+  exception is gone from the README, SECURITY and architecture
+  prose — there is no exception: text-bound probes' answer text
+  (numform included) is stripped from the default export, and the
+  earlier wording had the direction inverted. SECURITY's
+  supply-chain text now scopes its no-network claim to the
+  checkpoint-loading path and names the serving loopback client,
+  the in-process vLLM arm and the `tools/` HTTPS clients; its
+  deserialization bullet names the owned render worker as the
+  package's one subprocess use; the PEP 740 and `.deepsource.toml`
+  passages carry their current tense, and the DeepSource acceptance
+  paragraph names the exhausted quota (ledger RR-05), not the
+  credential, as the operative blocker. The architecture page lists
+  all twelve CLI commands, a serving-measurement component for the
+  two `exec-backends` backends, the measured 65 probe subsections
+  and the MCP server's four tools; the reference index reaches
+  USAGE §15; the ADR index records the vLLM arm as shipped in W6.
+  Ledger RR-16 is closed with this pass as its second evidence
+  half (the generated-file removal landed in W7-3).
+
 ### Added (external-audit W7 — R4 diff gate and JUnit reports)
 
 - **`diff-reports --gate` classifies a comparison for CI.** Opt-in:

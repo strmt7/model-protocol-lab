@@ -18,7 +18,7 @@ W4/RR-10 it runs in an owned worker process whose deadline the
 parent enforces on every platform).
 
 - `python -m pytest -q -p no:cacheprovider` — **10501 tests collected**
-  (measured 2026-11-18, wave-12 repair push). Subtests numbered in the 73k+
+  (measured 2026-11-22, W7-6 gate). Subtests numbered in the 73k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that

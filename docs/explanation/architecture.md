@@ -62,20 +62,27 @@ All measurement code is in the single package `model_protocol_lab/`:
   adapter never downloads models, never executes remote model code,
   and generates exactly N tokens with no implicit EOS stop, so stop
   behaviour stays a measured variable instead of a hidden default.
+- **Serving measurement** — two serving backends under one execution
+  protocol (`exec-backends`): `LlamacppHttpBackend`, an HTTP client
+  pinned to a loopback llama.cpp server the operator runs, and
+  `VllmOfflineBackend`, an in-process vLLM 0.33.0 engine. Both are
+  admitted by a fail-closed identity/configuration probe before any
+  measurement, and their records are keyed per stack × weights
+  digest × configuration.
 - **Boundary detection and selection** — response boundaries are
   matched as explicit token-ID subsequences with a text-level
   cross-check recorded as a diagnostic. The selection rule is
   deliberately conservative: a single candidate must pass every
   search fixture to reach held-out evaluation; anything else abstains.
-- **Probes** — the `run --…` diagnostics (USAGE §8, sixty-one
+- **Probes** — the `run --…` diagnostics (USAGE §8, sixty-five
   subsections) are post-hoc or re-measurement instruments over the
   same observations: stop-semantics robustness, cross-checkpoint
   transfer, perturbation, template conformance, and the generated-
   panel probes. Each exists because a design round decided it should,
   in a frozen shape — see the decision index.
 - **Reporting** — `results.json` carries verdicts, counts and answer
-  digests, not raw generations (one designed exception, documented in
-  USAGE §6); `report.html` is one self-contained file. Reports are
+  digests, not raw generations (recorded answer text is stripped from
+  the default export for every section — no exception); `report.html` is one self-contained file. Reports are
   byte-deterministic for identical inputs.
 - **Second-opinion tools** — `diff-reports` compares two result
   directories section by section; `verify` re-derives a stored result
@@ -84,16 +91,20 @@ All measurement code is in the single package `model_protocol_lab/`:
   stop semantics. None of them trusts the primary path's arithmetic.
 - **Interfaces** — the `model-protocol-lab` CLI (`catalog`, `inspect`,
   `doctor`, `run`, `fixtures`, `debug`, `diff-reports`,
-  `diff-backends`, `verify`, `pack`, `surface-noise`) and a stdlib-only
-  MCP server (`model-protocol-lab-mcp`) exposing the surface-noise
-  probe to agents.
+  `diff-backends`, `verify`, `pack`, `surface-noise`, `exec-backends`)
+  and a stdlib-only
+  MCP server (`model-protocol-lab-mcp`) exposing four surface-noise
+  tools to agents (one runs the probe; the others return its
+  hardening notes, protocol description and controls).
 
 ## Trust boundaries, briefly
 
 Checkpoints and chat templates are untrusted input: templates are
 statically scanned for code-execution primitives before any render,
-weights load only as safetensors, and nothing in the measurement path
-touches the network. The full record — trust boundaries, the dated
+weights load only as safetensors, and the checkpoint-measurement
+path touches no network. The one network surface is the serving
+measurement's loopback-pinned HTTP client, talking to a llama.cpp
+server the operator runs. The full record — trust boundaries, the dated
 audit log with findings and explicitly accepted residuals — is
 [SECURITY.md](../SECURITY.md); this page deliberately does not
 summarize it into a second copy.

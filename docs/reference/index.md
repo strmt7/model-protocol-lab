@@ -11,7 +11,9 @@ the reference wins.
   installation for contributors (§7), every probe (§8), fixture
   authoring (§9), the interactive debugger (§10), `diff-backends`
   (§11), `diff-reports` (§12), `verify`, `pack` and the determinism
-  self-audit (§13), and the surface-noise probe (§14).
+  self-audit (§13), the surface-noise probe (§14), and the exit-code
+  and output-format contracts (§15). `exec-backends` is documented
+  with the probes (§8.65) and in the §15 contract table.
 - **The catalog** — the 29 format families are enumerated by the
   tool itself: run `model-protocol-lab catalog` for the exact,
   current list as JSON. The catalog command is the reference for the
