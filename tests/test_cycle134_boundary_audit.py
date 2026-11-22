@@ -32,8 +32,6 @@ section, the diff-reports comparison, and a committed 4-mutant kill gate.
 
 from __future__ import annotations
 
-import subprocess
-import sys
 import unittest
 from dataclasses import asdict
 from pathlib import Path
@@ -558,56 +556,61 @@ class TestMutationGate(unittest.TestCase):
         ),
     ]
 
+    # W7-4 (RR-15): each mutant's registered audit set — the named
+    # tests execution proved kill it (derivation in the W7 work
+    # area, audit_sets.json).
+    AUDIT_TESTS = {
+        "m1": (
+            "Sa02ConservationTests::test_mixture_conserves",
+            "TestAuditSearchObservations::test_planted_problem_shows_in_rate",
+            "TestCheckBoundary::test_length_mismatch_diverges_at_shorter_end",
+            "TestCheckBoundary::test_planted_seam_merge_detected_with_index",
+        ),
+        "m2": (
+            "Sa02ConservationTests::test_mixture_conserves",
+            "TestAuditSearchObservations::test_planted_problem_shows_in_rate",
+            "TestCheckBoundary::test_planted_seam_merge_detected_with_index",
+        ),
+        "m3": ("TestAuditSearchObservations::test_planted_problem_shows_in_rate",),
+        "m4": (
+            "Sa02ConservationTests::test_encode_failure_conserves",
+            "Sa02ConservationTests::test_mixture_conserves",
+            "Sa02ConservationTests::test_single_decode_failure_conserves",
+            "TestAuditSearchObservations::test_encode_failure_marks_unusable_not_problem",
+            "TestBoundaryProblemRate::test_no_usable_none_rate",
+            "TestBoundaryProblemRate::test_unusable_excluded",
+        ),
+    }
+
     def test_mutants_are_killed(self) -> None:
         """Test mutants are killed."""
-        source = self.SOURCE.read_text()
-        killed = []
-        survived = []
-        for original, mutant in self.MUTANTS:
-            self.assertIn(original, source, f"mutant anchor missing: {original!r}")
-            self.SOURCE.write_text(source.replace(original, mutant, 1))
-            try:
-                proc = subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "pytest",
-                        __file__,
-                        "-q",
-                        "-p",
-                        "no:cacheprovider",
-                        # Exclude the gate itself from the subprocess run:
-                        # without this, the subprocess re-runs this very
-                        # test, stacking one more mutant per nesting level
-                        # (cycle-125's 22-site anchor fanned out to 184
-                        # processes). -k is used instead of --deselect
-                        # because __file__ is absolute under unittest
-                        # discovery while pytest normalizes node IDs to
-                        # relative paths, so an absolute --deselect never
-                        # matches. The kill verdict must come from the
-                        # audit tests alone.
-                        "-k",
-                        "not TestMutationGate",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    cwd=_REPO_ROOT,
-                    check=False,
-                )
-            finally:
-                self.SOURCE.write_text(source)
-                # Invalidate the bytecode cache: a same-size mutant can
-                # leave a .pyc whose (mtime, size) still validates
-                # against the reverted source, poisoning later imports
-                # with mutant bytecode (see the cycle-135 gate fix).
-                for _pyc in self.SOURCE.parent.glob("__pycache__/boundary_audit.*.pyc"):
-                    _pyc.unlink(missing_ok=True)
-            if proc.returncode != 0:
-                killed.append(mutant)
-            else:
-                survived.append(mutant)
-        self.assertEqual(survived, [], f"surviving mutants: {survived}")
-        self.assertEqual(len(killed), len(self.MUTANTS))
+        import tempfile
+
+        from tests._mutation_gate import MutantSpec, file_child_argv, run_mutation_gate
+
+        specs = [
+            MutantSpec(
+                name=f"m{i + 1}",
+                source=self.SOURCE,
+                anchor=original,
+                replacement=mutant,
+                audit_tests=self.AUDIT_TESTS[f"m{i + 1}"],
+            )
+            for i, (original, mutant) in enumerate(self.MUTANTS)
+        ]
+        # The child excludes the gate itself via -k (never
+        # --deselect with an absolute path — see
+        # tests/_mutation_gate.py for the incident history).
+        argv = file_child_argv(__file__, "TestMutationGate")
+        with tempfile.TemporaryDirectory(prefix="mpl_gate134_") as tmp:
+            result = run_mutation_gate(
+                specs,
+                argv_for=lambda spec: argv,
+                timeout=900,
+                cwd=_REPO_ROOT,
+                junit_dir=Path(tmp),
+            )
+        self.assertTrue(result.passed, result.summary())
 
 
 if __name__ == "__main__":

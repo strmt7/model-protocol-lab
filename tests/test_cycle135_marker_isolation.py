@@ -487,59 +487,74 @@ class MarkerIsolationMutationGateTests(unittest.TestCase):
         ),
     }
 
+    # Fast, targeted test subset per mutant (keeps the gate under a
+    # minute); each subset must fail on its mutant and pass on clean.
+    _BASE = "tests/test_cycle135_marker_isolation.py"
+    TARGETS = {
+        "m1": f"{_BASE}::ProbeFormatTests::test_golden_matrix",
+        "m2": f"{_BASE}::CountControlTokensTests",
+        "m3": f"{_BASE}::InjectHostileTests::test_appends_to_last_user_message",
+        "m4": f"{_BASE}::CheckIsolationTests::test_smuggled_marker_not_isolated",
+    }
+
+    # W7-4 (RR-15): each mutant's registered audit set — the named
+    # tests execution proved kill it within its target subset
+    # (derivation in the W7 work area, audit_sets.json).
+    AUDIT_TESTS = {
+        "m1": ("ProbeFormatTests::test_golden_matrix",),
+        "m2": (
+            "CountControlTokensTests::test_accepts_any_container",
+            "CountControlTokensTests::test_counts_special_ids",
+            "CountControlTokensTests::test_empty_ids",
+            "CountControlTokensTests::test_empty_specials",
+        ),
+        "m3": ("InjectHostileTests::test_appends_to_last_user_message",),
+        "m4": ("CheckIsolationTests::test_smuggled_marker_not_isolated",),
+    }
+
     def test_mutants_killed(self):
         """Test mutants killed."""
-        import subprocess
         import sys
+        import tempfile
+
+        from tests._mutation_gate import MutantSpec, run_mutation_gate
 
         src = Path(CT.__file__)
-        original = src.read_text(encoding="utf-8")
-        killed = []
-        survived = []
-        # Fast, targeted test subset per mutant (keeps the gate under a
-        # minute); each subset must fail on its mutant and pass on clean.
-        base = "tests/test_cycle135_marker_isolation.py"
-        targets = {
-            "m1": f"{base}::ProbeFormatTests::test_golden_matrix",
-            "m2": f"{base}::CountControlTokensTests",
-            "m3": f"{base}::InjectHostileTests::test_appends_to_last_user_message",
-            "m4": f"{base}::CheckIsolationTests::test_smuggled_marker_not_isolated",
-        }
-        for name, (old, new) in self.MUTANTS.items():
-            self.assertIn(old, original, f"mutant {name} anchor missing")
-            src.write_text(original.replace(old, new, 1), encoding="utf-8")
-            try:
-                proc = subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "pytest",
-                        "-q",
-                        "-p",
-                        "no:cacheprovider",
-                        "-x",
-                        "--tb=no",
-                        targets[name],
-                    ],
-                    cwd=str(Path(__file__).resolve().parent.parent),
-                    capture_output=True,
-                    timeout=300,
-                    check=False,
-                )
-            finally:
-                src.write_text(original, encoding="utf-8")
-                # Invalidate the bytecode cache: a same-size mutant (e.g.
-                # the M4 sign flip) can leave a .pyc whose (mtime, size)
-                # still validates against the reverted source, poisoning
-                # later imports in this process run with mutant bytecode.
-                for pyc in src.parent.glob("__pycache__/control_tokens.*.pyc"):
-                    pyc.unlink(missing_ok=True)
-            if proc.returncode != 0:
-                killed.append(name)
-            else:
-                survived.append(name)
-        self.assertEqual(survived, [], f"mutants survived: {survived}")
-        self.assertEqual(sorted(killed), sorted(self.MUTANTS))
+        specs = [
+            MutantSpec(
+                name=name,
+                source=src,
+                anchor=old,
+                replacement=new,
+                audit_tests=self.AUDIT_TESTS[name],
+            )
+            for name, (old, new) in self.MUTANTS.items()
+        ]
+
+        def argv_for(spec):
+            if spec is None:
+                return None  # per-spec baselines (targets shape)
+            return [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "-p",
+                "no:cacheprovider",
+                "-x",
+                "--tb=no",
+                self.TARGETS[spec.name],
+            ]
+
+        with tempfile.TemporaryDirectory(prefix="mpl_gate135_") as tmp:
+            result = run_mutation_gate(
+                specs,
+                argv_for=argv_for,
+                timeout=300,
+                cwd=Path(__file__).resolve().parent.parent,
+                junit_dir=Path(tmp),
+            )
+        self.assertTrue(result.passed, result.summary())
 
 
 if __name__ == "__main__":

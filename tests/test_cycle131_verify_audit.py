@@ -892,57 +892,71 @@ class TestMutationGate(unittest.TestCase):
         ),
     ]
 
+    # W7-4 (RR-15): each mutant's registered audit set — the named
+    # tests execution proved kill it (derivation in the W7 work
+    # area, audit_sets.json).
+    AUDIT_TESTS = {
+        "m1": (
+            "TestOracle::test_oracle_agrees_with_select_winner",
+            "TestOracle::test_tie_abstains",
+            "TestValidArtifacts::test_ambiguous_artifact_verifies_ok",
+        ),
+        "m2": (
+            "TestCli::test_verify_accepts_results_json_directly",
+            "TestCli::test_verify_ok_exit_0",
+            "TestDefensiveBranches::test_missing_floor_section_is_unavailable",
+            "TestDefensiveBranches::test_missing_frontier_section_is_unavailable",
+            "TestDefensiveBranches::test_run_verify_in_process_ok",
+            "TestTamperDetection::test_mutated_frontier_detected",
+            "TestTamperDetection::test_mutated_held_out_floor_detected",
+            "TestValidArtifacts::test_ambiguous_artifact_verifies_ok",
+            "TestValidArtifacts::test_compatible_artifact_verifies_ok",
+            "TestValidArtifacts::test_held_out_failed_artifact_verifies_ok",
+            "TestValidArtifacts::test_no_candidate_artifact_verifies_ok",
+        ),
+        "m3": (
+            "TestCli::test_verify_accepts_results_json_directly",
+            "TestCli::test_verify_ok_exit_0",
+            "TestDefensiveBranches::test_held_out_abort_keeps_winner",
+            "TestDefensiveBranches::test_missing_floor_section_is_unavailable",
+            "TestDefensiveBranches::test_missing_frontier_section_is_unavailable",
+            "TestDefensiveBranches::test_run_verify_in_process_ok",
+            "TestTamperDetection::test_search_held_out_overlap_detected",
+            "TestValidArtifacts::test_compatible_artifact_verifies_ok",
+            "TestValidArtifacts::test_held_out_failed_artifact_verifies_ok",
+        ),
+        "m4": ("TestTamperDetection::test_overcounted_passes_do_not_create_winners",),
+    }
+
     def test_mutants_are_killed(self) -> None:
         """Test mutants are killed."""
-        source = self.SOURCE.read_text(encoding="utf-8")
-        killed = []
-        survived = []
-        for original, mutant in self.MUTANTS:
-            self.assertIn(original, source, f"mutant anchor missing: {original!r}")
-            self.SOURCE.write_text(source.replace(original, mutant, 1), encoding="utf-8")
-            try:
-                proc = subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "pytest",
-                        __file__,
-                        "-q",
-                        "-p",
-                        "no:cacheprovider",
-                        # Exclude the gate itself from the subprocess run:
-                        # without this, the subprocess re-runs this very
-                        # test, stacking one more mutant per nesting level
-                        # (cycle-125's 22-site anchor fanned out to 184
-                        # processes). -k is used instead of --deselect
-                        # because __file__ is absolute under unittest
-                        # discovery while pytest normalizes node IDs to
-                        # relative paths, so an absolute --deselect never
-                        # matches. The kill verdict must come from the
-                        # audit tests alone.
-                        "-k",
-                        "not TestMutationGate",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    cwd=_REPO_ROOT,
-                    timeout=600,
-                    check=False,
-                )
-            finally:
-                self.SOURCE.write_text(source, encoding="utf-8")
-                # Invalidate the bytecode cache: a same-size mutant can
-                # leave a .pyc whose (mtime, size) still validates
-                # against the reverted source, poisoning later imports
-                # with mutant bytecode (see the cycle-135 gate fix).
-                for _pyc in self.SOURCE.parent.glob("__pycache__/verify.*.pyc"):
-                    _pyc.unlink(missing_ok=True)
-            if proc.returncode != 0:
-                killed.append(mutant)
-            else:
-                survived.append(mutant)
-        self.assertEqual(survived, [], f"surviving mutants: {survived}")
-        self.assertEqual(len(killed), len(self.MUTANTS))
+        import tempfile
+
+        from tests._mutation_gate import MutantSpec, file_child_argv, run_mutation_gate
+
+        specs = [
+            MutantSpec(
+                name=f"m{i + 1}",
+                source=self.SOURCE,
+                anchor=original,
+                replacement=mutant,
+                audit_tests=self.AUDIT_TESTS[f"m{i + 1}"],
+            )
+            for i, (original, mutant) in enumerate(self.MUTANTS)
+        ]
+        # The child excludes the gate itself via -k (never
+        # --deselect with an absolute path — see
+        # tests/_mutation_gate.py for the incident history).
+        argv = file_child_argv(__file__, "TestMutationGate")
+        with tempfile.TemporaryDirectory(prefix="mpl_gate131_") as tmp:
+            result = run_mutation_gate(
+                specs,
+                argv_for=lambda spec: argv,
+                timeout=900,
+                cwd=_REPO_ROOT,
+                junit_dir=Path(tmp),
+            )
+        self.assertTrue(result.passed, result.summary())
 
 
 if __name__ == "__main__":

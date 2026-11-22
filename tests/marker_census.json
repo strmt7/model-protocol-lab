@@ -1,0 +1,356 @@
+{
+ "package_per_file": {
+  "model_protocol_lab/backends.py": {
+   "noqa": 16,
+   "nosec": 2,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/boundary_audit.py": {
+   "noqa": 1,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/cacheprofile.py": {
+   "noqa": 0,
+   "nosec": 3,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/choiceaudit.py": {
+   "noqa": 0,
+   "nosec": 2,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/cli.py": {
+   "noqa": 60,
+   "nosec": 3,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/collision.py": {
+   "noqa": 5,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/compatibilityform.py": {
+   "noqa": 1,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/confidence.py": {
+   "noqa": 0,
+   "nosec": 1,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/confusableskeleton.py": {
+   "noqa": 1,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/core.py": {
+   "noqa": 8,
+   "nosec": 1,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/debug.py": {
+   "noqa": 3,
+   "nosec": 1,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/deliforge.py": {
+   "noqa": 7,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/determinism.py": {
+   "noqa": 2,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/diffbackends.py": {
+   "noqa": 3,
+   "nosec": 0,
+   "pragma_no_cover": 1,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/diffreports_forms.py": {
+   "noqa": 1,
+   "nosec": 5,
+   "pragma_no_cover": 1,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/diffreports_probes.py": {
+   "noqa": 0,
+   "nosec": 5,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/diffreports_runlevel.py": {
+   "noqa": 3,
+   "nosec": 2,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/diffreports_text.py": {
+   "noqa": 1,
+   "nosec": 4,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/doctor.py": {
+   "noqa": 20,
+   "nosec": 2,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/enumerationconvention.py": {
+   "noqa": 1,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/experiments_core.py": {
+   "noqa": 11,
+   "nosec": 1,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/experiments_forms.py": {
+   "noqa": 11,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/experiments_probes.py": {
+   "noqa": 15,
+   "nosec": 4,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/experiments_runlevel.py": {
+   "noqa": 20,
+   "nosec": 1,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/experiments_text.py": {
+   "noqa": 7,
+   "nosec": 22,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/fixturefuzz.py": {
+   "noqa": 1,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/healing.py": {
+   "noqa": 4,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/invisiblechars.py": {
+   "noqa": 1,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/mcp_server.py": {
+   "noqa": 1,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/multiturn.py": {
+   "noqa": 0,
+   "nosec": 3,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/needle.py": {
+   "noqa": 0,
+   "nosec": 2,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/numform.py": {
+   "noqa": 3,
+   "nosec": 0,
+   "pragma_no_cover": 1,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/perturbation.py": {
+   "noqa": 1,
+   "nosec": 1,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/position.py": {
+   "noqa": 1,
+   "nosec": 1,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/precision.py": {
+   "noqa": 0,
+   "nosec": 2,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/prunesweep.py": {
+   "noqa": 1,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/recordnotation.py": {
+   "noqa": 2,
+   "nosec": 4,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/render_worker.py": {
+   "noqa": 6,
+   "nosec": 2,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/scoring.py": {
+   "noqa": 4,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/servingbackends.py": {
+   "noqa": 10,
+   "nosec": 1,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 1
+  },
+  "model_protocol_lab/surfacenoise.py": {
+   "noqa": 11,
+   "nosec": 1,
+   "pragma_no_cover": 1,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/template_audit.py": {
+   "noqa": 2,
+   "nosec": 1,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/typographicemphasis.py": {
+   "noqa": 1,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab/verify.py": {
+   "noqa": 1,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  }
+ },
+ "totals": {
+  "examples": {
+   "noqa": 27,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "fuzz": {
+   "noqa": 2,
+   "nosec": 0,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
+  "model_protocol_lab": {
+   "noqa": 247,
+   "nosec": 77,
+   "pragma_no_cover": 4,
+   "skipcq": 0,
+   "type_ignore": 1
+  },
+  "repo_total": {
+   "noqa": 682,
+   "nosec": 87,
+   "pragma_no_cover": 18,
+   "skipcq": 0,
+   "type_ignore": 348
+  },
+  "tests": {
+   "noqa": 401,
+   "nosec": 5,
+   "pragma_no_cover": 14,
+   "skipcq": 0,
+   "type_ignore": 346
+  },
+  "tools": {
+   "noqa": 5,
+   "nosec": 5,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 1
+  }
+ }
+}

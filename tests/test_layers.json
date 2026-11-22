@@ -285,7 +285,9 @@
       "test_w5_rebuild_check.py",
       "test_w5_sdist_scope.py",
       "test_w7_facade_surface.py",
+      "test_w7_marker_census.py",
       "test_w7_module_sizes.py",
+      "test_w7_mutation_gate_verdict.py",
       "test_w7_registry.py",
       "test_wave14_repairs.py",
       "test_workflows.py"
@@ -448,8 +450,8 @@
     ]
   },
   "module_counts": {
-    "total": 285,
-    "base": 272,
+    "total": 287,
+    "base": 274,
     "hf": 12,
     "posix": 1
   }

@@ -251,56 +251,61 @@ class TestMutationGate(unittest.TestCase):
         ("return (y_max - margin) * height // denom_y", "return margin * height // denom_y"),
     ]
 
+    # W7-4 (RR-15): each mutant's registered audit set — the named
+    # tests execution proved kill it (mutant applied in a disposable
+    # copy, the gate's own child command run, JUnit failures
+    # recorded; derivation in the W7 work area, audit_sets.json).
+    AUDIT_TESTS = {
+        "m1": (
+            "TestMarginChartGeometry::test_aria_covers_every_span",
+            "TestMarginChartGeometry::test_segment_paths_hand_derived",
+            "TestMarginTrajectorySemantics::test_constant_margin_collapses_change_points",
+            "TestMarginTrajectorySemantics::test_hand_derived_trajectory",
+        ),
+        "m2": (
+            "TestMarginChartGeometry::test_segment_paths_hand_derived",
+            "TestMarginTrajectorySemantics::test_hand_derived_trajectory",
+        ),
+        "m3": (
+            "TestMarginChartGeometry::test_aria_covers_every_span",
+            "TestMarginChartGeometry::test_hostile_candidate_name_escaped",
+            "TestMarginChartGeometry::test_leader_colors_match_frontier_palette_order",
+            "TestMarginChartGeometry::test_segment_paths_hand_derived",
+            "TestMarginTrajectorySemantics::test_constant_margin_collapses_change_points",
+            "TestMarginTrajectorySemantics::test_hand_derived_trajectory",
+            "TestMarginTrajectorySemantics::test_three_way_tie_collapses_to_single_point",
+        ),
+        "m4": ("TestMarginChartGeometry::test_segment_paths_hand_derived",),
+    }
+
     def test_mutants_are_killed(self) -> None:
         """Test mutants are killed."""
-        import subprocess
-        import sys
+        import tempfile
 
-        source = self.SOURCE.read_text()
-        killed = []
-        survived = []
-        for original, mutant in self.MUTANTS:
-            self.assertIn(original, source, f"mutant anchor missing: {original!r}")
-            self.SOURCE.write_text(source.replace(original, mutant, 1))
-            try:
-                proc = subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "pytest",
-                        __file__,
-                        "-q",
-                        "-p",
-                        "no:cacheprovider",
-                        # Exclude the gate itself from the subprocess run:
-                        # without this, the subprocess re-runs this very
-                        # test, stacking one more mutant per nesting level
-                        # (cycle-125's 22-site anchor fanned out to 184
-                        # processes). -k is used instead of --deselect
-                        # because __file__ is absolute under unittest
-                        # discovery while pytest normalizes node IDs to
-                        # relative paths, so an absolute --deselect never
-                        # matches. The kill verdict must come from the
-                        # audit tests alone.
-                        "-k",
-                        "not TestMutationGate",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    cwd=_REPO_ROOT,
-                    check=False,
-                )
-            finally:
-                self.SOURCE.write_text(source)
-                # Invalidate the bytecode cache: a same-size mutant can
-                # leave a .pyc whose (mtime, size) still validates
-                # against the reverted source, poisoning later imports
-                # with mutant bytecode (see the cycle-135 gate fix).
-                for _pyc in self.SOURCE.parent.glob("__pycache__/reporting_core.*.pyc"):
-                    _pyc.unlink(missing_ok=True)
-            if proc.returncode != 0:
-                killed.append(mutant)
-            else:
-                survived.append(mutant)
-        self.assertEqual(survived, [], f"surviving mutants: {survived}")
-        self.assertEqual(len(killed), len(self.MUTANTS))
+        from tests._mutation_gate import MutantSpec, file_child_argv, run_mutation_gate
+
+        specs = [
+            MutantSpec(
+                name=f"m{i + 1}",
+                source=self.SOURCE,
+                anchor=original,
+                replacement=mutant,
+                audit_tests=self.AUDIT_TESTS[f"m{i + 1}"],
+            )
+            for i, (original, mutant) in enumerate(self.MUTANTS)
+        ]
+        # The child excludes the gate itself via -k (never
+        # --deselect with an absolute path: pytest normalizes node
+        # IDs to relative paths, so an absolute deselect silently
+        # matches nothing and the gate re-enters itself — the
+        # cycle-125 184-process incident).
+        argv = file_child_argv(__file__, "TestMutationGate")
+        with tempfile.TemporaryDirectory(prefix="mpl_gate124_") as tmp:
+            result = run_mutation_gate(
+                specs,
+                argv_for=lambda spec: argv,
+                timeout=900,
+                cwd=_REPO_ROOT,
+                junit_dir=Path(tmp),
+            )
+        self.assertTrue(result.passed, result.summary())

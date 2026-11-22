@@ -311,57 +311,69 @@ class FirewallMutationGateTests(unittest.TestCase):
         ),
     }
 
+    # Targeted test per mutant; each must fail on its mutant and
+    # pass on clean.
+    _BASE = "tests/test_cycle136_template_firewall.py"
+    TARGETS = {
+        "m1": f"{_BASE}::SstiCorpusDeniedTests::test_dunder_class_chain",
+        "m2": f"{_BASE}::SstiCorpusDeniedTests::test_attr_filter",
+        "m3": f"{_BASE}::SstiCorpusDeniedTests::test_lipsum_globals",
+        "m4": f"{_BASE}::SstiCorpusDeniedTests::test_unbounded_range_literal",
+    }
+
+    # W7-4 (RR-15): each mutant's registered audit set — the named
+    # test execution proved kills it (derivation in the W7 work
+    # area, audit_sets.json).
+    AUDIT_TESTS = {
+        "m1": ("SstiCorpusDeniedTests::test_dunder_class_chain",),
+        "m2": ("SstiCorpusDeniedTests::test_attr_filter",),
+        "m3": ("SstiCorpusDeniedTests::test_lipsum_globals",),
+        "m4": ("SstiCorpusDeniedTests::test_unbounded_range_literal",),
+    }
+
     def test_mutants_killed(self):
         """Test mutants killed."""
-        import subprocess
         import sys
+        import tempfile
+
+        from tests._mutation_gate import MutantSpec, run_mutation_gate
 
         src = Path(TA.__file__)
-        original = src.read_text(encoding="utf-8")
-        base = "tests/test_cycle136_template_firewall.py"
-        targets = {
-            "m1": f"{base}::SstiCorpusDeniedTests::test_dunder_class_chain",
-            "m2": f"{base}::SstiCorpusDeniedTests::test_attr_filter",
-            "m3": f"{base}::SstiCorpusDeniedTests::test_lipsum_globals",
-            "m4": f"{base}::SstiCorpusDeniedTests::test_unbounded_range_literal",
-        }
-        killed = []
-        survived = []
-        for name, (old, new) in self.MUTANTS.items():
-            self.assertIn(old, original, f"mutant {name} anchor missing")
-            src.write_text(original.replace(old, new, 1), encoding="utf-8")
-            try:
-                proc = subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "pytest",
-                        "-q",
-                        "-p",
-                        "no:cacheprovider",
-                        "-x",
-                        "--tb=no",
-                        targets[name],
-                    ],
-                    cwd=str(Path(__file__).resolve().parent.parent),
-                    capture_output=True,
-                    timeout=300,
-                    check=False,
-                )
-            finally:
-                src.write_text(original, encoding="utf-8")
-                # Invalidate the bytecode cache: a same-size mutant can
-                # leave a .pyc whose (mtime, size) still validates against
-                # the reverted source, poisoning later imports with mutant
-                # bytecode (see the cycle-135 gate fix).
-                for pyc in src.parent.glob("__pycache__/template_audit.*.pyc"):
-                    pyc.unlink(missing_ok=True)
-            if proc.returncode != 0:
-                killed.append(name)
-            else:
-                survived.append(name)
-        self.assertEqual(survived, [], f"mutants survived: {survived}")
-        self.assertEqual(sorted(killed), sorted(self.MUTANTS))
+        specs = [
+            MutantSpec(
+                name=name,
+                source=src,
+                anchor=old,
+                replacement=new,
+                audit_tests=self.AUDIT_TESTS[name],
+            )
+            for name, (old, new) in self.MUTANTS.items()
+        ]
+
+        def argv_for(spec):
+            if spec is None:
+                return None  # per-spec baselines (targets shape)
+            return [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "-p",
+                "no:cacheprovider",
+                "-x",
+                "--tb=no",
+                self.TARGETS[spec.name],
+            ]
+
+        with tempfile.TemporaryDirectory(prefix="mpl_gate136_") as tmp:
+            result = run_mutation_gate(
+                specs,
+                argv_for=argv_for,
+                timeout=300,
+                cwd=Path(__file__).resolve().parent.parent,
+                junit_dir=Path(tmp),
+            )
+        self.assertTrue(result.passed, result.summary())
 
 
 if __name__ == "__main__":

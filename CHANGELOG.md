@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (external-audit W7 — mutation-gate verdicts and marker census, RR-15/RR-17)
+
+- **Mutation gates now prove their kills (RR-15).** The six
+  in-place mutation gates (cycles 124/125/131/134/135/136) used
+  to count any non-zero child exit — including a collection
+  error that ran zero tests — as a kill. They now share one
+  verdict implementation (`tests/_mutation_gate.py`): a passing
+  unmutated baseline runs first and voids the gate if it fails;
+  each of the 24 mutants carries a registered audit set (the
+  named tests execution proved kill it); a kill requires a clean
+  test-failure run (exit 1, parsed JUnit outcomes, no errors)
+  with a named audit test among the failures; timeouts,
+  collection/usage errors, disjoint failures and missing audit
+  tests are inconclusive and fail the gate without counting as
+  kills. Restores are hash-verified. The verdict itself is
+  pinned by a fake-runner test that includes the audit's exit-2
+  negative control.
+- **Scanner exclusions are mechanically enforced (RR-17).** A
+  new census gate recounts every exclusion marker (noqa, nosec,
+  type: ignore, pragma: no cover) in the five source trees and
+  compares against a pinned census (`tests/marker_census.json`,
+  per-tree totals plus a per-file map for the package): any
+  addition, removal, or redistribution inside the package fails
+  the suite until the census is regenerated in the same commit.
+  The withdrawn DeepSource marker class is pinned at zero
+  everywhere.
+
 ### Removed (external-audit W7 — tracked generated files, RR-16)
 
 - **The 107 tracked generated files are gone.** The built
