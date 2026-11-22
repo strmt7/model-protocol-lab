@@ -288,6 +288,7 @@
       "test_w7_marker_census.py",
       "test_w7_module_sizes.py",
       "test_w7_mutation_gate_verdict.py",
+      "test_w7_r4_gate.py",
       "test_w7_registry.py",
       "test_wave14_repairs.py",
       "test_workflows.py"
@@ -450,8 +451,8 @@
     ]
   },
   "module_counts": {
-    "total": 287,
-    "base": 274,
+    "total": 288,
+    "base": 275,
     "hf": 12,
     "posix": 1
   }

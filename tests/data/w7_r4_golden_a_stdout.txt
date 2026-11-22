@@ -1,0 +1,969 @@
+{
+  "ablation": {
+    "available": "neither",
+    "changed": false
+  },
+  "aliasing": {
+    "available": "neither",
+    "changed": false
+  },
+  "answer_collision": {
+    "available": "both",
+    "candidates_added": [],
+    "candidates_removed": [],
+    "changed": false,
+    "colliding_added": [],
+    "colliding_removed": [],
+    "protocol_drift": false,
+    "rate_drift": [],
+    "uniform_changed": false
+  },
+  "batch_invariance": {
+    "available": "both",
+    "changed": false,
+    "diverged_added": [],
+    "diverged_removed": [],
+    "divergence_rate_changed": false,
+    "prompts_added": [],
+    "prompts_removed": [],
+    "verdict_changed": false
+  },
+  "boundary_audit": {
+    "available": "both",
+    "changed": false,
+    "family_drift": [],
+    "overall_rate": {
+      "changed": false,
+      "new": 0.0,
+      "old": 0.0
+    }
+  },
+  "budget": {
+    "available": "neither",
+    "changed": false
+  },
+  "cache_profile": {
+    "available": "both",
+    "block_drift": [],
+    "candidates_added": [],
+    "candidates_removed": [],
+    "changed": false,
+    "excluded_added": [],
+    "excluded_removed": [],
+    "potential_drift": [],
+    "token_drift": []
+  },
+  "candidate_verdicts": [],
+  "canonical_form": {
+    "available": "neither",
+    "changed": false
+  },
+  "choice_audit": {
+    "available": "neither",
+    "changed": false
+  },
+  "compatibility_form": {
+    "available": "neither",
+    "changed": false
+  },
+  "confidence": {
+    "available": "neither",
+    "changed": false
+  },
+  "confidentiality": {
+    "available": "both",
+    "candidates_added": [],
+    "candidates_removed": [],
+    "changed": false,
+    "gap_drift": [],
+    "positive_added": [],
+    "positive_removed": [],
+    "protocol_drift": false,
+    "uniform_changed": false
+  },
+  "config_drift": [],
+  "confusable_skeleton": {
+    "available": "neither",
+    "changed": false
+  },
+  "contamination": {
+    "available": "both",
+    "changed": false,
+    "pairs_added": [],
+    "pairs_removed": [],
+    "tier_changes": [],
+    "worst_tier": {
+      "changed": false,
+      "new": "clean",
+      "old": "clean"
+    }
+  },
+  "dateline": {
+    "available": "neither",
+    "changed": false
+  },
+  "decision": {
+    "changed": false,
+    "new": "compatible_on_fixture_set",
+    "old": "compatible_on_fixture_set"
+  },
+  "deliforge": {
+    "available": "both",
+    "candidates_added": [],
+    "candidates_removed": [],
+    "changed": false,
+    "excluded_added": [],
+    "excluded_removed": [],
+    "gap_drift": [],
+    "top_gap_drift": []
+  },
+  "density": {
+    "available": "neither",
+    "changed": false
+  },
+  "distraction": {
+    "available": "neither",
+    "changed": false
+  },
+  "enumeration_convention": {
+    "available": "neither",
+    "changed": false
+  },
+  "evidence": {
+    "new": false,
+    "old": false,
+    "skipped_observations": {
+      "new": 0,
+      "old": 0
+    }
+  },
+  "faketurn": {
+    "available": "both",
+    "candidates_added": [],
+    "candidates_removed": [],
+    "cell_drift": [],
+    "changed": false,
+    "excluded_added": [],
+    "excluded_removed": [],
+    "gap_drift": [],
+    "source_drift": [],
+    "top_rate_drift": []
+  },
+  "fewshot": {
+    "arm_drift": [],
+    "available": "both",
+    "candidates_added": [],
+    "candidates_removed": [],
+    "changed": false,
+    "excluded_added": [],
+    "excluded_removed": [],
+    "gain_drift": [],
+    "sensitivity_drift": []
+  },
+  "field_order": {
+    "available": "neither",
+    "changed": false
+  },
+  "fixture_diffs": [],
+  "fixture_diffs_include_unchanged": false,
+  "frontier": {
+    "available": "both",
+    "budget_robust": {
+      "changed": false,
+      "new": false,
+      "old": false
+    },
+    "changed": false,
+    "decision_flips": [],
+    "flip_attribution": {
+      "changed": false,
+      "new": [
+        {
+          "crossings": [
+            {
+              "candidate": "llama3",
+              "fixture": "search-copy-blue",
+              "min_budget": 5
+            }
+          ],
+          "span": [
+            1,
+            5
+          ]
+        }
+      ],
+      "old": [
+        {
+          "crossings": [
+            {
+              "candidate": "llama3",
+              "fixture": "search-copy-blue",
+              "min_budget": 5
+            }
+          ],
+          "span": [
+            1,
+            5
+          ]
+        }
+      ]
+    },
+    "leader_flips": [],
+    "max_new_tokens": {
+      "changed": false,
+      "new": 16,
+      "old": 16
+    },
+    "safe_budget_floor": {
+      "changed": false,
+      "new": 6,
+      "old": 6
+    },
+    "winner_flips": []
+  },
+  "held_out_floor": {
+    "available": "both",
+    "budget_robust": {
+      "changed": false,
+      "new": false,
+      "old": false
+    },
+    "changed": false,
+    "safe_budget_floor": {
+      "changed": false,
+      "new": 6,
+      "old": 6
+    }
+  },
+  "hierarchy": {
+    "available": "both",
+    "candidate_drift": [],
+    "candidates_added": [],
+    "candidates_removed": [],
+    "changed": false,
+    "condition_changed": {
+      "privilege_first": {
+        "changed": false,
+        "new_decision": "ambiguous",
+        "new_winner": null,
+        "old_decision": "ambiguous",
+        "old_winner": null
+      },
+      "privilege_last": {
+        "changed": false,
+        "new_decision": "no_candidate",
+        "new_winner": null,
+        "old_decision": "no_candidate",
+        "old_winner": null
+      }
+    },
+    "flips_changed": false,
+    "group_rates": {
+      "changed": false,
+      "new": {
+        "dedicated": null,
+        "folded": null,
+        "unknown": 0.4
+      },
+      "old": {
+        "dedicated": null,
+        "folded": null,
+        "unknown": 0.4
+      }
+    },
+    "positions_added": [],
+    "positions_removed": []
+  },
+  "history_frame": {
+    "available": "neither",
+    "changed": false
+  },
+  "instruction_distance": {
+    "available": "neither",
+    "changed": false
+  },
+  "invisible_chars": {
+    "available": "neither",
+    "changed": false
+  },
+  "leading": {
+    "available": "neither",
+    "changed": false
+  },
+  "multiturn": {
+    "available": "neither",
+    "changed": false
+  },
+  "needle": {
+    "available": "neither",
+    "changed": false
+  },
+  "negation": {
+    "available": "neither",
+    "changed": false
+  },
+  "new": {
+    "source": "old.json"
+  },
+  "numform": {
+    "available": "neither",
+    "changed": false
+  },
+  "old": {
+    "source": "old.json"
+  },
+  "perturbation": {
+    "available": "both",
+    "changed": false,
+    "operators_changed": false,
+    "stability": {
+      "changed": false,
+      "new": {
+        "decision_retained": 0,
+        "n_evaluable": 4,
+        "winner_retained": 2
+      },
+      "old": {
+        "decision_retained": 0,
+        "n_evaluable": 4,
+        "winner_retained": 2
+      }
+    },
+    "variant_drift": [],
+    "variants_added": [],
+    "variants_removed": []
+  },
+  "placement": {
+    "available": "neither",
+    "changed": false
+  },
+  "portfolio": {
+    "available": "both",
+    "changed": false,
+    "cover_drift": [],
+    "fixture_winner_drift": [],
+    "members_added": [],
+    "members_removed": [],
+    "rates": {
+      "changed": false,
+      "new": {
+        "gap": 0.0,
+        "oracle_pass_rate": 1.0,
+        "winner_pass_rate": 1.0
+      },
+      "old": {
+        "gap": 0.0,
+        "oracle_pass_rate": 1.0,
+        "winner_pass_rate": 1.0
+      }
+    },
+    "solvable_added": [],
+    "solvable_removed": []
+  },
+  "position": {
+    "available": "both",
+    "candidate_drift": [],
+    "candidates_added": [],
+    "candidates_removed": [],
+    "changed": false,
+    "condition_changed": {
+      "correct_first": {
+        "changed": false,
+        "new_decision": "ambiguous",
+        "new_winner": null,
+        "old_decision": "ambiguous",
+        "old_winner": null
+      },
+      "correct_last": {
+        "changed": false,
+        "new_decision": "selected",
+        "new_winner": "llama3/no-bos",
+        "old_decision": "selected",
+        "old_winner": "llama3/no-bos"
+      },
+      "correct_middle": {
+        "changed": false,
+        "new_decision": "no_candidate",
+        "new_winner": null,
+        "old_decision": "no_candidate",
+        "old_winner": null
+      }
+    },
+    "conditions_added": [],
+    "conditions_removed": [],
+    "flips_changed": false,
+    "index_drift": [],
+    "mean_index": {
+      "changed": false,
+      "new": 0.6,
+      "old": 0.6
+    }
+  },
+  "precision": {
+    "available": "neither",
+    "changed": false
+  },
+  "prefill": {
+    "available": "both",
+    "candidate_drift": [],
+    "candidates_added": [],
+    "candidates_removed": [],
+    "changed": false,
+    "condition_changed": {
+      "answer-colon": {
+        "changed": false,
+        "new_decision": "selected",
+        "new_winner": "llama3",
+        "old_decision": "selected",
+        "old_winner": "llama3"
+      },
+      "final-answer": {
+        "changed": false,
+        "new_decision": "selected",
+        "new_winner": "llama3",
+        "old_decision": "selected",
+        "old_winner": "llama3"
+      },
+      "result-colon": {
+        "changed": false,
+        "new_decision": "selected",
+        "new_winner": "llama3",
+        "old_decision": "selected",
+        "old_winner": "llama3"
+      }
+    },
+    "flips_changed": false,
+    "prefills_added": [],
+    "prefills_removed": [],
+    "think_rates": {
+      "changed": false,
+      "new": {
+        "plain": 0.8,
+        "think_channel": null
+      },
+      "old": {
+        "plain": 0.8,
+        "think_channel": null
+      }
+    }
+  },
+  "prune_sweep": {
+    "available": "neither",
+    "changed": false
+  },
+  "record_notation": {
+    "available": "neither",
+    "changed": false
+  },
+  "refusals": {
+    "available": "both",
+    "candidates_added": [],
+    "candidates_removed": [],
+    "changed": false,
+    "excluded_added": [],
+    "excluded_removed": [],
+    "hits_added": [],
+    "hits_removed": [],
+    "mismatch_changed": false,
+    "protocol_drift": false,
+    "rate_drift": []
+  },
+  "repetition": {
+    "available": "neither",
+    "changed": false
+  },
+  "rotation": {
+    "available": "neither",
+    "changed": false
+  },
+  "scorerlens": {
+    "available": "neither",
+    "changed": false
+  },
+  "section_states": {
+    "ablation": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "aliasing": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "answer_collision": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "batch_invariance": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "boundary_audit": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "budget": {
+      "state": "unvalidated",
+      "unvalidated_drift": false
+    },
+    "cache_profile": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "canonical_form": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "choice_audit": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "compatibility_form": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "confidence": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "confidentiality": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "confusable_skeleton": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "contamination": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "dateline": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "deliforge": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "density": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "distraction": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "enumeration_convention": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "faketurn": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "fewshot": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "field_order": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "frontier": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "held_out_floor": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "hierarchy": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "history_frame": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "instruction_distance": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "invisible_chars": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "leading": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "multiturn": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "needle": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "negation": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "numform": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "perturbation": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "placement": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "portfolio": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "position": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "precision": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "prefill": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "prune_sweep": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "record_notation": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "refusals": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "repetition": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "rotation": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "scorerlens": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "selection_robustness": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "serving_backends": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "stop_cause": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "structured": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "synthhistory": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "template_robustness": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "token_healing": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "toolcall": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "transfer": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "typographic_emphasis": {
+      "state": "absent",
+      "unvalidated_drift": false
+    },
+    "verbosity": {
+      "state": "compared",
+      "unvalidated_drift": false
+    },
+    "ws_canonical": {
+      "state": "compared",
+      "unvalidated_drift": false
+    }
+  },
+  "selection_robustness": {
+    "available": "both",
+    "changed": false,
+    "flips_changed": false,
+    "verdict_drift": []
+  },
+  "serving_backends": {
+    "available": "neither",
+    "changed": false
+  },
+  "stop_cause": {
+    "aggregate_drift": [],
+    "available": "both",
+    "candidates_added": [],
+    "candidates_removed": [],
+    "cause_drift": [],
+    "changed": false
+  },
+  "structured": {
+    "available": "both",
+    "candidates_added": [],
+    "candidates_removed": [],
+    "changed": false,
+    "gap_drift": [],
+    "rate_drift": [],
+    "weakest_added": [],
+    "weakest_removed": []
+  },
+  "summary": {
+    "ablation_asymmetric": false,
+    "ablation_changed": false,
+    "aliasing_asymmetric": false,
+    "aliasing_changed": false,
+    "answer_collision_asymmetric": false,
+    "answer_collision_changed": false,
+    "batch_invariance_asymmetric": false,
+    "batch_invariance_changed": false,
+    "boundary_audit_asymmetric": false,
+    "boundary_audit_changed": false,
+    "budget_asymmetric": false,
+    "budget_changed": false,
+    "cache_profile_asymmetric": false,
+    "cache_profile_changed": false,
+    "candidates_changed_status": 0,
+    "canonical_form_asymmetric": false,
+    "canonical_form_changed": false,
+    "choice_audit_asymmetric": false,
+    "choice_audit_changed": false,
+    "compatibility_form_asymmetric": false,
+    "compatibility_form_changed": false,
+    "confidence_asymmetric": false,
+    "confidence_changed": false,
+    "confidentiality_asymmetric": false,
+    "confidentiality_changed": false,
+    "config_drift_warnings": 0,
+    "confusable_skeleton_asymmetric": false,
+    "confusable_skeleton_changed": false,
+    "contamination_asymmetric": false,
+    "contamination_changed": false,
+    "dateline_asymmetric": false,
+    "dateline_changed": false,
+    "decision_changed": false,
+    "deliforge_asymmetric": false,
+    "deliforge_changed": false,
+    "density_asymmetric": false,
+    "density_changed": false,
+    "distraction_asymmetric": false,
+    "distraction_changed": false,
+    "enumeration_convention_asymmetric": false,
+    "enumeration_convention_changed": false,
+    "evidence_asymmetric": false,
+    "faketurn_asymmetric": false,
+    "faketurn_changed": false,
+    "fewshot_asymmetric": false,
+    "fewshot_changed": false,
+    "field_order_asymmetric": false,
+    "field_order_changed": false,
+    "fixtures_flipped": 0,
+    "frontier_asymmetric": false,
+    "frontier_changed": false,
+    "healing_asymmetric": false,
+    "healing_changed": false,
+    "held_out_floor_asymmetric": false,
+    "held_out_floor_changed": false,
+    "hierarchy_asymmetric": false,
+    "hierarchy_changed": false,
+    "history_frame_asymmetric": false,
+    "history_frame_changed": false,
+    "identical": true,
+    "instruction_distance_asymmetric": false,
+    "instruction_distance_changed": false,
+    "invisible_chars_asymmetric": false,
+    "invisible_chars_changed": false,
+    "leading_asymmetric": false,
+    "leading_changed": false,
+    "multiturn_asymmetric": false,
+    "multiturn_changed": false,
+    "needle_asymmetric": false,
+    "needle_changed": false,
+    "negation_asymmetric": false,
+    "negation_changed": false,
+    "numform_asymmetric": false,
+    "numform_changed": false,
+    "perturbation_asymmetric": false,
+    "perturbation_changed": false,
+    "placement_asymmetric": false,
+    "placement_changed": false,
+    "portfolio_asymmetric": false,
+    "portfolio_changed": false,
+    "position_asymmetric": false,
+    "position_changed": false,
+    "precision_asymmetric": false,
+    "precision_changed": false,
+    "prefill_asymmetric": false,
+    "prefill_changed": false,
+    "prune_sweep_asymmetric": false,
+    "prune_sweep_changed": false,
+    "record_notation_asymmetric": false,
+    "record_notation_changed": false,
+    "refusals_asymmetric": false,
+    "refusals_changed": false,
+    "repetition_asymmetric": false,
+    "repetition_changed": false,
+    "rotation_asymmetric": false,
+    "rotation_changed": false,
+    "scorerlens_asymmetric": false,
+    "scorerlens_changed": false,
+    "selection_robustness_asymmetric": false,
+    "selection_robustness_changed": false,
+    "serving_backends_asymmetric": false,
+    "serving_backends_changed": false,
+    "stop_cause_asymmetric": false,
+    "stop_cause_changed": false,
+    "structured_asymmetric": false,
+    "structured_changed": false,
+    "synthhistory_asymmetric": false,
+    "synthhistory_changed": false,
+    "template_robustness_asymmetric": false,
+    "template_robustness_changed": false,
+    "toolcall_asymmetric": false,
+    "toolcall_changed": false,
+    "transfer_asymmetric": false,
+    "transfer_changed": false,
+    "typographic_emphasis_asymmetric": false,
+    "typographic_emphasis_changed": false,
+    "unvalidated_drift_sections": [],
+    "verbosity_asymmetric": false,
+    "verbosity_changed": false,
+    "winner_changed": false,
+    "ws_canonical_asymmetric": false,
+    "ws_canonical_changed": false
+  },
+  "synthhistory": {
+    "available": "both",
+    "candidates_added": [],
+    "candidates_removed": [],
+    "changed": false,
+    "condition_changed": {
+      "history_2": {
+        "changed": false,
+        "new_decision": "selected",
+        "new_winner": "llama3",
+        "old_decision": "selected",
+        "old_winner": "llama3"
+      },
+      "history_6": {
+        "changed": false,
+        "new_decision": "no_candidate",
+        "new_winner": null,
+        "old_decision": "no_candidate",
+        "old_winner": null
+      }
+    },
+    "conditions_added": [],
+    "conditions_removed": [],
+    "flips_changed": false,
+    "group_rates": {
+      "changed": false,
+      "new": {
+        "explicit": 0.1,
+        "loose": null,
+        "unknown": null
+      },
+      "old": {
+        "explicit": 0.1,
+        "loose": null,
+        "unknown": null
+      }
+    },
+    "pass_rate_drift": []
+  },
+  "template_robustness": {
+    "available": "neither",
+    "changed": false
+  },
+  "token_healing": {
+    "available": "neither",
+    "changed": false
+  },
+  "tool": "diff-reports",
+  "toolcall": {
+    "args_drift": [],
+    "available": "both",
+    "candidates_added": [],
+    "candidates_removed": [],
+    "changed": false,
+    "excluded_added": [],
+    "excluded_removed": [],
+    "relevance_drift": [],
+    "selection_drift": []
+  },
+  "transfer": {
+    "available": "both",
+    "cell_drift": [],
+    "changed": false,
+    "checkpoint_drift": [],
+    "checkpoints_added": [],
+    "checkpoints_removed": [],
+    "transfer_verdict": {
+      "changed": false,
+      "new": "full",
+      "old": "full"
+    }
+  },
+  "typographic_emphasis": {
+    "available": "neither",
+    "changed": false
+  },
+  "verbosity": {
+    "available": "both",
+    "candidates_added": [],
+    "candidates_removed": [],
+    "capped_share_drift": [],
+    "changed": false,
+    "excluded_added": [],
+    "excluded_removed": [],
+    "iqr_drift": [],
+    "median_drift": []
+  },
+  "winner": {
+    "changed": false,
+    "new": "llama3",
+    "old": "llama3"
+  },
+  "ws_canonical": {
+    "available": "both",
+    "candidates_added": [],
+    "candidates_removed": [],
+    "changed": false,
+    "fragile_added": [],
+    "fragile_removed": [],
+    "mutations_added": [],
+    "mutations_removed": [],
+    "rate_drift": [],
+    "robust_flips": []
+  }
+}

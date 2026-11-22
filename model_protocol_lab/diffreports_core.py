@@ -2303,12 +2303,324 @@ def render_summary(diff: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+GATE_ENV_VAR = "MODEL_PROTOCOL_LAB_DIFF_MAX_REGRESSIONS"
+
+# Quality order over candidate verdicts for gate classification: a
+# change toward a lower rank is a regression event, toward a higher
+# rank an improvement event (the two are exact mirrors).
+_VERDICT_RANK = {  # nosec B105 -- verdict vocabulary, not a credential
+    "pass": 3,
+    "fail": 2,
+    "unknown": 1,
+    "absent": 0,
+}
+
+
+def _gate_events(diff: dict[str, Any]) -> tuple[int, int]:
+    """Count gate regression/improvement events in a finished diff.
+
+    Event definitions (R4 adjudication, section 4.2): a pass->fail
+    fixture flip; a candidate verdict change toward a lower quality
+    rank; a decision change away from ``compatible_on_fixture_set``;
+    a winner loss. Improvements are the exact mirrors. Fixture
+    transitions through ``absent`` are not flips (the payload's own
+    definition requires both outcomes in {pass, fail}), and a winner
+    change between two present winners is neither a loss nor a gain.
+    """
+    regressions = 0
+    improvements = 0
+    for entry in diff.get("fixture_diffs") or []:
+        if entry.get("old") == "pass" and entry.get("new") == "fail":
+            regressions += 1
+        elif entry.get("old") == "fail" and entry.get("new") == "pass":
+            improvements += 1
+    for change in diff.get("candidate_verdicts") or []:
+        old_value, new_value = change.get("old"), change.get("new")
+        old_rank = _VERDICT_RANK.get(old_value) if type(old_value) is str else None
+        new_rank = _VERDICT_RANK.get(new_value) if type(new_value) is str else None
+        if old_rank is None or new_rank is None or old_rank == new_rank:
+            continue
+        if new_rank < old_rank:
+            regressions += 1
+        else:
+            improvements += 1
+    decision = diff.get("decision") or {}
+    if decision.get("changed"):
+        if decision.get("old") == "compatible_on_fixture_set":
+            regressions += 1
+        elif decision.get("new") == "compatible_on_fixture_set":
+            improvements += 1
+    winner = diff.get("winner") or {}
+    if winner.get("changed"):
+        if winner.get("new") is None:
+            regressions += 1
+        elif winner.get("old") is None:
+            improvements += 1
+    return regressions, improvements
+
+
+def _classify_gate(
+    diff: dict[str, Any], max_regressions: int, threshold_source: str
+) -> dict[str, Any]:
+    """Compute the opt-in gate verdict over a finished diff dict.
+
+    Taxonomy (R4 adjudication, section 4.2): ``no_change`` when the
+    diff is identical; ``unavailable`` when the evidence is
+    asymmetric, so no fixture/verdict-level judgement is supported;
+    ``regression`` when the regression count exceeds the tolerated
+    maximum; ``improvement`` when nothing regressed and at least one
+    improvement event fired. The residual cell the adjudication left
+    open -- a non-identical diff with no improvement events, or with
+    regressions inside the tolerated maximum -- is ``change``: the
+    gate passes and both direction counts stay printed, so nothing
+    is hidden behind the neutral word.
+    """
+    regressions, improvements = _gate_events(diff)
+    summary = diff["summary"]
+    if summary["identical"]:
+        verdict = "no_change"
+    elif summary["evidence_asymmetric"]:
+        verdict = "unavailable"
+    elif regressions > max_regressions:
+        verdict = "regression"
+    elif regressions == 0 and improvements > 0:
+        verdict = "improvement"
+    else:
+        verdict = "change"
+    return {
+        "verdict": verdict,
+        "regressions": regressions,
+        "improvements": improvements,
+        "max_regressions": max_regressions,
+        "threshold_source": threshold_source,
+    }
+
+
+def _resolve_gate_threshold(
+    args: argparse.Namespace, parser: argparse.ArgumentParser | None
+) -> tuple[int, str] | None:
+    """Resolve the gate threshold: flag > env var > default 0.
+
+    The env value must be a non-negative integer in canonical
+    decimal form; anything else is fail-closed (``None`` here, the
+    caller exits 1 with a fixed message) -- never a silent fallback.
+    A negative flag value is an argparse-style error (exit 2).
+    """
+    flag = getattr(args, "max_regressions", None)
+    if flag is not None:
+        if flag < 0:
+            message = "--max-regressions must be a non-negative integer"
+            if parser is not None:
+                parser.error(message)
+            print(f"diff-reports: {message}", file=sys.stderr)
+            raise SystemExit(2)
+        return flag, "flag"
+    raw = os.environ.get(GATE_ENV_VAR)
+    if raw is not None:
+        if re.fullmatch(r"0|[1-9][0-9]*", raw) is None:
+            return None
+        return int(raw), "env"
+    return 0, "default"
+
+
+def _xml_clean(value: Any) -> str:
+    """Make a payload-controlled string safe for XML output.
+
+    ElementTree escapes markup characters, but XML 1.0 also forbids
+    most control characters and lone surrogates outright; those are
+    replaced with U+FFFD so hostile names still emit well-formed XML.
+    """
+    text = str(value)
+    return "".join(
+        ch
+        if (ord(ch) >= 0x20 or ch in "\t\n\r")
+        and not 0xD800 <= ord(ch) <= 0xDFFF
+        and ord(ch) not in (0xFFFE, 0xFFFF)
+        else "\ufffd"
+        for ch in text
+    )
+
+
+def _render_junit(suites: list[dict[str, Any]]) -> str:
+    """Render JUnit XML (the de-facto shape CI consumers accept).
+
+    ``suites`` is a list of ``{"name": str, "cases": [...]}`` where a
+    case is ``{"classname", "name", "status", "message", "detail"}``
+    with status ``passed`` | ``failed`` | ``skipped``. Suite and root
+    counts are computed from the cases themselves, so the XML can
+    never claim counts the cases do not add up to.
+    """
+    # Generation only: this module builds XML with ElementTree and
+    # never parses it, so the B405 parse-side risk cannot occur.
+    import xml.etree.ElementTree as ET  # nosec B405
+
+    root = ET.Element("testsuites")
+    total_tests = total_failures = total_skipped = 0
+    for suite in suites:
+        cases = suite["cases"]
+        failures = sum(1 for c in cases if c["status"] == "failed")
+        skipped = sum(1 for c in cases if c["status"] == "skipped")
+        total_tests += len(cases)
+        total_failures += failures
+        total_skipped += skipped
+        suite_el = ET.SubElement(
+            root,
+            "testsuite",
+            {
+                "name": _xml_clean(suite["name"]),
+                "tests": str(len(cases)),
+                "failures": str(failures),
+                "skipped": str(skipped),
+                "errors": "0",
+            },
+        )
+        for case in cases:
+            case_el = ET.SubElement(
+                suite_el,
+                "testcase",
+                {
+                    "classname": _xml_clean(case["classname"]),
+                    "name": _xml_clean(case["name"]),
+                },
+            )
+            if case["status"] == "failed":
+                failure_el = ET.SubElement(
+                    case_el, "failure", {"message": _xml_clean(case["message"])}
+                )
+                failure_el.text = _xml_clean(case["detail"])
+            elif case["status"] == "skipped":
+                ET.SubElement(case_el, "skipped", {"message": _xml_clean(case["message"])})
+    root.set("tests", str(total_tests))
+    root.set("failures", str(total_failures))
+    root.set("skipped", str(total_skipped))
+    root.set("errors", "0")
+    return ET.tostring(root, encoding="unicode", xml_declaration=True)
+
+
+def _write_junit(path: Any, xml_text: str) -> bool:
+    """Write JUnit XML atomically; False (no partial file) on failure."""
+    target = Path(path)
+    tmp = target.with_name(f"{target.name}.tmp-{os.getpid()}")
+    try:
+        tmp.write_text(xml_text, encoding="utf-8")
+        os.replace(tmp, target)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        return False
+    return True
+
+
+def _diff_junit_suites(diff: dict[str, Any], gate: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Build JUnit suites for a diff: one per compared candidate.
+
+    A candidate is compared when it carries a verdict change or a
+    fixture diff. Fixture testcases exist only where per-fixture
+    evidence exists on both sides (``fixture_diffs`` is populated
+    only then); a pass->fail fixture is a failure, a fail->pass or
+    unchanged fixture passes, and any other transition is skipped
+    as not comparable in pass/fail terms -- the suite never claims
+    fixture coverage the evidence does not support. When the gate
+    verdict is ``unavailable`` the candidate testcases are emitted
+    as skipped: the gate could not judge them.
+    """
+    verdict_changes: dict[str, list[dict[str, Any]]] = {}
+    for change in diff.get("candidate_verdicts") or []:
+        verdict_changes.setdefault(change["candidate"], []).append(change)
+    fixture_entries: dict[str, list[dict[str, Any]]] = {}
+    for entry in diff.get("fixture_diffs") or []:
+        fixture_entries.setdefault(entry["candidate"], []).append(entry)
+    unavailable = gate is not None and gate["verdict"] == "unavailable"
+    suites: list[dict[str, Any]] = []
+    for name in sorted(set(verdict_changes) | set(fixture_entries)):
+        cases: list[dict[str, Any]] = []
+        for change in verdict_changes.get(name, []):
+            old_value, new_value = change.get("old"), change.get("new")
+            old_rank = _VERDICT_RANK.get(old_value) if type(old_value) is str else None
+            new_rank = _VERDICT_RANK.get(new_value) if type(new_value) is str else None
+            regressed = old_rank is not None and new_rank is not None and new_rank < old_rank
+            message = f"{change.get('old')} -> {change.get('new')}"
+            if unavailable:
+                status = "skipped"
+                message = "gate verdict unavailable: evidence asymmetric"
+            elif regressed:
+                status = "failed"
+            else:
+                status = "passed"
+            cases.append(
+                {
+                    "classname": "diff-reports",
+                    "name": f"verdict ({change.get('stage')})",
+                    "status": status,
+                    "message": message,
+                    "detail": f"candidate {name} verdict {message}",
+                }
+            )
+        for entry in fixture_entries.get(name, []):
+            old, new = entry.get("old"), entry.get("new")
+            message = f"{old} -> {new}"
+            if old == new:
+                status = "passed"
+            elif (old, new) == ("pass", "fail"):
+                status = "failed"
+            elif (old, new) == ("fail", "pass"):
+                status = "passed"
+            else:
+                status = "skipped"
+                message = f"{message}: outcome not comparable as pass/fail"
+            cases.append(
+                {
+                    "classname": "diff-reports",
+                    "name": f"fixture {entry.get('fixture')} ({entry.get('stage')})",
+                    "status": status,
+                    "message": message,
+                    "detail": f"candidate {name} fixture {entry.get('fixture')} {message}",
+                }
+            )
+        suites.append({"name": name, "cases": cases})
+    return suites
+
+
+def _checks_junit_suites(
+    label: str, surface: str, checks: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Build the single JUnit suite for a verify-style check report."""
+    cases: list[dict[str, Any]] = []
+    for check in checks:
+        status = check.get("status")
+        detail = str(check.get("detail") or "")
+        if status == "failed":
+            case_status, message = "failed", detail or str(check.get("id"))
+        elif status == "unavailable":
+            case_status, message = "skipped", detail or "unavailable"
+        else:
+            case_status, message = "passed", ""
+        cases.append(
+            {
+                "classname": surface,
+                "name": str(check.get("id")),
+                "status": case_status,
+                "message": message,
+                "detail": detail,
+            }
+        )
+    return [{"name": label, "cases": cases}]
+
+
 def run_diff_reports(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
     """Implement ``mpl diff-reports``; returns the process exit code.
 
     JSON goes to stdout, the human-readable summary to stderr (mirroring
     ``diff-backends``). A successful comparison exits 0 even when it finds
     differences -- differences are the tool's useful output, not a failure.
+
+    With ``--gate`` (R4 adjudication) the same outputs are printed, the
+    JSON gains a top-level ``gate`` object carrying the verdict and both
+    direction counts, and the exit code becomes the gate's branch
+    signal: 0 for ``no_change``/``improvement``/``change``, 2 for
+    ``regression``/``unavailable``. Without ``--gate`` the output is
+    byte-identical to the pre-gate contract. ``--junit`` additionally
+    writes a JUnit XML report derived from the same diff dict; an
+    unwritable path exits 1 after the normal outputs print.
 
     Output contract (cycle 217, restructured cycle 225): both sinks
     print the DERIVED diff dict only, never the loaded input payloads, so
@@ -2324,6 +2636,26 @@ def run_diff_reports(args: argparse.Namespace, _parser: argparse.ArgumentParser)
     exists by construction; the emitted bytes are unchanged and are
     pinned by the cycle-169/217/225 tests.
     """
+    gate_mode = getattr(args, "gate", False)
+    junit_path = getattr(args, "junit", None)
+    if getattr(args, "max_regressions", None) is not None and not gate_mode:
+        # A threshold the user set must never be silently ignored.
+        message = "--max-regressions requires --gate"
+        if _parser is not None:
+            _parser.error(message)
+        print(f"diff-reports: {message}", file=sys.stderr)
+        return 2
+    max_regressions = 0
+    threshold_source = "default"
+    if gate_mode:
+        resolved = _resolve_gate_threshold(args, _parser)
+        if resolved is None:
+            print(
+                f"diff-reports: {GATE_ENV_VAR} must be a non-negative integer",
+                file=sys.stderr,
+            )
+            return 1
+        max_regressions, threshold_source = resolved
     loaded: dict[str, dict[str, Any]] = {}
     for side, path in (("old", args.old_results), ("new", args.new_results)):
         try:
@@ -2345,10 +2677,24 @@ def run_diff_reports(args: argparse.Namespace, _parser: argparse.ArgumentParser)
     # printed left a valid JSON artifact next to a traceback and a
     # nonzero exit -- a partial-success artifact. Building first keeps
     # the command all-or-nothing.
-    diff_text = json.dumps(diff, indent=2, ensure_ascii=True, sort_keys=True)
+    gate = _classify_gate(diff, max_regressions, threshold_source) if gate_mode else None
+    printed = {**diff, "gate": gate} if gate is not None else diff
+    diff_text = json.dumps(printed, indent=2, ensure_ascii=True, sort_keys=True)
     summary_text = render_summary(diff)
+    if junit_path is not None and not _write_junit(
+        junit_path, _render_junit(_diff_junit_suites(diff, gate))
+    ):
+        # The comparison itself succeeded, so its outputs still print;
+        # the unwritable JUnit path is an operational failure (exit 1)
+        # and no partial XML file is left behind.
+        print(diff_text)
+        print(summary_text, file=sys.stderr)
+        print(f"diff-reports: junit_unwritable ({junit_path})", file=sys.stderr)
+        return 1
     print(diff_text)
     print(summary_text, file=sys.stderr)
+    if gate is not None and gate["verdict"] in ("regression", "unavailable"):
+        return 2
     return 0
 
 

@@ -956,6 +956,19 @@ def run_verify_bundle(args: argparse.Namespace) -> int:
     except ValueError as exc:
         print(f"verify: {exc}", file=sys.stderr)
         return 1
+    junit_path = getattr(args, "junit", None)
+    if junit_path is not None:
+        from .diffreports_core import _checks_junit_suites, _render_junit, _write_junit
+
+        suites = _checks_junit_suites(str(args.bundle), "seal", report["checks"])
+        if not _write_junit(junit_path, _render_junit(suites)):
+            # The verification itself succeeded, so its outputs still
+            # print; the unwritable JUnit path is an operational
+            # failure (exit 1) and no partial XML file is left behind.
+            print(json.dumps(report, indent=2, ensure_ascii=True, sort_keys=True))
+            print(_render_bundle_summary(report, str(args.bundle)), file=sys.stderr)
+            print(f"verify: junit_unwritable ({junit_path})", file=sys.stderr)
+            return 1
     print(json.dumps(report, indent=2, ensure_ascii=True, sort_keys=True))
     print(_render_bundle_summary(report, str(args.bundle)), file=sys.stderr)
     return 0 if report["verdict"] == "ok" else 2

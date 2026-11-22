@@ -247,7 +247,7 @@ on stderr, never a traceback):
 | `run` | decision `compatible_on_fixture_set` | 2 negative or ambiguous decision; 130 cancellation; 1 recorded evaluator failure or caught initialization, loading, or filesystem error |
 | `fixtures build` | fixture file written | 1 invalid authoring source or output collision |
 | `fixtures fuzz` | report `ok` | 1 otherwise |
-| `diff-reports` | comparison written, even when it finds differences | 1 input load failure |
+| `diff-reports` | comparison written, even when it finds differences | 1 input load failure; with `--gate`: 2 when the gate verdict is `regression` or `unavailable` |
 | `diff-backends` | comparison written | 2 invalid input; 1 tokenizer or encode failure |
 | `exec-backends` | report produced, including a recorded probe-gate failure | 2 invalid input; 1 no report produced |
 | `debug` | session or script completed | 1 invalid dataset, tokenizer, or script |
@@ -266,7 +266,10 @@ Output contract: machine-parseable JSON goes to stdout for
 `pack`, `diff-reports`, `diff-backends`, `exec-backends`, and
 `surface-noise`;
 human-readable summaries, warnings, and progress notes go to
-stderr, so stdout stays parseable when stderr is discarded. A
+stderr, so stdout stays parseable when stderr is discarded.
+`--junit PATH` on `diff-reports` and `verify` additionally
+writes a JUnit XML report of the same comparison or checks to
+PATH (see §12 and §13). A
 long `run` prints nothing until it finishes — there is no
 progress heartbeat and no `--verbose` flag; that silence is the
 documented behavior, not a missing feature. Scripts should read
@@ -4288,7 +4291,46 @@ everything else (decisions, verdicts, config) instead of guessing.
 
 Exit code is 0 whenever the comparison succeeds -- differences are the
 tool's useful output, not a failure. Exit 1 means an input problem, with a
-fixed error code on stderr and no traceback. Input bounds (all fixed
+fixed error code on stderr and no traceback.
+
+**Gate mode (`--gate`)** turns the comparison into a CI branch signal
+without changing what it prints: the JSON gains a top-level `gate`
+object, and the exit code carries the verdict -- read the `verdict`
+field for the verdict itself, exactly as `run`'s decision field (not
+its code) is its verdict. Monday-morning use: a pipeline that
+re-runs a sweep after a template change fails the job when the change
+regressed a fixture, instead of a human eyeballing two reports.
+Regression events are a fixture flipping pass -> fail, a candidate
+verdict moving down the quality order pass > fail > unknown > absent,
+the decision moving away from `compatible_on_fixture_set`, and the
+winner being lost; improvement events are the exact mirrors, and both
+counts are always printed in the `gate` object, so a tolerated
+regression is never hidden. The verdicts: `no_change` (the diff is
+identical), `improvement` (improvements and no regressions),
+`regression` (regressions above the tolerated maximum), `unavailable`
+(the evidence is asymmetric, so no fixture-level judgement is
+supported), and `change` (anything else: section drift with no
+movement on those axes, or regressions inside the tolerated maximum).
+Exit 0 for `no_change`, `improvement` and `change`; exit 2 for
+`regression` and `unavailable`. The tolerated maximum resolves
+`--max-regressions N` over the `MODEL_PROTOCOL_LAB_DIFF_MAX_REGRESSIONS`
+environment variable over the default 0; a malformed environment value
+fails closed with exit 1 and a message naming the variable -- it is
+never silently replaced by the default. `--max-regressions` without
+`--gate` is a usage error (exit 2): a threshold the user set is never
+silently ignored. Without `--gate` the output is byte-identical to
+the pre-gate contract.
+
+**JUnit XML (`--junit PATH`)** writes the comparison in the de-facto
+JUnit shape CI systems consume: one test suite per compared
+candidate, a verdict testcase per verdict change (a failure exactly
+when the change is in the regression direction), and a fixture
+testcase per fixture outcome where both sides recorded per-fixture
+evidence (pass -> fail is a failure; a transition through `absent`
+is reported skipped -- not comparable as pass/fail -- rather than
+invented). When the gate verdict is `unavailable`, the candidate
+testcases are emitted as skipped. An unwritable path exits 1 after
+the JSON and summary print, and leaves no partial file. Input bounds (all fixed
 codes): at most 32 MB per `results.json` (`results_too_large`); the path
 must resolve to a regular file -- a directory is accepted when it holds
 `results.json`, while FIFOs, devices and sockets are refused
@@ -4333,7 +4375,12 @@ strip the observations, so observation-dependent checks report
 
 The JSON report goes to stdout; a human-readable summary goes to
 stderr. Exit 0 when every applicable check passes, 2 when any check
-fails, 1 for unreadable or invalid input.
+fails, 1 for unreadable or invalid input. `--junit PATH` also writes
+the checks as a JUnit XML report -- one suite named by the input,
+one testcase per check (classname `verify`, or `seal` for
+`--bundle`): a failed check is a failure, an `unavailable` check is
+skipped with its reason. An unwritable path exits 1 after the JSON
+and summary print, and leaves no partial file.
 
 ### 13.1 Sealing a result (`pack`, `verify --bundle`)
 
@@ -4503,7 +4550,9 @@ command that could not produce one fails operationally (1);
 cancellation is always 130. One documented exception:
 `diff-reports` answers 0 whenever its comparison was written,
 even when the comparison finds differences — a diff is an
-answer, not a verdict.
+answer, not a verdict. With `--gate` it joins the verdict
+discipline instead: 2 when the gate verdict is `regression`
+or `unavailable` (see §12).
 
 | Code | Meaning |
 | --- | --- |

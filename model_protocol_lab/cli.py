@@ -1562,7 +1562,10 @@ def build_parser() -> argparse.ArgumentParser:
         allow_abbrev=False,
         epilog=(
             "Exit codes: 0 on success (the diff is the output, whatever "
-            "it finds); 1 on failure. Output: the diff as JSON on stdout."
+            "it finds); 1 on failure. With --gate: 0 when the gate "
+            "verdict is no_change, improvement or change; 2 when it is "
+            "regression or unavailable; 1 on failure. Output: the diff "
+            "as JSON on stdout."
         ),
     )
     diff_reports_cmd.add_argument(
@@ -1580,6 +1583,29 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="List every compared fixture outcome, not just changed ones "
         "(requires --include-evidence on both runs)",
+    )
+    diff_reports_cmd.add_argument(
+        "--gate",
+        action="store_true",
+        help="Gate mode: classify the diff and exit 2 on a regression "
+        "or an unavailable verdict (the JSON gains a gate object; "
+        "the verdict field is the verdict, the code is the branch signal)",
+    )
+    diff_reports_cmd.add_argument(
+        "--max-regressions",
+        type=int,
+        default=None,
+        metavar="N",
+        help="In gate mode, tolerate up to N regression events before "
+        "the gate fails (flag over MODEL_PROTOCOL_LAB_DIFF_MAX_REGRESSIONS "
+        "over the default 0; requires --gate)",
+    )
+    diff_reports_cmd.add_argument(
+        "--junit",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Also write a JUnit XML report of the comparison to PATH",
     )
     diff_cmd = sub.add_parser(
         "diff-backends",

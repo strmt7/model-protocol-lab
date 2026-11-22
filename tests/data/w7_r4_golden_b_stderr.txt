@@ -1,0 +1,15 @@
+diff-reports: old.json vs new.json
+Decision: compatible_on_fixture_set -> compatible_on_fixture_set
+Winner: llama3 -> chatml
+Budget-robust: no -> no
+Safe budget floor: 6 -> 6
+Token-budget frontier: no differences.
+Held-out verification budget-robust: no -> no
+Held-out verification floor: 6 -> 6
+Prompt Boundary Problem rate: 0.0% -> 0.0%
+Candidate verdict changes (3):
+  search/llama3: pass -> fail
+  held_out/chatml: absent -> pass
+  held_out/llama3: pass -> absent
+Per-fixture comparison unavailable: old run has no --include-evidence observations, new run has no --include-evidence observations
+Summary: decision unchanged, winner CHANGED, frontier unchanged, 2 candidate(s) changed verdict, 0 fixture(s) flipped, 0 config drift warning(s).

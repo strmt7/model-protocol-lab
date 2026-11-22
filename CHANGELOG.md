@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (external-audit W7 — R4 diff gate and JUnit reports)
+
+- **`diff-reports --gate` classifies a comparison for CI.** Opt-in:
+  without the flag the output is byte-identical to before (pinned by
+  recorded goldens). Gate mode adds a `gate` object to the JSON --
+  verdict (`no_change`, `improvement`, `change`, `regression`,
+  `unavailable`), both direction counts, the tolerated maximum and
+  where it came from -- and exits 2 on `regression` or `unavailable`.
+  Regression events are fixture pass -> fail flips, candidate
+  verdicts moving down the quality order, the decision moving away
+  from `compatible_on_fixture_set`, and winner loss; improvements
+  are the exact mirrors and both counts always print, so a
+  tolerated regression is never hidden. The threshold resolves
+  `--max-regressions` over `MODEL_PROTOCOL_LAB_DIFF_MAX_REGRESSIONS`
+  over 0; a malformed environment value fails closed (exit 1,
+  naming the variable), and `--max-regressions` without `--gate`
+  is a usage error rather than a silently ignored setting.
+- **`--junit PATH` on `diff-reports` and `verify`.** Writes a
+  JUnit XML report derived from the same report dict the command
+  prints: per-candidate suites with verdict and fixture testcases
+  for a diff (a pass -> fail fixture is a failure; transitions
+  through `absent` are skipped as not comparable), one suite of
+  check testcases for verify (classname `verify`, or `seal` for
+  `--bundle`; `unavailable` checks are skipped with their reason).
+  An unwritable path exits 1 after the normal outputs print and
+  leaves no partial file.
+
 ### Fixed (external-audit W7 — agent-search first-run bootstrap)
 
 - **First-run `index` no longer refuses on absent project settings.**

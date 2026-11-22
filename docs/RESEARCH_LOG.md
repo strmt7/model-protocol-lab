@@ -12192,3 +12192,39 @@ shipped record's returned IDs exceed its token cap; if any
 llama.cpp output byte changes under the stack-keyed mirror,
 builder, or renderer; or if a cross-stack diff reports a pair
 comparable. None has been observed.
+
+## W7-6 — the diff gate and JUnit reports: a branch signal for run comparisons (2026-11-22)
+
+The R4 adjudication lane checked the neighbouring tools before this
+was built: assertion-style pass/fail gating over evaluation results
+is an established contract shape (promptfoo's assert model is the
+closest neighbour), and JUnit XML is the de-facto report format CI
+systems already consume. Neither is claimed as new. What the lab
+adds is the application of that shape to its own diff payload with
+three properties the neighbours do not combine: the classification
+is computed from the same diff dict the command prints (no second
+implementation to drift), asymmetric evidence yields an explicit
+`unavailable` verdict instead of a forced pass/fail, and the
+regression threshold fails closed -- a malformed
+`MODEL_PROTOCOL_LAB_DIFF_MAX_REGRESSIONS` value exits 1 naming the
+variable rather than falling back to a default the operator did not
+choose.
+
+The gate is opt-in (`diff-reports --gate`); without the flag the
+output is byte-identical to the pre-gate contract, pinned by goldens
+recorded from the unmodified code. Regression events are defined
+over the payload's own vocabulary (fixture pass -> fail flips,
+candidate verdict movement down the quality order pass > fail >
+unknown > absent, decision movement away from
+`compatible_on_fixture_set`, winner loss), improvements are the
+exact mirrors, and both counts are always printed -- a regression
+tolerated by `--max-regressions` shows up in the counts under the
+neutral verdict `change`, never silently absorbed.
+
+Falsification: this entry's claims fall if a default-mode
+diff-reports output differs by one byte from the recorded goldens;
+if a gate run prints a verdict whose regression/improvement counts
+do not match a hand count of the same diff's events; if a malformed
+threshold environment value exits 0 or falls back to the default;
+or if a JUnit file's suite counts disagree with its own testcases.
+None has been observed.

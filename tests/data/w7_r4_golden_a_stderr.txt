@@ -1,0 +1,11 @@
+diff-reports: old.json vs old.json
+Decision: compatible_on_fixture_set -> compatible_on_fixture_set
+Winner: llama3 -> llama3
+Budget-robust: no -> no
+Safe budget floor: 6 -> 6
+Token-budget frontier: no differences.
+Held-out verification budget-robust: no -> no
+Held-out verification floor: 6 -> 6
+Prompt Boundary Problem rate: 0.0% -> 0.0%
+Per-fixture comparison unavailable: old run has no --include-evidence observations, new run has no --include-evidence observations
+No differences: the two runs are identical on every compared axis (decision, winner, candidate verdicts, configuration, token-budget frontier, held-out budget floor, fixture-perturbation robustness, instruction-hierarchy adherence, assistant-prefill sensitivity, protocol-portfolio gap).

@@ -759,6 +759,19 @@ def run_verify(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> in
                 replay={"device": args.device, "max_context": args.max_context},
             )
         _append_determinism_check(report, audit)
+    junit_path = getattr(args, "junit", None)
+    if junit_path is not None:
+        from .diffreports_core import _checks_junit_suites, _render_junit, _write_junit
+
+        suites = _checks_junit_suites(str(args.results), "verify", report["checks"])
+        if not _write_junit(junit_path, _render_junit(suites)):
+            # The verification itself succeeded, so its outputs still
+            # print; the unwritable JUnit path is an operational
+            # failure (exit 1) and no partial XML file is left behind.
+            print(json.dumps(report, indent=2, ensure_ascii=True, sort_keys=True))
+            print(_render_summary(report, str(args.results)), file=sys.stderr)
+            print(f"verify: junit_unwritable ({junit_path})", file=sys.stderr)
+            return 1
     print(json.dumps(report, indent=2, ensure_ascii=True, sort_keys=True))
     print(_render_summary(report, str(args.results)), file=sys.stderr)
     return 0 if report["verdict"] == "ok" else 2
@@ -783,7 +796,8 @@ def build_verify_parser(sub: Any) -> None:
         epilog=(
             "Exit codes: 0 when the report (or bundle, with --bundle) "
             "verifies; 2 when it does not; 1 on input failure. Output: "
-            "the verdict as JSON on stdout."
+            "the verdict as JSON on stdout. --junit also writes a JUnit "
+            "XML report of the checks."
         ),
     )
     verify_cmd.add_argument(
@@ -832,4 +846,11 @@ def build_verify_parser(sub: Any) -> None:
         type=int,
         default=2048,
         help="Replay context limit for --determinism (default 2048)",
+    )
+    verify_cmd.add_argument(
+        "--junit",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Also write a JUnit XML report of the verification checks to PATH",
     )

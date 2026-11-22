@@ -98,6 +98,13 @@
    "skipcq": 0,
    "type_ignore": 0
   },
+  "model_protocol_lab/diffreports_core.py": {
+   "noqa": 0,
+   "nosec": 2,
+   "pragma_no_cover": 0,
+   "skipcq": 0,
+   "type_ignore": 0
+  },
   "model_protocol_lab/diffreports_forms.py": {
    "noqa": 1,
    "nosec": 5,
@@ -326,20 +333,20 @@
   },
   "model_protocol_lab": {
    "noqa": 247,
-   "nosec": 77,
+   "nosec": 79,
    "pragma_no_cover": 4,
    "skipcq": 0,
    "type_ignore": 1
   },
   "repo_total": {
-   "noqa": 682,
-   "nosec": 87,
+   "noqa": 688,
+   "nosec": 89,
    "pragma_no_cover": 18,
    "skipcq": 0,
    "type_ignore": 348
   },
   "tests": {
-   "noqa": 401,
+   "noqa": 407,
    "nosec": 5,
    "pragma_no_cover": 14,
    "skipcq": 0,
