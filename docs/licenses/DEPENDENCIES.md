@@ -15,7 +15,7 @@ inventory stale.
 | Package | Version | License |
 | --- | --- | --- |
 | ast-serialize | 0.13.1 | MIT |
-| coverage | 7.17.2 | Apache-2.0 |
+| coverage | 7.17.3 | Apache-2.0 |
 | hypothesis | 6.170.15 | MPL-2.0 |
 | iniconfig | 2.3.1 | MIT |
 | librt | 0.16.0 | MIT |
@@ -26,7 +26,7 @@ inventory stale.
 | pluggy | 1.7.0 | MIT |
 | pygments | 2.21.0 | BSD-2-Clause |
 | pytest | 9.2.0 | MIT |
-| ruff | 0.17.4 | MIT |
+| ruff | 0.17.5 | MIT |
 | sortedcontainers | 2.4.0 | Apache-2.0 |
 | typing-extensions | 4.16.0 | PSF-2.0 |
 

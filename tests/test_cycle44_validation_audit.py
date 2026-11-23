@@ -426,11 +426,11 @@ class ValidationConfigFileTests(unittest.TestCase):
         self.assertLess(readme.index(ci_badge), readme.index(badge))
 
     def test_pre_commit_ruff_rev(self):
-        # Doc: "pre-commit YAML (ruff-pre-commit v0.17.4)".
+        # Doc: "pre-commit YAML (ruff-pre-commit v0.17.5)".
         """Pre commit ruff rev."""
         text = (REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
         self.assertIn("ruff-pre-commit", text)
-        self.assertIn("rev: v0.17.4", text)
+        self.assertIn("rev: v0.17.5", text)
 
     def test_dependabot_ecosystems(self):
         # Doc: "Dependabot YAML (pip, github-actions, pre-commit)".
