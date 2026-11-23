@@ -134,7 +134,8 @@ Two honesty rules govern every cell:
    separate claims with separate evidence.
 2. The full gate (the exact CI command + the 95% coverage floor)
    is a Linux-only claim until a Windows cell runs it — which the
-   Windows Phase 1 cell deliberately does not; no cell below
+   Windows portable cell deliberately does not (its base-layer run
+   carries no coverage floor and is not the gate); no cell below
    implies otherwise.
 
 Windows-on-ARM is **unsupported**: several pins, including torch,
@@ -159,7 +160,7 @@ Windows x86_64 (win_amd64):
 | dev-hf lock resolution | proxy-proven (uv `--python-platform` windows dry-run matrix, W3-1) | proxy-proven (same matrix) | proxy-proven (same matrix) |
 | dev-hf lock installation | documented-unverifiable | CI-executed (Windows portable, `windows-base` job: hashed install + `pip check`, green 2026-11-14) | documented-unverifiable |
 | base/core collection | proxy-proven in part (simulated-absence collection executed on Linux, W3-3) | CI-executed (Windows portable: 9,296 tests collected, 0 errors, 2026-11-14) | proxy-proven in part (same simulation) |
-| base/core run | documented-unverifiable — Phase 2; promotion requires the Phase 1 cell green on ≥3 consecutive main pushes plus a timed local Linux base run for reference | documented-unverifiable — same Phase 2 item | documented-unverifiable — same Phase 2 item |
+| base/core run | documented-unverifiable (the cell is 3.12-only) | CI-executed (Windows portable, `windows-base` job: base layer executed under pytest — Phase 2, RR-18, promoted 2026-11-23 after the Phase 1 cell's run of green main pushes and the timed local Linux reference run, 1,850 s) | documented-unverifiable (the cell is 3.12-only) |
 | HF tests | documented-unverifiable — no Windows execution exists; a resolving torch win_amd64 wheel is not an adapter proof | documented-unverifiable — same | documented-unverifiable — same |
 | gate tooling (mypy) | proxy-proven (`mypy --platform win32` on Linux, W3-2: 0 errors; pre-W3-2 the native run failed with 34 errors in 3 files) | CI-executed (Windows portable: native mypy clean) and proxy-proven (same `--platform` run) | proxy-proven (same `--platform` run) |
 | agent-tool / POSIX | unsupported by design (`sys_platform` markers; on Windows these report skips-with-reasons post-W3-3). The cocoindex lock nevertheless resolves for Windows — proxy-proven (uv matrix, W3-1) — resolution is not support (rule 1) | unsupported — same | unsupported — same |
@@ -172,7 +173,11 @@ layer-paths tool's output was not byte-exact under a Windows
 text-mode stdout (carriage returns glued to every printed path),
 and two test modules evaluated the POSIX-only `os.geteuid` at
 class-definition time. Both are fixed in-tree with regression pins;
-the third run is the green one recorded above.
+the third run is the green one recorded above. Phase 2 (RR-18,
+2026-11-23) promoted the same cell from collection to execution:
+after the collect step, the job runs the base layer under pytest
+in the installed dev-hf environment, the run's output captured to
+its own failure-uploaded log alongside the collect log.
 
 macOS (the smoke runner is macos-latest, arm64; 3.12 is the only
 smoked version):

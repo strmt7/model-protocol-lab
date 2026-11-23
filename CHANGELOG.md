@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (Windows portable cell runs the base test layer — RR-18 closed, 2026-11-23)
+
+- **`.github/workflows/windows.yml` now executes the base test
+  layer on Windows, not just collects it.** After the Phase-1
+  steps (hashed dev-hf install, `pip check`, native mypy, the
+  base-layer collection whose verdict stays a separate cell), a
+  new run step executes the W3-3 manifest's base layer under
+  pytest — same `tools/layer_paths.py --layer base` discovery,
+  same bash shell — with its output captured to a run log that
+  joins the collect log in the failure-gated artifact upload.
+  Nothing is deselected: the manifest's recorded POSIX classes
+  and methods skip through their own platform guards. The job
+  timeout rises from 60 to 120 minutes, sized from the timed
+  local reference run the promotion required (base layer:
+  1,850 s on the project's throttled 1.5-CPU Linux host). This
+  is a layer check, not the gate: the full suite and its
+  coverage floor stay Linux-only. The support matrix's
+  Windows 3.12 base/core-run cell is now CI-executed
+  (docs/STABILITY_CONTRACT.md §1.5.1). Regression coverage:
+  `tests/test_w3_windows_workflow.py` extended regression-first
+  (the Phase-2 assertions fail on the Phase-1 workflow).
+
 ### Added (release workflow consumes the readiness receipt — RR-06 closed, 2026-11-23)
 
 - **`.github/workflows/release.yml` now gates publication on the

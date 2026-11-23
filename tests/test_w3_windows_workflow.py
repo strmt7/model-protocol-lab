@@ -1,14 +1,16 @@
-"""W3-6 — the Windows portable workflow keeps its Phase-1 shape.
+"""W3-6 / RR-18 — the Windows portable workflow keeps its shape.
 
 The workflow is evidence, not decoration: it is the only mechanism
 that turns the W3 support matrix's Windows cells (hashed dev-hf
-install, `pip check`, native mypy, base-layer collection) from
+install, `pip check`, native mypy, base-layer collection and —
+since the RR-18 Phase-2 promotion — base-layer execution) from
 proxy-proven into CI-executed. These pins hold the workflow to the
 scope it claims — one job, Windows, Python 3.12, the CI test job's
 exact hashed install route, native mypy, a collect-only base-layer
-step — and to what it must never become: the gate. The full suite
-and its coverage floor stay Linux-only in ci.yml; a run step here
-must never invoke coverage or unittest discovery.
+step followed by a run of that same layer — and to what it must
+never become: the gate. The full suite and its coverage floor stay
+Linux-only in ci.yml; a run step here must never invoke coverage
+or unittest discovery.
 """
 
 from __future__ import annotations
@@ -39,7 +41,7 @@ def _steps(doc: dict) -> list[dict]:
 
 
 class TestWindowsPortableWorkflow(unittest.TestCase):
-    """The windows.yml Phase-1 shape, pinned."""
+    """The windows.yml shape, pinned (Phase 1 + the RR-18 run)."""
 
     def setUp(self) -> None:
         """Load the workflow document once per test."""
@@ -56,11 +58,19 @@ class TestWindowsPortableWorkflow(unittest.TestCase):
     def test_job_platform_timeout_and_matrix(self) -> None:
         """Purpose: The cell is Windows, 3.12 only, and time-bounded
         Inputs: The windows-base job
-        Outputs: windows-latest, timeout-minutes 60, matrix ["3.12"].
+        Outputs: windows-latest, timeout-minutes 120, matrix ["3.12"].
+            The Phase-1 cell ran in 60; the RR-18 run step executes
+            the whole base layer, whose timed local reference run
+            (the promotion precondition in STABILITY_CONTRACT
+            §1.5.1) took 1,850 s on this project's throttled
+            1.5-CPU Linux host before the hashed install, native
+            mypy and collection are counted. 120 is the cap that
+            measurement supports with headroom for a first-of-kind
+            platform run; it is a cap, not a target.
         """
         job = self.doc["jobs"]["windows-base"]
         self.assertEqual(job["runs-on"], "windows-latest")
-        self.assertEqual(job["timeout-minutes"], 60)
+        self.assertEqual(job["timeout-minutes"], 120)
         self.assertEqual(job["strategy"]["matrix"]["python-version"], ["3.12"])
 
     def test_permissions_are_read_only(self) -> None:
@@ -115,14 +125,42 @@ class TestWindowsPortableWorkflow(unittest.TestCase):
         self.assertEqual(len(collect), 1)
         self.assertEqual(collect[0].get("shell"), "bash")
 
+    def test_run_step_executes_base_layer(self) -> None:
+        """Purpose: Phase 2 (RR-18) — the layer is run, not just
+            collected
+        Inputs: The job's steps
+        Outputs: Exactly one run step that executes the base layer:
+            it invokes pytest over the tools/layer_paths.py
+            --layer base expansion WITHOUT --collect-only, runs
+            under shell: bash (the same command-substitution shape
+            as the collect step; under PowerShell the expansion
+            dies before pytest starts), and tees its output to the
+            windows-base-run log the upload step ships. A run step
+            that kept --collect-only (the Phase-1 mutant) would
+            re-prove collection and execute nothing.
+        """
+        runs = [
+            s
+            for s in _steps(self.doc)
+            if "layer_paths.py --layer base" in s.get("run", "")
+            and "--collect-only" not in s.get("run", "")
+        ]
+        self.assertEqual(len(runs), 1)
+        run = runs[0]
+        self.assertIn("pytest", run["run"])
+        self.assertIn("windows-base-run", run["run"])
+        self.assertEqual(run.get("shell"), "bash")
+
     def test_step_order_install_check_mypy_collect(self) -> None:
         """Purpose: The evidence steps run in dependency order
         Inputs: The job's run steps, in order
         Outputs: pip.txt install < dev-hf install < editable
-            install < pip check < mypy < collect, each exactly
-            once. A pip check moved before the installs (wave-11
-            mutant) would verify the stock environment instead
-            of the installed closure and pass vacuously.
+            install < pip check < mypy < collect < run, each
+            exactly once. A pip check moved before the installs
+            (wave-11 mutant) would verify the stock environment
+            instead of the installed closure and pass vacuously;
+            a run moved before the collect would lose the
+            collection cell's separate verdict.
         """
         runs = _run_steps(self.doc)
 
@@ -140,19 +178,21 @@ class TestWindowsPortableWorkflow(unittest.TestCase):
             index_of("pip check"),
             index_of("mypy"),
             index_of("--collect-only"),
+            index_of("windows-base-run"),
         ]
         self.assertEqual(len(set(order)), len(order))
         self.assertEqual(order, sorted(order))
 
-    def test_upload_collect_log_step_survives(self) -> None:
-        """Purpose: A failed collect stays diagnosable
+    def test_upload_logs_step_survives(self) -> None:
+        """Purpose: A failed collect or run stays diagnosable
         Inputs: The job's steps
         Outputs: Exactly one actions/upload-artifact step, gated
-            on failure(), ordered after the collect step, and
-            uploading the collect log (the windows-base-collect
-            path the collect step tees to). Job logs are not
-            API-accessible, so deleting this step (wave-11
-            mutant) loses the only failure evidence.
+            on failure(), ordered after the run step (hence after
+            the collect step too), and uploading both logs (the
+            windows-base-collect path the collect step tees to
+            and the windows-base-run path the run step tees to).
+            Job logs are not API-accessible, so deleting this
+            step (wave-11 mutant) loses the only failure evidence.
         """
         steps = _steps(self.doc)
         uploads = [
@@ -162,8 +202,9 @@ class TestWindowsPortableWorkflow(unittest.TestCase):
         upload = uploads[0]
         self.assertEqual(upload.get("if"), "failure()")
         self.assertIn("windows-base-collect", upload["with"]["path"])
-        collect_index = next(i for i, s in enumerate(steps) if "--collect-only" in s.get("run", ""))
-        self.assertGreater(steps.index(upload), collect_index)
+        self.assertIn("windows-base-run", upload["with"]["path"])
+        run_index = next(i for i, s in enumerate(steps) if "windows-base-run" in s.get("run", ""))
+        self.assertGreater(steps.index(upload), run_index)
 
     def test_not_the_gate_guard(self) -> None:
         """Purpose: This workflow must never grow into the gate

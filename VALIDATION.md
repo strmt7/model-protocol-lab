@@ -11,14 +11,15 @@ Platform: CI tests Linux x86-64 for the full suite; a cross-OS smoke
 workflow (cycle 210) additionally verifies install plus the offline
 CLI on macOS and Windows; a Windows portable workflow (W3-6)
 additionally installs the hashed dev-hf lock on Windows and collects
-the base test layer there (collection only, not a suite run) —
+and runs the base test layer there (the manifest-defined base layer
+under pytest — not the full suite, and not its coverage gate) —
 the MCP server's SIGALRM budget and doctor's resource fallbacks
 degrade there (checkpoint-template rendering does not: since
 W4/RR-10 it runs in an owned worker process whose deadline the
 parent enforces on every platform).
 
-- `python -m pytest -q -p no:cacheprovider` — **10523 tests collected**
-  (measured 2026-11-22, wave-15 repairs gate). Subtests numbered in the 73k+
+- `python -m pytest -q -p no:cacheprovider` — **10524 tests collected**
+  (measured 2026-11-23, RR-18 gate). Subtests numbered in the 73k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that
