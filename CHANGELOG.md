@@ -6,6 +6,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (release workflow consumes the readiness receipt — RR-06 closed, 2026-11-23)
+
+- **`.github/workflows/release.yml` now gates publication on the
+  exact-SHA readiness receipt.** A new `readiness` job — the build
+  job needs it, and the publish job still needs the build — runs
+  `tools/release_policy.py` (the W1 fence) against the tagged
+  commit before anything is built: the verifier fetches the CI,
+  Secret scan and CodeQL evidence for that exact SHA from the
+  GitHub API and accepts only when every run completed
+  successfully, the dependency and static security audit job
+  inside the CI run succeeded, and the tree at that commit
+  carries the tag's version. Every gap rejects with a named
+  reason (exit 1) and unobtainable evidence fails closed
+  (exit 2), so a tag pointing at an uncertified or failed commit
+  stops before the build starts. The accepted receipt is kept
+  as the run's `release-receipt` artifact. The job holds exactly
+  the two grants the verifier uses (`contents: read`,
+  `actions: read`); the OIDC publish path, the tag trigger and
+  the owner's publication authority are unchanged, and the
+  workflow remains inert until the owner pushes a `v*` tag.
+  Regression coverage: `tests/test_w8_release_wiring.py` (the
+  wiring pins fail on the pre-fix workflow), with the step's own
+  command executed locally against the current head (accept),
+  a wrong version (reject) and a failed-evidence commit
+  (reject).
+
 ### Fixed (W8 rehearsal B1 — sdist scope contract restored, 2026-11-22)
 
 - **The shipped test suite's declared sdist scope executes again.**

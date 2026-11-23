@@ -1,7 +1,12 @@
 # Release pipeline — runs only when the owner pushes a version tag.
 #
 # Creating the tag is the owner's decision (see AGENTS.md); this workflow
-# never creates one. It builds the artifacts with the pinned reproducible
+# never creates one. Before anything is built, the readiness job runs
+# the RR-06 verifier (tools/release_policy.py) against the tagged
+# commit: a tag publishes only a commit whose CI, Secret scan and
+# CodeQL evidence for that exact SHA completed successfully and whose
+# tree carries the tag's version — any gap stops the run before the
+# build starts. It builds the artifacts with the pinned reproducible
 # procedure (tools/release_build.py: SOURCE_DATE_EPOCH-normalized, built
 # twice, identical SHA-256 required), publishes to PyPI through Trusted
 # Publishing (OIDC — no long-lived PyPI token exists in CI; PEP 740
@@ -30,8 +35,52 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  readiness:
+    name: verify exact-SHA readiness receipt
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # RR-06: exactly the least-privilege block
+    # release-readiness.yml documents, held on this job (the
+    # cycle-215 pattern) so the build and publish jobs inherit
+    # nothing new.
+    permissions:
+      contents: read # checkout the tagged tree; the verifier reads its version via the API
+      actions: read # the verifier reads workflow runs and jobs for the tagged SHA
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      # RR-06 (wired in the W8 follow-up cycle): until this step
+      # accepts, nothing is built and nothing publishes — the
+      # build job needs this job, and the publish job needs the
+      # build. The verifier fetches the CI, Secret scan and
+      # CodeQL evidence for the exact tagged commit from the
+      # GitHub API and accepts only when every run completed
+      # successfully, the dependency and static security audit
+      # job inside the CI run succeeded, and the tree at that
+      # commit carries the tag's version. Every gap rejects with
+      # a named reason (exit 1); unobtainable evidence fails
+      # closed (exit 2). The JSON it prints is the readiness
+      # receipt the audit named; --out keeps a copy as this
+      # run's release-receipt artifact.
+      - name: Verify the exact-SHA readiness receipt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python tools/release_policy.py --sha "$GITHUB_SHA" \
+            --version "${GITHUB_REF_NAME#v}" \
+            --out release-receipt.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-receipt
+          path: release-receipt.json
+
   build:
     name: build release artifacts
+    needs: readiness
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

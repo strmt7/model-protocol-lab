@@ -290,6 +290,7 @@
       "test_w7_mutation_gate_verdict.py",
       "test_w7_r4_gate.py",
       "test_w7_registry.py",
+      "test_w8_release_wiring.py",
       "test_wave14_repairs.py",
       "test_wave15_repairs.py",
       "test_workflows.py"
@@ -452,8 +453,8 @@
     ]
   },
   "module_counts": {
-    "total": 289,
-    "base": 276,
+    "total": 290,
+    "base": 277,
     "hf": 12,
     "posix": 1
   }
