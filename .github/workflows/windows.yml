@@ -75,17 +75,49 @@ jobs:
           python -m pytest --collect-only -q -p no:cacheprovider $(python tools/layer_paths.py --layer base) 2>&1 | tee "$RUNNER_TEMP/windows-base-collect-py$PYTHON_VERSION.log"
       # Phase 2 (RR-18): run the layer the collect step just proved
       # collectible — same discovery (the layer_paths.py expansion),
-      # same shell, output captured to its own log for the failure
-      # upload below. The layer manifest's recorded POSIX classes
+      # same shell. The layer manifest's recorded POSIX classes
       # and methods skip through their own platform guards; nothing
       # is deselected here.
-      - name: run base layer (output captured)
+      #
+      # The run is CHUNKED (RR-18 follow-up, 2026-11-23): the first
+      # Phase-2 run was a single -q invocation whose bare dot
+      # stream named no failure, and it was interrupted at 88%
+      # with no summary at all — the failures had to be recovered
+      # by aligning the stream against the collect log by hand.
+      # Each chunk below is its own pytest invocation whose
+      # failures are named twice over: -rf prints the short
+      # summary into the chunk's own log, and --junitxml writes
+      # names and tracebacks to a file pytest produces itself.
+      # A chunk that fails or is interrupted records status=1 and
+      # the loop continues, so one bad chunk can neither hide the
+      # remaining chunks' evidence nor let the step pass.
+      - name: run base layer (chunked, output captured)
         shell: bash
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
         run: |
-          set -o pipefail
-          python -m pytest -q -p no:cacheprovider $(python tools/layer_paths.py --layer base) 2>&1 | tee "$RUNNER_TEMP/windows-base-run-py$PYTHON_VERSION.log"
+          mapfile -t modules < <(python tools/layer_paths.py --layer base)
+          if [ "${#modules[@]}" -eq 0 ]; then
+            echo "layer_paths.py --layer base produced no modules" >&2
+            exit 1
+          fi
+          echo "base layer: ${#modules[@]} modules"
+          status=0
+          chunk_size=35
+          chunk=0
+          for ((start = 0; start < ${#modules[@]}; start += chunk_size)); do
+            chunk=$((chunk + 1))
+            log="$RUNNER_TEMP/windows-base-run-py$PYTHON_VERSION-chunk-$chunk.log"
+            xml="$RUNNER_TEMP/windows-base-run-py$PYTHON_VERSION-chunk-$chunk.xml"
+            echo "chunk $chunk: ${modules[start]} .. ${modules[start + chunk_size - 1]:-end}"
+            if python -m pytest -q -rf -p no:cacheprovider --junitxml="$xml" "${modules[@]:start:chunk_size}" >"$log" 2>&1; then
+              echo "chunk $chunk: passed"
+            else
+              echo "chunk $chunk: FAILED (log: $log, junit: $xml)"
+              status=1
+            fi
+          done
+          exit $status
       - name: upload logs on failure
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -93,6 +125,7 @@ jobs:
           name: windows-base-log-py${{ matrix.python-version }}
           path: |
             ${{ runner.temp }}/windows-base-collect-py${{ matrix.python-version }}.log
-            ${{ runner.temp }}/windows-base-run-py${{ matrix.python-version }}.log
+            ${{ runner.temp }}/windows-base-run-py${{ matrix.python-version }}-chunk-*.log
+            ${{ runner.temp }}/windows-base-run-py${{ matrix.python-version }}-chunk-*.xml
           if-no-files-found: warn
           retention-days: 7

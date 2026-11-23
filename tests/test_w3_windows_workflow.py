@@ -134,10 +134,10 @@ class TestWindowsPortableWorkflow(unittest.TestCase):
             --layer base expansion WITHOUT --collect-only, runs
             under shell: bash (the same command-substitution shape
             as the collect step; under PowerShell the expansion
-            dies before pytest starts), and tees its output to the
-            windows-base-run log the upload step ships. A run step
-            that kept --collect-only (the Phase-1 mutant) would
-            re-prove collection and execute nothing.
+            dies before pytest starts), and captures its output to
+            the windows-base-run chunk logs the upload step ships.
+            A run step that kept --collect-only (the Phase-1
+            mutant) would re-prove collection and execute nothing.
         """
         runs = [
             s
@@ -150,6 +150,58 @@ class TestWindowsPortableWorkflow(unittest.TestCase):
         self.assertIn("pytest", run["run"])
         self.assertIn("windows-base-run", run["run"])
         self.assertEqual(run.get("shell"), "bash")
+
+    def test_run_step_is_chunked_with_junit_evidence(self) -> None:
+        """Purpose: A failed or interrupted run still names its
+            failures (RR-18 follow-up)
+        Inputs: The job's run step
+        Outputs: The single base-layer run step (a) expands
+            tools/layer_paths.py --layer base into an addressable
+            list (mapfile) and executes the layer in sequential
+            chunks instead of one invocation, (b) passes
+            --junitxml and -rf to every chunk's pytest so the
+            failing tests are named with tracebacks in files the
+            upload ships, even when a chunk's stream dies
+            mid-run, and (c) accumulates chunk failures into a
+            status variable it finally exits with, so one bad
+            chunk neither aborts the remaining chunks nor lets
+            the step pass. The first Phase-2 run (2026-11-23)
+            proved the need: a single -q invocation was
+            interrupted at 88% and its bare dot stream named no
+            failure and no cause.
+        """
+        runs = [
+            s
+            for s in _steps(self.doc)
+            if "layer_paths.py --layer base" in s.get("run", "")
+            and "--collect-only" not in s.get("run", "")
+        ]
+        self.assertEqual(len(runs), 1)
+        script = runs[0]["run"]
+        self.assertIn("mapfile", script)
+        self.assertIn("chunk", script)
+        self.assertIn("--junitxml", script)
+        self.assertIn("-rf", script)
+        self.assertIn("status=1", script)
+        self.assertIn("exit $status", script)
+
+    def test_upload_ships_chunk_logs_and_junit(self) -> None:
+        """Purpose: The failure evidence includes the chunk files
+        Inputs: The job's upload step
+        Outputs: The single upload step's path covers the run
+            step's per-chunk logs and per-chunk JUnit XML files
+            (the -chunk- segment and the .xml extension), not
+            only the Phase-1/2 whole-run logs.
+        """
+        uploads = [
+            s
+            for s in _steps(self.doc)
+            if str(s.get("uses", "")).startswith("actions/upload-artifact@")
+        ]
+        self.assertEqual(len(uploads), 1)
+        path = uploads[0]["with"]["path"]
+        self.assertIn("-chunk-", path)
+        self.assertIn(".xml", path)
 
     def test_step_order_install_check_mypy_collect(self) -> None:
         """Purpose: The evidence steps run in dependency order
@@ -188,11 +240,10 @@ class TestWindowsPortableWorkflow(unittest.TestCase):
         Inputs: The job's steps
         Outputs: Exactly one actions/upload-artifact step, gated
             on failure(), ordered after the run step (hence after
-            the collect step too), and uploading both logs (the
-            windows-base-collect path the collect step tees to
-            and the windows-base-run path the run step tees to).
-            Job logs are not API-accessible, so deleting this
-            step (wave-11 mutant) loses the only failure evidence.
+            the collect step too), and uploading the collect log
+            and the run step's windows-base-run chunk logs. Job
+            logs are not API-accessible, so deleting this step
+            (wave-11 mutant) loses the only failure evidence.
         """
         steps = _steps(self.doc)
         uploads = [

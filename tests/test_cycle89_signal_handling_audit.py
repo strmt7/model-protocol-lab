@@ -714,12 +714,29 @@ class RunMainSignalTests(unittest.TestCase):
         self.assertIsNone(doc["selected_candidate"])
         self.assertTrue((outdir / "report.html").is_file())
 
+    # The two real-signal methods below are POSIX-only for the
+    # same reason the subprocess classes above are: they deliver a
+    # real signal to this process with os.kill(os.getpid(), ...).
+    # On Windows os.kill(pid, SIGINT) is a console control event
+    # addressed to a process GROUP (GenerateConsoleCtrlEvent), not
+    # a per-process delivery — in-process under pytest it
+    # broadcasts to the harness's own console group and the
+    # KeyboardInterrupt lands in the test runner, outside
+    # cli.main's handler scope (proven by the first Windows
+    # base-layer run, RR-18 follow-up 2026-11-23: the run died
+    # with pytest's interrupted exit 2 at exactly this test); and
+    # os.kill(pid, SIGTERM) on Windows is TerminateProcess, which
+    # no handler can intercept at all. The KeyboardInterrupt
+    # injection test below covers the handler path on every
+    # platform; these two keep their POSIX delivery semantics.
+    @unittest.skipUnless(_POSIX, "sends POSIX signals")
     def test_sigint_during_generate_yields_cancelled_report_and_130(self) -> None:
         """Test sigint during generate yields cancelled report and 130."""
         rc, outdir, _out, err = self._run_main(_backend_with("sigint-once"))
         self.assertEqual(rc, 130)
         self._assert_cancelled_report(outdir, err)
 
+    @unittest.skipUnless(_POSIX, "sends POSIX signals")
     def test_sigterm_during_generate_drives_cooperative_cancel(self) -> None:
         """Test sigterm during generate drives cooperative cancel."""
         # Without the cycle-89 SIGTERM wiring this would kill the test

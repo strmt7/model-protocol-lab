@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Added (Windows portable cell runs the base test layer — RR-18 closed, 2026-11-23)
+### Added (Windows portable cell runs the base test layer — RR-18, 2026-11-23; first run failed, follow-up in progress)
 
 - **`.github/workflows/windows.yml` now executes the base test
   layer on Windows, not just collects it.** After the Phase-1
@@ -27,6 +27,17 @@ All notable changes to this project are documented here. The format follows
   (docs/STABILITY_CONTRACT.md §1.5.1). Regression coverage:
   `tests/test_w3_windows_workflow.py` extended regression-first
   (the Phase-2 assertions fail on the Phase-1 workflow).
+- **The first run failed, and RR-18 stays open.** The run step
+  executed 25m53s and exited 2: 226 named failures in the
+  executed 88% of the layer, then an interruption immediately
+  before a cycle-89 test whose in-process `os.kill(...,
+  SIGINT)` is a console-group broadcast on Windows (the two
+  real-signal methods of that class now carry the file's own
+  POSIX guard). The follow-up cycle makes the run step
+  chunked — per-chunk logs and JUnit XML, failures accumulated
+  across chunks — so the artifact names every failure with its
+  traceback, and repairs the failure clusters regression-first;
+  the full record is in the ledger's RR-18 row.
 
 ### Added (release workflow consumes the readiness receipt — RR-06 closed, 2026-11-23)
 

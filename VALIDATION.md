@@ -18,7 +18,7 @@ degrade there (checkpoint-template rendering does not: since
 W4/RR-10 it runs in an owned worker process whose deadline the
 parent enforces on every platform).
 
-- `python -m pytest -q -p no:cacheprovider` — **10524 tests collected**
+- `python -m pytest -q -p no:cacheprovider` — **10526 tests collected**
   (measured 2026-11-23, RR-18 gate). Subtests numbered in the 73k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
