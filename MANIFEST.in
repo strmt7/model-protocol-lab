@@ -19,3 +19,10 @@ include tests/data/UnicodeData.txt
 # declares which shipped modules need the checkout (RR-12).
 include tests/test_layers.json
 include tests/CHECKOUT_ONLY
+# The shipped mutation-gate modules — the six in-place gates and
+# their verdict pins — import the shared verdict helper
+# tests/_mutation_gate.py. Setuptools' defaults ship only the
+# test_*.py modules, so the helper is named here and censused as a
+# declared sdist member (tools/artifact_census.py), the same way
+# the data file above ships with the test that derives from it.
+include tests/_mutation_gate.py

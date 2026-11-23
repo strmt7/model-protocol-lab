@@ -32,16 +32,25 @@ checks classes, not a frozen member list):
   dist-info directory.
 - Sdist: members are the nine named root files, the package files,
   the six regenerated egg-info files, the ``test_*.py`` modules,
-  and the three named non-code test files
-  (``tests/data/UnicodeData.txt``, ``tests/CHECKOUT_ONLY``,
-  ``tests/test_layers.json``). No ``docs/``, ``examples/``,
-  ``tools/``, ``.github/``, ``site/``, or any other checkout
-  content; the ``tests/__init__.py`` and underscore-prefixed test
-  helpers the checkout carries are not shipped by setuptools and
-  are not required (the rule is ``test_*.py``, measured, not a
-  hardcoded exception list). Every member is enumerated, not only
-  regular files: a symlink, hardlink, FIFO or device member is a
-  named finding with its kind and target, never invisible.
+  and the four named non-module test files
+  (``tests/_mutation_gate.py``, ``tests/data/UnicodeData.txt``,
+  ``tests/CHECKOUT_ONLY``, ``tests/test_layers.json``). No
+  ``docs/``, ``examples/``, ``tools/``, ``.github/``, ``site/``, or
+  any other checkout content. Setuptools ships only the
+  ``test_*.py`` modules by default, so every further file the
+  shipped suite needs is named, here and in ``MANIFEST.in``: the
+  mutation-gate helper (imported by the six shipped in-place gates
+  and their verdict pins) and the vendored census data file. The
+  remaining underscore helper (``tests/_collect_cache.py``) and
+  ``tests/__init__.py`` are not shipped and are not required by
+  the declared scope — the helper's importers are declared
+  checkout-only, and the scope runner executes from the extraction
+  root, where the shipped modules' ``tests.*`` imports resolve
+  against the extraction's ``tests/`` directory (measured by the
+  executed scope run, not assumed). Every member is enumerated,
+  not only regular files: a symlink, hardlink, FIFO or device
+  member is a named finding with its kind and target, never
+  invisible.
 
 ``tools/release_build.py`` calls these checks on every build: the
 source tree before building, the built wheel and sdist before their
@@ -111,6 +120,7 @@ _EGG_INFO_FILES = (
     "top_level.txt",
 )
 _TEST_FILES = (
+    "tests/_mutation_gate.py",
     "tests/data/UnicodeData.txt",
     "tests/CHECKOUT_ONLY",
     "tests/test_layers.json",

@@ -224,6 +224,7 @@ def _fake_source(root: Path) -> Path:
     tests = root / "tests"
     (tests / "data").mkdir(parents=True)
     (tests / "test_a.py").write_text("# test\n", encoding="utf-8")
+    (tests / "_mutation_gate.py").write_text("# helper\n", encoding="utf-8")
     (tests / "data" / "UnicodeData.txt").write_text("data\n", encoding="utf-8")
     (tests / "CHECKOUT_ONLY").write_text("none\n", encoding="utf-8")
     (tests / "test_layers.json").write_text("{}\n", encoding="utf-8")
@@ -258,6 +259,7 @@ def _write_sdist(path: Path) -> None:
     members += [f"{top}/model_protocol_lab.egg-info/{name}" for name in _EGG_INFO_FILES]
     members += [
         f"{top}/tests/test_a.py",
+        f"{top}/tests/_mutation_gate.py",
         f"{top}/tests/data/UnicodeData.txt",
         f"{top}/tests/CHECKOUT_ONLY",
         f"{top}/tests/test_layers.json",

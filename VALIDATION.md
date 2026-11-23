@@ -826,8 +826,10 @@ reproducible from the repository root in a fresh virtual environment.
   enforced by `tools/release_build.py` on every build: the wheel
   carries exactly the package `.py` files + `py.typed` + the six
   dist-info files; the sdist carries exactly the package files, the
-  `test_*.py` modules, the three named non-code test files, the six
-  regenerated egg-info files, and the nine named root files. A stray
+  `test_*.py` modules, the four named non-module test files (the
+  mutation-gate helper the shipped gates import, the vendored
+  census data, and the two scope contracts), the six regenerated
+  egg-info files, and the nine named root files. A stray
   file in the package tree, or any unexpected archive member, fails
   the build with the member named; entries and members are judged
   by type as well as name, so a symlink, hardlink, FIFO or device —

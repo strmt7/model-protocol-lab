@@ -7,9 +7,11 @@ documented surface cannot silently diverge from the shipped one:
   six dist-info files. Nothing else (no tests, no data files, no
   weights, no caches).
 - Sdist members are the package files, the ``test_*.py`` modules, the
-  three named non-code test files, the six regenerated egg-info files,
-  and the nine named root files. No ``docs/``, ``examples/``, ``tools/``,
-  ``.github/``, ``site/``, or any other checkout content.
+  four named non-module test files (the mutation-gate helper, the
+  vendored census data, and the two scope contracts), the six
+  regenerated egg-info files, and the nine named root files. No
+  ``docs/``, ``examples/``, ``tools/``, ``.github/``, ``site/``, or
+  any other checkout content.
 - The source tree itself is checked before building: a stray file in
   ``model_protocol_lab/`` fails the build with the member named,
   whether or not the build backend would have packaged it.
@@ -112,6 +114,7 @@ def _fake_source(root: Path) -> Path:
     tests = root / "tests"
     (tests / "data").mkdir(parents=True)
     (tests / "test_a.py").write_text("# test\n", encoding="utf-8")
+    (tests / "_mutation_gate.py").write_text("# helper\n", encoding="utf-8")
     (tests / "data" / "UnicodeData.txt").write_text("data\n", encoding="utf-8")
     (tests / "CHECKOUT_ONLY").write_text("none\n", encoding="utf-8")
     (tests / "test_layers.json").write_text("{}\n", encoding="utf-8")
@@ -149,6 +152,7 @@ def _sdist_members(
     members += [f"{top}/model_protocol_lab.egg-info/{name}" for name in _EGG_INFO_FILES]
     members += [
         f"{top}/tests/test_a.py",
+        f"{top}/tests/_mutation_gate.py",
         f"{top}/tests/data/UnicodeData.txt",
         f"{top}/tests/CHECKOUT_ONLY",
         f"{top}/tests/test_layers.json",

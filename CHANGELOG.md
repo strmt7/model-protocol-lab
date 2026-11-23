@@ -6,6 +6,50 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed (W8 rehearsal B1 — sdist scope contract restored, 2026-11-22)
+
+- **The shipped test suite's declared sdist scope executes again.**
+  The W8 readiness rehearsal found the RR-12 contract broken at the
+  rehearsed head: `tools/sdist_scope.py` against a fresh sdist
+  failed collection with two errors, and the failure cascaded —
+  the artifact manifest would not emit without the scope result,
+  so the from-sdist rebuild-check and manifest verify could not
+  run through the shipped path at all. The rehearsal stopped at
+  collection; executing the scope's run phase mapped the whole
+  class — every failure a post-W5 module that had never been
+  adjudicated against the contract. The shared mutation-gate
+  verdict helper `tests/_mutation_gate.py` (W7-4) is imported by
+  seven shipped modules — the six in-place gates and their verdict
+  pins — but setuptools ships only the `test_*.py` modules by
+  default, so the helper never reached the tarball; it is now a
+  named sdist member (`MANIFEST.in` + the artifact census's
+  declared test-file set, whose "helpers are not required" wording
+  was a W5-era measurement W7-4 had falsified). Four modules join
+  `tests/CHECKOUT_ONLY` with their reasons, in the established
+  form: `tests/test_wave15_repairs.py` and `tests/test_w7_r4_gate.py`
+  (both build on `examples/sample-report/results.json`; `examples/`
+  stays out of the sdist deliberately), `tests/test_w7_registry.py`
+  (reads `docs/USAGE.md` for its anchor checks), and
+  `tests/test_w7_marker_census.py` (counts markers across the
+  checkout's `examples/`, `tools/` and `fuzz/` trees). The scope
+  manifest's anti-fabrication tripwire gains the two checkout-file
+  names those modules reference in path-segment form
+  (`USAGE.md`, `marker_census.json`). The full shipped path
+  (scope run green from the sdist alone, manifest emit,
+  rebuild-check, verify) executes end-to-end again.
+- **One shipped property test no longer fails on host load alone.**
+  Executing the scope's run phase surfaced a second, independent
+  blocker to a green run: `tests/test_cycle7_properties.py`'s
+  Hypothesis profile left the `too_slow` health check armed, and
+  input generation starved under full-suite load on a shared cell
+  (8 examples in 1.05s) while the same test passes in isolation in
+  under a second — generation wall-clock speed is a property of
+  the host, not of the code under test. The profile now suppresses
+  that check, the same treatment
+  `tests/test_cycle98_boundary_properties.py` and
+  `tests/test_cycle109_split_properties.py` already carry; all 40
+  derandomized examples and every assertion are unchanged.
+
 ### Changed (external-audit W7 — documentation truth pass, RR-16 closed, 2026-11-22)
 
 - **Living docs corrected to match the shipped implementation.**

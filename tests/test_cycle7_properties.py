@@ -46,7 +46,19 @@ FUZZ = settings(
     # Same rationale as tests/test_fuzz_boundary.py: differing_executors
     # fires on in-process re-runs (a harness artifact), not on flakiness;
     # these tests are deterministic, so the check is suppressed.
-    suppress_health_check=[HealthCheck.differing_executors],
+    # too_slow is suppressed for the same reason
+    # tests/test_cycle98_boundary_properties.py and
+    # tests/test_cycle109_split_properties.py suppress it: generation
+    # wall-clock speed is a property of the host's load, not of the
+    # code under test — during a full-suite run on a loaded shared
+    # cell the check fired with 8 examples generated in 1.05s while
+    # the same test passes in isolation in under a second.  The
+    # strategies stay small and bounded (max_examples=40), and every
+    # assertion still runs on every generated example.
+    suppress_health_check=[
+        HealthCheck.differing_executors,
+        HealthCheck.too_slow,
+    ],
 )
 
 #: The 8-class divergence vocabulary, pinned from the Literal.

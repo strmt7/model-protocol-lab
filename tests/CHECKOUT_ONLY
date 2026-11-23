@@ -88,3 +88,7 @@ test_w5_census_gate.py | imports tools.artifact_census and tools.release_build a
 test_w5_pack_limits.py | reads examples/sample-report/results.json as its canonical report fixture; examples/ is not shipped in the sdist
 test_w5_rebuild_check.py | imports tools.artifact_manifest at module level; tools/ is not shipped in the sdist
 test_w5_sdist_scope.py | imports tools.sdist_scope, the runner it pins; tools/ is not shipped in the sdist
+test_w7_marker_census.py | counts suppression markers across the checkout's examples/, tools/ and fuzz/ trees against tests/marker_census.json; those trees and the census file are not shipped in the sdist
+test_w7_r4_gate.py | builds its report pairs from examples/sample-report/results.json and pins against recorded goldens under tests/data; neither is shipped in the sdist
+test_w7_registry.py | reads docs/USAGE.md to verify the registry's documentation anchors; docs/ is not shipped in the sdist
+test_wave15_repairs.py | reads examples/sample-report/results.json at import time as its canonical report fixture; examples/ is not shipped in the sdist

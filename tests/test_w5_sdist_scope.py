@@ -67,6 +67,8 @@ _CHECKOUT_TOKENS = (
     "fixtures.json",
     "fixtures.csv",
     "workflows/",
+    "USAGE.md",
+    "marker_census.json",
 )
 
 
