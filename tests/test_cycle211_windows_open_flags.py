@@ -86,11 +86,17 @@ class TestWindowsOpenFlags(unittest.TestCase):
         # already do not exist this still passes, but on Linux (where
         # CI runs) the deletion must take effect for the other tests
         # to prove anything.
+        had_flags = hasattr(os, "O_NONBLOCK") and hasattr(os, "O_NOFOLLOW")
         with _WithoutUnixFlags(self):
             self.assertFalse(hasattr(os, "O_NONBLOCK"))
             self.assertFalse(hasattr(os, "O_NOFOLLOW"))
-        self.assertTrue(hasattr(os, "O_NONBLOCK"))
-        self.assertTrue(hasattr(os, "O_NOFOLLOW"))
+        # The restoration half only has meaning where the flags
+        # natively exist; on Windows they do not, and asserting their
+        # return made the suite fail there instead of passing as the
+        # note above intends (RR-18 follow-up).
+        if had_flags:
+            self.assertTrue(hasattr(os, "O_NONBLOCK"))
+            self.assertTrue(hasattr(os, "O_NOFOLLOW"))
 
     def test_load_dataset_without_o_nonblock(self) -> None:
         text = _dataset_text()

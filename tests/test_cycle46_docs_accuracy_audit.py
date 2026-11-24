@@ -334,7 +334,9 @@ class DocumentedFlagsTest(unittest.TestCase):
                 "SECOND_CHECKPOINT",
             ]
         )
-        self.assertEqual(str(args.model), "path/to/checkpoint")
+        # Path-typed args: compare Paths, not spellings — str(Path)
+        # uses the platform separator (RR-18 follow-up).
+        self.assertEqual(args.model, Path("path/to/checkpoint"))
         self.assertEqual(str(args.dataset), "YOUR_FIXTURES.json")
         self.assertEqual(args.boundary_ids, (1, 2, 3))
         self.assertEqual(args.boundary_map, [("chatml", (1, 2))])
@@ -431,8 +433,8 @@ class DocumentedFlagsTest(unittest.TestCase):
                 "session.txt",
             ]
         )
-        self.assertEqual(str(args.dataset), "examples/fixtures.json")
-        self.assertEqual(str(args.model), "path/to/checkpoint")
+        self.assertEqual(args.dataset, Path("examples/fixtures.json"))
+        self.assertEqual(args.model, Path("path/to/checkpoint"))
         self.assertEqual(str(args.script), "session.txt")
 
     def test_diff_backends_flags_and_defaults(self):
@@ -1084,8 +1086,11 @@ class DebugTest(unittest.TestCase):
         )
         assert match is not None
         self.assertIn(f"model-protocol-lab debug {match.group(1)}", proc.stdout)
+        # The banner echoes the dataset path in platform spelling;
+        # every other character is the documented text (RR-18
+        # follow-up).
         self.assertIn(
-            "dataset: examples/fixtures.json (4 fixtures) | family: chatml | "
+            f"dataset: {Path('examples/fixtures.json')} (4 fixtures) | family: chatml | "
             "tokenizer: none (rerun with --model PATH)",
             proc.stdout,
         )

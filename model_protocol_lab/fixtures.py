@@ -355,12 +355,25 @@ def write_fixture_file(text: str, path: str | Path) -> Path:
         # newline translation (CRLF on Windows) would smuggle \r
         # into the last field of every CSV line (RR-18 follow-up).
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+            fd = -1  # ownership moved to the file object
             handle.write(text)
     except BaseException:
-        # A partial write must not leave a half-built fixture file behind.
+        # A partial write must not leave a half-built fixture file
+        # behind. Close before unlinking: when fdopen itself failed
+        # the descriptor is still ours, and on Windows an open file
+        # cannot be unlinked — the partial would survive the very
+        # cleanup this branch exists to perform (RR-18 follow-up;
+        # same defect class as the pack writer's fix).
+        if fd != -1:
+            with contextlib.suppress(OSError):
+                os.close(fd)
+            fd = -1
         with contextlib.suppress(OSError):
             os.unlink(target)
         raise
+    finally:
+        if fd != -1:
+            os.close(fd)
     return target
 
 

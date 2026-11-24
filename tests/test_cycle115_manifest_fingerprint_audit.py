@@ -85,7 +85,15 @@ class TestVerifyManifestFingerprints(unittest.TestCase):
         """Test in place modification detected."""
         with tempfile.TemporaryDirectory() as tmp:
             root, names, prints = self._root(tmp)
-            _write(root / "w.safetensors", b"\x03" * 64)  # same size, new mtime/content
+            target = root / "w.safetensors"
+            _write(target, b"\x03" * 64)  # same size, new content
+            # Move the mtime explicitly: the fingerprint is the stat
+            # triple, and relying on the rewrite itself to move
+            # mtime_ns races the filesystem clock — on Windows the
+            # two writes landed in the same tick and the change was
+            # invisible (RR-18 follow-up).
+            stat = target.stat()
+            os.utime(target, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
             with self.assertRaisesRegex(ValueError, "^assets_changed$"):
                 _verify_manifest_fingerprints(root, names, prints)
 

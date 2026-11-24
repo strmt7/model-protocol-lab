@@ -144,9 +144,19 @@ class CrawlerContracts(unittest.TestCase):
                 ("linux", "model-protocol-lab/crawl4ai"),
                 ("darwin", "Library/Caches/model-protocol-lab/crawl4ai"),
             ):
+                # Pin the home sources as well as the platform: with
+                # a fully cleared environment, Path.home() on a
+                # Windows host raises RuntimeError (no USERPROFILE),
+                # which made this host-independence test depend on
+                # the host (RR-18 follow-up).
+                home = path / "home"
                 with (
                     patch.object(tool.sys, "platform", platform),
-                    patch.dict(os.environ, {}, clear=True),
+                    patch.dict(
+                        os.environ,
+                        {"HOME": str(home), "USERPROFILE": str(home)},
+                        clear=True,
+                    ),
                 ):
                     self.assertTrue(tool.cache_home().as_posix().endswith(expected))
         with self.assertRaises(ValueError):

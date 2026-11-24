@@ -1058,8 +1058,13 @@ class TestSave(unittest.TestCase):
         """Test save requires existing parent directory."""
         shell, buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
-            out = _run(shell, buf, f".save {tmp}/nodir/x.txt", ".quit")
-            self.assertIn(f"error: not a directory: {tmp}/nodir", out)
+            # Build both the input and the expectation from Path:
+            # the shell echoes the path in platform spelling, so a
+            # "/nodir" suffix glued onto a Windows temp path never
+            # matches (RR-18 follow-up).
+            target = Path(tmp) / "nodir" / "x.txt"
+            out = _run(shell, buf, f".save {target}", ".quit")
+            self.assertIn(f"error: not a directory: {Path(tmp) / 'nodir'}", out)
 
     def test_save_rejects_non_regular_file(self) -> None:
         """Test save rejects non regular file."""
@@ -1107,6 +1112,7 @@ class TestSave(unittest.TestCase):
             finally:
                 os.chdir(old_cwd)
 
+    @unittest.skipUnless(os.name == "posix", "control-char filename not constructible on Windows")
     def test_save_message_sanitizes_control_chars_in_path(self) -> None:
         """Test save message sanitizes control chars in path."""
         shell, buf = _make_shell()
@@ -1124,8 +1130,9 @@ class TestRead(unittest.TestCase):
         """Test read missing file."""
         shell, buf = _make_shell()
         with tempfile.TemporaryDirectory() as tmp:
-            out = _run(shell, buf, f".read {tmp}/nope.txt", ".quit")
-            self.assertIn(f"error: unreadable script file: {tmp}/nope.txt", out)
+            target = Path(tmp) / "nope.txt"
+            out = _run(shell, buf, f".read {target}", ".quit")
+            self.assertIn(f"error: unreadable script file: {target}", out)
 
     def test_read_skips_comments_and_blanks(self) -> None:
         """Test read skips comments and blanks."""

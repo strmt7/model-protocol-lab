@@ -32,6 +32,7 @@ These tests pin that contract:
 
 from __future__ import annotations
 
+import contextlib
 import io
 import json
 import os
@@ -420,11 +421,21 @@ class SectionContainmentTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = _write_checkpoint(Path(tmp), CLEAN_TEMPLATE)
-            with (
-                mock.patch.object(signal, "getsignal", boom),
-                mock.patch.object(signal, "getitimer", boom),
-                mock.patch.object(signal, "setitimer", boom),
-            ):
+            # Patch only the attributes the platform has: getitimer /
+            # setitimer do not exist on Windows, where patch.object
+            # raises AttributeError before the assertion can run
+            # (RR-18 follow-up). The render path cannot consult
+            # machinery that does not exist, so the proof is the
+            # same: every signal entry point the platform offers is
+            # armed to explode, and the render still succeeds.
+            armed = [
+                mock.patch.object(signal, name, boom)
+                for name in ("getsignal", "getitimer", "setitimer")
+                if hasattr(signal, name)
+            ]
+            with contextlib.ExitStack() as stack:
+                for patcher in armed:
+                    stack.enter_context(patcher)
                 out = _conformance(root, (_case(),))
         self.assertEqual(out["status"], "ok")
         self.assertEqual(out["diffs"][0]["status"], "ok")

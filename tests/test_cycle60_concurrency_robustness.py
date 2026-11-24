@@ -144,7 +144,13 @@ class TestOversizedFixtureRobustness(unittest.TestCase):
                 handle.write(b"\x00")
             self.assertEqual(target.stat().st_size, 128 * 1024 * 1024 + 1)
             # Sparse: the byte count is real, the disk cost is ~nothing.
-            self.assertLess(target.stat().st_blocks * 512, 1024 * 1024)
+            # st_blocks is POSIX-only (RR-18 follow-up): where the
+            # platform reports block allocation, prove the fixture
+            # really is sparse; the rejection assertion below is the
+            # contract and runs on every platform.
+            st_blocks = getattr(target.stat(), "st_blocks", None)
+            if st_blocks is not None:
+                self.assertLess(st_blocks * 512, 1024 * 1024)
             with self.assertRaises(ValueError) as ctx:
                 _read_json(target)
             self.assertEqual(str(ctx.exception), "oversized_asset_json")

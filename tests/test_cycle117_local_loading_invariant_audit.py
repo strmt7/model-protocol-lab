@@ -97,7 +97,11 @@ class TestFromPretrainedIsLocalOnly(unittest.TestCase):
                 if not has_local_only:
                     offenders.append(f"{path.name}:{node.lineno}")
         self.assertNotEqual(
-            [p.name for p, _ in _package_trees() if "from_pretrained" in p.read_text()],
+            [
+                p.name
+                for p, _ in _package_trees()
+                if "from_pretrained" in p.read_text(encoding="utf-8")
+            ],
             [],
             "expected at least one from_pretrained call site to audit",
         )

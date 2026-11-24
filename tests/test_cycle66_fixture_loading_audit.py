@@ -538,6 +538,11 @@ class TestReadAuthoringFileAdversarial(unittest.TestCase):
             with self.subTest(kind=kind):
                 # Unique names per subtest: subTests share one tmp_path (pytest gave
                 # each parametrized case a fresh dir).
+                if kind in ("fifo", "fifo_symlink") and not hasattr(os, "mkfifo"):
+                    # Windows has no os.mkfifo: the FIFO kinds cannot
+                    # be constructed there (RR-18 follow-up). The dir
+                    # and devnull kinds still run on every platform.
+                    self.skipTest("POSIX FIFO support required")
                 if kind == "fifo":
                     target = tmp_path / "p_fifo.csv"
                     os.mkfifo(target)
@@ -545,7 +550,7 @@ class TestReadAuthoringFileAdversarial(unittest.TestCase):
                     target = tmp_path / "sub"
                     target.mkdir()
                 elif kind == "devnull":
-                    target = "/dev/null"
+                    target = os.devnull
                 else:
                     fifo = tmp_path / "p_link.csv"
                     os.mkfifo(fifo)

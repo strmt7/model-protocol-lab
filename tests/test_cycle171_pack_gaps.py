@@ -100,6 +100,7 @@ def _status(report, check_id):
 class PackReadGuardTests(unittest.TestCase):
     """Pack read guard tests."""
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "POSIX FIFO support required")
     def test_fifo_is_not_regular(self):
         """Test fifo is not regular."""
         with tempfile.TemporaryDirectory(prefix="c171g_fifo_") as tmpdir:
@@ -131,6 +132,7 @@ class PackReadGuardTests(unittest.TestCase):
             pk.collect_pack_files(Path("/nonexistent-dir-xyz"), [])
         self.assertEqual(str(ctx.exception), "pack_report_dir_missing")
 
+    @unittest.skipUnless(os.name == "posix", "backslash filename not constructible on Windows")
     def test_collect_backslash_name_invalid(self):
         """Test collect backslash name invalid."""
         with tempfile.TemporaryDirectory(prefix="c171g_bs_") as tmpdir:
@@ -199,6 +201,7 @@ class LoadGuardTests(unittest.TestCase):
                 pk.load_bundle_bytes(target)
             self.assertEqual(str(ctx.exception), "bundle_not_regular_file")
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "POSIX FIFO support required")
     def test_fifo_not_regular(self):
         """Test fifo not regular."""
         with tempfile.TemporaryDirectory(prefix="c171g_lfifo_") as tmpdir:
@@ -797,10 +800,20 @@ class SecondGapTests(unittest.TestCase):
         class _BadHandle:
             """Bad handle."""
 
+            def __init__(self, fd):
+                self._fd = fd
+
             def __enter__(self):
                 return self
 
             def __exit__(self, *exc):
+                # A real fdopen result owns the descriptor and its
+                # close() closes it. The fake must honor that
+                # contract: dropping the fd leaves the output file
+                # open, and on Windows an open file cannot be
+                # unlinked, so the partial would survive the cleanup
+                # this test exists to prove (RR-18 follow-up).
+                os.close(self._fd)
                 return False
 
             @staticmethod
@@ -816,7 +829,7 @@ class SecondGapTests(unittest.TestCase):
             def fake_fdopen(fd, mode, *args, **kwargs):
                 """Fake fdopen."""
                 if mode == "wb":
-                    return _BadHandle()
+                    return _BadHandle(fd)
                 return real_fdopen(fd, mode, *args, **kwargs)
 
             with mock.patch("os.fdopen", fake_fdopen):
@@ -834,6 +847,7 @@ class SecondGapTests(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertIn("bundle_container_invalid", err)
 
+    @unittest.skipUnless(os.name == "posix", "backslash filename not constructible on Windows")
     def test_include_name_invalid_via_cli(self):
         """Test include name invalid via cli."""
         with tempfile.TemporaryDirectory(prefix="c171g_ini_") as tmpdir:

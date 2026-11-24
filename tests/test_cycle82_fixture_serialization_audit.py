@@ -407,9 +407,11 @@ class FixtureSerializationAuditTests(unittest.TestCase):
         assert isinstance(target, Path)
         assert target == self.tmp_path / "f.json"
         assert target.read_text(encoding="utf-8") == text
-        mode = os.stat(target).st_mode & 0o777
-        assert mode & 0o077 == 0  # no group/other bits, whatever the umask
-        assert mode == 0o600
+        # Permission bits are POSIX-only (RR-18 follow-up).
+        if os.name == "posix":
+            mode = os.stat(target).st_mode & 0o777
+            assert mode & 0o077 == 0  # no group/other bits, whatever the umask
+            assert mode == 0o600
 
     def test_str_path_spelling_writes_and_returns_path(self):
         """Test str path spelling writes and returns path."""
@@ -421,10 +423,16 @@ class FixtureSerializationAuditTests(unittest.TestCase):
         """Test relative path resolves in cwd."""
         _old_cwd = os.getcwd()
         os.chdir(self.tmp_path)
-        self.addCleanup(os.chdir, _old_cwd)
-        target = write_fixture_file("{}", "rel.json")
-        assert target == Path("rel.json")
-        assert (self.tmp_path / "rel.json").read_text(encoding="utf-8") == "{}"
+        try:
+            target = write_fixture_file("{}", "rel.json")
+            assert target == Path("rel.json")
+            assert (self.tmp_path / "rel.json").read_text(encoding="utf-8") == "{}"
+        finally:
+            # Restore before tearDown removes the tempdir:
+            # addCleanup runs AFTER tearDown, and on Windows the
+            # tempdir cannot be removed while it is the process CWD
+            # (RR-18 follow-up).
+            os.chdir(_old_cwd)
 
     def test_empty_text_writes_verbatim(self):
         """The writer is content-agnostic: no schema validation at write time."""
@@ -680,6 +688,7 @@ class FixtureSerializationAuditTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not a regular file"):
             load_dataset(self.tmp_path)
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "POSIX FIFO support required")
     def test_load_dataset_rejects_fifo(self):
         """Test load dataset rejects fifo."""
         fifo = self.tmp_path / "pipe"

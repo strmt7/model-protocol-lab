@@ -363,10 +363,17 @@ class ParserHostilePropertiesTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, re.escape("Fixture path is not a regular file")):
             load_dataset(self.pid_tmpdir)  # a directory is never loadable
 
-        fifo = self.pid_tmpdir / f"fifo-{os.getpid()}"
-        os.mkfifo(fifo)
-        with self.assertRaisesRegex(ValueError, re.escape("Fixture path is not a regular file")):
-            load_dataset(fifo)  # refused via O_NONBLOCK + fstat: cannot hang
+        # Windows has no os.mkfifo, so the FIFO attack cannot be
+        # constructed there (RR-18 follow-up); the directory attack
+        # above and the device refusals elsewhere in the suite cover
+        # the not-regular vocabulary on that platform.
+        if hasattr(os, "mkfifo"):
+            fifo = self.pid_tmpdir / f"fifo-{os.getpid()}"
+            os.mkfifo(fifo)
+            with self.assertRaisesRegex(
+                ValueError, re.escape("Fixture path is not a regular file")
+            ):
+                load_dataset(fifo)  # refused via O_NONBLOCK + fstat: cannot hang
 
         bad = self.pid_tmpdir / "bad.bin"
         bad.write_bytes(b"\xff\xfe\x00not-json")

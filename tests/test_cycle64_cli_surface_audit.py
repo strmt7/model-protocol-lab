@@ -921,6 +921,7 @@ class DiffReportsValidationTests(unittest.TestCase):
         self.assertIn("diff-reports: results_path_missing (old input)", proc.stderr)
         self.assertNotIn("Traceback", proc.stderr)
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "POSIX FIFO support required")
     def test_fifo_input_reports_results_not_regular_file(self):
         """Test fifo input reports results not regular file."""
         # FIFOs are refused via the fstat-on-opened-fd check. (A directory

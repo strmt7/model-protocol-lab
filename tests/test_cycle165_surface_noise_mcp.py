@@ -433,7 +433,11 @@ class MCPPosixGuardTests(unittest.TestCase):
         class NoAlarmSignal:
             """No alarm signal."""
 
-            ITIMER_REAL = real_signal.ITIMER_REAL
+            # On a real no-SIGALRM platform (Windows) the real module
+            # has no ITIMER_REAL either; the fake only needs the
+            # attribute to exist so the code under test can look —
+            # the value is never used while SIGALRM is absent.
+            ITIMER_REAL = getattr(real_signal, "ITIMER_REAL", 0)
 
             def __init__(self):
                 self.setitimer_calls = []

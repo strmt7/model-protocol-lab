@@ -946,9 +946,11 @@ def _check_save_report_io(rep):
         json_path, html_path = rep.save_report(result, tmp / "r1")
         assert json_path == tmp / "r1" / "results.json"
         assert html_path == tmp / "r1" / "report.html"
-        for path in (json_path, html_path):
-            assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
-        assert stat.S_IMODE(os.stat(tmp / "r1").st_mode) == 0o700
+        # Permission bits are POSIX-only (RR-18 follow-up).
+        if os.name == "posix":
+            for path in (json_path, html_path):
+                assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
+            assert stat.S_IMODE(os.stat(tmp / "r1").st_mode) == 0o700
         # Refuses to overwrite: O_EXCL.
         with unittest.TestCase().assertRaises(FileExistsError):
             rep.save_report(result, tmp / "r1")
@@ -959,8 +961,9 @@ def _check_save_report_io(rep):
     # prepare_report_dir: fresh nested parents all get 0o700.
     with tempfile.TemporaryDirectory() as tmp:
         target = rep.prepare_report_dir(Path(tmp) / "a" / "b" / "c")
-        for component in (Path(tmp) / "a", Path(tmp) / "a" / "b", target):
-            assert stat.S_IMODE(os.stat(component).st_mode) == 0o700
+        if os.name == "posix":
+            for component in (Path(tmp) / "a", Path(tmp) / "a" / "b", target):
+                assert stat.S_IMODE(os.stat(component).st_mode) == 0o700
         with unittest.TestCase().assertRaises(FileExistsError):
             rep.prepare_report_dir(target)  # already exists and is empty: still refused
     with tempfile.TemporaryDirectory() as tmp:

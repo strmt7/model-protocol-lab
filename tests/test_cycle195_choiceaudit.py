@@ -1201,7 +1201,7 @@ def _run_gate(mutant_name, replacements, scenario):
         assert source.count(original) == 1, f"gate anchor not unique: {original[:60]}"
         source = source.replace(original, mutant)
     module_name = f"model_protocol_lab.diffreports_mut_{mutant_name}"
-    with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+    with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, f"diffreports_mut_{mutant_name}.py")
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(source)

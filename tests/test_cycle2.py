@@ -754,7 +754,7 @@ class ReadAuthoringFileTests(unittest.TestCase):
         """Test reads regular file."""
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "cases.csv"
-            path.write_text(VALID_CSV, encoding="utf-8")
+            path.write_text(VALID_CSV, encoding="utf-8", newline="")
             self.assertEqual(read_authoring_file(path), VALID_CSV)
 
     def test_refuses_directory(self):
@@ -795,8 +795,11 @@ class WriteFixtureFileTests(unittest.TestCase):
             target = Path(tmp) / "out.json"
             write_fixture_file("{}", target)
             self.assertEqual(target.read_text(encoding="utf-8"), "{}")
-            mode = stat.S_IMODE(os.stat(target).st_mode)
-            self.assertEqual(mode, 0o600)
+            # Permission bits are POSIX-only: Windows has no 0o600
+            # to observe (RR-18 follow-up).
+            if os.name == "posix":
+                mode = stat.S_IMODE(os.stat(target).st_mode)
+                self.assertEqual(mode, 0o600)
 
     def test_refuses_existing_path(self):
         """Test refuses existing path."""
@@ -842,6 +845,73 @@ class WriteFixtureFileTests(unittest.TestCase):
             target = Path(tmp) / "out.json"
             write_fixture_file("{}", target)
         self.assertFalse(target.exists())
+
+    def test_fdopen_failure_closes_the_open_fd(self):
+        """An fdopen failure leaves the descriptor closed.
+
+        Regression (RR-18 follow-up): write_fixture_file unlinked
+        the partial output in its cleanup branch but never closed
+        the descriptor when fdopen itself failed — on Windows the
+        still-open file cannot be unlinked, so the partial survived
+        the cleanup. The fake records the descriptor it was handed
+        and refuses it; afterwards the descriptor must be closed
+        (fstat raises) on every platform.
+        """
+        from unittest.mock import patch
+
+        seen: dict[str, int] = {}
+
+        def fake_fdopen(fd, *args, **kwargs):
+            """Fake fdopen."""
+            seen["fd"] = fd
+            raise OSError("boom")
+
+        with (
+            TemporaryDirectory() as tmp,
+            patch.object(os, "fdopen", fake_fdopen),
+            self.assertRaises(OSError),
+        ):
+            write_fixture_file("{}", Path(tmp) / "out.json")
+        with self.assertRaises(OSError):
+            os.fstat(seen["fd"])
+
+    def test_cleanup_interrupt_still_closes_via_finally(self):
+        """Test cleanup interrupt still closes via finally."""
+        from unittest.mock import patch
+
+        seen: dict[str, int] = {}
+        real_close = os.close
+        calls: list[int] = []
+
+        def fake_fdopen(fd, *args, **kwargs):
+            """Fake fdopen."""
+            seen["fd"] = fd
+            raise OSError("boom")
+
+        def interrupting_close(fd):
+            """Interrupting close."""
+            calls.append(fd)
+            if len(calls) == 1:
+                raise KeyboardInterrupt
+            return real_close(fd)
+
+        with TemporaryDirectory() as tmp:
+            target = Path(tmp) / "out.json"
+            with (
+                patch.object(os, "fdopen", fake_fdopen),
+                patch.object(os, "close", interrupting_close),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                write_fixture_file("{}", target)
+            # The unlink never ran: the partial file survives the
+            # interrupted cleanup.
+            self.assertTrue(target.exists())
+        # The cleanup branch's close was interrupted before it
+        # could reset ownership; the finally belt made the second
+        # close call, so the descriptor is closed regardless.
+        self.assertEqual(calls, [seen["fd"], seen["fd"]])
+        with self.assertRaises(OSError):
+            os.fstat(seen["fd"])
 
 
 class FixturesBuildCliTests(unittest.TestCase):

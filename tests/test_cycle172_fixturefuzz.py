@@ -450,7 +450,7 @@ class FixtureFuzzMutationGateTests(unittest.TestCase):
         source = Path(ff.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
         mutated = source.replace(old_text, new_text)
-        with tempfile.TemporaryDirectory(prefix="c172_mut_", dir="/tmp") as tmpdir:
+        with tempfile.TemporaryDirectory(prefix="c172_mut_") as tmpdir:
             mod_path = os.path.join(tmpdir, f"fixturefuzz_mut_{name}.py")
             with open(mod_path, "w", encoding="utf-8") as handle:
                 handle.write(mutated)

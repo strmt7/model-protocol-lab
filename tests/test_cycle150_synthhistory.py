@@ -675,7 +675,7 @@ class SynthhistoryMutationGateTests(unittest.TestCase):
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
         mutated = source.replace(old_text, new_text)
-        with tempfile.TemporaryDirectory(prefix="c150_mut_", dir="/tmp") as tmpdir:
+        with tempfile.TemporaryDirectory(prefix="c150_mut_") as tmpdir:
             mod_path = os.path.join(tmpdir, f"{module_name}_mut_{name}.py")
             with open(mod_path, "w", encoding="utf-8") as handle:
                 handle.write(mutated)

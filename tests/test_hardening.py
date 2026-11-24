@@ -9,6 +9,7 @@ import argparse
 import importlib.util
 import io
 import json
+import os
 import unittest
 from contextlib import redirect_stdout
 from dataclasses import replace
@@ -877,6 +878,7 @@ class SecurityFixTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not a regular file"):
             load_dataset("/dev/null")
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "POSIX FIFO support required")
     def test_fifo_fixture_rejected_without_hanging(self):
         """Test fifo fixture rejected without hanging."""
         # A named FIFO with no writer must be refused, not block forever.
@@ -915,6 +917,7 @@ class SecurityFixTests(unittest.TestCase):
         ):
             load_dataset(Path(tmp) / "does-not-exist.json")
 
+    @unittest.skipUnless(os.name == "posix", "POSIX permission bits")
     def test_report_files_have_restrictive_permissions(self):
         """Test report files have restrictive permissions."""
         import os as _os
@@ -1075,6 +1078,7 @@ class RenderRobustnessTests(unittest.TestCase):
         self.assertEqual(base.render(messages), variant.render(messages))
         self.assertEqual(candidate_fingerprint(base), candidate_fingerprint(variant))
 
+    @unittest.skipUnless(os.name == "posix", "POSIX permission bits")
     def test_report_intermediate_dirs_are_owner_only(self):
         """Test report intermediate dirs are owner only."""
         # L3: every created path component is 0o700, not just the leaf.
@@ -1565,6 +1569,7 @@ class RoundThreeFixTests(unittest.TestCase):
             )
             self.assertEqual(list(real.iterdir()), [])
 
+    @unittest.skipUnless(os.name == "posix", "POSIX permission bits")
     def test_prepare_report_dir_still_secures_real_components(self):
         """Test prepare report dir still secures real components."""
         # The symlink guard must not weaken the normal guarantee: created

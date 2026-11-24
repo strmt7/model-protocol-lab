@@ -64,6 +64,30 @@ All notable changes to this project are documented here. The format follows
   crashing. Each fix carries a regression test that fails
   without it under the affected platform semantics or the
   closest executable proxy.
+- **Follow-up Push 3: the test-design clusters, and the last
+  production survivor.** The Push-2 head's Windows run
+  (45315904711) executed the full base layer and named 190
+  failures, every one in test code or test fixtures: the
+  mutation-gate helpers' hardcoded `dir="/tmp"` tempdirs (27
+  files) now use the platform temp dir; the cycle62 doctor
+  fake canonicalizes the paths it keys by, the way the product
+  canonicalizes the paths it looks up; POSIX-only mechanisms
+  (FIFOs, `SIGALRM` deadlines, `st_blocks`, mode bits, a
+  literal `/dev/null`, backslash and control-character
+  filenames) carry the suite's platform guards or
+  `os.name`/`os.devnull` branches with their reasons recorded,
+  and the POSIX assertions keep running on POSIX; byte-exact
+  test writes (the resume test's journal rewrite, the
+  authoring-file roundtrips) open with `newline=""`, matching
+  the byte-verified formats they feed; the serving-backends
+  fake server is threaded like the real one, after two runs
+  failed two different single calls of the single-threaded
+  fixture while the direct erase and full-sequence tests
+  passed in both. One production fix completes Push 2's
+  cluster G: `write_fixture_file`'s failure path now closes
+  its descriptor before unlinking the partial file, pinned by
+  a regression test that fails on the pre-fix code. RR-18
+  stays open until the Windows run at this head is green.
 
 ### Added (release workflow consumes the readiness receipt — RR-06 closed, 2026-11-23)
 

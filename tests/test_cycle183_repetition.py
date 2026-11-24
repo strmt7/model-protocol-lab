@@ -1458,7 +1458,7 @@ class TestCliDispatch(unittest.TestCase):
 
 def _exec_repetition_variant(source_text: str) -> Any:
     """Exec a repetition.py variant under the package namespace."""
-    with tempfile.TemporaryDirectory(prefix="c183_mut_", dir="/tmp") as tmpdir:
+    with tempfile.TemporaryDirectory(prefix="c183_mut_") as tmpdir:
         mod_path = os.path.join(tmpdir, "repetition_variant.py")
         with open(mod_path, "w", encoding="utf-8") as handle:
             handle.write(source_text)

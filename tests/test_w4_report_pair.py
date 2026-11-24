@@ -151,8 +151,9 @@ class SavePairTests(unittest.TestCase):
             )
             names = sorted(p.name for p in json_path.parent.iterdir())
             self.assertEqual(names, ["report.html", "results.json"])
-            for path in (json_path, html_path):
-                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            if os.name == "posix":
+                for path in (json_path, html_path):
+                    self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             loaded = load_results(json_path.parent)
             self.assertEqual(loaded["report_pair"], stamp)
 

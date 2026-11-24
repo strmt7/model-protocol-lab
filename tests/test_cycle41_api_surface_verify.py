@@ -440,8 +440,12 @@ class TestDebugRepl(unittest.TestCase):
         )
         assert match is not None
         self.assertIn(f"model-protocol-lab debug {match.group(1)}", proc.stdout)
+        # The banner echoes the dataset path in platform spelling;
+        # every other character is the documented text (RR-18
+        # follow-up).
         self.assertIn(
-            "dataset: examples/fixtures.json (4 fixtures) | family: chatml | tokenizer: none",
+            f"dataset: {Path('examples/fixtures.json')} (4 fixtures) | "
+            "family: chatml | tokenizer: none",
             proc.stdout,
         )
 
@@ -1324,14 +1328,14 @@ class TestSensitivityControls(unittest.TestCase):
             dest = Path(tmp) / "model_protocol_lab"
             shutil.copytree(pkg_src, dest, ignore=shutil.ignore_patterns("__pycache__"))
             cat_py = dest / "catalog.py"
-            original = cat_py.read_text()
+            original = cat_py.read_text(encoding="utf-8")
             pruned = original.replace(
                 '"gemma4": Format(\n        "gemma4",',
                 '"gemma4": Format(\n        "gemma4-MUTANT",',
                 1,
             )
             self.assertNotEqual(pruned, original, "anchor text for mutant not found")
-            cat_py.write_text(pruned)
+            cat_py.write_text(pruned, encoding="utf-8")
             proc = run_mutant_cli(Path(tmp), "catalog", timeout=60)
             self.assertEqual(proc.returncode, 0, proc.stderr)
             names = [d["name"] for d in json.loads(proc.stdout)]

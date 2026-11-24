@@ -1112,7 +1112,7 @@ class SurfaceNoiseMutationGateTests(unittest.TestCase):
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertEqual(source.count(old_text), 1, f"mutant {name}: anchor not unique")
         mutated = source.replace(old_text, new_text)
-        with tempfile.TemporaryDirectory(prefix="c165_mut_", dir="/tmp") as tmpdir:
+        with tempfile.TemporaryDirectory(prefix="c165_mut_") as tmpdir:
             mod_path = os.path.join(tmpdir, f"{module_name}_mut_{name}.py")
             with open(mod_path, "w", encoding="utf-8") as handle:
                 handle.write(mutated)
@@ -1498,6 +1498,7 @@ class CoverageGapTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 sn._load_probe_json(bad)
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "POSIX FIFO support required")
     def test_load_probe_json_refuses_fifo(self):
         """Test load probe json refuses fifo."""
         # Oversight security S-1: the single-fd reader refuses a FIFO

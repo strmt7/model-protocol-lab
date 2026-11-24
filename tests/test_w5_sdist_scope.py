@@ -332,7 +332,9 @@ class WiringTests(unittest.TestCase):
                 os.environ["https_proxy"] = previous_proxy  # type: ignore[assignment]
         self.assertNotIn("PYTHONPATH", env)
         self.assertNotIn("PYTHONHOME", env)
-        self.assertEqual(env["TMPDIR"], "/work/tmp")
+        # TMPDIR carries the directory's own path string — platform
+        # spelling, not a POSIX literal (RR-18 follow-up).
+        self.assertEqual(env["TMPDIR"], str(Path("/work/tmp")))
         # The host's egress configuration is not checkout state: it
         # passes through, or the hashed installs cannot reach an index.
         self.assertEqual(env["https_proxy"], "http://proxy.invalid:3128")

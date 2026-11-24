@@ -1353,7 +1353,7 @@ def _load_variant(source: str):
     import os
     import tempfile
 
-    with tempfile.TemporaryDirectory(prefix="c184_mut_", dir="/tmp") as tmpdir:
+    with tempfile.TemporaryDirectory(prefix="c184_mut_") as tmpdir:
         mod_path = os.path.join(tmpdir, "distraction_variant.py")
         with open(mod_path, "w", encoding="utf-8") as handle:
             handle.write(source)

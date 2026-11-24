@@ -15,6 +15,7 @@ acceptance text, never from the pre-fix behaviour.
 
 import io
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -758,8 +759,17 @@ def _write_dataset(path: Path, *, search: int = 24, held_out: int = 4) -> Path:
 
 
 @unittest.skipUnless(_toolkit_available(), "HF toolkit not installed")
+@unittest.skipUnless(os.name == "posix", "SIGTERM delivery to a child process is POSIX-only")
 class RealSignalCliTests(unittest.TestCase):
-    """Brief 4.3: real SIGTERM against the real CLI, three arms."""
+    """Brief 4.3: real SIGTERM against the real CLI, three arms.
+
+    POSIX-only: on Windows, Popen.send_signal(SIGTERM) is
+    TerminateProcess — the child dies with exit code 1, no handler
+    runs, and no cancelled report can be written (RR-18 follow-up).
+    Windows console control events reach only processes in the
+    sender's own console group, so this delivery route does not
+    exist there at all.
+    """
 
     @classmethod
     def setUpClass(cls) -> None:

@@ -18,6 +18,7 @@ VALIDATION evidence blocks keep their own era's numbers, per the
 standing snapshot rule).
 """
 
+import os
 import re
 import subprocess
 import sys
@@ -186,7 +187,12 @@ class ValidationRuffCountPinTests(unittest.TestCase):
         match = re.search(r"\((\d+) files in that CI scope", top)
         self.assertIsNotNone(match, "VALIDATION top section lost its scoped ruff count")
         claimed = int(match.group(1))  # type: ignore[union-attr]
-        exe = BIN_DIR / "ruff"
+        # Tool scripts sit beside the interpreter in a POSIX venv,
+        # but in the Scripts subdirectory of a Windows installation,
+        # with the .exe suffix (RR-18 follow-up).
+        suffix = ".exe" if os.name == "nt" else ""
+        candidates = (BIN_DIR / ("ruff" + suffix), BIN_DIR / "Scripts" / ("ruff" + suffix))
+        exe = next((candidate for candidate in candidates if candidate.exists()), candidates[0])
         self.assertTrue(exe.exists(), f"expected tool at {exe}")
         proc = subprocess.run(
             [

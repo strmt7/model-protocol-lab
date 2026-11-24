@@ -446,10 +446,34 @@
     ]
   },
   "posix_methods": {
+    "test_cycle165_surfacenoise.py": [
+      "CoverageGapTests.test_load_probe_json_refuses_fifo"
+    ],
+    "test_cycle171_pack_gaps.py": [
+      "LoadGuardTests.test_fifo_not_regular",
+      "PackReadGuardTests.test_fifo_is_not_regular"
+    ],
+    "test_cycle29_fixtures_verify.py": [
+      "TestReadAuthoringFile.test_fifo_refused"
+    ],
+    "test_cycle30_datasets_verify.py": [
+      "TestLoadDataset.test_fifo_without_writer_refused",
+      "TestLoadDataset.test_symlink_to_fifo_refused",
+      "TestRedTeam.test_fifo_with_writer_still_refused"
+    ],
+    "test_cycle64_cli_surface_audit.py": [
+      "DiffReportsValidationTests.test_fifo_input_reports_results_not_regular_file"
+    ],
+    "test_cycle82_fixture_serialization_audit.py": [
+      "FixtureSerializationAuditTests.test_load_dataset_rejects_fifo"
+    ],
     "test_cycle96_redteam_sweep.py": [
       "ChatTemplateMemoryCapTests.test_bomb_render_raises_memory_error_without_rss_growth",
       "WeightHeaderRobustnessTests.test_fifo_shard_fails_closed_without_hang",
       "WeightHeaderRobustnessTests.test_read_json_fifo_fails_closed_without_hang"
+    ],
+    "test_hardening.py": [
+      "SecurityFixTests.test_fifo_fixture_rejected_without_hanging"
     ]
   },
   "module_counts": {

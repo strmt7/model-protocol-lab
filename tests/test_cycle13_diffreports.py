@@ -474,6 +474,7 @@ class DiffreportsTests(unittest.TestCase):
             load_results(path)
         assert str(excinfo.exception) == "results_too_large"
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "POSIX FIFO support required")
     def test_hostile_inputs_not_regular_file(self):
         """Test hostile inputs not regular file."""
         fifo = self.tmp_path / "fifo.json"

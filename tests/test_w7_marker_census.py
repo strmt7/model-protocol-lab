@@ -67,7 +67,12 @@ def _count_tree(tree: str) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
     for path in sorted(base.rglob("*.py")):
         if "__pycache__" in path.parts:
             continue
-        rel = str(path.relative_to(ROOT))
+        # as_posix: the pinned census keys are POSIX paths, and the
+        # SELF exclusion must match on every platform — with str()
+        # a Windows run keyed files by backslash paths, matched
+        # nothing, and counted this file's own pattern literals
+        # (RR-18 follow-up).
+        rel = path.relative_to(ROOT).as_posix()
         if rel == SELF:
             continue
         counts = _count_text(path.read_text(encoding="utf-8", errors="replace"))

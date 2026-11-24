@@ -34,6 +34,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import random
 import string
 import sys
@@ -569,6 +570,7 @@ class DriverTests(unittest.TestCase):
         self.assertEqual(section["status"], "ok")
         self.assertEqual(section["counts"]["transform_unverifiable"], len(tp.PAIRS))
 
+    @unittest.skipUnless(os.name == "posix", "strftime %f unsupported by the Windows CRT")
     def test_strftime_template_is_nondeterministic_and_inconclusive(self):
         """Test strftime template is nondeterministic and inconclusive."""
         template = (

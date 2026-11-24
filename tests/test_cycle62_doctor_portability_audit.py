@@ -211,7 +211,14 @@ def _write_ckpt(directory: Path, doc: dict) -> Path:
 
 def _register(registry: dict[str, FakeSpec], ckpt: Path, spec: FakeSpec) -> None:
     """Register."""
-    registry[str(ckpt / "tokenizer.json")] = spec
+    # The product resolves the checkpoint root before constructing
+    # the tokenizer (backends._directory resolve()s), so the fake is
+    # looked up by the RESOLVED tokenizer_file string. Keying on the
+    # unresolved path misses whenever resolution changes the string
+    # — on Windows the temp root's 8.3 short name (RUNNER~1) expands
+    # — and every case degrades to reference_tokenizer_unavailable
+    # (RR-18 follow-up). Canonicalize at registration.
+    registry[str((ckpt / "tokenizer.json").resolve())] = spec
 
 
 @contextlib.contextmanager

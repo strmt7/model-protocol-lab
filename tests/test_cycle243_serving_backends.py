@@ -31,7 +31,7 @@ import threading
 import types
 import unittest
 import urllib.parse
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -420,7 +420,14 @@ def _make_handler(state: _FakeState):
 class _FakeServer:
     def __init__(self, gguf_path: Path) -> None:
         self.state = _FakeState(gguf_path)
-        self.httpd = HTTPServer(("127.0.0.1", 0), _make_handler(self.state))
+        # Threaded like the real server: a single-threaded fixture
+        # lets one lingering keep-alive read serialize (and on the
+        # Windows runner intermittently fail) every later request --
+        # diag run 45285454480 failed the reset seam's erase call and
+        # run 45315904711 the mirror test's cache sequence, while the
+        # direct erase and full-sequence tests passed in both
+        # (RR-18 follow-up).
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), _make_handler(self.state))
         self.port = int(self.httpd.server_address[1])
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
 
@@ -5077,7 +5084,9 @@ class CliStackValidationTests(ServingBackendsTestBase):
         with mock.patch.dict(sys.modules, {"transformers": fake}):
             result = servingbackends._load_hf_tokenizer(Path("/ckpt"))
         self.assertEqual(result, "tok")
-        self.assertEqual(calls["path"], "/ckpt")
+        # The product hands over str(path): the platform spelling of
+        # the same path, not a POSIX literal (RR-18 follow-up).
+        self.assertEqual(calls["path"], str(Path("/ckpt")))
         self.assertEqual(calls["kwargs"], {"local_files_only": True})
 
     def test_vllm_arm_rejections_construct_nothing(self) -> None:

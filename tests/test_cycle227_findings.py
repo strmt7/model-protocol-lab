@@ -68,6 +68,7 @@ from __future__ import annotations
 import copy
 import io
 import json
+import signal
 import struct
 import tempfile
 import unittest
@@ -849,6 +850,7 @@ class McpRobustnessTests(unittest.TestCase):
             "local_hf backend could not be constructed from params.backend",
         )
 
+    @unittest.skipUnless(hasattr(signal, "SIGALRM"), "POSIX SIGALRM required")
     def test_probe_restores_preexisting_sigalrm_timer(self):
         """Test probe restores preexisting sigalrm timer."""
         import signal

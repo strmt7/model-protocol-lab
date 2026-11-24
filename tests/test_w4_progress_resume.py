@@ -36,7 +36,6 @@ import hashlib
 import importlib.metadata
 import io
 import json
-import signal
 import subprocess
 import sys
 import tempfile
@@ -615,7 +614,7 @@ class CliResumeTests(unittest.TestCase):
                 if journal.is_file():
                     lines = journal.read_bytes().count(b"\n")
                     if lines >= 4:  # header + >=3 records
-                        proc.send_signal(signal.SIGKILL)
+                        proc.kill()
                         proc.wait(timeout=60)
                         return lines - 1
                 if proc.poll() is not None:
@@ -1240,7 +1239,7 @@ class CliResumeDispatchTests(unittest.TestCase):
             self.assertIn('"footer"', lines[-1])
             (output / "results.json").unlink()
             (output / "report.html").unlink()
-            journal.write_text("\n".join(lines[:-1]) + "\n", encoding="utf-8")
+            journal.write_text("\n".join(lines[:-1]) + "\n", encoding="utf-8", newline="")
             with mock.patch.object(cli_module, "run_experiment", resume_stub):
                 kind, code, _ = self._invoke(self._argv(tmp, fixture, output, "--resume"))
             self.assertEqual((kind, code), ("return", 0))

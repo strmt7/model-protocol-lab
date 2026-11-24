@@ -1061,7 +1061,11 @@ class TestReadScriptEdges(unittest.TestCase):
             home = Path(tmp) / "home"
             home.mkdir()
             (home / "cmds.txt").write_text(".families\n", encoding="utf-8")
-            with mock.patch.dict(os.environ, {"HOME": str(home)}):
+            # HOME is the POSIX home source; Windows expanduser
+            # consults USERPROFILE instead, so pin both to the same
+            # home or the expansion follows the host account
+            # (RR-18 follow-up).
+            with mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home)}):
                 _, out = _one(shell, buf, ".read ~/cmds.txt")
         self.assertIn("chatml", out)
 

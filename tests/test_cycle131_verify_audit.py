@@ -825,7 +825,10 @@ class TestDefensiveBranches(unittest.TestCase):
         verify.build_verify_parser(sub)
         args = parser.parse_args(["verify", "some/path"])
         self.assertEqual(args.command, "verify")
-        self.assertEqual(str(args.results), "some/path")
+        # Compare Paths, not spellings: str(Path) uses the platform
+        # separator, so a literal "some/path" expectation is
+        # POSIX-only (RR-18 follow-up).
+        self.assertEqual(args.results, Path("some/path"))
 
     def test_entry_without_own_boundary_falls_back(self) -> None:
         """Test entry without own boundary falls back."""

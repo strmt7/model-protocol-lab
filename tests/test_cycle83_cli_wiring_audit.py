@@ -512,6 +512,7 @@ class ExitCodeContractTests(unittest.TestCase):
     @unittest.skipIf(
         hasattr(os, "geteuid") and os.geteuid() == 0, "permission bits do not block root"
     )
+    @unittest.skipUnless(os.name == "posix", "chmod 0o000 does not deny reads on Windows")
     def test_unreadable_fixture_mode_000_exits_1(self):
         """Test unreadable fixture mode 000 exits 1."""
         with TemporaryDirectory() as tmp:

@@ -819,7 +819,7 @@ class MutationGateTests(unittest.TestCase):
         mutated = source.replace(old_text, new_text)
         import tempfile
 
-        with tempfile.TemporaryDirectory(prefix="c170_mut_", dir="/tmp") as tmpdir:
+        with tempfile.TemporaryDirectory(prefix="c170_mut_") as tmpdir:
             mod_path = os.path.join(tmpdir, f"{module_name}_mut_{name}.py")
             with open(mod_path, "w", encoding="utf-8") as handle:
                 handle.write(mutated)

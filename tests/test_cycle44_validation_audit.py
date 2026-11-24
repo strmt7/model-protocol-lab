@@ -85,6 +85,7 @@ the honest framings. It does NOT modify VALIDATION.md itself.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -100,7 +101,12 @@ BIN_DIR = Path(sys.executable).parent
 
 def run_tool(name: str, *args: str, timeout: int = 300) -> subprocess.CompletedProcess[str]:
     """Run tool."""
-    exe = BIN_DIR / name
+    # Tool scripts sit beside the interpreter in a POSIX venv, but
+    # in the Scripts subdirectory of a Windows installation, with
+    # the .exe suffix (RR-18 follow-up).
+    suffix = ".exe" if os.name == "nt" else ""
+    candidates = (BIN_DIR / (name + suffix), BIN_DIR / "Scripts" / (name + suffix))
+    exe = next((candidate for candidate in candidates if candidate.exists()), candidates[0])
     assert exe.exists(), f"expected tool at {exe}"
     return subprocess.run(
         [str(exe), *args],

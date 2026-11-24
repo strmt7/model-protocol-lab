@@ -197,6 +197,7 @@ class PackSurrogateNameTests(unittest.TestCase):
     during serialisation.
     """
 
+    @unittest.skipUnless(os.name == "posix", "bytes filenames are POSIX-only")
     def test_surrogateescape_filename_rejected_in_vocabulary(self):
         """Test surrogateescape filename rejected in vocabulary."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -394,6 +395,7 @@ class ProbeOutputPermissionTests(unittest.TestCase):
     permissive umask.
     """
 
+    @unittest.skipUnless(os.name == "posix", "POSIX permission bits and umask")
     def test_probe_output_permissions(self):
         """Test probe output permissions."""
         with tempfile.TemporaryDirectory() as tmp:

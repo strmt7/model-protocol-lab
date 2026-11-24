@@ -714,6 +714,7 @@ class AdversarialEdgeTests(_Base, unittest.TestCase):
         hasattr(os, "geteuid") and os.geteuid() == 0,
         "root bypasses file permission checks; nothing to deny",
     )
+    @unittest.skipUnless(os.name == "posix", "chmod 0o000 does not deny reads on Windows")
     def test_unreadable_config_fails_closed(self):
         """Test unreadable config fails closed."""
         root = self.healthy()

@@ -1196,7 +1196,7 @@ class TestReadAuthoringFile(unittest.TestCase):
         """Test roundtrip small file."""
         tmp_path = self.tmp_path
         target = tmp_path / "a.csv"
-        target.write_text("id,group\n", encoding="utf-8")
+        target.write_text("id,group\n", encoding="utf-8", newline="")
         assert fx.read_authoring_file(target) == "id,group\n"
         assert fx.read_authoring_file(str(target)) == "id,group\n"
 
@@ -1215,6 +1215,7 @@ class TestReadAuthoringFile(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "[Ss]ize|[Ll]imit"):
             fx.read_authoring_file(target)
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "POSIX FIFO support required")
     def test_fifo_refused(self):
         """Test fifo refused."""
         tmp_path = self.tmp_path
@@ -1299,8 +1300,10 @@ class TestWriteFixtureFile(unittest.TestCase):
         result = fx.write_fixture_file(self._built_text(), target)
         assert result == target
         assert parse_dataset(target.read_text(encoding="utf-8")) is not None
-        mode = stat.S_IMODE(os.stat(target).st_mode)
-        assert mode == 0o600
+        # Permission bits are POSIX-only (RR-18 follow-up).
+        if os.name == "posix":
+            mode = stat.S_IMODE(os.stat(target).st_mode)
+            assert mode == 0o600
 
     def test_write_does_not_translate_newlines(self):
         """The fixture write must open with newline="".
@@ -1369,10 +1372,16 @@ class TestWriteFixtureFile(unittest.TestCase):
         tmp_path = self.tmp_path
         _old_cwd = os.getcwd()
         os.chdir(tmp_path)
-        self.addCleanup(os.chdir, _old_cwd)
-        target = Path("rel.json")
-        fx.write_fixture_file(self._built_text(), target)
-        assert target.exists()
+        try:
+            target = Path("rel.json")
+            fx.write_fixture_file(self._built_text(), target)
+            assert target.exists()
+        finally:
+            # Restore before tearDown removes the tempdir:
+            # addCleanup runs AFTER tearDown, and on Windows the
+            # tempdir cannot be removed while it is the process CWD
+            # (RR-18 follow-up).
+            os.chdir(_old_cwd)
 
     def setUp(self):
         """Set up the test fixture."""

@@ -1269,8 +1269,9 @@ class TestLoadDataset(unittest.TestCase):
     def test_dev_null_refused(self):
         """Test dev null refused."""
         with self.assertRaisesRegex(ValueError, "not a regular file"):
-            datasets_mod.load_dataset("/dev/null")
+            datasets_mod.load_dataset(os.devnull)
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "POSIX FIFO support required")
     def test_fifo_without_writer_refused(self):
         """Test fifo without writer refused."""
         tmp_path = self.tmp_path
@@ -1279,6 +1280,7 @@ class TestLoadDataset(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not a regular file"):
             datasets_mod.load_dataset(fifo)
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "POSIX FIFO support required")
     def test_symlink_to_fifo_refused(self):
         """Test symlink to fifo refused."""
         tmp_path = self.tmp_path
@@ -1415,6 +1417,7 @@ class TestLoadDataset(unittest.TestCase):
 class TestRedTeam(unittest.TestCase):
     """Test red team."""
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "POSIX FIFO support required")
     def test_fifo_with_writer_still_refused(self):
         """Test fifo with writer still refused."""
         tmp_path = self.tmp_path
