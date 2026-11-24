@@ -97,6 +97,35 @@ All notable changes to this project are documented here. The format follows
   complete Phase-2 history (first run, diagnosis, Pushes
   1–3, verdict run).
 
+### Fixed (release-policy recorded-evidence mode binds run IDs and fails closed, 2026-11-24)
+
+- **`tools/release_policy.py`'s rehearsal-only `--evidence-json`
+  mode now checks the bindings its API mode gets from the API
+  itself.** The W8 rehearsal-refresh invalidation lane showed
+  (findings T07/T28) that a recorded bundle's run IDs were trusted
+  verbatim — substituting a stale real run ID still accepted —
+  and that a malformed bundle crashed with a traceback at exit 1
+  instead of the tool's documented fail-closed exit 2. The bundle
+  shape now records, for each run, the workflow file that
+  produced it, and, for each CI job, the `run_id` it was fetched
+  for (both are fields the GitHub API itself returns; the emit
+  side, `build_bundle`, records them). The evaluator rejects a
+  run produced by the wrong workflow (`wrong-workflow:`) and a
+  job list recorded for another run (`unbound:`), so the lane's
+  substitution attack now rejects with a named reason. Bundle
+  loading is total: an unreadable file, invalid JSON, or any
+  structural defect against the documented shape (missing keys,
+  wrong types, bool-as-int, missing binding fields) fails closed
+  with exit 2 and a named reason — never a traceback, never an
+  accept. API mode is behaviour-identical: the acceptance at
+  950ddcf5 and every refusal arm were re-executed after the fix
+  and match the rehearsal record byte for byte. Regression
+  coverage: `tests/test_release_policy.py` extended
+  regression-first (the T07 substitution tests, the
+  wrong-workflow and unbound evaluations, a 26-case malformed
+  bundle sweep, and a recorded-payload `build_bundle` test) —
+  every new test fails on the pre-fix code.
+
 ### Added (release workflow consumes the readiness receipt — RR-06 closed, 2026-11-23)
 
 - **`.github/workflows/release.yml` now gates publication on the

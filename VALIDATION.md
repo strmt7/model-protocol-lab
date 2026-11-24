@@ -18,8 +18,8 @@ degrade there (checkpoint-template rendering does not: since
 W4/RR-10 it runs in an owned worker process whose deadline the
 parent enforces on every platform).
 
-- `python -m pytest -q -p no:cacheprovider` — **10541 tests collected**
-  (measured 2026-11-24, RR-18 follow-up gate). Subtests numbered in the 73k+
+- `python -m pytest -q -p no:cacheprovider` — **10550 tests collected**
+  (measured 2026-11-24, release-policy hardening gate). Subtests numbered in the 73k+
   range in recent cycles.
 - `python -m unittest discover -s tests -t .` — **8281 tests (cycle 207,
   2026-10-25; both runners agree exactly). Cycle 106 closed the pytest-only gap: 9 test files that

@@ -21,6 +21,21 @@ Who uses it: the maintainer, on the morning a release is proposed, to
 get one receipt binding a commit to its evidence instead of eyeballing
 four workflow pages — and to have the absence of evidence fail closed
 rather than pass unnoticed.
+
+Recorded-evidence mode (--evidence-json, rehearsal only) consumes a
+bundle in the shape build_bundle produces. The API path binds a run
+ID to its commit by fetching it from the workflow's own run list
+filtered to that SHA, and binds the CI job list to the CI run by
+fetching it under that run's ID; a recorded bundle carries the same
+bindings as data — each run records the workflow file that produced
+it, each CI job records the run_id it was fetched for — and the
+evaluator checks them, so a substituted run ID or a job list recorded
+for another run rejects with a named reason. A bundle that cannot be
+read, parsed or matched to that shape at all is not evidence: it
+fails closed with exit 2, never a traceback and never an accept. The
+bundle's authenticity still rests on its provenance (the receipt
+names the evidence file as its source); the release path itself runs
+in API mode, where the bindings come from the API directly.
 """
 
 from __future__ import annotations
@@ -67,9 +82,17 @@ def evaluate_evidence(bundle: dict[str, Any]) -> list[str]:
          "version_at_sha": str | None,
          "runs": {key: {"id": int, "status": str,
                         "conclusion": str | None,
-                        "head_sha": str} | None},
+                        "head_sha": str,
+                        "workflow": str} | None},
          "ci_jobs": [{"name": str, "status": str,
-                      "conclusion": str | None}] | None}
+                      "conclusion": str | None,
+                      "run_id": int}] | None}
+
+    Two bindings mirror how the API path obtains the evidence: a
+    run's recorded workflow must be the workflow file its key stands
+    for, and every CI job's recorded run_id must be the bundle's CI
+    run — a job list fetched for any other run does not vouch for
+    this one.
     """
     reasons: list[str] = []
     sha = bundle["sha"]
@@ -82,6 +105,12 @@ def evaluate_evidence(bundle: dict[str, Any]) -> list[str]:
         if run.get("head_sha") != sha:
             reasons.append(
                 f"wrong-sha: {key} run {run.get('id')} is bound to {run.get('head_sha')}, not {sha}"
+            )
+            continue
+        if run.get("workflow") != REQUIRED_WORKFLOWS[key]:
+            reasons.append(
+                f"wrong-workflow: {key} run {run.get('id')} was produced by "
+                f"{run.get('workflow')}, not {REQUIRED_WORKFLOWS[key]}"
             )
             continue
         if run.get("status") != "completed":
@@ -102,6 +131,16 @@ def evaluate_evidence(bundle: dict[str, Any]) -> list[str]:
     if jobs is None:
         reasons.append("absent: CI job list for the CI run is unavailable")
     else:
+        ci_run = runs.get("ci")
+        if isinstance(ci_run, dict):
+            ci_run_id = ci_run.get("id")
+            for job in jobs:
+                if job.get("run_id") != ci_run_id:
+                    reasons.append(
+                        f"unbound: CI job {job.get('name')!r} was recorded for "
+                        f"run {job.get('run_id')}, not the CI run {ci_run_id} "
+                        "in this bundle"
+                    )
         audit_jobs = [j for j in jobs if j.get("name") == REQUIRED_CI_JOB]
         if not audit_jobs:
             reasons.append(f"absent: CI job {REQUIRED_CI_JOB!r} not in the CI run")
@@ -174,6 +213,7 @@ def build_bundle(repo: str, sha: str, expected_version: str, token: str | None) 
             "status": run.get("status"),
             "conclusion": run.get("conclusion"),
             "head_sha": run.get("head_sha"),
+            "workflow": workflow_file,
         }
         if key == "ci":
             ci_run_id = int(run["id"])
@@ -188,6 +228,7 @@ def build_bundle(repo: str, sha: str, expected_version: str, token: str | None) 
                 "name": job.get("name"),
                 "status": job.get("status"),
                 "conclusion": job.get("conclusion"),
+                "run_id": job.get("run_id"),
             }
             for job in payload.get("jobs", [])
         ]
@@ -209,6 +250,87 @@ def build_bundle(repo: str, sha: str, expected_version: str, token: str | None) 
         "runs": runs,
         "ci_jobs": ci_jobs,
     }
+
+
+def _is_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _validate_bundle_shape(bundle: Any) -> None:
+    """Raise PolicyError unless bundle matches the documented shape.
+
+    Recorded evidence is untrusted input: every structural defect —
+    a missing key, a wrong type, a binding field of the wrong type —
+    means the evidence could not be obtained in the form the policy
+    evaluates, so it is a PolicyError (exit 2), never a crash and
+    never a policy verdict on a shape the evaluator cannot read.
+    """
+
+    def malformed(defect: str) -> PolicyError:
+        return PolicyError(f"malformed evidence bundle: {defect}")
+
+    if not isinstance(bundle, dict):
+        raise malformed(f"top level must be a JSON object, got {type(bundle).__name__}")
+    for key in ("sha", "runs", "ci_jobs", "version_at_sha"):
+        if key not in bundle:
+            raise malformed(f"missing key {key!r}")
+    if not isinstance(bundle["sha"], str):
+        raise malformed("'sha' must be a string")
+    if "expected_version" in bundle and not isinstance(bundle["expected_version"], str):
+        raise malformed("'expected_version' must be a string")
+    if bundle["version_at_sha"] is not None and not isinstance(bundle["version_at_sha"], str):
+        raise malformed("'version_at_sha' must be a string or null")
+    runs = bundle["runs"]
+    if not isinstance(runs, dict):
+        raise malformed("'runs' must be an object")
+    for key, run in runs.items():
+        if run is None:
+            continue
+        if not isinstance(run, dict):
+            raise malformed(f"runs.{key} must be an object or null")
+        if key not in REQUIRED_WORKFLOWS:
+            continue
+        if not _is_int(run.get("id")):
+            raise malformed(f"runs.{key}.id is missing or not an integer")
+        for field in ("status", "conclusion", "head_sha"):
+            if run.get(field) is not None and not isinstance(run.get(field), str):
+                raise malformed(f"runs.{key}.{field} must be a string or null")
+        if not isinstance(run.get("workflow"), str):
+            raise malformed(f"runs.{key}.workflow is missing or not a string")
+    jobs = bundle["ci_jobs"]
+    if jobs is not None:
+        if not isinstance(jobs, list):
+            raise malformed("'ci_jobs' must be a list or null")
+        for index, job in enumerate(jobs):
+            if not isinstance(job, dict):
+                raise malformed(f"ci_jobs[{index}] must be an object")
+            if not isinstance(job.get("name"), str):
+                raise malformed(f"ci_jobs[{index}].name is missing or not a string")
+            for field in ("status", "conclusion"):
+                if job.get(field) is not None and not isinstance(job.get(field), str):
+                    raise malformed(f"ci_jobs[{index}].{field} must be a string or null")
+            if not _is_int(job.get("run_id")):
+                raise malformed(f"ci_jobs[{index}].run_id is missing or not an integer")
+
+
+def _load_evidence_bundle(path: Path) -> dict[str, Any]:
+    """Read and shape-check a recorded evidence bundle.
+
+    Any failure — an unreadable file, invalid JSON, or a document
+    that does not match the shape build_bundle produces — raises
+    PolicyError, so the CLI fails closed with exit 2 (evidence could
+    not be obtained) instead of crashing on garbage input.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise PolicyError(f"evidence bundle could not be read: {path}: {exc}") from exc
+    try:
+        bundle: dict[str, Any] = json.loads(text)
+    except (json.JSONDecodeError, RecursionError) as exc:
+        raise PolicyError(f"evidence bundle is not valid JSON: {path}: {exc}") from exc
+    _validate_bundle_shape(bundle)
+    return bundle
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -233,8 +355,8 @@ def main(argv: list[str] | None = None) -> int:
     source = "api"
     try:
         if args.evidence_json is not None:
-            bundle = json.loads(args.evidence_json.read_text(encoding="utf-8"))
-            if bundle.get("sha") != args.sha:
+            bundle = _load_evidence_bundle(args.evidence_json)
+            if bundle["sha"] != args.sha:
                 print(
                     json.dumps(
                         {
@@ -243,7 +365,7 @@ def main(argv: list[str] | None = None) -> int:
                             "reasons": [
                                 (
                                     "wrong-sha: evidence bundle is bound to "
-                                    f"{bundle.get('sha')}, not {args.sha}"
+                                    f"{bundle['sha']}, not {args.sha}"
                                 )
                             ],
                         },
