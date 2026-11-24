@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Added (Windows portable cell runs the base test layer — RR-18, 2026-11-23; first run failed, follow-up in progress)
+### Added (Windows portable cell runs the base test layer — RR-18 closed, 2026-11-24)
 
 - **`.github/workflows/windows.yml` now executes the base test
   layer on Windows, not just collects it.** After the Phase-1
@@ -88,6 +88,14 @@ All notable changes to this project are documented here. The format follows
   its descriptor before unlinking the partial file, pinned by
   a regression test that fails on the pre-fix code. RR-18
   stays open until the Windows run at this head is green.
+- **RR-18 closed.** The Windows portable run at the Push-3
+  head (b4b09cbb2955, run 45358577264) completed green: the
+  chunked run step executed the full base layer across all
+  chunks with zero failures. The support matrix's Windows
+  3.12 base/core-run cell now carries its pass claim, and
+  the ledger's RR-18 row is fixed-with-evidence with the
+  complete Phase-2 history (first run, diagnosis, Pushes
+  1–3, verdict run).
 
 ### Added (release workflow consumes the readiness receipt — RR-06 closed, 2026-11-23)
 
