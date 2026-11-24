@@ -1,6 +1,14 @@
 # Line endings and diff display (cycle 210).
 * text=auto
 *.py text eol=lf
+# Byte-pinned fixtures: their digests are part of the test contract
+# (the sample report's report_pair stamp; the vendored Unicode
+# census), so a checkout must reproduce the blob bytes exactly on
+# every platform — CRLF translation on a Windows checkout changed
+# the bytes and the digests no longer matched (RR-18 follow-up,
+# proven by digest arithmetic against the CI-reported value).
+examples/sample-report/* binary
+tests/data/* binary
 # Generated/large artifacts: collapsed by default in diff views, but
 # still expandable — the byte-identical golden test, not diff review,
 # is what guards the sample report's contents.

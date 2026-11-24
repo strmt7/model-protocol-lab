@@ -528,6 +528,41 @@ class LayerPathsStdoutDeathTests(unittest.TestCase):
         self.assertNotIn("Traceback", proc.stderr)
         self.assertNotIn("BrokenPipeError", proc.stderr)
 
+    def test_einval_death_is_quiet(self):
+        """Windows shape: a dead stdout raises EINVAL, not EPIPE.
+
+        The quiet-death path must treat EINVAL from the write as
+        the same dead-reader event (RR-18 follow-up); pre-fix it
+        propagated out of _emit as a traceback.
+        """
+        import errno as _errno
+
+        class _DeadBuffer:
+            """Buffer whose write raises EINVAL, as on Windows."""
+
+            def write(self, _data):
+                """Raise EINVAL."""
+                raise OSError(_errno.EINVAL, "Invalid argument")
+
+            def flush(self):
+                """Do nothing."""
+
+        class _DeadStdout:
+            """Stdout carrying the dead buffer."""
+
+            buffer = _DeadBuffer()
+
+        spec = importlib.util.spec_from_file_location(
+            "layer_paths_under_test", REPO_ROOT / "tools" / "layer_paths.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with (
+            mock.patch.object(sys, "stdout", _DeadStdout()),
+            mock.patch.object(os, "dup2", lambda *args: None),
+        ):
+            self.assertEqual(module._emit(b"tests/x.py\n"), 1)
+
     def test_closed_stdout_start_is_quiet(self):
         """Test closed stdout start is quiet."""
         spec = importlib.util.spec_from_file_location(

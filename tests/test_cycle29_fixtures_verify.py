@@ -1229,6 +1229,31 @@ class TestReadAuthoringFile(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "[Rr]egular"):
             fx.read_authoring_file(tmp_path)
 
+    def test_directory_refused_when_open_itself_refuses(self):
+        """Directory refusal when the open, not the fstat, refuses.
+
+        Windows shape (RR-18 follow-up): os.open on a directory
+        raises PermissionError instead of succeeding so the fstat
+        can refuse it. Simulate that open on any platform and
+        require the same not-regular vocabulary.
+        """
+        from unittest import mock
+
+        tmp_path = self.tmp_path
+        real_open = os.open
+
+        def fake_open(path, flags, *args, **kwargs):
+            """Raise PermissionError for the directory, delegate else."""
+            if Path(path) == tmp_path:
+                raise PermissionError(13, "Access is denied")
+            return real_open(path, flags, *args, **kwargs)
+
+        with (
+            mock.patch.object(os, "open", fake_open),
+            self.assertRaisesRegex(ValueError, "[Rr]egular"),
+        ):
+            fx.read_authoring_file(tmp_path)
+
     def test_missing_file(self):
         """Test missing file."""
         tmp_path = self.tmp_path
@@ -1276,6 +1301,34 @@ class TestWriteFixtureFile(unittest.TestCase):
         assert parse_dataset(target.read_text(encoding="utf-8")) is not None
         mode = stat.S_IMODE(os.stat(target).st_mode)
         assert mode == 0o600
+
+    def test_write_does_not_translate_newlines(self):
+        """The fixture write must open with newline="".
+
+        The written text is the file's exact content and is
+        re-read byte-faithfully; a text-mode write that
+        translates newlines (CRLF on Windows) smuggles \\r into
+        the last field of every CSV line (RR-18 follow-up).
+        Pin the construction.
+        """
+        from unittest import mock
+
+        real_fdopen = os.fdopen
+        calls = []
+
+        def recording_fdopen(fd, mode, *args, **kwargs):
+            """Record text-mode calls, then delegate."""
+            if mode == "w":
+                calls.append(kwargs)
+            return real_fdopen(fd, mode, *args, **kwargs)
+
+        tmp_path = self.tmp_path
+        target = tmp_path / "out.json"
+        with mock.patch.object(os, "fdopen", recording_fdopen):
+            fx.write_fixture_file(self._built_text(), target)
+        assert calls
+        for kwargs in calls:
+            assert kwargs.get("newline") == ""
 
     def test_refuses_overwrite(self):
         """Test refuses overwrite."""

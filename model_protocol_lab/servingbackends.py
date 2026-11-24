@@ -3532,7 +3532,9 @@ def run_exec_backends(args: Any, parser: argparse.ArgumentParser) -> int:
         section = serving_backends_analysis({"available": False, "detail": detail})
         doc = {"schema_version": 1, "serving_backends": section}
         try:
-            out.write_text(canonical_json(doc) + "\n", encoding="utf-8")
+            # newline="" — a canonical-JSON artifact must be the
+            # same bytes on every platform (RR-18 follow-up).
+            out.write_text(canonical_json(doc) + "\n", encoding="utf-8", newline="")
         except OSError:
             print("exec-backends: cannot write the output artifact", file=sys.stderr)
             return 1
@@ -3634,7 +3636,7 @@ def run_exec_backends(args: Any, parser: argparse.ArgumentParser) -> int:
     doc = {"schema_version": 1, "serving_backends": section}
     tmp = out.with_name(out.name + ".tmp")
     try:
-        tmp.write_text(canonical_json(doc) + "\n", encoding="utf-8")
+        tmp.write_text(canonical_json(doc) + "\n", encoding="utf-8", newline="")
         tmp.replace(out)
     except OSError:
         print("exec-backends: cannot write the output artifact", file=sys.stderr)

@@ -546,6 +546,19 @@ def _sha256_regular_file(path: Path) -> str | None:
             os.close(fd)
 
 
+def _stat_not_regular(path: Path) -> bool:
+    """Whether ``os.stat`` resolves the path to a non-regular node.
+
+    Used only to classify an already-failed open (see
+    :func:`load_results`): False when the path is a regular
+    file or cannot be stat'ed at all.
+    """
+    try:
+        return not stat.S_ISREG(os.stat(path).st_mode)
+    except OSError:
+        return False
+
+
 def load_results(path: str | Path) -> dict[str, Any]:
     """Read a ``results.json`` (or a report directory holding one).
 
@@ -572,6 +585,14 @@ def load_results(path: str | Path) -> dict[str, Any]:
     try:
         fd = os.open(resolved, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
     except OSError:
+        # Windows refuses to open a directory or device at all,
+        # where POSIX opens it and the fstat below refuses it:
+        # classify by stat so a non-regular path earns the
+        # not-regular refusal on every platform. Only the error
+        # code is classified — every path here still raises
+        # (RR-18 follow-up; mirrors datasets.load_dataset).
+        if _stat_not_regular(resolved):
+            raise ValueError("results_not_regular_file") from None
         raise ValueError("results_unreadable") from None
     try:
         if not stat.S_ISREG(os.fstat(fd).st_mode):

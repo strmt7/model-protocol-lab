@@ -887,6 +887,48 @@ class McpRobustnessTests(unittest.TestCase):
         self.assertFalse(worker.is_alive())
         self.assertIn("result", outcome["response"])
 
+    def test_write_response_treats_windows_pipe_errors_as_disconnect(self):
+        """A Windows pipe-gone write error ends the session cleanly.
+
+        On Windows a dead pipe surfaces as OSError with winerror
+        109 (ERROR_BROKEN_PIPE), not BrokenPipeError; pre-fix it
+        escaped _write_response and the server died with exit
+        120 (RR-18 follow-up). A non-pipe OSError must still
+        propagate.
+        """
+        from unittest import mock
+
+        from model_protocol_lab import mcp_server
+
+        class DeadStdout:
+            """Stdout whose write and flush raise the given error."""
+
+            def __init__(self, exc):
+                self._exc = exc
+
+            def write(self, _text):
+                """Raise the configured error."""
+                raise self._exc
+
+            def flush(self):
+                """Raise the configured error."""
+                raise self._exc
+
+            def fileno(self):
+                """Refuse the fd so the devnull redirect is a no-op."""
+                raise OSError("no fd")
+
+        gone = OSError("The pipe has been ended")
+        gone.winerror = 109
+        with mock.patch.object(mcp_server.sys, "stdout", DeadStdout(gone)):
+            self.assertFalse(mcp_server._write_response({"jsonrpc": "2.0", "id": 1}))
+        other = OSError(5, "Input/output error")
+        with (
+            mock.patch.object(mcp_server.sys, "stdout", DeadStdout(other)),
+            self.assertRaises(OSError),
+        ):
+            mcp_server._write_response({"jsonrpc": "2.0", "id": 1})
+
     def test_client_disconnect_ends_session_cleanly(self):
         """Test client disconnect ends session cleanly."""
         import subprocess

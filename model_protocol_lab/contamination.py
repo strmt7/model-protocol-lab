@@ -177,8 +177,14 @@ def contamination_report(
     deadline = time.monotonic() + _deadline_s
     search_grams = [_trigrams(sig) for _sig_id, sig in search_sigs]
     pairs: list[dict[str, Any]] = []
-    exhausted = False
+    # A non-positive budget is exhausted by definition: deciding
+    # it by the strict-> clock checks below makes a zero budget a
+    # race against the platform's clock granularity (on Windows
+    # a pair completed under _deadline_s=0 — RR-18 follow-up).
+    exhausted = _deadline_s <= 0
     for held_id, held_sig in held_sigs:
+        if exhausted:
+            break
         held_grams = _trigrams(held_sig)
         best: tuple[float, float, str, str] | None = None
         for (search_id, search_sig), grams in zip(search_sigs, search_grams, strict=True):

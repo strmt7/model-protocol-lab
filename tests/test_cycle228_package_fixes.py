@@ -90,6 +90,23 @@ class TestContaminationBudget(unittest.TestCase):
         report = contamination_report([_fx("s1", "alpha")], [_fx("h1", "alpha")], _deadline_s=0)
         self.assertEqual(report, {"worst_tier": "clean", "pairs": [], "budget_exhausted": True})
 
+    def test_zero_deadline_exhausts_even_with_a_frozen_clock(self) -> None:
+        """Purpose: A zero budget is exhausted by definition, not by clock luck
+        Inputs: A frozen monotonic clock and a zero budget
+        Outputs: Empty pairs plus budget_exhausted.
+
+        The strict-> clock checks made a zero budget a race
+        against the platform's clock granularity — the Windows
+        runner completed a pair under _deadline_s=0 (RR-18
+        follow-up). Freeze the clock: pre-fix the pair completes,
+        post-fix the budget is exhausted by definition.
+        """
+        from unittest import mock
+
+        with mock.patch.object(contamination.time, "monotonic", lambda: 1000.0):
+            report = contamination_report([_fx("s1", "alpha")], [_fx("h1", "alpha")], _deadline_s=0)
+        self.assertEqual(report, {"worst_tier": "clean", "pairs": [], "budget_exhausted": True})
+
     def test_completed_sweep_shape_unchanged(self) -> None:
         """Purpose: Pin the long-standing exact shape on completed sweeps
         Inputs: One duplicate pair, generous budget

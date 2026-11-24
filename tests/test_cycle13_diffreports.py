@@ -482,6 +482,31 @@ class DiffreportsTests(unittest.TestCase):
             load_results(fifo)
         assert str(excinfo.exception) == "results_not_regular_file"
 
+    def test_hostile_inputs_directory_named_results_json(self):
+        """A directory wearing the results.json name is not-regular.
+
+        Windows shape (RR-18 follow-up): os.open on the directory
+        raises instead of succeeding so the fstat can refuse it.
+        Simulate that open on any platform and require the same
+        not-regular code.
+        """
+        from pathlib import Path
+        from unittest import mock
+
+        inner = self.tmp_path / "results.json"
+        inner.mkdir()
+        real_open = os.open
+
+        def fake_open(path, flags, *args, **kwargs):
+            """Raise PermissionError for the directory, delegate else."""
+            if Path(path) == inner:
+                raise PermissionError(13, "Access is denied")
+            return real_open(path, flags, *args, **kwargs)
+
+        with mock.patch.object(os, "open", fake_open), self.assertRaises(ValueError) as excinfo:
+            load_results(self.tmp_path)
+        assert str(excinfo.exception) == "results_not_regular_file"
+
     def test_hostile_inputs_missing(self):
         """Test hostile inputs missing."""
         with self.assertRaises(ValueError) as excinfo:

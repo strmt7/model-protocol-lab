@@ -129,6 +129,20 @@ class GuardTests(unittest.TestCase):
         self.assertIsNone(report["deepsource_total"])
         self.assertIn("NOT-CONFIGURED", report["failures"][0])
 
+    def test_undeterminable_home_fails_closed_not_configured(self):
+        """An undeterminable home is not-configured, never a crash.
+
+        Path.home() raises RuntimeError when no home can be
+        determined (reachable on Windows with a scrubbed
+        environment — RR-18 follow-up); the guard must treat
+        that as "no config there" and fail closed.
+        """
+        with patch.object(Path, "home", side_effect=RuntimeError("no home")):
+            report = self._evaluate([[]], _runner(0))
+        self.assertFalse(report["pass"])
+        self.assertEqual(report["deepsource_state"], "not-configured")
+        self.assertIsNone(report["deepsource_total"])
+
     def test_incomplete_manifest_fails_closed(self):
         """An incomplete inventory manifest fails the guard closed as an error."""
         report = self._evaluate([[]], _runner(None, complete=False), {"DEEPSOURCE_TOKEN": "x"})

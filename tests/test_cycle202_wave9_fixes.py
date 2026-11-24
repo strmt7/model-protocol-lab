@@ -13,8 +13,10 @@ exception, a heap address in a payload, or invalid JSON on a wire.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import io
 import json
+import os
 import struct
 import subprocess
 import sys
@@ -111,6 +113,19 @@ class TestPackCodecNormalisation(unittest.TestCase):
             self.assertEqual(pk.run_verify_bundle(args), 2)
 
 
+@contextlib.contextmanager
+def _without_o_nofollow():
+    """Simulate a platform with no O_NOFOLLOW (the Windows shape)."""
+    saved = getattr(os, "O_NOFOLLOW", None)
+    if saved is not None:
+        delattr(os, "O_NOFOLLOW")
+    try:
+        yield
+    finally:
+        if saved is not None:
+            os.O_NOFOLLOW = saved
+
+
 class TestPackSymlinkConsistency(unittest.TestCase):
     """F11: both pack readers refuse symlinks (O_NOFOLLOW)."""
 
@@ -125,6 +140,38 @@ class TestPackSymlinkConsistency(unittest.TestCase):
             with self.assertRaises(ValueError) as ctx:
                 pk.load_bundle_bytes(link)
             self.assertEqual(str(ctx.exception), "bundle_unreadable")
+
+    def test_load_bundle_bytes_refuses_symlink_without_o_nofollow(self) -> None:
+        """The symlink refusal must not rest on O_NOFOLLOW alone.
+
+        Windows has no O_NOFOLLOW: pre-fix the open silently
+        followed the link there (RR-18 follow-up). Hide the flag
+        and require the same refusal.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            real = Path(tmp) / "real.bundle.zip"
+            real.write_bytes(b"bundle-bytes")
+            link = Path(tmp) / "link.bundle.zip"
+            link.symlink_to(real)
+            with _without_o_nofollow():
+                self.assertEqual(pk.load_bundle_bytes(real), b"bundle-bytes")
+                with self.assertRaises(ValueError) as ctx:
+                    pk.load_bundle_bytes(link)
+            self.assertEqual(str(ctx.exception), "bundle_unreadable")
+
+    def test_collect_refuses_symlink_entry_without_o_nofollow(self) -> None:
+        """A symlinked report entry is refused without O_NOFOLLOW."""
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "report"
+            report.mkdir()
+            for name in ("results.json", "report.html"):
+                (report / name).write_bytes((SAMPLE_REPORT / name).read_bytes())
+            outside = Path(tmp) / "outside.txt"
+            outside.write_bytes(b"outside")
+            (report / "linked.txt").symlink_to(outside)
+            with _without_o_nofollow(), self.assertRaises(ValueError) as ctx:
+                pk.collect_pack_files(report, [])
+            self.assertEqual(str(ctx.exception), "pack_entry_unreadable")
 
 
 class TestFingerprintGuard(unittest.TestCase):

@@ -270,16 +270,57 @@ def _stored_bundle_size(manifest_data: bytes, files: list[tuple[str, bytes]]) ->
     return total
 
 
+def _stat_not_regular(path: Path) -> bool:
+    """Whether ``os.stat`` resolves the path to a non-regular node.
+
+    Used only to classify an already-failed open (see
+    :func:`load_bundle_bytes`): False when the path is a
+    regular file or cannot be stat'ed at all.
+    """
+    try:
+        return not stat.S_ISREG(os.stat(path).st_mode)
+    except OSError:
+        return False
+
+
+def _refuse_symlink(path: Path, code: str) -> None:
+    """Refuse a symlinked ``path`` with the caller's fixed ``code``.
+
+    The readers in this module cannot rest the refusal on
+    ``O_NOFOLLOW`` alone: the flag does not exist on Windows,
+    where the open would silently follow the link (RR-18
+    follow-up). ``lstat`` sees the link itself on every
+    platform. The fd fstat in the readers still guarantees
+    the regularity of whatever was opened; a swap between
+    this check and the open is caught on POSIX by
+    ``O_NOFOLLOW`` and bounded elsewhere by the bundle's
+    digest verification downstream.
+    """
+    try:
+        link = stat.S_ISLNK(os.lstat(path).st_mode)
+    except OSError:
+        raise ValueError(code) from None
+    if link:
+        raise ValueError(code)
+
+
 def _read_regular_file(path: Path, *, too_large_code: str, cap: int) -> bytes:
     """Open ``path`` once (O_NOFOLLOW/O_NONBLOCK), require a regular
     file, and return its bytes — at most ``cap`` of them. Mirrors the
     single-fd discipline of ``diffreports.load_results``.
     """
+    _refuse_symlink(path, "pack_entry_unreadable")
     try:
         fd = os.open(
             path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
         )
     except OSError:
+        # Windows refuses to open a directory at all, where POSIX
+        # opens it and the fstat below refuses it: classify by
+        # stat so a non-regular path earns the not-regular code
+        # on every platform (RR-18 follow-up).
+        if _stat_not_regular(path):
+            raise ValueError("pack_entry_not_regular") from None
         raise ValueError("pack_entry_unreadable") from None
     try:
         if not stat.S_ISREG(os.fstat(fd).st_mode):
@@ -420,18 +461,26 @@ def load_bundle_bytes(path: Path) -> bytes:
 
     Raises ``ValueError`` with a fixed ``bundle_*`` code; a FIFO cannot
     block the read, and the size cap is enforced from ``fstat`` before
-    any bytes are read. The open refuses symlinks (``O_NOFOLLOW``),
-    matching :func:`_read_regular_file` in this module: before cycle
+    any bytes are read. Symlinks are refused by :func:`_refuse_symlink`
+    (``O_NOFOLLOW`` alone does not exist on Windows), matching
+    :func:`_read_regular_file` in this module: before cycle
     202 the two readers disagreed, and a symlinked bundle was followed
     here while a symlinked pack entry was refused there.
     """
     if not path.exists():
         raise ValueError("bundle_path_missing")
+    _refuse_symlink(path, "bundle_unreadable")
     try:
         fd = os.open(
             path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
         )
     except OSError:
+        # Windows refuses to open a directory at all, where POSIX
+        # opens it and the fstat below refuses it: classify by
+        # stat so a non-regular path earns the not-regular code
+        # on every platform (RR-18 follow-up).
+        if _stat_not_regular(path):
+            raise ValueError("bundle_not_regular_file") from None
         raise ValueError("bundle_unreadable") from None
     try:
         info = os.fstat(fd)
@@ -897,6 +946,15 @@ def run_pack(args: argparse.Namespace, _parser: argparse.ArgumentParser) -> int:
             fd = -1  # ownership moved to the file object
             handle.write(bundle_bytes)
     except OSError:
+        # Close before unlinking: when fdopen itself failed the
+        # descriptor is still ours, and on Windows an open file
+        # cannot be unlinked — the partial output would survive
+        # the cleanup this branch exists to perform (RR-18
+        # follow-up).
+        if fd != -1:
+            with contextlib.suppress(OSError):
+                os.close(fd)
+            fd = -1
         with contextlib.suppress(OSError):
             output.unlink()
         print("pack: output_write_failed", file=sys.stderr)

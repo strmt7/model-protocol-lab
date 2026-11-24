@@ -96,6 +96,22 @@ def github_page_fetcher(repo: str, token: str) -> Callable[[int], list[dict[str,
     return fetch
 
 
+def _deepsource_config_exists() -> bool:
+    """Whether the DeepSource CLI config exists under the home dir.
+
+    An undeterminable home (``Path.home()`` raises RuntimeError
+    when neither the environment nor the platform account
+    database names one — reachable on Windows with a scrubbed
+    environment) means no config can be found there: the guard
+    must fail closed as not-configured, never crash (RR-18
+    follow-up).
+    """
+    try:
+        return (Path.home() / ".deepsource" / "config.toml").exists()
+    except RuntimeError:
+        return False
+
+
 def deepsource_status(
     repository: str,
     commit: str,
@@ -110,10 +126,7 @@ def deepsource_status(
     The caller decides the exit code; this function never invents
     a zero.
     """
-    if (
-        not os.environ.get("DEEPSOURCE_TOKEN")
-        and not (Path.home() / ".deepsource" / "config.toml").exists()
-    ):
+    if not os.environ.get("DEEPSOURCE_TOKEN") and not _deepsource_config_exists():
         return "not-configured", None
     output = output_root / f"deepsource-{commit[:12]}"
     tool = Path(__file__).resolve().parent / "deepsource_inventory.py"

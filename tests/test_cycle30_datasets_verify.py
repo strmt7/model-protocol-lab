@@ -1241,6 +1241,31 @@ class TestLoadDataset(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not a regular file"):
             datasets_mod.load_dataset(tmp_path)
 
+    def test_directory_refused_when_open_itself_refuses(self):
+        """Directory refusal when the open, not the fstat, refuses.
+
+        Windows shape (RR-18 follow-up): os.open on a directory
+        raises PermissionError instead of succeeding so the fstat
+        can refuse it. Simulate that open on any platform and
+        require the same not-regular vocabulary.
+        """
+        from unittest import mock
+
+        tmp_path = self.tmp_path
+        real_open = os.open
+
+        def fake_open(path, flags, *args, **kwargs):
+            """Raise PermissionError for the directory, delegate else."""
+            if Path(path) == tmp_path:
+                raise PermissionError(13, "Access is denied")
+            return real_open(path, flags, *args, **kwargs)
+
+        with (
+            mock.patch.object(os, "open", fake_open),
+            self.assertRaisesRegex(ValueError, "not a regular file"),
+        ):
+            datasets_mod.load_dataset(tmp_path)
+
     def test_dev_null_refused(self):
         """Test dev null refused."""
         with self.assertRaisesRegex(ValueError, "not a regular file"):

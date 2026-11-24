@@ -110,6 +110,32 @@ def _checks_by_id(out):
 
 
 class SavePairTests(unittest.TestCase):
+    """save_report publishes a digest-stamped pair."""
+
+    def test_staged_writes_do_not_translate_newlines(self):
+        """The staged writes must open with newline="".
+
+        The pair stamp hashes the exact HTML text; a text-mode
+        write that translates newlines (CRLF on Windows)
+        publishes bytes the stamp does not describe and the
+        pair is born incomplete (RR-18 follow-up). Pin the
+        construction on every text-mode staged write.
+        """
+        real_fdopen = os.fdopen
+        calls: list[dict] = []
+
+        def recording_fdopen(fd, mode, *args, **kwargs):
+            """Record text-mode calls, then delegate."""
+            if mode == "w":
+                calls.append(kwargs)
+            return real_fdopen(fd, mode, *args, **kwargs)
+
+        with TemporaryDirectory() as tmp, mock.patch.object(os, "fdopen", recording_fdopen):
+            _save(tmp)
+        self.assertTrue(calls)
+        for kwargs in calls:
+            self.assertEqual(kwargs.get("newline"), "")
+
     """Test save pair."""
 
     def test_save_stamps_pair_and_cleans_staging(self):

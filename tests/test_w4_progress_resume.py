@@ -210,6 +210,35 @@ def _crash_run(path, backend, *, crash_after):
 class JournalTests(unittest.TestCase):
     """The journal verifies, chains, and refuses by fixed codes."""
 
+    def test_journal_open_does_not_translate_newlines(self):
+        """The journal writer must open with newline="".
+
+        The journal is a byte format — load_progress splits the
+        raw bytes and verifies a hash chain — so a text-mode
+        open that translates newlines (CRLF on Windows) makes
+        every journal unreadable to its own reader (RR-18
+        follow-up). Pin the construction.
+        """
+        from unittest import mock
+
+        real_open = Path.open
+        calls: list[dict] = []
+
+        def recording_open(self, *args, **kwargs):
+            """Record the call's kwargs, then delegate."""
+            calls.append(kwargs)
+            return real_open(self, *args, **kwargs)
+
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "progress.jsonl"
+            backend = ScriptedBackend(EXPECTED, BEHAVIOR)
+            with mock.patch.object(Path, "open", recording_open):
+                sink = ProgressSink.create(path, header=_header(backend))
+                sink.close()
+        self.assertTrue(calls)
+        for kwargs in calls:
+            self.assertEqual(kwargs.get("newline"), "")
+
     def test_roundtrip_full_run(self):
         """Test roundtrip full run."""
         with TemporaryDirectory() as tmp:

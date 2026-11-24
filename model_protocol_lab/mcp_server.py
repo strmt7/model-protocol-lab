@@ -45,6 +45,7 @@ keeps working from a repository root.
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import math
 import os
@@ -789,8 +790,10 @@ _RESPONSE_LOCK = threading.Lock()
 def _write_response(response: dict[str, Any]) -> bool:
     """Write one response frame; False when the client has gone away.
 
-    A routine client disconnect surfaces as BrokenPipeError on the
-    flush (pre-fix the server died with a traceback, exit 120). The
+    A routine client disconnect surfaces as a pipe error on the
+    flush — BrokenPipeError on POSIX, the WinError 109/232 or
+    EINVAL shapes on Windows (see :func:`_client_gone`; pre-fix
+    the server died with a traceback, exit 120). The
     session is over at that point: report False so serve() ends it
     cleanly with exit 0, and point the stdout fd at devnull so the
     interpreter's shutdown flush cannot re-raise on the dead pipe
@@ -802,12 +805,32 @@ def _write_response(response: dict[str, Any]) -> bool:
         return _write_response_locked(response)
 
 
+def _client_gone(exc: OSError) -> bool:
+    """Whether a stdout write error means the client went away.
+
+    POSIX reports a dead pipe as BrokenPipeError; Windows
+    reports the same event as ERROR_BROKEN_PIPE (109) or
+    ERROR_NO_DATA (232), or as EINVAL from the write itself —
+    none of which are BrokenPipeError, so a BrokenPipeError-only
+    handler lets the server die with exit 120 on Windows
+    (RR-18 follow-up). Anything else is a real write failure
+    and must propagate.
+    """
+    if isinstance(exc, BrokenPipeError):
+        return True
+    if getattr(exc, "winerror", None) in (109, 232):
+        return True
+    return os.name == "nt" and exc.errno == errno.EINVAL
+
+
 def _write_response_locked(response: dict[str, Any]) -> bool:
     """Write response locked."""
     try:
         sys.stdout.write(json.dumps(response, default=str) + "\n")
         sys.stdout.flush()
-    except BrokenPipeError:
+    except OSError as exc:
+        if not _client_gone(exc):
+            raise
         try:
             devnull = os.open(os.devnull, os.O_WRONLY)
             try:

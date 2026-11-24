@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import errno
 import json
 import os
 import sys
@@ -90,7 +91,13 @@ def _emit(data: bytes) -> int:
         sys.stdout.write(data.decode("utf-8"))
         sys.stdout.flush()
         return 0
-    except BrokenPipeError:
+    except OSError as exc:
+        # A dead reader surfaces as EPIPE on POSIX but as EINVAL
+        # on Windows (RR-18 follow-up): both are the quiet death
+        # this function exists to produce. Anything else is a
+        # real write failure and propagates.
+        if not isinstance(exc, BrokenPipeError) and exc.errno not in (errno.EPIPE, errno.EINVAL):
+            raise
         with contextlib.suppress(OSError):
             os.dup2(os.open(os.devnull, os.O_WRONLY), 1)
         return 1

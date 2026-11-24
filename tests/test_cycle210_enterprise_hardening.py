@@ -177,6 +177,13 @@ class TestCommunityFiles(unittest.TestCase):
         attrs = (REPO_ROOT / ".gitattributes").read_text(encoding="utf-8")
         self.assertIn("linguist-generated", attrs)
         self.assertIn("examples/sample-report", attrs)
+        # Byte-pinned fixtures must survive checkout byte-exact on
+        # every platform: their digests are test contract (the
+        # sample pair's stamp, the vendored Unicode census), and
+        # CRLF translation on a Windows checkout changed the
+        # bytes under the digests (RR-18 follow-up).
+        self.assertIn("examples/sample-report/* binary", attrs)
+        self.assertIn("tests/data/* binary", attrs)
 
     def test_typing_classifier(self):
         """pyproject carries the 'Typing :: Typed' classifier."""

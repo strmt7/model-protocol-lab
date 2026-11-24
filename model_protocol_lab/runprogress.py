@@ -106,7 +106,12 @@ class ProgressSink:
     def __init__(self, path: Path, *, mode: str, last_hash: str, records: int) -> None:
         """Init."""
         self._path = Path(path)
-        self._handle = self._path.open(mode, encoding="utf-8")
+        # newline="" — the journal is a byte-format: load_progress
+        # splits the raw bytes on b"\n" and verifies a hash chain
+        # over the canonical lines. Text-mode newline translation
+        # (CRLF on Windows) would make every journal this writer
+        # produces unreadable to its own reader (RR-18 follow-up).
+        self._handle = self._path.open(mode, encoding="utf-8", newline="")
         self._last_hash = last_hash
         self._records = records
         self._closed = False

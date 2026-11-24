@@ -177,6 +177,28 @@ class LoadGuardTests(unittest.TestCase):
                 pk.load_bundle_bytes(Path(tmpdir))
             self.assertEqual(str(ctx.exception), "bundle_not_regular_file")
 
+    def test_directory_not_regular_when_open_itself_refuses(self):
+        """Directory refusal when the open, not the fstat, refuses.
+
+        Windows shape (RR-18 follow-up): os.open on a directory
+        raises PermissionError instead of succeeding so the fstat
+        can refuse it. Simulate that open on any platform and
+        require the same bundle_not_regular_file code.
+        """
+        with tempfile.TemporaryDirectory(prefix="c171g_dir_") as tmpdir:
+            target = Path(tmpdir)
+            real_open = os.open
+
+            def fake_open(path, flags, *args, **kwargs):
+                """Raise PermissionError for the directory, delegate else."""
+                if Path(path) == target:
+                    raise PermissionError(13, "Access is denied")
+                return real_open(path, flags, *args, **kwargs)
+
+            with mock.patch.object(os, "open", fake_open), self.assertRaises(ValueError) as ctx:
+                pk.load_bundle_bytes(target)
+            self.assertEqual(str(ctx.exception), "bundle_not_regular_file")
+
     def test_fifo_not_regular(self):
         """Test fifo not regular."""
         with tempfile.TemporaryDirectory(prefix="c171g_lfifo_") as tmpdir:

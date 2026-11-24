@@ -3294,7 +3294,12 @@ def _write_staged(path: Path, text: str) -> None:
     """
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
-        handle = os.fdopen(fd, "w", encoding="utf-8")
+        # newline="" — save_report stamps results.json with the
+        # SHA-256 of the exact HTML text; text-mode newline
+        # translation (CRLF on Windows) would publish bytes the
+        # stamp does not describe and the pair would be born
+        # incomplete to its own verifier (RR-18 follow-up).
+        handle = os.fdopen(fd, "w", encoding="utf-8", newline="")
     except BaseException:
         os.close(fd)
         with contextlib.suppress(OSError):

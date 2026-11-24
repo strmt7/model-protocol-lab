@@ -38,6 +38,32 @@ All notable changes to this project are documented here. The format follows
   across chunks — so the artifact names every failure with its
   traceback, and repairs the failure clusters regression-first;
   the full record is in the ledger's RR-18 row.
+- **Follow-up Push 2: the production defects the diagnostic run
+  proved.** The chunked diagnostic run (45285454480) executed
+  the full base layer and named 264 failures + 4 errors; the
+  production clusters are fixed here: byte-pinned checkout
+  fixtures (`examples/sample-report/*`, `tests/data/*`) are now
+  binary in `.gitattributes`, so a Windows checkout can no
+  longer CRLF-convert the sample report pair or the digest-
+  pinned UnicodeData file; the byte-verified writers (progress
+  journal, staged report writes, fixture writes, serving-
+  backend artifacts) open with `newline=""` so their bytes are
+  the bytes their digests and hash chains describe on every
+  platform; the four defensive readers classify a non-regular
+  path by stat when the open itself refuses (Windows), keeping
+  the fixed not-regular refusal instead of misreporting it as
+  unreadable; both pack readers refuse a symlink by lstat ahead
+  of the open, since Windows has no `O_NOFOLLOW`; `run_pack`
+  closes its descriptor before unlinking a partial bundle; the
+  MCP server treats a Windows broken pipe (winerror 109/232,
+  EINVAL) as the client-disconnect it is instead of dying with
+  exit 120, and `tools/layer_paths.py` dies the same quiet
+  death; a non-positive contamination budget is exhausted by
+  definition rather than by clock race; the findings guard
+  treats an undeterminable home as not-configured instead of
+  crashing. Each fix carries a regression test that fails
+  without it under the affected platform semantics or the
+  closest executable proxy.
 
 ### Added (release workflow consumes the readiness receipt — RR-06 closed, 2026-11-23)
 

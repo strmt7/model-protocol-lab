@@ -117,6 +117,19 @@ def parse_dataset(text: str) -> Split:
     return Split(*partitions)
 
 
+def _stat_not_regular(path: Path) -> bool:
+    """Whether ``os.stat`` resolves the path to a non-regular node.
+
+    Used only to classify an already-failed open (see
+    :func:`load_dataset`): False when the path is a regular
+    file or cannot be stat'ed at all.
+    """
+    try:
+        return not stat.S_ISREG(os.stat(path).st_mode)
+    except OSError:
+        return False
+
+
 def load_dataset(path: str | Path) -> Split:
     """Load a dataset file from disk into a validated Split.
 
@@ -134,6 +147,14 @@ def load_dataset(path: str | Path) -> Split:
     try:
         fd = os.open(target, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
     except OSError:
+        # Windows refuses to open a directory or device at all,
+        # where POSIX opens it and the fstat below refuses it:
+        # classify by stat so a non-regular path earns the
+        # not-regular refusal on every platform. Only the error
+        # code is classified — every path here still raises
+        # (RR-18 follow-up).
+        if _stat_not_regular(target):
+            raise ValueError("Fixture path is not a regular file") from None
         raise ValueError("Unreadable fixture file") from None
     try:
         if not stat.S_ISREG(os.fstat(fd).st_mode):

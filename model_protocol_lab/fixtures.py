@@ -80,6 +80,19 @@ def _safe(value: str) -> str:
     return cleaned
 
 
+def _stat_not_regular(path: Path) -> bool:
+    """Whether ``os.stat`` resolves the path to a non-regular node.
+
+    Used only to classify an already-failed open (see
+    :func:`read_authoring_file`): False when the path is a
+    regular file or cannot be stat'ed at all.
+    """
+    try:
+        return not stat.S_ISREG(os.stat(path).st_mode)
+    except OSError:
+        return False
+
+
 def read_authoring_file(path: str | Path) -> str:
     """Read a bounded UTF-8 text file, refusing non-regular files.
 
@@ -93,6 +106,14 @@ def read_authoring_file(path: str | Path) -> str:
     try:
         fd = os.open(target, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
     except OSError:
+        # Windows refuses to open a directory or device at all,
+        # where POSIX opens it and the fstat below refuses it:
+        # classify by stat so a non-regular path earns the
+        # not-regular refusal on every platform. Only the error
+        # code is classified — every path here still raises
+        # (RR-18 follow-up; mirrors datasets.load_dataset).
+        if _stat_not_regular(target):
+            raise ValueError("Authoring path is not a regular file") from None
         raise ValueError("Unreadable authoring file") from None
     try:
         if not stat.S_ISREG(os.fstat(fd).st_mode):
@@ -329,7 +350,11 @@ def write_fixture_file(text: str, path: str | Path) -> Path:
     except OSError:
         raise ValueError("Fixture output is not writable") from None
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        # newline="" — the text is the file's exact content (a
+        # built fixture is re-read byte-faithfully); text-mode
+        # newline translation (CRLF on Windows) would smuggle \r
+        # into the last field of every CSV line (RR-18 follow-up).
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
             handle.write(text)
     except BaseException:
         # A partial write must not leave a half-built fixture file behind.
